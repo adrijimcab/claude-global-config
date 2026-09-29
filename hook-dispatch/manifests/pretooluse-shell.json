@@ -1,0 +1,7 @@
+{
+  "event": "PreToolUse",
+  "guards": [
+    "../../eval-guard/guard.mjs",
+    "../../gentle-ai-sync-guard/guard.mjs"
+  ]
+}

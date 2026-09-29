@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Agent|Task|SendMessage|TaskCreate|TaskUpdate|mcp__plugin_engram_engram__mem_save|mcp__engram__mem_save"
+    }
+  ],
+  "why": "a brief can again end with a report or a question addressed to the owner, and any brief, resume, task record or saved memory can again swallow the author's own tool-call markup — 108 such leaks sat unnoticed across 504 transcripts, including task #6's record, which lost its activeForm."
+}

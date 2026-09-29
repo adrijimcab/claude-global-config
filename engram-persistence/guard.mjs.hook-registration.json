@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "Stop"
+    }
+  ],
+  "why": "a session can end after the integration branch advanced with no engram save since those commits, so the next session starts without knowing what landed."
+}

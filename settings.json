@@ -1,0 +1,188 @@
+{
+  "env": {
+    "ENABLE_STOP_REVIEW": "0"
+  },
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(sudo rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(sudo rm -rf ~)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Read(.ssh/*)",
+      "Edit(.ssh/*)",
+      "Read(.credentials/*)",
+      "Edit(.credentials/*)",
+      "Read(Library/Keychains/*)",
+      "Edit(Library/Keychains/*)",
+      "Read(.aws/credentials)",
+      "Edit(.aws/credentials)",
+      "Read(.config/gh/hosts.yml)",
+      "Edit(.config/gh/hosts.yml)",
+      "Read(**/*.pem)",
+      "Edit(**/*.pem)",
+      "Read(**/*.key)",
+      "Edit(**/*.key)",
+      "Read(**/secrets/*)",
+      "Edit(**/secrets/*)"
+    ],
+    "defaultMode": "auto"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/pretooluse-shell.json\""
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gentle-ai sdd-preflight-hook --agent claude-code",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gentle-ai review stop-hook --agent claude-code",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/gentle-ai-overlay/session-start-hook.mjs\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/stop.json\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gentle-ai review stop-hook --agent claude-code",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gentle-ai telemetry runtime claude --json",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gentle-ai telemetry runtime claude --json",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gentle-ai skill-registry refresh --quiet --no-gitignore --cwd \"${CLAUDE_PROJECT_DIR:-$PWD}\" || true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Recordatorio] Mandatos, contratos, reglas promovidas y lecciones: cargados desde ~/.claude/rules/ (y .claude/CLAUDE.md del proyecto). Vinculantes.'"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true,
+    "engram@engram": true,
+    "frontend-design@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "engram": {
+      "source": {
+        "source": "github",
+        "repo": "Gentleman-Programming/engram"
+      }
+    }
+  },
+  "outputStyle": "Gentleman",
+  "effortLevel": "high",
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "auto",
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: BASE 100 (gitlab.base100.local — internal_development/frontend group)",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: assume private — internal self-hosted GitLab remote (gitlab.base100.local), not queryable via gh; no public-visibility signal found",
+      "**Internal sharing / snippet hosting**: Confluence at base100.atlassian.net (referenced in README as the canonical docs host)",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: main (default, per repo facts); develop (referenced as integration branch in CLAUDE.md and CI badges) — protection status not queryable here (gh check failed for this self-hosted host)",
+      "**CI/CD deploy targets**: GitLab CI at gitlab.base100.local (pipeline/coverage badges reference develop pipelines)",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine (Windows, per repo path) with open internet",
+      "**Source control**: The trusted repo (b100-am-ui) and its GitLab remote at gitlab.base100.local only",
+      "**Trusted internal domains**: gitlab.base100.local, base100.atlassian.net",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: gitlab.base100.local (source control + CI/CD)",
+      "**Internal package registry**: gitlab.base100.local (seen as a package registry host in config scan)",
+      "**Sensitive data locations & audiences**: .storybook/stories/b100-pii-sanitize.stories.ts (PII-related story file) — share only with audiences cleared for personal-data handling",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries prod or production as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries prod or production as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development (Angular 19 design-system library, b100-am-ui)",
+      "**Trusted repo**: b100-am-ui at C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui, remote gitlab.base100.local/frontend/b100-am-ui.git",
+      "**Org-specific CLIs**: gentle-ai (SDD/review workflow CLI, used in this project); ng (Angular CLI)"
+    ]
+  }
+}

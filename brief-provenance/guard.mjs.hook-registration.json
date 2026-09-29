@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Agent|Task|SendMessage"
+    }
+  ],
+  "why": "delegations and resumes reach a worker with no place to tell a measured fact from a guess, and an unmeasured claim arrives with the authority of a measurement. Unregistered for SendMessage alone, every resume runs unguarded while the code claims to cover it — measured 2026-09-14."
+}

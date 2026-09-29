@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp *)",
+      "Bash(where.exe engram *)",
+      "Bash(engram --version)",
+      "Bash(npm root *)",
+      "Bash(npm ls *)",
+      "Bash(where.exe engram.cmd)",
+      "Bash(curl -sf http://127.0.0.1:7437/health --max-time 2)",
+      "PowerShell($p = Get-CimInstance Win32_Process -Filter \"name='engram.exe'\" -ErrorAction SilentlyContinue; if \\($p\\) { $p | Select-Object ProcessId, ExecutablePath, CommandLine | Format-List } else { Write-Output \"No engram.exe process found by that name\" }; Write-Output \"=== Get-Command ===\"; try { \\(Get-Command engram -ErrorAction Stop\\).Source } catch { Write-Output \"engram NOT on PowerShell PATH\" }; Write-Output \"=== Listener on 7437 ===\"; $c = Get-NetTCPConnection -LocalPort 7437 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c | ForEach-Object { $pr = Get-Process -Id $_.OwningProcess; \"$\\($pr.ProcessName\\) [PID $\\($pr.Id\\)] -> $\\($pr.Path\\)\" } } else { \"nothing listening\" })"
+    ]
+  }
+}

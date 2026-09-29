@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a node -e one-liner whose payload the shell mangles, or a Git Bash cmd /c that never reaches cmd, runs again and reports success over code that did not do what it says — the 58-symbols-missing false alarm and the two teardowns that silently did not happen."
+}

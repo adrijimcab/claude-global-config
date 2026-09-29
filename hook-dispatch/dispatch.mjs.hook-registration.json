@@ -1,0 +1,15 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    },
+    {
+      "event": "Stop"
+    },
+    {
+      "event": "SubagentStop"
+    }
+  ],
+  "why": "ninguna guardia listada en un manifiesto corre: el dispatcher es la única entrada de settings que las ejecuta (shell en PreToolUse; Stop y SubagentStop del proyecto; claim e idioma en Stop), así que sin él todas callan a la vez."
+}

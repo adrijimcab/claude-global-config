@@ -1,0 +1,96 @@
+# Allowlist .gitignore — este repo es un respaldo PRIVADO de la config propia del dueño, nunca un
+# checkout completo de ~/.claude. Ignora TODO por defecto y reincluye solo lo que es config/tooling
+# propio (reglas, lecciones, checklists, hooks, skills, agentes). Todo lo demás — transcripts de
+# sesión, cachés, credenciales, telemetría, estado en vivo — queda fuera aunque aparezca nuevo.
+*
+
+# ── Reincluir directorios propios (su contenido se reincluye explícitamente más abajo) ──────────
+!/rules/
+!/rules/**
+!/lessons/
+!/lessons/**
+!/checklists/
+!/checklists/**
+!/hooks/
+!/hooks/**
+!/hook-dispatch/
+!/hook-dispatch/**
+/hook-dispatch/state/
+!/agents/
+!/agents/**
+!/skills/
+!/skills/**
+# skills/synced/ is Anthropic's OWN built-in skill packages (docx/pdf/pptx/xlsx/google-workspace/
+# mcp-builder reference docs, several MB of vendored XSD schemas), synced under a random UUID pair —
+# not config the owner authored. Re-excluded so this repo stays "the owner's config", not a mirror of
+# Anthropic's bundled skill content.
+/skills/synced/
+!/commands/
+!/commands/**
+!/output-styles/
+!/output-styles/**
+!/themes/
+!/themes/**
+!/mcp/
+!/mcp/**
+
+# Guardias propias — código + manifiesto de registro sí, estado/runs en vivo NO (pueden citar texto
+# de sesiones reales: refusals.jsonl, denials.jsonl, payloads capturados).
+!/brief-audience/
+!/brief-audience/*.mjs
+!/brief-audience/*.json
+/brief-audience/state/
+
+!/brief-provenance/
+!/brief-provenance/*.mjs
+!/brief-provenance/*.json
+/brief-provenance/state/
+
+!/eval-guard/
+!/eval-guard/*.mjs
+!/eval-guard/*.json
+/eval-guard/state/
+
+!/gentle-ai-overlay/
+!/gentle-ai-overlay/**
+
+!/gentle-ai-sync-guard/
+!/gentle-ai-sync-guard/**
+
+!/owner-language-guard/
+!/owner-language-guard/*.mjs
+!/owner-language-guard/*.json
+/owner-language-guard/fixtures/
+
+!/engram-persistence/
+!/engram-persistence/*.mjs
+!/engram-persistence/*.json
+/engram-persistence/state/
+
+# ── Reincluir ficheros sueltos de config propia ──────────────────────────────────────────────────
+!/CLAUDE.md
+!/settings.json
+!/settings.local.json
+!/lessons-ledger.md
+!/verification-contract.md
+!/sdd-mandate.md
+!/audit-playbook.md
+!/.gitignore
+
+# ── EXCLUIDO explícitamente (documentado, no solo por el "*" de arriba) ──────────────────────────
+# projects/          transcripts de sesión completos
+# sessions/          claves de sesión (*.key) + estado
+# tasks/             estado de tareas del harness
+# shell-snapshots/   snapshots de shell por sesión
+# plugins/           caché de plugins + marketplaces (reproducible, no es config propia)
+# backups/           backups de .claude.json (¡token MCP!) — nunca entra
+# daemon/, daemon.*  claves de control del daemon (control.key, pipe.key) + estado en vivo
+# security/          logs (log.txt, log.txt.1) + venv del agent-sdk
+# session-env/       entorno por sesión (runtime)
+# state/             mcp-discover-verdicts.json (estado, no config)
+# file-history/      historial de ediciones de fichero por sesión (equivalente a transcript)
+# hook-payloads/     payloads reales capturados de tool calls (Bash/Agent/PowerShell/...)
+# jobs/              estado de jobs programados
+# cache/, debug/, paste-cache/, scratch/   cachés, logs de debug por sesión, portapapeles pegado
+# *.jsonl, *.log, *.credentials.json, .last-*, *.swp, mcp-needs-auth-cache.json  estado/credenciales sueltos
+# .claude.json y sus backups viven FUERA de ~/.claude — nunca se referencian aquí

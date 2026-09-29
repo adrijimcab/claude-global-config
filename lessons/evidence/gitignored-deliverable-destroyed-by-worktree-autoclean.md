@@ -1,0 +1,27 @@
+# `gitignored-deliverable-destroyed-by-worktree-autoclean` — evidencia completa
+
+Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») el 2026-09-28. La forma vinculante vive en `~/.claude/rules/promoted-rules.md`.
+
+- **`gitignored-deliverable-destroyed-by-worktree-autoclean`** — CLOSED BY MECHANISM 2026-09-16; this
+  entry states what the mechanism enforces. Two deliveries were lost because a worktree whose whole
+  value sat in ignored paths read as EMPTY and was removed. ROOT, and it is one `.gitignore` rule
+  serving two opposite populations: `dist/`, `node_modules/` and coverage are build product — never a
+  deliverable, and counting them makes every consumer refuse forever — while `.claude/**` is this
+  project's own hand-authored tooling, always a deliverable and invisible to `git status --porcelain`.
+  `.claude/fleet-env/delivery.mjs:27` had written that blindness down as a deliberate decision.
+  THE RULE, now a shared predicate rather than a habit: the question a removal decides is **"if this
+  worktree were deleted right now, what would be gone for good?"**, and it is answered in ONE place
+  (`.claude/worktree-work/worktree-work.mjs`) that every consumer asks — `fleet-env/delivery.mjs`,
+  `integrate/worktree-closure.mjs`, `orphan-work-guard/guard.mjs`. **Anything ignored and UNDECLARED
+  counts as work**: a path is exempt only where a declaration names the process that produces it, so a
+  new ignored build directory shows up loudly and a new ignored tooling directory is protected for
+  free. The two failure directions are not symmetric and the default points away from the silent one.
+  Proof: 29/29 selftest on constructed repositories, 23/23 mutants killed against that green baseline,
+  and eight consumer selftests re-run green. THE RESIDUAL GAP, stated rather than hidden: the Stop gate
+  fires only when a worker CLAIMS completion, so a worker that stops without claiming is still not
+  blocked, and the harness's own auto-clean is untouched.
+  The half that generalises beyond worktrees: **a predicate inherited by many consumers carries its
+  blind spot to all of them**, and the blind spot is invisible precisely because every consumer agrees.
+  When a shared question keeps producing surprises, fix the question — never add a second answer beside
+  it.
+

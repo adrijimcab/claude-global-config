@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "un `gentle-ai sync` vuelve a correr sin verificar antes el drift del overlay, y borra otra vez las personalizaciones propias de CLAUDE.md y de los sub-agentes, como pasó el 2026-09-28."
+}
