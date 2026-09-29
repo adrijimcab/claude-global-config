@@ -114,4 +114,12 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   RULE: **an item goes on the owner's work list only after an engram search for it and a read of the
   code in the same turn.** Otherwise it goes on the list marked as the worker's unverified claim. A
   defect list is an instruction to spend work; every entry in it is an assertion.
+  **EIGHTH FACE — A WORKER'S PLAN RELAYED WITH ITS ENVIRONMENT PREMISES UNCHECKED**
+  (`worker-claim-about-unreachable-file-committed-as-fact`, ninth occurrence, 2026-09-28; appended
+  2026-09-29 during the prompt-audit condensation, before trimming the summary in
+  `promoted-rules.md`): I told the owner that Renovate «activates after the next develop → main
+  merge», which was the worker's activation plan. The owner uses only develop, and the GitLab default
+  branch was `main` in all three projects. RULE: before relaying a worker's activation, deploy or
+  rollout plan, measure the environment premises it rests on (default branch, branches in use, roles
+  and permissions, schedules) in the same turn, or mark them unverified.
 

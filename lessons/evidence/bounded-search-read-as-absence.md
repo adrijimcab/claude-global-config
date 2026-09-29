@@ -168,4 +168,9 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   notification is true about the REPORT and silent about the BRANCH, and I read one as the other.
   RULE: a worker's state is read from its branch head, dirty count and transcript mtime, measured in the
   same turn, never from the wording of a lifecycle notification. "No report yet" is not "no work yet".
+  **DUODÉCIMA CARA — LA LISTA DE SKILLS DE UN TURNO ES UNA FOTO** (2026-09-29, apéndice tras la
+  auditoría prompt-audit, antes de condensar el resumen en `promoted-rules.md`): dije al dueño que
+  `/claude-api` no estaba disponible en su versión porque no figuraba en la lista de skills de ese
+  turno; al instalar un plugin la lista se recargó y apareció. RULE: una lista de capacidades del
+  harness solo prueba lo que hay EN ESE TURNO; decir «no aparece en esta sesión», nunca «no existe».
 
