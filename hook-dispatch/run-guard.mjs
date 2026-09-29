@@ -2,9 +2,15 @@
  * Corre UNA guardia dentro del proceso del dispatcher, aislada de las demás.
  *
  * El contrato de una guardia despachable es mínimo: exporta `evaluate(raw)`, que devuelve la salida
- * de hook (o `undefined`) sin imprimir nada, y NO lee stdin cuando `globalThis[IN_PROCESS]` es `true`.
- * Ejecutada directamente, la misma guardia sigue siendo un hook completo; por eso sus selftests no
- * cambian.
+ * de hook (o `undefined`) sin imprimir nada, y corre su `main()` (leer stdin, imprimir, salir) solo
+ * cuando es el proceso principal: `process.argv[1]` es su propio archivo. Importada por el dispatcher
+ * —o por un selftest— no lee stdin ni sale. Ejecutada directamente, sigue siendo un hook completo.
+ *
+ * Hasta el 2026-09-29 la señal era una marca global que ponía el dispatcher. Respondía «¿estoy dentro
+ * del dispatcher?», pero la pregunta real era «¿soy el proceso principal?». Por eso cualquier OTRO
+ * importador (el selftest de worktree-work importaba orphan-work-guard) disparaba `main()`, que salía
+ * con `process.exit(0)` y cortaba al importador a mitad de camino: 31 de 35 mutantes sobrevivían sobre
+ * un selftest que ya no podía ponerse rojo.
  *
  * Lo que este módulo garantiza, porque una guardia rota no puede llevarse puestas a las otras:
  *   - un `import` que falla, un `evaluate` que lanza o una guardia sin `evaluate` quedan como error de
@@ -16,9 +22,6 @@
  */
 
 import { pathToFileURL } from 'node:url';
-
-/** La marca que le dice a una guardia «estás dentro del dispatcher: no leas stdin». */
-export const IN_PROCESS = Symbol.for('hook-dispatch.in-process');
 
 class GuardExit extends Error {
   constructor(code) {
@@ -35,7 +38,6 @@ export async function runGuard(guard, raw, { importer = (file) => import(pathToF
   const originalWrite = process.stdout.write;
   let printed = '';
 
-  globalThis[IN_PROCESS] = true;
   process.exit = (code) => {
     throw new GuardExit(code);
   };

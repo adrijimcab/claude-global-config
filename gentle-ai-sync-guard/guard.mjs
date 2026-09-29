@@ -10,6 +10,9 @@
  *
  *   node guard.mjs [--overlay-check <check.mjs>]     (el flag solo lo usa el selftest)
  */
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 const BYTE_ORDER_MARK = 0xfe_ff;
 
 const write = (object) => process.stdout.write(`${JSON.stringify(object)}\n`);
@@ -57,5 +60,6 @@ function main() {
   });
 }
 
-// Dentro del dispatcher, stdin ya lo leyó él: escucharlo acá consumiría su entrada.
-if (globalThis[Symbol.for('hook-dispatch.in-process')] !== true) main();
+// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
+// leería el stdin del importador y lo cortaría con process.exit(0) a mitad de camino.
+if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();

@@ -112,11 +112,8 @@ try {
   guard('broken-import.mjs', `import './does-not-exist.mjs';\nexport function evaluate() {}\n`);
   guard('exits.mjs', `export function evaluate() { process.exit(3); }\n`);
   guard('prints.mjs', `export function evaluate() { console.log('ruido'); }\n`);
-  // Una guardia real, sin la marca, leería stdin al importarse. Leer fd 0 en el test no discrimina
-  // (a veces devuelve vacío), así que la fixture hace observable la ausencia de la marca: lanza.
-  guard('reads-stdin-guarded.mjs', `export function evaluate() { return undefined; }\nif (globalThis[Symbol.for('hook-dispatch.in-process')] !== true) throw new Error('sin la marca, esta guardia habría leído stdin');\n`);
 
-  const allGood = manifest('good.json', ['deny-a.mjs', 'deny-bash-only.mjs', 'async.mjs', 'reads-stdin-guarded.mjs']);
+  const allGood = manifest('good.json', ['deny-a.mjs', 'deny-bash-only.mjs', 'async.mjs']);
 
   const clean = await dispatch(allGood, payload('Bash', 'ok'));
   check('dispatch: comando limpio → sin salida ni problemas', clean.output === undefined && clean.problems.length === 0, JSON.stringify(clean));

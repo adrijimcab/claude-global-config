@@ -49,7 +49,7 @@
  */
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { briefOf, inspectBrief } from './provenance.mjs';
@@ -193,5 +193,6 @@ function main() {
   process.exit(0);
 }
 
-// Dentro del dispatcher, stdin ya lo leyó él: leerlo acá consumiría su entrada.
-if (globalThis[Symbol.for('hook-dispatch.in-process')] !== true) main();
+// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
+// leería el stdin del importador y lo cortaría con process.exit(0) a mitad de camino.
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) main();

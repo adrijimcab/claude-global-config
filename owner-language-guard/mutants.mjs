@@ -65,7 +65,7 @@ const MUTANTS = [
   ['el CLI bloquea siempre', `${G}/guard.mjs`, 'if (!verdict.block) return undefined;', 'if (false) return undefined;'],
   ['el CLI no registra el payload ilegible', `${G}/guard.mjs`, 'log(`payload ilegible, se deja pasar:', 'String(`payload ilegible, se deja pasar:'],
   ['el CLI no imprime el bloqueo', `${G}/guard.mjs`, 'if (output !== undefined) process.stdout.write(JSON.stringify(output));', ''],
-  ['el CLI no corre fuera del dispatcher', `${G}/guard.mjs`, "if (globalThis[Symbol.for('hook-dispatch.in-process')] !== true) {", 'if (false) {']
+  ['el CLI no corre como proceso principal', `${G}/guard.mjs`, 'if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {', 'if (false) {']
 ];
 
 if (!existsSync(RUNNER)) {

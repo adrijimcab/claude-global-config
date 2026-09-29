@@ -20,6 +20,9 @@
  * in ~/.claude/verification-contract.md, loaded in every project by ~/.claude/rules/10-contracts.md.
  */
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 const HIGH_RISK = [
   // Spanish — claims of non-existence / absolutes about the system
   /\bno\s+(existe|hay|tenemos|ten[ií]a(?:mos)?|est[aá]\s+cableado|lo\s+caza|cubre|falta)\b/i,
@@ -112,5 +115,6 @@ const main = async () => {
   process.exit(0);
 };
 
-// Dentro del dispatcher, stdin ya lo leyó él: escucharlo acá consumiría su entrada.
-if (globalThis[Symbol.for('hook-dispatch.in-process')] !== true) main();
+// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
+// leería el stdin del importador y lo cortaría con process.exit(0) a mitad de camino.
+if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();

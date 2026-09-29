@@ -26,7 +26,6 @@ const MUTANTS = [
   ['una guardia sin evaluate cuenta como silencio limpio', 'hook-dispatch/run-guard.mjs', "if (typeof module?.evaluate !== 'function') return { error: 'no exporta evaluate(raw): no es despachable' };", "if (typeof module?.evaluate !== 'function') return { output: undefined };"],
   ['un fallo de guardia deja de anunciarse', 'hook-dispatch/dispatch.mjs', 'const withNotice = { ...output, systemMessage:', 'const withNotice = { ...output, silenced:'],
   ['el proceso sale con 1 ante problemas', 'hook-dispatch/dispatch.mjs', '  await main();\n  process.exitCode = 0;', '  await main();\n  process.exitCode = 1;'],
-  ['la marca de proceso compartido no se pone', 'hook-dispatch/run-guard.mjs', '  globalThis[IN_PROCESS] = true;', ''],
 ];
 
 const survivors = runMutants({

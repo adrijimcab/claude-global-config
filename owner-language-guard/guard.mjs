@@ -18,6 +18,7 @@
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { evaluate as judgeTurn } from './evaluate.mjs';
 
@@ -82,8 +83,9 @@ function main() {
   if (output !== undefined) process.stdout.write(JSON.stringify(output));
 }
 
-// Dentro del dispatcher, stdin ya lo leyó él: leerlo acá consumiría su entrada.
-if (globalThis[Symbol.for('hook-dispatch.in-process')] !== true) {
+// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
+// leería el stdin del importador.
+if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   main();
   process.exitCode = 0;
 }

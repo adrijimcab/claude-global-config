@@ -17,7 +17,6 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.join(HERE, 'claim-guard.mjs');
 
-globalThis[Symbol.for('hook-dispatch.in-process')] = true;
 const { evaluate } = await import('./claim-guard.mjs');
 
 let passed = 0;
