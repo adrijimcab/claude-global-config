@@ -51,121 +51,41 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/stale-artifact-read-as-this-runs-result.md`.
 
 - **`guard-that-cannot-go-red`** — A new guard, gate, check or classifier is NOT trusted until it has
-  been proven to DISCRIMINATE, on real cases, across the state space its decision ranges over. Two
-  distinct faces, both mine, both nearly shipped as working: (1) a `Stop` guard filtered on a field
-  name that did not exist, so every comparison saw `undefined`, the filter emptied, and a guard that
-  COULD NOT FIRE produced output byte-identical to a clean fleet; (2) a close command passed an 11/11
-  self-test and four real closes, then refused a fully-integrated worktree with a self-contradicting
-  message — its classifier could not tell "the branch has content the trunk lacks" from "the trunk has
-  content the branch lacks", and the earlier cases happened to contain only one of those states. So:
-  silence from a check is evidence ONLY once that same check has been seen to speak; testing that a
-  mechanism FIRES is not testing that it DECIDES CORRECTLY; and the states your first real cases
-  happen to contain are not the states that exist. Enumerate the state space the decision ranges over
-  and exercise each state in the self-test, so the discrimination cannot silently drift back.
-  Recorded twice before it earned promotion, and a THIRD face arrived the moment a guard met reality.
-  **THE NEAR MISS IS A STATE, and it is the one you will not think of**, because the state space that
-  matters is defined by USAGE, not by the code's branches. Measured: a delegation guard requiring the
-  literal markers `MEASURED:` / `HYPOTHESIS:` passed 14 self-test cases — both present, each missing,
-  both missing, wrong tool, no prompt, four corruptions — and then REFUSED its author's very first
-  real brief, which said `MEASURED (by me, on develop):`. The word was there, the meaning was there,
-  the literal was not, because the colon landed after a parenthetical. Nobody had tested "tried and
-  got the FORM wrong", which is precisely what a person satisfying a control actually does.
-  Second half of the same defect: the refusal said only "missing" while the guard could SEE the bare
-  word present, withholding the one fact that made the fix obvious. **A control that decides correctly
-  but explains poorly gets routed around — the same end state as one that cannot fire, reached by a
-  different road.** So: test the near miss, and make the refusal NAME it. Do not relax the form to
-  make the message unnecessary; strictness is what stops a marker from being talked around.
-  **FOURTH FACE, and it is the one that gets a guard switched off: RED FOR THE WRONG REASON.** A
-  selftest whose fixture is LIVE MUTABLE STATE rots on its own. Measured 2026-09-02: the
-  integration-guard selftest pinned its REAL INCIDENT cases by comparing the deck HTML blob at a
-  historical tag against `develop`, asserting byte-identity — and went red the moment `develop`
-  legitimately regenerated the deck four times. Nothing had regressed. The reasoning error sat in the
-  test's own comment, which claimed an inversion meant "the discount has lost its basis"; false,
-  because the discount rests on the three deck artifacts rendering from ONE model in ONE command — a
-  property of a SINGLE regeneration, never of a frozen tag versus a branch that moves. A historical
-  tag MUST diverge from the trunk; that is what historical means. So: a fixture is CONSTRUCTED by the
-  test, never read from a branch, a tag's relationship to a branch, or any artifact that legitimately
-  changes. A guard that reddens on a correct tree is worse than one that cannot fire — the first
-  teaches people to turn it off, the second at least stays out of the way.
-  **FIFTH FACE, and it is the one you BORROW rather than build: A PROBE YOU DID NOT AUTHOR.** … RULE: before any probe becomes a decision signal, exercise the state in which it
-  MUST say no. A borrowed signal gets the same treatment as a guard you wrote, because the question
-  is not who built it — it is whether its answer can vary with the thing you are deciding.
-  **SIXTH FACE — THE DISCRIMINATOR THAT ANSWERS A DIFFERENT QUESTION, and it passes as diligence
-  because it is genuinely careful work.** The five above either cannot fire, cannot vary, or fire
-  wrongly. This one fires correctly and answers something you were not deciding. Measured: I reaped a
-  LIVE worker's worktree and deleted its branch mid-verification — `git worktree remove --force`
-  wiped the directory and `git branch -D` left its commit DANGLING and GC-eligible, reachable only by
-  SHA; the work survived solely because I had told that worker to commit first. I had run a careful
-  check beforehand — "does this branch hold content the trunk lacks?" — and got a correct NO. But a
-  reap decides OCCUPANCY, and nothing I ran answered that. **A check being rigorous, and its answer
-  being true, says nothing about it bearing on the decision.** Name the question the action decides,
-  in words, BEFORE choosing the probe — and when a decision has two independent preconditions,
-  satisfying one is not evidence about the other.
-  The second half is how the real signal got past me, and it generalises: **a machine STATUS FIELD
-  outranked the actor's own sentence.** The harness said `completed` — which means the agent stopped
-  this turn, and its own note says the same task may notify again — while the agent's report text
-  said it was "waiting on the fresh verification run to land". It declared itself unfinished and I
-  read the field instead of the words. So: when a status and a first-hand account disagree about
-  whether work is finished, the account wins; a lifecycle field describes the process, never the
-  task. And for anything destructive, prefer the reversible error — an unreaped worktree costs disk,
-  a reaped live one costs work.
-  **THE SIXTH FACE THEN RECURRED WITH THIS PARAGRAPH ALREADY BINDING**, so the next lines are the part
-  that has to do the work. Measured 2026-09-09: dispatching five agents, I verified rigorously that
-  each task was still OPEN — `check:visual-coverage` still exit 1 with 68 problems, `package.json`
-  lines 295-296 still on the git URL — and every measurement was true. But a DISPATCH has two
-  independent preconditions: is the task open, AND is there already work in flight for it. Two fresh
-  agents went onto work already sitting finished and uncommitted in worktrees from a stopped fleet:
-  the entire two-line deliverable of task #56, and 175 lines of the Docker baselines script. The
-  OWNER caught it — "weren't these launched last night?" — no control did.
-  The abstract principle was not enough because **parked work is invisible by construction**: not in
-  `git status`, not in `git log`, and from the main checkout a loaded worktree looks identical to an
-  empty one — same HEAD, same branch listing. So the operational rule, not the principle: **before any
-  delegation, enumerate every worktree's uncommitted and unmerged content and READ the diff. OPEN is
-  not the same as UNSTARTED.**
-  The guard written to close it then failed on this same key twice over, which is why it was NOT
-  shipped: its agent-liveness probe scanned process command lines, and measurement refuted it — of 8
-  live `node`/`claude` processes, ZERO name any worktree, because agents run in-process in the
-  harness. A probe with no NO to give (fifth face) that reddens over a live agent (fourth face). That
-  discriminator belongs on `.claude/agent-worktree-lifecycle/occupancy.ts`, which already owns the
-  question, never on a process scan.
-  **SEVENTH FACE — THE GUARD THAT FORBIDS WRITING ABOUT ITSELF, and it fires within minutes of
-  shipping.** Measured 2026-09-09: the new toolchain guard, built to deny the shared-tree wipe,
-  denied a heredoc that was writing the agent contract DESCRIBING that denial — the forbidden text sat
-  in the heredoc BODY, which is data being written to a file, not a command being run. I had
-  enumerated the state space from the COMMAND's shapes: flags, chained `cd`, the Windows shim, the
-  fused semicolon, and the `npm run ci:lint` near miss that would have got the guard switched off. I
-  never enumerated the shapes an author produces immediately AFTER a prohibition ships, and
-  **documenting the new rule is the first of them** … RULE: when a guard forbids
-  a token, its self-test must exercise that token appearing as DATA — heredoc bodies, quoted strings,
-  echoed text, commit messages — and must also prove the scan RESUMES afterwards, or stripping the
-  data silently swallows the real command that follows it. This is the third face wearing new clothes:
-  a control that blocks legitimate work gets switched off the same day, which is the
-  `guard-that-cannot-go-red` end state reached by yet another road.
-  **EIGHTH FACE — THE IDENTITY GUARD THAT READ THE LABEL, NOT THE ERRAND** … RULE: an identity guard compares what the author actually wrote (the BRIEF, not the label), folds the
-  domain's own spellings (numeronyms, plurals), and treats a live worktree as overriding recency. Where
-  the signal is too weak to REFUSE without blocking legitimate work, the guard must still SURFACE the
-  candidate. Silence is not the only alternative to a false refusal. Fixed:
-  `relatedLiveAgents` advises (never denies) when a live worktree's whole errand appears inside the new
-  brief, and the self-test now carries this incident as its first advisory case (26/26, with the live
-  store probe flagging `a153f28c` and staying silent on an unrelated control).
-  **NINTH FACE — THE FIXTURE ALPHABET HID THE UNIT MISMATCH** … RULE: **a value measured in one unit is applied in that unit**: a byte size cuts bytes
-  (`Buffer.subarray`), never a decoded string. **A fixture is chosen for the data the guard will really
-  read**: a guard over transcripts, logs or user text is tested with multi-byte content larger than the
-  window it slices. Fixed and proven: self-test 12/12 including the multi-byte save case seen RED first,
-  plus a replay of the real refused stop against the live transcript, which now allows.
-  **TENTH FACE — "AM I BLOCKED RIGHT NOW" ANSWERING "IS THIS FINISHED", and the only witness was a count that did not add up** … RULE: **the completion of a multi-item operation is verified by COUNTING what landed against what was
-  asked** — never by a state flag, because a flag that marks one interruption cannot distinguish
-  "between items" from "done". And prefer the tool that already owns the operation: this project's
-  `.claude/integrate/staging-worktree.mjs` `pickOnto` picks ONE commit at a time and checks each status,
-  which is exactly why the production path does not have this defect and my ad-hoc loop did. A
-  hand-rolled reimplementation of an operation the repository already automates is where this class of
-  bug is born.
-  **The first face, again, in a throwaway script** … RULE, operational: **before any script
-  reads a field, print the DISTINCT FIELD SETS of the real records in one command and read from what is
-  there**; and **a chain whose later step certifies an earlier one must stop when the earlier one
-  fails** - never `;` or a newline between an edit and the command that vouches for it.
-  **THE PROOF TOOL ITSELF COULD NOT GO RED** … RULE: a kill measured over a red baseline is not evidence, and a proof is only as good
-  as the runner's ability to refuse to measure.
+  been proven to DISCRIMINATE, on real cases, across the state space its decision ranges over. Silence
+  from a check is evidence ONLY once that same check has been seen to speak; testing that a mechanism
+  FIRES is not testing that it DECIDES CORRECTLY. RULE: enumerate the state space the decision ranges
+  over and exercise each state in the self-test, so the discrimination cannot silently drift back. Ten
+  faces recorded to date; each adds one more state that belongs in that enumeration:
+  - **THE NEAR MISS IS A STATE.** RULE: test the near miss, and make the refusal NAME it — do not
+    relax the form to make the message unnecessary; strictness is what stops a marker from being
+    talked around.
+  - **RED FOR THE WRONG REASON.** RULE: a fixture is CONSTRUCTED by the test, never read from a
+    branch, a tag's relationship to a branch, or any artifact that legitimately changes.
+  - **A PROBE YOU DID NOT AUTHOR.** RULE: before any probe becomes a decision signal, exercise the
+    state in which it MUST say no — a borrowed signal gets the same scrutiny as a guard you wrote.
+  - **THE DISCRIMINATOR THAT ANSWERS A DIFFERENT QUESTION.** RULE: name the question the action
+    decides, in words, BEFORE choosing the probe; when a decision has two independent preconditions,
+    satisfying one is not evidence about the other. It recurred twice more: when a status and a
+    first-hand account disagree about whether work is finished, the account wins — a lifecycle field
+    describes the process, never the task; and before any delegation, enumerate every worktree's
+    uncommitted and unmerged content and READ the diff — OPEN is not the same as UNSTARTED.
+  - **THE GUARD THAT FORBIDS WRITING ABOUT ITSELF.** RULE: when a guard forbids a token, its self-test
+    must exercise that token appearing as DATA — heredoc bodies, quoted strings, echoed text, commit
+    messages — and must prove the scan RESUMES afterwards.
+  - **THE IDENTITY GUARD THAT READ THE LABEL, NOT THE ERRAND.** RULE: an identity guard compares what
+    the author actually wrote (the brief, not the label), folds the domain's own spellings, and treats
+    a live worktree as overriding recency; where the signal is too weak to refuse, it must still
+    surface the candidate.
+  - **THE FIXTURE ALPHABET HID THE UNIT MISMATCH.** RULE: a value measured in one unit is applied in
+    that unit — a byte size cuts bytes, never a decoded string; a fixture is chosen for the data the
+    guard will really read.
+  - **"AM I BLOCKED RIGHT NOW" ANSWERING "IS THIS FINISHED".** RULE: the completion of a multi-item
+    operation is verified by COUNTING what landed against what was asked, never by a state flag;
+    prefer the tool that already owns the operation. Operational corollary: before any script reads a
+    field, print the DISTINCT FIELD SETS of the real records first; a chain whose later step certifies
+    an earlier one must stop when the earlier one fails.
+  - **THE PROOF TOOL ITSELF COULD NOT GO RED.** RULE: a kill measured over a red baseline is not
+    evidence, and a proof is only as good as the runner's ability to refuse to measure.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/guard-that-cannot-go-red.md`.
 
 - **`bounded-search-read-as-absence`** — Reading ONE empty store as "no record exists". Measured, twice, and the
@@ -333,21 +253,14 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   two real refused forms, in `~/.claude/brief-provenance/selftest.mjs`.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/brief-marker-written-as-prose-not-literal-form.md`.
 
-- **`promotion-to-contract-read-as-prevention`** — Promoting a lesson into a binding contract is not the
-  same as preventing it, and treating the promotion as the end of the work is how a "closed" lesson keeps
-  firing. Measured: `measurement-failure-is-not-a-zero` recurred an EIGHTH time with its rule already in
-  both contract files AND anchored in the parity gate. Nothing had rotted. The promoted text named only
-  the faces measured up to that point — a failing command piped into a counter reading as clean, and `$?`
-  after a pipeline — while the recurrence was the INVERSE face the text never mentions: a KILLED process's
-  non-zero code read as a real failure over an operation that had actually succeeded. The first two faces
-  fail toward "clean" and certify broken work; that one fails toward "broken" and destroys finished work,
-  because the response to a false RED is to redo or abort something already done.
-  **RULE: a promoted rule prevents only the FACES ITS TEXT NAMES, never the lesson in the abstract.** So on
-  every recurrence of an ALREADY-promoted key, the work is not to re-record it: READ the existing contract
-  text, decide whether this incident is a face that text already names, and when it is not, EXTEND the text
-  with the new face — in every file that carries it — before promoting again. A key whose recurrence count
-  climbs while its text stands unchanged is telling you the TEXT is the stale artifact, and a contract that
-  is added to only when a key is brand new will keep collecting recurrences it was supposed to stop.
+- **`promotion-to-contract-read-as-prevention`** — Promoting a lesson into a binding contract is not
+  the same as preventing it, and treating the promotion as the end of the work is how a "closed"
+  lesson keeps firing. **RULE: a promoted rule prevents only the FACES ITS TEXT NAMES, never the
+  lesson in the abstract.** So on every recurrence of an ALREADY-promoted key, do not re-record it —
+  READ the existing contract text, decide whether this incident is a face that text already names,
+  and when it is not, EXTEND the text with the new face in every file that carries it before promoting
+  again. A recurrence count climbing while the text stands unchanged means the text is the stale
+  artifact.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/promotion-to-contract-read-as-prevention.md`.
 
 - **`worker-claim-about-unreachable-file-committed-as-fact`** — A subagent's finding is UNVERIFIED BY ME
@@ -404,22 +317,13 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   (default branch, branches in use, roles and permissions, schedules) in the same turn, or mark them unverified.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/worker-claim-about-unreachable-file-committed-as-fact.md`.
 
-- **`provisioning-bound-to-delegation-not-worktree-creation`** — A worktree you create YOURSELF arrives
-  with no `node_modules`, because the provisioner is bound to DELEGATION — a `PreToolUse` hook on
-  `Task|Agent` — and never to worktree creation. It fires for a spawned worker and never for a worktree
-  you make by hand. Measured, twice: the second time I made one to land a change the integration guard
-  had correctly refused on `develop`, and nothing could run in it. The reason it recurred is the part
-  worth keeping: **the refusal message that sends you down that path was itself telling me the
-  opposite**, printing `git worktree add … # node_modules is junctioned for you` — guidance TRUE for a
-  delegated worker and FALSE for anyone following the printed instruction by hand, with nothing in the
-  text distinguishing the two. A correct instruction whose audience is ambiguous is a wrong instruction
-  for half its readers. (Corrected in `.husky/pre-commit`, without naming the gitignored provisioner,
-  since no agent tooling may enter git.)
-  **RULE: after any `git worktree add` you performed yourself, give the new worktree its dependencies
-  BEFORE running a single gate there** — and never read a gate failure in a fresh worktree as a verdict
-  about the code until `node_modules` is confirmed present. The first failure in a new worktree is
-  almost always the missing install, and it will masquerade as anything: a type error, a broken import,
-  a red gate that has nothing to do with your change.
+- **`provisioning-bound-to-delegation-not-worktree-creation`** — A worktree you create YOURSELF
+  arrives with no `node_modules`, because the provisioner is bound to DELEGATION (a `PreToolUse` hook
+  on `Task|Agent`), never to worktree creation. **RULE: after any `git worktree add` you performed
+  yourself, give the new worktree its dependencies BEFORE running a single gate there** — and never
+  read a gate failure in a fresh worktree as a verdict about the code until `node_modules` is confirmed
+  present. The first failure in a new worktree is almost always the missing install, and it will
+  masquerade as anything: a type error, a broken import, a red gate unrelated to your change.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/provisioning-bound-to-delegation-not-worktree-creation.md`.
 
 - **`gitignored-deliverable-destroyed-by-worktree-autoclean`** — CLOSED BY MECHANISM 2026-09-16; this

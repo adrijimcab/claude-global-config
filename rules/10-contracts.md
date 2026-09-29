@@ -1,8 +1,7 @@
 # Contratos vinculantes cargados en todo proyecto
 
-Hasta el 2026-09-28 estos textos se inyectaban por prompt con hooks `UserPromptSubmit`: se repetían en
-el historial con cada mensaje y con cada notificación de agente. Ahora se cargan una vez por sesión
-(y se reinyectan tras compactar). Cada archivo importado sigue siendo la FUENTE ÚNICA de su texto.
+Estos archivos se cargan una vez por sesión (y se reinyectan tras compactar). Cada archivo importado
+es la FUENTE ÚNICA de su texto.
 
 ## Orchestration directive
 

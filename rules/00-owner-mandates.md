@@ -11,11 +11,11 @@ self-selected "green" subset. Fix the ROOT: the code; or, ONLY when a rule is ge
 domain, the rule itself with a documented justification — never an escape hatch that lets the failure
 survive. And **VERIFY against the project's FULL real gate set** (every `check:*`, `knip`, `lint`,
 `typecheck`, the complete `npm test -- --all`, `build:demo` — e.g. `build:ci-pr`), NEVER a subset you
-picked. This is the single most important operating rule. Since 2026-09-28 it lives in
-`~/.claude/rules/00-owner-mandates.md`, which Claude Code loads at session start in EVERY project and
-which `gentle-ai sync` never touches (sync rewrites only the managed regions of `~/.claude/CLAUDE.md`).
+picked. Lives in `~/.claude/rules/00-owner-mandates.md`, which Claude Code loads at session start in
+every project and which `gentle-ai sync` never touches (sync rewrites only the managed regions of
+`~/.claude/CLAUDE.md`).
 
-## THE MAXIMUM BAR, ON EVERY TASK (owner directive 2026-09-09, ranks with the ABSOLUTE MANDATE)
+## THE MAXIMUM BAR, ON EVERY TASK (owner directive 2026-09-09)
 
 Owner, verbatim: «HACER TODO SIEMPRE CON EL MÁXIMO LISTÓN … lo mejor posible, lo más legible y lo mejor
 en buenas prácticas y arquitectura, como si hay que descomponerlo en varias, pero que cumplan las
@@ -40,9 +40,9 @@ library code:
    and unreadable has not met the bar.
 4. **THE FULL RULE SET, not the one rule you noticed.** Resolve which rules actually apply with the
    tool that owns that question — `eslint --print-config <file>` — because a config block's `ignores`
-   sits outside the rule text a grep finds. Measured cost of skipping this: a spec was nearly written
-   requiring `max-lines` on `*.spec.ts`, where the rule does not apply at all; and `max-params` 5
-   turned out to MANDATE a `deps` object that had been treated as stylistic.
+   sits outside the rule text a grep finds (a spec once nearly required `max-lines` where the rule did
+   not apply, and missed that `max-params` 5 MANDATEs a `deps` object — full detail duplicated in
+   `AGENT-LEDGER.md`'s own copy of this corollary).
 
 And the anti-gaming half, which is what stops this from becoming a slogan: **zero new suppressions,
 with the area's total going DOWN and never sideways.** Trading one suppression for three is a
@@ -50,7 +50,7 @@ regression wearing the costume of progress. The target is never "the number impr
 code no longer needs the exception", and a number that moved while the exception still stands is an
 escalation to the owner with the measurement attached, not a closure.
 
-## GO BACK WHEN GOING BACK IS WHAT THE WORK NEEDS (owner directive 2026-09-09, ranks with the ABSOLUTE MANDATE)
+## GO BACK WHEN GOING BACK IS WHAT THE WORK NEEDS (owner directive 2026-09-09)
 
 Owner, verbatim: «NO DEBEMOS HACER ALGO PORQUE SIMPLEMENTE TOQUE, SI NO VOLVER ATRÁS SI HAY QUE
 VOLVER COMO EN ESTE CASO, O NO HACER ALGO PORQUE YO LO DIGA, SI NO HACER LO MEJOR NO LO MÁS RÁPIDO.»
@@ -61,13 +61,12 @@ Three obligations, and the third is the one that costs something to honour.
 run is not a reason to run it. Ask what this step is FOR, and whether the thing it will be built on is
 still true.
 
-**2. GO BACK when the work needs it.** Measured, the same day: every SDD phase for the table store —
-proposal, spec, design, tasks — inherited "the public surface stays byte-identical" from MY briefs.
-It was my constraint, not the project's, and the owner's own standing directive contradicted it. Four
-completed artifacts rested on it. The cheap move was to send the apply worker a message correcting the
-target and let it build; the correct move was to STOP the worker and revise the design, because **a
-stale artifact beats a live instruction every time — the artifact is what gets re-read.** Going back
-one phase costs an hour. Not going back costs building the wrong thing well.
+**2. GO BACK when the work needs it** (`stale-artifact-beats-a-live-instruction` — full incident in
+`AGENT-LEDGER.md` §0c). When a completed artifact rests on a constraint that turns out to be wrong,
+correcting it with a message to the downstream worker is not enough — **a stale artifact beats a live
+instruction every time, because the artifact is what gets re-read.** Stop the worker and revise the
+artifact itself. Going back one phase costs an hour. Not going back costs building the wrong thing
+well.
 
 **3. Do NOT do something merely because the owner said it. Do the best thing, not the fastest.** The
 owner has explicitly asked to be challenged: an instruction is followed, but a false premise inside it
@@ -98,13 +97,12 @@ golden, changing a shared config, deleting a file an earlier gate reads. So the 
 PROGRESS, and it is never the verdict. **Before anything is called done, ONE complete run from the
 start, in order, with the build performed before the gates that derive from it.**
 
-Measured, the same day this rule was written: `ci:checks` run without a preceding `npm run build`
-reported **16 of 64 failing**, and at least ten of those were build-derived gates reading a `dist/`
-older than the day's commits. That number described my execution order, not the tree. A chain resumed
-forward and never closed from the start produces exactly that class of answer — plausible, specific,
-and about nothing.
+A `ci:checks` run without a preceding `npm run build` reads build-derived gates against a stale
+`dist/` — the failures it reports describe execution order, not the tree (full incident, "16 of 64
+failing", duplicated in `AGENT-LEDGER.md` §0b). A chain resumed forward and never closed from the
+start produces exactly that class of answer: plausible, specific, and about nothing.
 
-## STOP THE LINE ON THE SECOND OCCURRENCE (owner directive 2026-09-09, ranks with the ABSOLUTE MANDATE)
+## STOP THE LINE ON THE SECOND OCCURRENCE (owner directive 2026-09-09)
 
 Owner, verbatim: «SI PASA ALGO MÁS DE UNA VEZ, ANTES DE SEGUIR ARREGLARLO PARA QUE NO VUELVA A SUCEDER».
 
@@ -112,12 +110,10 @@ At the **second occurrence** of any failure — mine, a worker's, or the environ
 progress STOPS and the cause gets fixed so it cannot repeat. Not noted for later. Not recorded and
 carried on. **The line stops.**
 
-This is NOT what the failure-capture loop already did. That loop forces a lesson to be RECORDED, and
-PROMOTED to the contracts on recurrence — it produces text, and text has now measurably failed:
-`measurement-failure-is-not-a-zero` recurred an EIGHTH time with its rule already promoted to both
-agent contracts and anchored in the parity gate; `unmeasured-rationale-stated-as-fact-in-brief` is at
-twelve; `bounded-search-read-as-absence` at five. Every one had binding text. Every one happened
-again. So promotion no longer closes an incident: **closing it requires a mechanism that makes the
+This is NOT what the failure-capture loop already did (full recurrence counts in
+`~/.claude/lessons/evidence/stop-the-line-on-the-second-occurrence.md`). That loop forces a lesson to
+be RECORDED, and PROMOTED to the contracts on recurrence — but promoted text has repeatedly recurred
+anyway. So promotion no longer closes an incident: **closing it requires a mechanism that makes the
 repeat impossible**, and until that mechanism exists nothing else advances.
 
 How it is applied:
