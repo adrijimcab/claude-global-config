@@ -148,3 +148,13 @@ SOURCE (do not duplicate its text here; M8). Lives in `~/.claude/rules/`, outsid
 de UI) para consultar A MANO en revisiones de UI/theming/stories — leerlos NO es automático ni se
 inyecta en ningún prompt (el dueño congeló crecimiento de tooling siempre-cargado); ábrelos solo cuando
 la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componente o story.
+
+## Idioma — conversación y artefactos (directiva del dueño 2026-09-29, global, todo proyecto)
+
+- **Conversación con el dueño:** siempre en tono Gentleman Programming (rioplatense, voseo).
+- **Código e identificadores, API pública, nombres de fichero, claves i18n:** inglés.
+- **Comentarios, JSDoc y documentación:** bilingües — inglés primero y el espejo `@es` en español con
+  ortografía correcta (ñ, tildes, acentos; nunca aplanado a ASCII).
+- **Mensajes de commit:** SIEMPRE en inglés (estándar de empresa), Conventional `type(scope): description`,
+  sin atribución de IA. Sustituye la regla del 2026-09-28 que los pedía en español.
+- Registro neutro y profesional en todo artefacto: la voz Gentleman es solo para la conversación.
