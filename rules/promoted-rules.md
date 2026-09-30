@@ -151,6 +151,11 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   - **A COUNT PROVES A STRING OCCURS, NOTHING MORE.** RULE: a grep may only LOCATE a candidate —
     before any count becomes a claim, OPEN the hits and read them in context, or ask the tool that
     OWNS the semantics.
+  - **A FILE'S SHARE JUDGED FROM ITS LOUDEST TOKENS (2026-09-30,
+    `audit-verdict-from-commit-subjects-not-from-reading`).** I told the owner a rules file was mostly
+    specific to one project, from the project names that stood out in it; classified entry by entry,
+    1 of 14 was. RULE: a claim about what share of a file or list belongs to a category is made only
+    after classifying every entry by reading it, and the sentence carries the count (N of M).
   - **A MANIFEST IS A STRUCTURED DOCUMENT, NEVER A LINE RANGE.** RULE: before any verdict about a
     dependency, PARSE the manifest and name the SECTION the key lives in; the same package name in two
     sections answers two different questions.
