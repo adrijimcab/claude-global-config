@@ -59,6 +59,17 @@ export function readMarker(line) {
 /** A refusal: `{ ok: false, line: '', problem }`, English first and the `@es` mirror in the same message. @es Una negativa con el motivo en inglés y su espejo `@es`. */
 export const refuse = (english, spanish) => ({ ok: false, line: '', problem: `${english} @es ${spanish}` });
 
+/**
+ * Joins bilingual sentences, each `english @es spanish`, into ONE message: every English part, a single
+ * `@es`, then every Spanish part in the same order, so both languages carry the same information.
+ * @es Une oraciones bilingües en UN mensaje: todas las partes en inglés, un único `@es` y todas las partes en español en el mismo orden.
+ */
+export function joinBilingual(sentences) {
+  const halves = sentences.map((sentence) => sentence.split(' @es '));
+
+  return `${halves.map(([english]) => english).join(' ')} @es ${halves.map(([english, spanish = english]) => spanish).join(' ')}`;
+}
+
 /** `YYYY-MM-DD`, checked character by character. @es `AAAA-MM-DD`, comprobado carácter a carácter. */
 export const isDate = (text) => typeof text === 'string' && text.length === 10 && [...text].every((character, at) => (at === 4 || at === 7 ? character === '-' : DIGITS.includes(character)));
 

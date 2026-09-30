@@ -215,6 +215,7 @@ function capture(target, key, extra) {
 }
 
 const readOr = (file) => (existsSync(file) && statSync(file).isFile() ? readFileSync(file, 'utf8') : '');
+const noteOf = (out) => out.split('\n').find((line) => line.startsWith('NOTE')) ?? '';
 const lineFor = (text, key) => text.split('\n').find((line) => line.includes(`<!--fc:${key}#`)) ?? '';
 
 {
@@ -270,6 +271,12 @@ for (const [name, extra, fragment] of [
 
   check('evidence that cannot be written: the FULL line is recorded, the capture still succeeds', run.status === 0 && line.includes(NARRATIVE) && line.includes(`RULE: ${SAID}`) && !line.includes('Evidence:') && readOr(target.ledger).includes('#1-->'), `${run.out}\n${line}`);
   check('...and the fallback is announced in both languages', run.out.includes('not shortened') && run.out.includes(' @es '), run.out);
+
+  // A message is ONE English part, then ONE `@es` part carrying the same information, in the same order.
+  // @es Un mensaje es UNA parte en inglés y UNA parte `@es` con la misma información, en el mismo orden.
+  const [english, spanish, ...extra] = noteOf(run.out).split(' @es ');
+
+  check('...the note is one English part, then one @es part, each carrying the evidence fault', extra.length === 0 && english.includes('not shortened') && english.includes('could not be written') && !english.includes('no se pudo') && spanish?.includes('se registró como línea completa') === true && spanish.includes('no se pudo escribir la evidencia'), noteOf(run.out));
 }
 
 {
@@ -279,6 +286,7 @@ for (const [name, extra, fragment] of [
   const line = lineFor(readOr(target.ledger), 'unprovable-lesson');
 
   check('a full line whose conservation cannot be proved (two RULE: labels) is recorded in full, not shortened', run.status === 0 && line.includes(twoLabels) && !line.includes('Evidence:') && run.out.includes('not shortened'), `${run.out}\n${line}`);
+  check('...and its note also has exactly one @es', noteOf(run.out).split(' @es ').length === 2, noteOf(run.out));
 }
 
 {

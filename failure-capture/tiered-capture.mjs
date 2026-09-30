@@ -12,7 +12,7 @@
 
 import { proveConservation } from './conservation.mjs';
 import { appendEvidence, readEvidence } from './evidence.mjs';
-import { MARK_OPEN, RULE_LABEL, tieredLine } from './ledger-line.mjs';
+import { joinBilingual, MARK_OPEN, RULE_LABEL, tieredLine } from './ledger-line.mjs';
 
 /** The shortest `--rule` accepted: a sentence, not a word. @es La `--rule` más corta aceptada: una frase, no una palabra. */
 export const MINIMUM_RULE_LENGTH = 20;
@@ -58,7 +58,7 @@ export function newLessonLine({ ledgerFile, scope, date, key, lesson, rule, mark
 
   if (proof?.ok) return { line: built.line, tiered: true };
 
-  const reason = proof === undefined ? archived.problem : proof.deficits.join(' ');
+  const reasons = proof === undefined ? [archived.problem] : proof.deficits;
 
-  return { line: full, tiered: false, problem: `the lesson was recorded as a full line, not shortened: ${reason} @es la lección se registró como línea completa, sin acortar.` };
+  return { line: full, tiered: false, problem: joinBilingual(['the lesson was recorded as a full line, not shortened. @es la lección se registró como línea completa, sin acortar.', ...reasons]) };
 }
