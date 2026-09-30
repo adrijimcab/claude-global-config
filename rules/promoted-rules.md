@@ -98,7 +98,7 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   - **A CAPABILITY DECLARED ABSENT FROM ONE TOOL'S SILENCE.** RULE: a tool returning nothing
     establishes only what THAT tool enumerates; before declaring any capability, actor or record gone,
     name what the tool you used actually covers, and ATTEMPT the recovery instead of reasoning about
-    it. CLOSED BY MECHANISM: `.claude/resume-before-fresh/guard.mjs`.
+    it. CLOSED BY MECHANISM: `~/.claude/resume-before-fresh/guard.mjs`.
   - **THE RIGHT SEARCH OF THE WRONG SURFACE.** RULE: expanding ONE dependency graph establishes
     absence only within THAT graph — before saying anything does not gate a release, enumerate every
     gating surface it actually passes through.
