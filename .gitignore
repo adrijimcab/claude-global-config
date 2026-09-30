@@ -20,6 +20,8 @@
 !/fleet-kit/**
 /fleet-kit/state/
 /fleet-kit/scratch/
+!/gates-kit/
+!/gates-kit/**
 !/backlog-guard/
 !/backlog-guard/**
 /backlog-guard/state/
