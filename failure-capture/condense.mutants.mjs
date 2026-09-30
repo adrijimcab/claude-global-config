@@ -57,7 +57,7 @@ const MUTANTS = [
   ['a dry run is worded as a write', RUN, "['would be shortened', 'se acortarían']", "['shortened', 'acortadas']"],
 
   // --- the command
-  ['a dry run is written for real', COMMAND, 'write: args.write === true,', 'write: true,'],
+  ['a dry run is written for real', COMMAND, 'write: args.write === true })', 'write: true })'],
   ['the ledger is read before the lock by the command', COMMAND, 'load: () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined)', 'load: ((early) => () => early)(readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined))'],
   ['an unreadable keys file is not refused', COMMAND, "console.error(`condense REFUSED — --keys needs", "console.error(`condense — --keys needs"],
   ['a refused keys file does not stop the run', COMMAND, '\n\n      return 1;\n    }\n  }\n\n  const outcome', '\n    }\n  }\n\n  const outcome'],

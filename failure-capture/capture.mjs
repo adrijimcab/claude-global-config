@@ -42,6 +42,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { baselineFor, closureClause, closureRecord, contractFileId, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
+import { adviseOnBudget } from './budget-advisory.mjs';
 import { budgetVerdict } from './budget-verdict.mjs';
 import { renderBudget, renderUnmeasured } from './budget-report.mjs';
 import { describeOutcome, newRunId, runCondense } from './condense.mjs';
@@ -311,7 +312,29 @@ function commandKeys() {
   return 0;
 }
 
+/**
+ * Records a lesson, then advises when the always-loaded instruction set is over its ceiling. The advisory
+ * runs only after the capture succeeded, outside the ledger lock the capture held, and never changes the
+ * capture's exit status (spec R4.4).
+ * @es Registra una lección y luego avisa si el conjunto de instrucciones siempre cargado supera su techo. El
+ * aviso corre solo tras una captura exitosa, fuera del lock del ledger que la captura tomó, y nunca cambia el
+ * estado de salida de la captura (spec R4.4).
+ */
 function commandCapture(args) {
+  const status = recordCapture(args);
+
+  if (status === 0) {
+    adviseOnBudget({
+      measure: () => measureLoadedSet({ project: PROJECT, directory: process.cwd(), ceiling: args.ceiling }).verdict,
+      condense: () => describeOutcome(condenseLedgers({ keyMap: [], write: true })),
+      print: (line) => console.log(line)
+    });
+  }
+
+  return status;
+}
+
+function recordCapture(args) {
   const { key, scope, actor, lesson, rule, session } = args;
   const problems = [];
 
@@ -806,6 +829,9 @@ function commandInit() {
  * y `--keys <fichero>` opcional con la clave de cada línea sin marcador. Salida 0 limpia, 1 si quedó alguna
  * línea sin cambiar, 2 si el ledger está bloqueado.
  */
+/** Runs the condense over this project's ledgers, reading them under the ledger lock. @es Ejecuta el condense sobre los ledgers de este proyecto, leyéndolos bajo el lock del ledger. */
+const condenseLedgers = ({ keyMap, write }) => runCondense({ load: () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined), keyMap, write, date: today(), runId: newRunId(), lockFile: LOCK_FILE, preImageRoot: path.join(STATE_DIR, 'condense') });
+
 function commandCondense(args) {
   let keyMap = [];
 
@@ -821,11 +847,23 @@ function commandCondense(args) {
     }
   }
 
-  const outcome = runCondense({ load: () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined), keyMap, write: args.write === true, date: today(), runId: newRunId(), lockFile: LOCK_FILE, preImageRoot: path.join(STATE_DIR, 'condense') });
+  const outcome = condenseLedgers({ keyMap, write: args.write === true });
 
   for (const line of describeOutcome(outcome)) console.log(line);
 
   return outcome.status;
+}
+
+/**
+ * The loaded instruction set of a project (or of `directory` when no project holds it) and its verdict,
+ * shared by the `budget` command and the advisory after a capture. `ceiling` is the highest directory walked.
+ * @es El conjunto de instrucciones cargado de un proyecto (o de `directory` si ningún proyecto lo contiene) y
+ * su veredicto, compartido por el comando `budget` y el aviso tras una captura. `ceiling` es el directorio más alto que se recorre.
+ */
+function measureLoadedSet({ project, directory, ceiling }) {
+  const loaded = loadedSet({ home: homedir(), projectRoot: project?.root ?? directory, ceiling: typeof ceiling === 'string' ? path.resolve(ceiling) : undefined });
+
+  return { loaded, verdict: budgetVerdict({ loaded, projectCeiling: project?.loadedSetCeiling }) };
 }
 
 /**
@@ -846,9 +884,7 @@ function commandBudget(args) {
   try {
     if (!existsSync(directory)) throw new Error(`${directory} does not exist. @es ${directory} no existe.`);
 
-    const project = projectOf(directory);
-    const loaded = loadedSet({ home: homedir(), projectRoot: project?.root ?? directory, ceiling: typeof args.ceiling === 'string' ? path.resolve(args.ceiling) : undefined });
-    const verdict = budgetVerdict({ loaded, projectCeiling: project?.loadedSetCeiling });
+    const { loaded, verdict } = measureLoadedSet({ project: projectOf(directory), directory, ceiling: args.ceiling });
 
     for (const line of renderBudget({ verdict, missing: loaded.missing })) console.log(line);
 

@@ -27,7 +27,7 @@ const MUTANTS = [
   ['the counted total is shown as the raw one', R, 'harness-counted ${number(verdict.countedTotal)}', 'harness-counted ${number(verdict.rawTotal)}'],
   ['the margin is left out', R, ', margin ${number(verdict.margin)}. @es', '. @es'],
   ['the Spanish half of the verdict line is dropped', R, ' @es presupuesto ${within', ' presupuesto ${within'],
-  ['the files by weight are not listed', R, 'verdict.files.map((file) => `${number(file.raw)} / ${number(file.counted)}  ${file.path}`)', '[]'],
+  ['the files by weight are not listed', R, 'verdict.files.map(fileEntry)', '[]'],
   ['a file is shown without its counted size', R, '${number(file.raw)} / ${number(file.counted)}  ${file.path}', '${number(file.raw)}  ${file.path}'],
   ['an empty section still prints its heading', R, "entries.length === 0 ? [] : [heading", "false ? [] : [heading"],
   ['section entries lose their indentation', R, '...entries.map((entry) => `  ${entry}`)', '...entries'],
@@ -48,7 +48,7 @@ const MUTANTS = [
   ['a project directory that does not exist is measured anyway', C, 'if (!existsSync(directory)) throw', 'if (false) throw'],
   ['--project is ignored', C, "typeof args.project === 'string' ? path.resolve(args.project) : process.cwd()", 'process.cwd()'],
   ['the project ceiling is ignored', C, 'projectCeiling: project?.loadedSetCeiling', 'projectCeiling: undefined'],
-  ['--ceiling is ignored', C, "ceiling: typeof args.ceiling === 'string' ? path.resolve(args.ceiling) : undefined", 'ceiling: undefined'],
+  ['--ceiling is ignored', C, "ceiling: typeof ceiling === 'string' ? path.resolve(ceiling) : undefined", 'ceiling: undefined'],
   ['the missing imports are not passed to the report', C, 'renderBudget({ verdict, missing: loaded.missing })', 'renderBudget({ verdict, missing: [] })'],
   ['the home is not the process home', C, 'loadedSet({ home: homedir(),', "loadedSet({ home: path.join(homedir(), 'nowhere'),"]
 ];
