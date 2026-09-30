@@ -156,6 +156,11 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     specific to one project, from the project names that stood out in it; classified entry by entry,
     1 of 14 was. RULE: a claim about what share of a file or list belongs to a category is made only
     after classifying every entry by reading it, and the sentence carries the count (N of M).
+  - **ENTRIES CALLED DUPLICATES FROM THEIR SHARED LABEL (2026-09-30,
+    `audit-verdict-from-commit-subjects-not-from-reading`).** I proposed unloading 13 ledger stubs as
+    copies of the promoted rules; compared one by one, 5 of 13 carried a mechanism path found nowhere
+    else. RULE: "duplicate" is a share claim too — compare every entry against its supposed copy
+    before proposing to remove or unload the set, and state how many are fully covered (N of M).
   - **A MANIFEST IS A STRUCTURED DOCUMENT, NEVER A LINE RANGE.** RULE: before any verdict about a
     dependency, PARSE the manifest and name the SECTION the key lives in; the same package name in two
     sections answers two different questions.
