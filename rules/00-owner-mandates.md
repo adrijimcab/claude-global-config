@@ -180,6 +180,24 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
   sin atribución de IA. Sustituye la regla del 2026-09-28 que los pedía en español.
 - Registro neutro y profesional en todo artefacto: la voz Gentleman es solo para la conversación.
 
+## Cierre de toda unidad de trabajo terminada (directiva del dueño 2026-10-01, global, todo proyecto)
+
+Dueño, literal: «Siempre que se termine guardar en engram, borrar el worktree y archivar el SDD».
+
+Cuando una unidad de trabajo TERMINA (un worker entrega, algo se integra o aterriza, un SDD pasa el
+verify), el ORQUESTADOR hace, en el MISMO turno, las tres cosas:
+1. **Engram:** guarda el resultado (qué quedó, dónde, con qué evidencia) y lo refleja en el backlog
+   maestro.
+2. **Worktree y rama:** los elimina cuando su contenido ya está integrado. Condiciones: medirlo con
+   `git cherry` (patch-id, nunca solo la ancestría); el worktree está limpio; su actor está parado; y
+   en Windows no se sigue ningún junction. Si NO está integrado, no se borra: se integra primero, o se
+   informa como trabajo varado.
+3. **SDD:** si la unidad era un cambio SDD, se archiva (`sdd-archive`) cuando su verify está en verde.
+   Un verify en rojo no se archiva: se arregla primero.
+
+Nada de esto queda para «más tarde». Un worktree integrado que sigue vivo, o un SDD verificado sin
+archivar, es deuda.
+
 ## Backlog maestro — todo hallazgo entra en el momento (directiva del dueño 2026-09-30, global; alcance
 corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
 
