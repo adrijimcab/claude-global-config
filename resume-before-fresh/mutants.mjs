@@ -25,7 +25,10 @@ const MUTANTS = [
   ['the message is searched instead of compared, so another invalid_request is written off', G, 'text === CONTEXT_EXHAUSTED_TEXT', 'text.startsWith(CONTEXT_EXHAUSTED_TEXT)'],
   ['a rate limit is read as context exhaustion', G, "export const CONTEXT_EXHAUSTED_ERROR_CLASS = 'invalid_request';", "export const CONTEXT_EXHAUSTED_ERROR_CLASS = 'rate_limit';"],
   ['the FIRST transcript record is read instead of the last', G, "JSON.parse(lines.at(-1) ?? '{}')", "JSON.parse(lines.at(0) ?? '{}')"],
-  ['one shared word is enough to refuse', G, 'if (shared < 2 || ratio < OVERLAP_THRESHOLD) continue;', 'if (shared < 1) continue;'],
+  ['an identical label is no longer judged when too few object words remain', G, 'if (!overlaps && !sameLabel(label, significantWords(record.description))) continue;', 'if (!overlaps) continue;'],
+  ['any label identical in size counts as the same label', G, 'left.size === right.size && [...left].every((word) => right.has(word))', 'left.size === right.size'],
+  ['one shared word is enough to refuse', G, 'const overlaps = shared >= 2 && ratio >= OVERLAP_THRESHOLD;', 'const overlaps = shared >= 1;'],
+  ['the overlap ratio is ignored, so two shared words refuse anything', G, 'const overlaps = shared >= 2 && ratio >= OVERLAP_THRESHOLD;', 'const overlaps = shared >= 2;'],
   ['an agent older than the window is offered', G, '    if (now - lastWrite > RESUMABLE_WINDOW_MS) continue;\n', ''],
   ['a record from another project is offered', G, 'if (projectSlug(record.project) !== slug) continue;', ''],
   ['an agent whose worktree was removed is offered', G, '    if (recordedWorktree.length > 0 && !existsSync(recordedWorktree)) continue;\n', '']

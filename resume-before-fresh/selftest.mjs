@@ -158,6 +158,8 @@ const cases = [
   // --- DISPATCH VOCABULARY, added 2026-09-30 after two real false identities.
   ['pass', 'Takeover of exhausted coverage-exclusions worker', 'REAL CASE: shares only takeover/exhausted/worker with a different errand'],
   ['refuse', 'Takeover of the stalled demo gallery screenshots rebuild', 'a takeover of the SAME object still matches on the object'],
+  ['refuse', 'Takeover of context-exhausted demo worker', 'REPLAY CASE: the identical label re-sent, one object word left, still the same errand'],
+  ['pass', 'Takeover of the exhausted worker', 'a label of dispatch words only matches no DIFFERENT label'],
 
   // --- TERMINAL STATE, added 2026-09-30: an agent whose context ran out cannot be resumed.
   ['pass', 'Gates: coverage-exclusion legitimacy + type-only assertion rule', 'REAL CASE aa3437bf9bf7832a9: stopped on "Prompt is too long", so unresumable'],

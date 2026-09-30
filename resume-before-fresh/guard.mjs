@@ -298,6 +298,11 @@ export function stoppedOnContextLength(transcript) {
   }
 }
 
+/** Whether two labels carry exactly the same significant words. @es Si dos etiquetas llevan exactamente las mismas palabras. */
+function sameLabel(left, right) {
+  return left.size > 0 && left.size === right.size && [...left].every((word) => right.has(word));
+}
+
 /**
  * Recent agents in THIS project whose errand already covers the one about to be dispatched, newest
  * first. Every match is returned rather than only the best one, because naming a single candidate
@@ -307,8 +312,12 @@ export function stoppedOnContextLength(transcript) {
  */
 function matchingAgents(description, repoPath, records, now) {
   const wanted = errandWords(description);
-
-  if (wanted.size < 2) return []; // too little to judge — refusing on a single word would be noise
+  const label = significantWords(description);
+  // Overlap needs two shared object words — refusing on a single word would be noise. An IDENTICAL label
+  // is judged anyway: measured in the migration replay, «Takeover of context-exhausted demo worker» re-sent
+  // verbatim keeps one object word once dispatch words go, and would otherwise pass unseen.
+  // @es El solapamiento exige dos palabras de objeto; una etiqueta IDÉNTICA se juzga igual (medido en el replay).
+  if (label.size === 0) return [];
 
   const slug = projectSlug(repoPath);
   const matches = [];
@@ -323,8 +332,9 @@ function matchingAgents(description, repoPath, records, now) {
     if (record.description === '') continue;
 
     const { shared, ratio } = coverage(wanted, errandWords(record.description));
+    const overlaps = shared >= 2 && ratio >= OVERLAP_THRESHOLD;
 
-    if (shared < 2 || ratio < OVERLAP_THRESHOLD) continue;
+    if (!overlaps && !sameLabel(label, significantWords(record.description))) continue;
 
     // A worktree that was spawned and then REMOVED makes its agent unresumable: the harness refuses
     // with "its worktree no longer exists, and the fallback directory is not covered by the session's
