@@ -98,6 +98,29 @@ const cases = [
   ['allow', payload(`git commit -m "fix: café"`), 'non-ASCII with no node eval at all'],
   ['allow', payload(`node -e "console.log(process.argv[1])" "C:/tmp/x"`), 'quoted payload plus a path argument'],
 
+  // --- node's OWN options only. Everything after the script path belongs to the SCRIPT: a `-p` there is
+  // git's patch flag forwarded through a wrapper, not node's print switch. Measured: `node
+  // .claude/backup-repo.mjs log -p -S"x" -- AGENT-LEDGER.md` was refused as an evaluate payload.
+  // @es Solo las opciones PROPIAS de node. Lo que sigue a la ruta del script es del SCRIPT: un `-p` ahí es
+  // el flag de parche de git reenviado por un wrapper, no el switch de impresión de node.
+  ['allow', payload(`node .claude/backup-repo.mjs log -p -S"x" -- AGENT-LEDGER.md`), 'THE INCIDENT: git -p forwarded through a wrapper script'],
+  ['allow', payload(String.raw`node script.mjs -e "console.log('\\b')"`), 'a script argument -e carrying a doubled backslash is the script\'s, not node\'s'],
+  ['allow', payload(String.raw`node script.mjs --eval "x\\y" --print`), 'the long forms after the script path are the script\'s too'],
+  ['allow', payload(`node -r ./hook.js script.mjs -p "a"`), 'a value-taking option (-r) does not end node\'s options, and the script still does'],
+  ['allow', payload(String.raw`node -- script.mjs -e "console.log('\\b')"`), 'a bare -- ends node\'s options'],
+  ['allow', payload(`node --no-warnings script.mjs -pe "x"`), 'a boolean option before the script, evaluate cluster after it'],
+  ['allow', payload(`node -p "1 + 1"`), 'a plain print one-liner is still fine'],
+  ['allow', payload(String.raw`node -- -e "console.log('\\b')"`), 'after a bare -- even -e is the script file name, not a switch'],
+  ['allow', payload(String.raw`node - -e "console.log('\\b')"`), 'a lone - (stdin) ends node\'s options; what follows is the script\'s'],
+  // --- and every evaluate switch that IS node's own stays refused, wherever among node's options it sits.
+  // @es Y todo switch de evaluación que SÍ es de node sigue rechazado, esté donde esté entre sus opciones.
+  ['deny', payload(String.raw`node --input-type=module -e "console.log('\\b')"`), 'an inline-valued option before -e'],
+  ['deny', payload(String.raw`node --input-type module -e "console.log('\\b')"`), 'a space-valued option before -e (its value is not the script)'],
+  ['deny', payload(String.raw`node -r ./hook.js -e "console.log('\\b')"`), '-r with its value, then -e'],
+  ['deny', payload(String.raw`node --no-warnings --eval "console.log('\\b')"`), 'a boolean option before --eval'],
+  ['deny', payload(String.raw`node -e "ok" -p "console.log('\\b')"`), 'a SECOND evaluate switch after a clean first one is still node\'s'],
+  ['deny', payload(String.raw`node -pe "'\\d'" script.mjs`), 'the evaluate cluster before a trailing script word'],
+
   // --- FAIL OPEN: every corruption of the hook's own input / FALLAR ABIERTO
   ['allow', 'this is not json at all', 'unparseable stdin'],
   ['allow', '', 'empty stdin'],

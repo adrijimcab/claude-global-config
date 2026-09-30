@@ -275,6 +275,48 @@ export function evaluateFlag(token) {
 }
 
 /**
+ * Node options that take their value from the NEXT word (`node -r ./hook.js script.mjs`). Without this the
+ * value would be read as the script path and end node's options one word too early, so a later `-e` would
+ * go unexamined. Options written with `=` (`--input-type=module`) carry their value inline and need no entry.
+ * The list is the documented value-taking options; a value option missing from it ends the scan early,
+ * which can only MISS a refusal and never invent one.
+ *
+ * @es Opciones de node cuyo valor es la palabra SIGUIENTE. Sin esto el valor se leería como la ruta del
+ * script y las opciones de node acabarían una palabra antes, dejando sin examinar un `-e` posterior. Las
+ * escritas con `=` llevan el valor dentro. Una opción con valor que falte aquí corta el escaneo antes:
+ * solo puede OMITIR un rechazo, nunca inventarlo.
+ */
+const NODE_OPTIONS_TAKING_A_VALUE = new Set([
+  '-r',
+  '--require',
+  '--import',
+  '--loader',
+  '--experimental-loader',
+  '-C',
+  '--conditions',
+  '--input-type',
+  '--env-file',
+  '--title',
+  '--stack-trace-limit',
+  '--disable-warning',
+  '--watch-path',
+  '--test-name-pattern',
+  '--inspect-port',
+]);
+
+/**
+ * Whether a word ends node's own options. Node stops parsing options at the first word that is not one
+ * (the script path, or `-` for stdin) and at a bare `--`; everything after belongs to the SCRIPT, so a
+ * `-p` there is the script's flag (`git log -p`, forwarded through `node backup-repo.mjs`), never node's
+ * print switch.
+ *
+ * @es Si una palabra termina las opciones propias de node. Node deja de interpretar opciones en la
+ * primera palabra que no lo es (la ruta del script, o `-` para stdin) y en un `--` suelto; lo que sigue
+ * es del SCRIPT, así que un `-p` ahí es flag del script y no el switch de impresión de node.
+ */
+const endsNodeOptions = (token) => token.raw === '--' || !token.raw.startsWith('-') || token.raw === '-';
+
+/**
  * Every character in a payload that this harness was measured to eat, plus raw control bytes.
  *
  * A backslash is reported ONLY when the next character is one the shell consumes it for — the measured
@@ -379,6 +421,17 @@ export function inspectCommand(command, { toolName } = {}) {
     if (name !== 'node' && name !== 'nodejs') continue;
 
     for (let index = position + 1; index < invocation.length; index += 1) {
+      // Only node's OWN options are examined: the scan ends where node's option parsing ends, so a `-p`
+      // or `-e` that follows the script path is the script's argument, not an evaluate switch.
+      // @es Solo se examinan las opciones PROPIAS de node: el escaneo termina donde termina el parseo
+      // de opciones de node, así que un `-p` o `-e` tras la ruta del script es argumento del script.
+      if (endsNodeOptions(invocation[index])) break;
+
+      if (NODE_OPTIONS_TAKING_A_VALUE.has(invocation[index].raw)) {
+        index += 1;
+        continue;
+      }
+
       const flag = evaluateFlag(invocation[index]);
 
       if (flag === undefined) continue;
@@ -418,6 +471,12 @@ export function inspectCommand(command, { toolName } = {}) {
 
         if (findings.length > 0) return { flag: flag.flag, payload: token.raw, findings };
       }
+
+      // The payload word was just examined; it is an argument of the switch, never an option itself, so
+      // the walk resumes after it and a LATER evaluate switch (`node -e "a" -p "b"`) is still examined.
+      // @es La palabra del payload ya se examinó: es argumento del switch, nunca una opción, así que el
+      // recorrido sigue tras ella y un switch de evaluación POSTERIOR sigue examinándose.
+      if (!inline) index += 1;
     }
   }
 
