@@ -248,7 +248,10 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   into a brief, check it against the worker's real environment (deny list, blocking hooks, its pinned
   worktree) and name the alternative that works. A worker never changes worktree: moving work onto a
   new base is the orchestrator's step (cherry-pick into the new worktree from the main checkout),
-  followed by a worker whose TENANCY names that worktree from launch.
+  followed by a worker whose TENANCY names that worktree from launch. THIRD FACE (2026-09-30): briefs
+  told worktree workers to run `node .claude/diff-coverage/…` by a RELATIVE path; `.claude/` tooling is
+  gitignored and lives only in the main checkout, so the worker could not self-verify. Every tooling
+  command in a brief uses the main checkout's ABSOLUTE path. Mechanism: `~/.claude/brief-feasibility/`.
 - **`integrated-a-range-without-running-its-cheap-gates`** — Every integration onto `develop` runs
   every gate that can READ the changed paths, never a gate list I chose. **A hand-picked gate set is a
   bounded search written down as coverage.** RULE: after a cherry-pick, run the gates derived from the
