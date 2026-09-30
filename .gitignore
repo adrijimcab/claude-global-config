@@ -90,6 +90,9 @@
 !/engram-title-integrity/
 !/engram-title-integrity/**
 /engram-title-integrity/state/
+!/backlog-owner-guard/
+!/backlog-owner-guard/**
+/backlog-owner-guard/state/
 !/brief-tenancy/
 !/brief-tenancy/**
 /brief-tenancy/state/

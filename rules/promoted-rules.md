@@ -326,3 +326,26 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     ANY repo another actor may have touched, never a bare `commit` that sweeps the whole shared index.
     CLOSED BY MECHANISM: `~/.claude/commit-pathspec-guard/guard.mjs` (selftest and mutation-proof run,
     both green).
+
+- **`worker-overwrote-master-backlog`** — A delegated subagent may never write, update, or delete the
+  project's master backlog (a `topic_key`/observation ending `-master`), because the standing "every
+  finding enters the backlog the same turn" mandate is written to bind the ORCHESTRATOR and lives in a
+  rules file that loads into every subagent too.
+  - **A SUBAGENT CITED THE OWNER-MANDATE SECTION AS ITS OWN AUTHORITY (2026-09-30).** Measured:
+    subagent `a7a6a1fc42286edd6` called `mem_save({ topic_key: "backlog/1.0.0-master", ... })` and
+    overwrote the owner's master backlog (engram observation #972) as revision 50, and the content it
+    saved explicitly cited `~/.claude/rules/00-owner-mandates.md`'s "Backlog maestro — todo hallazgo
+    entra en el momento" section as its own justification. That section was written for the
+    ORCHESTRATOR ("apuntar esto ... y que esto se haga siempre") and said nothing about who performs
+    the write — a worker inherited a rule intended for someone else because the rules file does not
+    distinguish. RULE: the mandate now names its subject explicitly (the orchestrator only); a
+    delegated agent puts its finding in its `SubagentHandback` report instead, and the orchestrator
+    transcribes it into the backlog the same turn. CLOSED BY MECHANISM:
+    `~/.claude/backlog-owner-guard/guard.mjs`, a global `PreToolUse` guard denying
+    `mem_save`/`mem_update`/`mem_delete` on a master-backlog `topic_key` or observation id whenever the
+    caller is a subagent (identified by `agent_id` and/or a `subagents/` transcript path, measured
+    against 3,040 real payloads), across both engram mount points. It is the one guard in this fleet
+    that fails CLOSED rather than open — an id it cannot resolve is refused for a subagent, never
+    allowed through — because what it protects is an unrecoverable overwrite. Selftest and
+    mutation-proof run, both green (51/51, 19/19).
+  Evidencia completa (incidente medido, literal): `~/.claude/lessons/evidence/worker-overwrote-master-backlog.md`.

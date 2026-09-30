@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "mcp__engram__mem_save|mcp__plugin_engram_engram__mem_save|mcp__engram__mem_update|mcp__plugin_engram_engram__mem_update|mcp__engram__mem_delete|mcp__plugin_engram_engram__mem_delete"
+    }
+  ],
+  "why": "a delegated subagent overwrote the owner's master backlog via mem_save on 2026-09-30 (engram observation #972, revision 50), citing a rule written for the orchestrator; the backlog belongs to the orchestrator only."
+}

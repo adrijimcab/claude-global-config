@@ -161,20 +161,39 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
   sin atribución de IA. Sustituye la regla del 2026-09-28 que los pedía en español.
 - Registro neutro y profesional en todo artefacto: la voz Gentleman es solo para la conversación.
 
-## Backlog maestro — todo hallazgo entra en el momento (directiva del dueño 2026-09-30, global)
+## Backlog maestro — todo hallazgo entra en el momento (directiva del dueño 2026-09-30, global; alcance
+corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
 
 Dueño, literal: «Apuntar esto y TODO lo que vaya saliendo más adelante directamente en el backlog …
 y que esto se haga siempre, dejarlo como regla implementada».
+
+**Esta sección vincula al ORQUESTADOR (la sesión principal), NUNCA a un agente delegado.** MEDIDO
+2026-09-30: el subagente `a7a6a1fc42286edd6` llamó `mem_save({ topic_key: "backlog/1.0.0-master", ... })`
+y sobreescribió el backlog maestro (observación #972) como revisión 50, citando esta misma sección como
+su propia justificación — este fichero de reglas globales carga también en el contexto de todo
+subagente, así que una regla escrita para el orquestador fue leída y obedecida por un worker. El dueño
+resolvió: **«LOS AGENTES NO PUEDEN SOBREESCRIBIR EL BACKLOG, ESTO NO PUEDE VOLVER A PASAR»** — el
+backlog es SOLO del orquestador.
 
 - Cada proyecto tiene UN backlog maestro en engram, con `topic_key` `backlog/<hito>-master` (en
   b100-am-ui: `backlog/1.0.0-master`, observación #972). Es la fuente única de lo que queda.
 - Todo hallazgo, defecto, deuda, decisión pendiente del dueño o tarea «encolada» que aparezca —de un
   agente, de una medición o de la conversación— se escribe en ese backlog EN EL MISMO TURNO en que
   aparece. Nunca queda solo en el chat, en un reporte de agente o en una nota suelta.
+- **Quién escribe:** SOLO el orquestador llama `mem_save`/`mem_update` sobre un `topic_key`/id de
+  backlog maestro. **Un agente delegado NUNCA escribe, actualiza ni borra un registro de backlog
+  maestro** — pone su hallazgo en su informe de `SubagentHandback`, y el orquestador lo transcribe al
+  backlog EN EL MISMO TURNO en que lo recibe, sin perder lo que ya había.
 - Guardar con el mismo `topic_key` REEMPLAZA el contenido: siempre se lee la revisión actual
   (`mem_get_observation`) y se reescribe la revisión completa, sumando lo nuevo, sin perder nada.
-- Mecanismo: el guard `Stop` de backlog (`~/.claude/backlog-guard/`) bloquea el fin de un turno cuyo
-  mensaje final anuncia algo pendiente sin haber guardado el backlog maestro en ese turno.
+- Mecanismo, dos capas: (1) el guard `Stop` de backlog (`~/.claude/backlog-guard/`), registrado SOLO en
+  el `Stop` del orquestador (`~/.claude/hook-dispatch/manifests/stop.json`, nunca en `subagent-stop.json`
+  — MEDIDO), bloquea el fin de un turno cuyo mensaje final anuncia algo pendiente sin haber guardado el
+  backlog maestro en ese turno; (2) el guard global `PreToolUse`
+  (`~/.claude/backlog-owner-guard/guard.mjs`, clave `worker-never-writes-the-master-backlog`) RECHAZA
+  `mem_save`/`mem_update`/`mem_delete` sobre un `topic_key`/id de backlog maestro siempre que quien
+  llama sea un subagente, en ambos montajes de engram — la sesión principal siempre está permitida, y
+  un id que no puede resolver se trata como inseguro y se rechaza (falla CERRADO, no abierto).
 
 ## Config de agentes versionada y subida en el momento (directiva del dueño 2026-09-30, global)
 
