@@ -96,6 +96,18 @@ const cases = [
   ],
   ['deny', agent(long(`MEASURED 70 of 70 with no colon anywhere\n${HYPOTHESIS_LINE}`)), 'heads a line but carries no colon', 'carries no colon'],
   ['deny', agent(long(`MEASUREDLY: a different word entirely\n${HYPOTHESIS_LINE}`)), 'a prefix of a longer word must not satisfy the marker', 'MEASURED'],
+  ['deny', agent(long(`MEASUREDly: a lowercase continuation is a different word too\n${HYPOTHESIS_LINE}`)), 'a lowercase continuation must not satisfy the marker', 'MEASURED'],
+  // The words sit at offsets 8 and 10 of their lines with a blank just after: a check that looks at the
+  // text past the word's LENGTH instead of past the word itself would read them as declarations.
+  // @es Las palabras quedan en los desplazamientos 8 y 10 con un blanco justo después.
+  ['deny', agent(long('Xxxxxxx. see MEASURED: 70 of 70\nYyyyyyyyy. see HYPOTHESIS: a guess')), 'BURIED after as many characters as the word is long', 'not at the START of a line'],
+  ['deny', agent(long(`MEASURED\n${HYPOTHESIS_LINE}`)), 'the bare word alone on its line heads it, and carries no colon', 'carries no colon'],
+  ['allow', agent(long(`MEASURED with no colon, then a real one below\nMEASURED: 24 symbols\n${HYPOTHESIS_LINE}`)), 'a later declaring line satisfies the marker after a colonless one'],
+  ...['*', '+', '#', '>'].map((bullet) => ['allow', agent(long(`${bullet} ${MEASURED_LINE}\n${bullet} ${HYPOTHESIS_LINE}`)), `a "${bullet}" list or heading prefix still declares`]),
+  ['deny', agent(long()), 'an Agent refusal names its surface', 'this delegation (Agent)'],
+  ['deny', task(long()), 'a Task refusal names its surface', 'this delegation (Task)'],
+  ['deny', resume(long()), 'a SendMessage refusal names its surface', 'this message (SendMessage)'],
+  ['deny', `﻿${agent(long())}`, 'a BOM-prefixed payload is still judged', 'ABSENT'],
   ['deny', agent('read src/x.ts and report the export list'), 'a SHORT prompt is refused too — length is not the variable (the #115 brief was 1086 chars)', 'ABSENT'],
   ['deny', task(long()), 'the Task alias refuses exactly as Agent does', 'ABSENT'],
 
