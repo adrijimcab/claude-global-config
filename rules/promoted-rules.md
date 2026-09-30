@@ -401,3 +401,11 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   write-target lexer `.claude/write-targets/` (`tool-call-writes.mjs`, `shell-writes.mjs`, `redirect-targets.mjs`),
   which `golden-guard` now reads too. Selftest 91/91, mutants 20/20 killed, and the two real incident
   commands replayed through the real dispatcher: DENY.
+
+- **`unverified-commit-published-by-another-sessions-sync`** — In a repository other live sessions
+  sync, any commit on the shared branch is published within minutes, verified or not. RULE: work in
+  progress goes on a branch in its own worktree with no upstream, and reaches the shared branch only
+  through `node ~/.claude/worktree-landing/land.mjs --worktree <dir> --main <dir> --branch <shared>
+  --remote <remote>` (verifies in the worktree, then fast-forwards, pushes and reads the remote tip back);
+  never commit to, merge into or fast-forward the shared branch by hand. CLOSED BY MECHANISM:
+  `~/.claude/worktree-landing/land.mjs`.
