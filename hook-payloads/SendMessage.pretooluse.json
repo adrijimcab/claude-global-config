@@ -1,0 +1,28 @@
+{
+  "provenance": "CAPTURED 2026-09-14 from the live harness: a temporary PreToolUse hook on matcher SendMessage wrote its stdin verbatim while a real SendMessage call ran (session c45d798b, agent a9fcd54b98e5f304a). A second capture with a 2870-character message confirmed tool_input.message carries the FULL text and tool_input.content a 50-character preview (49 characters + an ellipsis). The capture hook was removed after both payloads were read.",
+  "text": "Capture probe for the PreToolUse payload shape; this recipient does not exist.\nSecond line so the multi-line shape is visible.",
+  "payload": {
+    "session_id": "c45d798b-d78f-4f60-9a32-1f722bbe86e5",
+    "transcript_path": "C:\\Users\\adrian.jimenez\\.claude\\projects\\C--Users-adrian-jimenez-Desktop-Projects-b100-am-ui\\c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+    "cwd": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui",
+    "scratchpad_dir": "C:\\Users\\ADRIAN~1.JIM\\AppData\\Local\\Temp\\claude\\C--Users-adrian-jimenez-Desktop-Projects-b100-am-ui\\c45d798b-d78f-4f60-9a32-1f722bbe86e5\\scratchpad",
+    "prompt_id": "034cc60b-795f-49ec-872f-1baedde1a9cb",
+    "permission_mode": "auto",
+    "agent_id": "a9fcd54b98e5f304a",
+    "agent_type": "general-purpose",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "SendMessage",
+    "tool_input": {
+      "to": "brief-provenance-capture-probe-nonexistent-7f3a",
+      "summary": "payload shape capture probe",
+      "message": "Capture probe for the PreToolUse payload shape; this recipient does not exist.\nSecond line so the multi-line shape is visible.",
+      "type": "message",
+      "recipient": "brief-provenance-capture-probe-nonexistent-7f3a",
+      "content": "Capture probe for the PreToolUse payload shape; t…"
+    },
+    "tool_use_id": "toolu_01DKvaNwsrcWamifgQ24SZm8"
+  }
+}

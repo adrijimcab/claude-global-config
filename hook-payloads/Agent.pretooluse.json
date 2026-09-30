@@ -1,0 +1,14 @@
+{
+  "provenance": "CONSTRUCTED, not captured. The field that carries the brief, tool_input.prompt, is established by the live harness: 75 refusals in state/refusals.jsonl carry a real session UUID, and this guard can only refuse when tool_input.prompt is a non-blank string while it is registered on Agent|Task alone. The other tool_input keys are the Agent tool_use input keys recorded in session c45d798b's transcript. A capture hook on Agent was attempted on 2026-09-14 and refused by the permission classifier, so unlike SendMessage.pretooluse.json this shape is not a verbatim capture; replace it with one when a capture is possible.",
+  "text": "Construct a delegation brief.",
+  "payload": {
+    "session_id": "c45d798b-d78f-4f60-9a32-1f722bbe86e5",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Agent",
+    "tool_input": {
+      "description": "Fixture delegation",
+      "prompt": "Construct a delegation brief.",
+      "subagent_type": "general-purpose"
+    }
+  }
+}

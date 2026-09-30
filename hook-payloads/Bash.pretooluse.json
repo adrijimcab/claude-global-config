@@ -1,0 +1,15 @@
+{
+  "provenance": "CONSTRUCTED, not captured: the shape is the one documented for PreToolUse (code.claude.com/docs/en/hooks, \"tool_input\": { \"command\": \"npm test\" }) and it is exercised by live traffic — the exit-code guard, which reads only tool_input.command, refused a real Bash call of this agent on 2026-09-14 (\"EXIT-CODE GUARD REFUSED this command\"). The description key is the Bash tool's own schema.",
+  "text": "npm test",
+  "payload": {
+    "session_id": "c45d798b-d78f-4f60-9a32-1f722bbe86e5",
+    "hook_event_name": "PreToolUse",
+    "agent_id": "a9fcd54b98e5f304a",
+    "agent_type": "general-purpose",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "npm test",
+      "description": "Run the tests"
+    }
+  }
+}

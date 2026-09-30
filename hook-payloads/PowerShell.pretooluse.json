@@ -1,0 +1,24 @@
+{
+  "provenance": "CAPTURED 2026-09-14 from the live harness: a temporary PreToolUse hook on matcher PowerShell wrote its stdin verbatim while a real PowerShell call ran (session c45d798b, agent a9fcd54b98e5f304a). The command is in tool_input.command, beside tool_input.description. The capture hook was removed after the payload was read.",
+  "text": "Write-Output \"capture probe for the PowerShell PreToolUse payload\"; Write-Output \"second statement\"",
+  "payload": {
+    "session_id": "c45d798b-d78f-4f60-9a32-1f722bbe86e5",
+    "transcript_path": "C:\\Users\\adrian.jimenez\\.claude\\projects\\C--Users-adrian-jimenez-Desktop-Projects-b100-am-ui\\c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+    "cwd": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui",
+    "scratchpad_dir": "C:\\Users\\ADRIAN~1.JIM\\AppData\\Local\\Temp\\claude\\C--Users-adrian-jimenez-Desktop-Projects-b100-am-ui\\c45d798b-d78f-4f60-9a32-1f722bbe86e5\\scratchpad",
+    "prompt_id": "e98d062e-4ac3-47ff-b9cd-6aff3490a3b9",
+    "permission_mode": "auto",
+    "agent_id": "a9fcd54b98e5f304a",
+    "agent_type": "general-purpose",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "Write-Output \"capture probe for the PowerShell PreToolUse payload\"; Write-Output \"second statement\"",
+      "description": "Trigger a PowerShell call to capture its payload"
+    },
+    "tool_use_id": "toolu_017CaTinfgrJgey4WYZra6DM"
+  }
+}

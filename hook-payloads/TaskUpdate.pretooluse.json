@@ -1,0 +1,16 @@
+{
+  "provenance": "CONSTRUCTED, not captured, for the same reason as TaskCreate. The tool_input keys (taskId, subject, description) are those of real TaskUpdate tool_use calls in session 22854ffb's transcript (line 2687).",
+  "text": "Construct an updated task description.",
+  "payload": {
+    "session_id": "c45d798b-d78f-4f60-9a32-1f722bbe86e5",
+    "hook_event_name": "PreToolUse",
+    "agent_id": "a9fcd54b98e5f304a",
+    "agent_type": "general-purpose",
+    "tool_name": "TaskUpdate",
+    "tool_input": {
+      "taskId": "1",
+      "subject": "Fixture task",
+      "description": "Construct an updated task description."
+    }
+  }
+}

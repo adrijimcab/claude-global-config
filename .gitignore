@@ -69,6 +69,15 @@
 !/brief-feasibility/fixtures/*.json
 /brief-feasibility/state/
 
+# Recorded PreToolUse payloads and the module that substitutes text into them: imported at runtime by the
+# preflight and by every guard selftest. Each recording holds probe text and the owner's own home paths,
+# no conversation text (read in full 2026-09-30). @es Payloads PreToolUse grabados y el módulo que les
+# sustituye texto: lo importan en ejecución el pre-chequeo y los selftests de los guards. Cada grabación
+# lleva texto de sonda y rutas del propio dueño, sin conversación.
+!/hook-payloads/
+!/hook-payloads/*.mjs
+!/hook-payloads/*.json
+
 # Guards moved from b100-am-ui to global on 2026-09-30 (registered once, in hook-dispatch/manifests/).
 # Code, fixtures and registration sidecars yes; live state and scratch no.
 !/exit-code-guard/
@@ -174,7 +183,6 @@
 # session-env/       entorno por sesión (runtime)
 # state/             mcp-discover-verdicts.json (estado, no config)
 # file-history/      historial de ediciones de fichero por sesión (equivalente a transcript)
-# hook-payloads/     payloads reales capturados de tool calls (Bash/Agent/PowerShell/...)
 # jobs/              estado de jobs programados
 # cache/, debug/, paste-cache/, scratch/   cachés, logs de debug por sesión, portapapeles pegado
 # *.jsonl, *.log, *.credentials.json, .last-*, *.swp, mcp-needs-auth-cache.json  estado/credenciales sueltos

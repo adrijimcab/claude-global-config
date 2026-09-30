@@ -1,0 +1,16 @@
+{
+  "provenance": "CONSTRUCTED, not captured: this agent has no TaskCreate tool, so no PreToolUse payload for it can be triggered here. The tool_input keys (subject, description, activeForm) are those of the real TaskCreate tool_use that created task #6 in session c45d798b's transcript (line 15925) — the call whose description carries the leaked parameter markup. Replace with a capture when one is possible.",
+  "text": "Construct a task description.",
+  "payload": {
+    "session_id": "c45d798b-d78f-4f60-9a32-1f722bbe86e5",
+    "hook_event_name": "PreToolUse",
+    "agent_id": "a9fcd54b98e5f304a",
+    "agent_type": "general-purpose",
+    "tool_name": "TaskCreate",
+    "tool_input": {
+      "subject": "Fixture task",
+      "description": "Construct a task description.",
+      "activeForm": "Constructing a fixture task"
+    }
+  }
+}
