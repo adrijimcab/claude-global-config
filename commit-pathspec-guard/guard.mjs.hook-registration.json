@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a plain `git commit` or the `backup-repo.mjs` wrapper, run with no explicit pathspec inside a declared backup repo, commits the WHOLE shared index — measured 2026-09-30: 63 of another, frozen actor's already-staged deletions rode along with 1 intended file into 89b9dad, pushed before anyone read the diff (acted-on-a-live-actors-working-state, 2nd occurrence)."
+}

@@ -75,6 +75,9 @@
 !/collision-guard/
 !/collision-guard/**
 /collision-guard/state/
+!/commit-pathspec-guard/
+!/commit-pathspec-guard/**
+/commit-pathspec-guard/state/
 !/stash-watch/
 !/stash-watch/**
 /stash-watch/state/

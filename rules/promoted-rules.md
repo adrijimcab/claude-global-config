@@ -300,3 +300,19 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     commit. The full `build:ci-pr` chain stays advisory unless `B100_LANDING_GUARD=enforce`. Replayed
     on the real incident (develop `283d2c77` -> `cfe6a6ff`, real verdict store): DENY in both modes.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/integrated-a-range-without-running-its-cheap-gates.md`.
+
+- **`acted-on-a-live-actors-working-state`** — Acting on shared repository state — a worktree, an index —
+  before establishing that no OTHER actor's work is mixed into it. Two faces recorded to date:
+  - **A LIVE ACTOR'S WORKING TREE COMMITTED MID-RUN (2026-09-09).** I committed a LIVE agent's working
+    tree while it was mid-run and captured a state it then corrected; real, load-bearing corrections
+    the agent found afterwards were lost in the snapshot I had already landed. RULE: before committing,
+    reaping, rebasing or otherwise acting on ANY worktree that is not mine, establish that its actor has
+    STOPPED from the agent list, never from how finished the diff looks.
+  - **THE SHARED INDEX SWEPT INTO MY COMMIT (2026-09-30).** In the `b100-am-ui-claude-tooling` backup
+    repo I ran `git add AGENT-LEDGER.md` then `git commit`, and the bare commit swept in 63 deletions a
+    different, FROZEN actor had already staged in that same shared index — `git add <path>` only ADDS,
+    it never NARROWS what a bare `commit` then sweeps up — and the merged commit was pushed before
+    anyone read the diff. RULE: commit with an explicit pathspec (`-- <paths>`, or `--only <paths>`) in
+    ANY repo another actor may have touched, never a bare `commit` that sweeps the whole shared index.
+    CLOSED BY MECHANISM: `~/.claude/commit-pathspec-guard/guard.mjs` (selftest and mutation-proof run,
+    both green).
