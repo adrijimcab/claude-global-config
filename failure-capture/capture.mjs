@@ -42,6 +42,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { closureClause, closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
+import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
 
@@ -91,9 +92,6 @@ const SCOPES = PROJECT === undefined ? [GLOBAL_SCOPE] : [GLOBAL_SCOPE, PROJECT.s
 /** Recurrences needed before a lesson stops being an incident and becomes a rule. @es Recurrencias necesarias para que una lección deje de ser incidente y pase a regla. */
 const PROMOTION_THRESHOLD = 2;
 
-const MARK_OPEN = '<!--fc:';
-const MARK_CLOSE = '-->';
-
 // ---------------------------------------------------------------------------------------------
 // small utilities — no regexes anywhere (owner mandate M5) / utilidades: cero regex (mandato M5)
 // ---------------------------------------------------------------------------------------------
@@ -122,16 +120,6 @@ function parseArgs(argv) {
   return out;
 }
 
-/** A key is lowercase kebab: letters, digits, hyphens. Checked char by char, no regex. @es Clave kebab en minúsculas, comprobada carácter a carácter. */
-function isValidKey(key) {
-  if (typeof key !== 'string' || key.length < 4 || key.length > 60) return false;
-  if (key.startsWith('-') || key.endsWith('-')) return false;
-
-  const allowed = 'abcdefghijklmnopqrstuvwxyz0123456789-';
-
-  return [...key].every((character) => allowed.includes(character));
-}
-
 /** Today as YYYY-MM-DD in local time. @es Hoy como YYYY-MM-DD en hora local. */
 function today() {
   const now = new Date();
@@ -150,28 +138,6 @@ function readFileOr(file, fallback) {
   } catch {
     return fallback;
   }
-}
-
-/** Reads the `<!--fc:key#n-->` marker on a ledger line, or `undefined`. @es Lee el marcador de una línea del ledger. */
-function readMarker(line) {
-  const open = line.indexOf(MARK_OPEN);
-
-  if (open === -1) return undefined;
-
-  const close = line.indexOf(MARK_CLOSE, open);
-
-  if (close === -1) return undefined;
-
-  const body = line.slice(open + MARK_OPEN.length, close);
-  const hash = body.lastIndexOf('#');
-
-  if (hash === -1) return undefined;
-
-  const count = Number.parseInt(body.slice(hash + 1), 10);
-
-  if (!Number.isInteger(count) || count < 1) return undefined;
-
-  return { key: body.slice(0, hash), count, open, close: close + MARK_CLOSE.length };
 }
 
 /** Every key currently carried by the ledger, with its recurrence count. @es Todas las claves del ledger con su recuento. */
