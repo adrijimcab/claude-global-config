@@ -113,6 +113,14 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   - **THE NOTIFICATION DESCRIBES THE REPORT, NOT THE BRANCH.** RULE: a worker's state is read from its
     branch head, dirty count and transcript mtime, measured in the same turn, never from the wording
     of a lifecycle notification. "No report yet" is not "no work yet".
+  - **«QUEUED» IS NOT «RUNNING», AND A SHRINKING COUNT IS NOT A COMMIT (2026-09-30,
+    `bounded-search-read-as-absence`).** I told the
+    owner twice that a migration agent was live and "committing path by path (19 -> 1)" and dismissed
+    a guard on that basis; its transcript had last written hours earlier (context-exhausted, a
+    dangling tool_use), my SendMessage had only been "queued for its next tool round", and git held
+    zero commits from it — the count moved because the guard attributed differently between turns.
+    RULE: liveness is read from the actor's transcript mtime and last record, progress from `git log`
+    of the repo, both in the same turn; a delivery-queued message proves nothing ran.
   - **LA LISTA DE SKILLS DE UN TURNO ES UNA FOTO.** RULE: una lista de capacidades del harness solo
     prueba lo que hay EN ESE TURNO; decir «no aparece en esta sesión», nunca «no existe».
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/bounded-search-read-as-absence.md`.
