@@ -182,3 +182,11 @@ export function harnessLimits({ contextTokens, charsPerToken = DEFAULT_CHARS_PER
 
 /** Whether a file of `length` characters is added to the sum that raises the warning: one over the per-file limit is left out. @es Si un fichero de `length` caracteres entra en la suma que dispara el aviso: uno sobre el límite por fichero queda fuera. */
 export const countsTowardTotal = (length, limits) => length <= limits.perFile;
+
+/** The frontmatter block `instructionContent` removes from `text`, or an empty text when it removes none. @es El bloque de frontmatter que `instructionContent` quita de `text`, o un texto vacío si no quita ninguno. */
+export function frontmatterOf(text) {
+  const body = withoutFrontmatter(text);
+  const start = text.charCodeAt(0) === BYTE_ORDER_MARK ? 1 : 0;
+
+  return text.slice(start, text.length - body.length);
+}

@@ -48,6 +48,8 @@ const MUTANTS = [
   ['only a space counts as a blank', FILE, "text[index].trim() === ''", "text[index] === ' '"],
   ['the blank run is not bounded by the text', FILE, 'index < text.length && ', ''],
 
+  ['the byte-order mark is returned with the frontmatter', FILE, 'const start = text.charCodeAt(0) === BYTE_ORDER_MARK ? 1 : 0;', 'const start = 0;'],
+
   // --- fences: a comment inside one is not a block
   ['fences are ignored', FILE, 'fence === undefined && source.startsWith', 'source.startsWith'],
   ['a fence never opens', FILE, 'if (open === undefined) return fence;', 'if (open === undefined) return undefined;'],

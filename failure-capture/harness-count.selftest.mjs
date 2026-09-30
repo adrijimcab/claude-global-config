@@ -11,7 +11,7 @@
  * (si es bajo) o da una falsa alarma (si es alto).
  */
 
-import { countedLength, countsTowardTotal, harnessLimits } from './harness-count.mjs';
+import { countedLength, countsTowardTotal, frontmatterOf, harnessLimits } from './harness-count.mjs';
 
 let passed = 0;
 const failures = [];
@@ -71,6 +71,16 @@ const COUNTS = [
 ];
 
 for (const [name, text, expected] of COUNTS) check(name, countedLength(text), expected);
+
+const FRONTMATTER = [
+  ['the removed frontmatter is returned whole', '---\na: 1\n---\nbody\n', '---\na: 1\n---\n'],
+  ['the blanks after the closing mark belong to it', '---\na\n---\n\n\nb', '---\na\n---\n\n\n'],
+  ['a byte-order mark is not part of the frontmatter', '﻿---\na\n---\nb', '---\na\n---\n'],
+  ['text without frontmatter has none', 'body\n', ''],
+  ['frontmatter that never closes is none', '---\na: 1\n', ''],
+];
+
+for (const [name, text, expected] of FRONTMATTER) check(name, frontmatterOf(text), expected);
 
 const LIMITS = [
   ['200k context at 3 chars per token', { contextTokens: 200_000, charsPerToken: 3 }, { perFile: 40_000, total: 120_000 }],
