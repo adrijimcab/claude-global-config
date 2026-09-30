@@ -173,3 +173,21 @@ y que esto se haga siempre, dejarlo como regla implementada».
   (`mem_get_observation`) y se reescribe la revisión completa, sumando lo nuevo, sin perder nada.
 - Mecanismo: el guard `Stop` de backlog (`~/.claude/backlog-guard/`) bloquea el fin de un turno cuyo
   mensaje final anuncia algo pendiente sin haber guardado el backlog maestro en ese turno.
+
+## Config de agentes versionada y subida en el momento (directiva del dueño 2026-09-30, global)
+
+Dueño, literal: «Todas las modificaciones de agents, claude reglas hooks gates, a parte de
+implementarlas, se dejan subidas al repo directamente … y crear otra regla para ello».
+
+- Toda modificación de agentes, `CLAUDE.md`, reglas, contratos, hooks, guards o gates de tooling se
+  COMMITEA y se SUBE a su repo de respaldo en el mismo turno en que queda implementada y verificada:
+  - `~/.claude/**` → `adrijimcab/claude-global-config` (`git -C ~/.claude …`, rama `master`);
+  - `<b100-am-ui>/.claude/**` → `adrijimcab/b100-am-ui-claude-tooling`
+    (`node .claude/backup-repo.mjs …`, rama `master`);
+  - un repo de proyecto nuevo con `.claude/` propio declara aquí su repo de respaldo antes de usarlo.
+- Solo se commitea lo propio y terminado: lo que un agente VIVO está escribiendo lo commitea ese
+  agente al terminar (nunca se commitea el estado de trabajo de un actor vivo).
+- Mensajes en inglés, Conventional, sin atribución. Artefactos de ejecución (`state/`, `.runs/`,
+  logs) van al `.gitignore` del repo de respaldo, nunca al historial.
+- Mecanismo: un guard `Stop` global bloquea el fin de turno mientras alguno de esos repos tenga
+  commits sin subir o cambios sin commitear que no pertenezcan a un agente vivo.
