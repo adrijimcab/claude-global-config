@@ -1,0 +1,6 @@
+{
+  "event": "PreToolUse",
+  "guards": [
+    "../../brief-feasibility/guard.mjs"
+  ]
+}

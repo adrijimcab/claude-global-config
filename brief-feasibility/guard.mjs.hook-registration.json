@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Agent|Task|SendMessage"
+    }
+  ],
+  "why": "delegations and resumes reached workers ordering a denied `git rebase`, a `git worktree add` from inside an isolated worktree, and a relative path to gitignored `.claude/` tooling that exists only in the main checkout — each caught only by the worker hitting the wall. A resume is as able to carry such an order as a delegation, so SendMessage is covered too."
+}

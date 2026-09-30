@@ -51,6 +51,15 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "Agent|Task|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/pretooluse-delegation.json\""
+          }
+        ]
       }
     ],
     "SessionStart": [

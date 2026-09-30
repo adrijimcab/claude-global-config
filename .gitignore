@@ -60,6 +60,13 @@
 !/brief-provenance/*.json
 /brief-provenance/state/
 
+!/brief-feasibility/
+!/brief-feasibility/*.mjs
+!/brief-feasibility/*.json
+!/brief-feasibility/fixtures/
+!/brief-feasibility/fixtures/*.json
+/brief-feasibility/state/
+
 !/eval-guard/
 !/eval-guard/*.mjs
 !/eval-guard/*.json

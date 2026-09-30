@@ -1,0 +1,299 @@
+{
+  "provenance": "CAPTURED 2026-09-30T01:53:53.316Z verbatim from the tool_use inputs of session c45d798b (main transcript and subagents/*.jsonl); each SendMessage carries its recipient's harness meta (subagents/agent-<id>.meta.json). `recipients.cwdOnly` is the one real meta of that session locating its agent by `cwd` alone. `refusedDrafts` are real briefs the live guards refused in that session, each with the first line of the refusal it received.",
+  "incidents": [
+    {
+      "label": "REAL INCIDENT: resume telling worktree agent a7793255 to `git worktree add .claude/worktrees/lang-sweep-2` and run diff-coverage by a relative path",
+      "expected": "deny",
+      "faces": [
+        "worktree-inside-a-worktree",
+        "relative-tooling-path"
+      ],
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_015NvsC9pktMC1emwqUiBZzs"
+      },
+      "tool": "SendMessage",
+      "input": {
+        "to": "a7793255cadd3dee6",
+        "message": "Resume: good work. The voseo and runtime-string parts are accepted in substance. Two things remain before integration.\n\nMEASURED (by me, on develop 6879fd9d):\n- develop already contains `0d761f69`, which translated live-counters.ts runtime messages to English, and `abb3e3d5`, which made the hang-watch JSDoc bilingual.\n- Your branch's merge-base is `7e333133`, so your `d3d9ffcd` will conflict on live-counters.ts.\n- The 4 tooling failures you saw are fixed on develop (golden `c6eabd2f`, watchdog `6879fd9d`).\n\nHYPOTHESIS (verify): your remaining bilingual items are ~42 `*.examples.html` / `*.examples.config.ts` files with Spanish-only captions, plus ~14 scattered comments (schematics ng-add ×3, check-consumer-app ×2, generate-presentation, b100-tooltip.directive.ts, b100-table-cell.component.html and the others you listed).\n\n**1. Deliver on current develop.** rebase is denied here, so:\n- create a new branch from develop in a new worktree: `git worktree add .claude/worktrees/lang-sweep-2 -b chore/language-sweep-2026-09-30 develop`;\n- cherry-pick your 6 commits onto it;\n- resolve every conflict by reading both sides. For live-counters.ts, keep develop's English wording and add only what yours has that develop lacks. Never take a side wholesale.\n\n**2. Finish the bilingual part in this same task.** It is not a follow-up: the owner's standing rule is that nothing is left pending. Translate every remaining Spanish-only caption and comment, following the sibling \"English / Spanish\" caption convention you already identified. `.stories.ts` stays out of scope, as you correctly noted.\n\n**3. Verify on the new branch, all with real exit codes:**\n- typecheck, typecheck:scripts(+spec), lint;\n- `prettier --check` on touched paths;\n- check:no-suppressions, check:devmode-guard, check:examples, check:examples:ts, check:i18n-provenance;\n- build:demo;\n- the tooling project and schematics project suites;\n- `node .claude/diff-coverage/diff-coverage.mjs --worktree <new worktree> --base develop`.\n\nConstraints:\n- Never npm install.\n- Commit before reporting.\n- Then report the new branch and commits. Your old worktree/branch can stay; I will close it.",
+        "type": "message",
+        "recipient": "a7793255cadd3dee6",
+        "content": "Resume: good work. The voseo and runtime-string p…"
+      },
+      "recipientMeta": {
+        "agentType": "general-purpose",
+        "worktreePath": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude\\worktrees\\agent-a7793255cadd3dee6",
+        "spawnedWithWorktree": true,
+        "worktreeBranch": "worktree-agent-a7793255cadd3dee6",
+        "description": "Neutral Spanish and bilingual dev warnings in src/scripts",
+        "toolUseId": "toolu_018rZ6jSD1kqfjYmh2bmEuVq",
+        "spawnDepth": 1,
+        "requestShape": "background",
+        "requestNonInteractive": true,
+        "model": "sonnet",
+        "cwd": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude\\worktrees\\lang-sweep-2"
+      }
+    },
+    {
+      "label": "REAL INCIDENT: isolation-worktree delegation running `node .claude/diff-coverage/diff-coverage.mjs`",
+      "expected": "deny",
+      "faces": [
+        "relative-tooling-path"
+      ],
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_012vWJMUJq7StaEeDqEFqajw"
+      },
+      "tool": "Agent",
+      "input": {
+        "description": "Harness audit: assert real values and cover harnesses",
+        "subagent_type": "general-purpose",
+        "model": "sonnet",
+        "isolation": "worktree",
+        "prompt": "TENANCY: b100-am-ui — your own isolated worktree and branch from develop. You edit `src/lib/testing/harnesses/**` (harness files and their smoke specs), the component specs that drive them, and the `etc/testing.api.md` golden.\n\nEXCLUDED, because another branch owns them:\n- the harnesses `b100-date-range`, `b100-date`, `b100-input`, `b100-select` and `b100-stepper`;\n- the harnesses and specs of `b100-button-toggle`, `b100-button`, `b100-defer-skeleton`, `b100-expansion`, `b100-menu`, `b100-progress-bar`, `b100-radio-group`, `b100-sidenav`, `b100-skeleton`, `b100-slider`, `b100-splitter`, `b100-tabs`, `b100-toolbar` and `b100-card`.\n\nDo not touch those.\n\nMEASURED (by a worker, confirmed in its commit on a held branch): `B100StepperHarness.isLinear()` read a `linear` attribute CdkStepper never reflects, so it always returned false. `getLabelPosition()` read a nonexistent `label-position` attribute. Both went unnoticed for months because every test only asserted `typeof result === 'boolean'` or `'string'`.\n\nMEASURED (by me, vitest.config.ts:1901): `'src/**/*.harness.ts'` is excluded from coverage with the comment \"not product code\". That is false: harnesses ship publicly in `@base100/b100-am-ui/testing`. The exclusion hides every harness method that no test ever calls.\n\nHYPOTHESIS (verify; do not assume): more harness methods are broken the same way, reading attributes or classes the rendered DOM never carries, and are hidden behind type-only assertions or never called at all.\n\n**The task:**\n1. **Census the type-only tests.** In `src/lib/testing/harnesses/*.smoke.spec.ts` and the component specs for every in-scope harness, list each harness method whose only assertions are type checks (`typeof`, `toBeTypeOf`, `toEqual(expect.any(...))`, `toBeDefined()` on a value), or which no spec calls at all. Find the population by READING the harness and its specs. A grep may only locate candidates. Report the census, with paths searched.\n2. **For each such method:**\n   - drive the component into at least two states where the value differs, and assert the EXACT expected value in each (for booleans: both true and false);\n   - where the method is broken, fix it at the root against what Angular Material/CDK really renders (read the node_modules source) and say what was wrong;\n   - where a method can never return a meaningful value, delete it (public testing API: golden in the same commit).\n3. **Coverage.** Measure each in-scope harness file's coverage with the real runner. Temporarily override the exclude on the command line, e.g. `--coverage.include=src/lib/testing/harnesses/<file>` with the exclude override your runner supports; read `scripts/test/test.ts` to find out. Bring each in-scope harness to 100% lines and branches with meaningful assertions. Report the per-file numbers.\n   Do NOT remove the global `*.harness.ts` exclude in vitest.config.ts. The orchestrator will do that once every harness, including the excluded ones, is covered. Report which in-scope harnesses reached 100%.\n4. **Bar:**\n   - English code; bilingual JSDoc;\n   - no suppressions, no protected access in specs;\n   - no \"intentionally uncovered\" branches;\n   - English Conventional commits, one per harness or small group;\n   - golden in the same commit as any API change (`npm run build` then `api:update`).\n\nVerification with real exit codes:\n- the specs you touched;\n- `npm run typecheck`;\n- eslint + prettier on touched files;\n- `npm run build` + `check:api`, `check:testing-barrel-parity`, `check:harness-coverage`;\n- `node .claude/diff-coverage/diff-coverage.mjs --worktree <your worktree> --base develop`. Harness files are excluded there too, so report what it says about the non-harness files you touched.\n\nConstraints:\n- Never npm install.\n- rebase and reset are denied.\n- Commit before reporting.\n- Keep your context small by redirecting outputs to files in your private scratch directory.",
+        "run_in_background": "true"
+      },
+      "recipientMeta": null
+    },
+    {
+      "label": "REAL INCIDENT: resume ordering `git rebase integrate/lint-zero`",
+      "expected": "deny",
+      "faces": [
+        "denied-command"
+      ],
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_01SkLLsU6iKY1HTJ3xyFQDsA"
+      },
+      "tool": "SendMessage",
+      "input": {
+        "to": "acfc849499ebe819c",
+        "summary": "Owner approves: rebase onto integration line",
+        "message": "The owner APPROVED your rebase. Rebase onto the integration line, NOT onto develop.\n\nMEASURED (orchestrator, 2026-09-28):\n- The integration line is branch `integrate/lint-zero`, head d70ed91f. It is develop 6f4f449c (which already contains the floor leg 0cd2a214) plus 26 commits: visual, the lint-to-zero work, retirement of the suppressions mechanism, and an a11y token fix. It is green 11/11 on build, test:all-coverage, coverage thresholds, build:demo, check:api, lint and typecheck, and check:a11y is 103/103.\n- develop will only move after ONE final build:ci-pr over the whole line, so the line is the base now.\nHYPOTHESIS: none.\n\nSteps:\n1. Run `git rebase integrate/lint-zero` on your branch `consumer-app-runtime-phase`.\n   - If the permission layer still refuses the command, do the equivalent that the owner approved: create `git switch -c consumer-app-runtime-on-line integrate/lint-zero` as its own command, then cherry-pick your 3 commits (460978ff, e7018403, d0d8cb40).\n   - Resolve every conflict as a union, never by taking a side.\n2. Apply your stated design: the runtime phase runs on BOTH legs (thread `projectDir` and `leg`), keep a single `precheck:consumer-app:top`, and give floor its own Playwright-image CI job like top, because Alpine cannot run a browser.\n3. Gates: one recorded run of lint, typecheck, related specs, check:consumer-app:top, check:consumer-app:floor, check:ci-scripts, check:script-docs, check:i18n-provenance and check:provenance-coverage. Do NOT run the full chain; it runs once at the end.\nReport your branch and head.",
+        "type": "message",
+        "recipient": "acfc849499ebe819c",
+        "content": "The owner APPROVED your rebase. Rebase onto the i…"
+      },
+      "recipientMeta": {
+        "agentType": "general-purpose",
+        "description": "Consumer gate runtime phase",
+        "toolUseId": "toolu_01Cz1D2uSmsJgJD4B2yDGnwW",
+        "spawnDepth": 1,
+        "requestShape": "background",
+        "requestNonInteractive": true,
+        "worktreeCleanlyRemoved": true
+      }
+    },
+    {
+      "label": "REAL INCIDENT: `git rebase 3fdb3380` on a line whose LATER clause says \"if any does not\"",
+      "expected": "deny",
+      "faces": [
+        "denied-command"
+      ],
+      "source": {
+        "transcript": "agent-a8e8251030ea24789.jsonl",
+        "toolUseId": "toolu_01L1cWRCJhLdQMwpTKeGK9tH"
+      },
+      "tool": "SendMessage",
+      "input": {
+        "to": "a98337f392cc1d8da",
+        "summary": "g2 follow-up: combobox, mask, rating",
+        "message": "New follow-up from the coordinator (CTO decision): close three of your recorded findings, as separate commits.\nMEASURED: every commit of yours is already integrated on the coordinator branch `worktree-agent-a8e8251030ea24789`, head 3fdb3380 (develop 6f4f449c + all coverage work). The full coverage run there still lists `b100-select-combobox.component.ts:437`, `b100-mask.directive.ts:371` and `b100-rating.component.ts:380` as uncovered branches.\nHYPOTHESIS: none beyond your own earlier findings; re-verify each against the current code.\n\nFirst, base your branch on the coordinator head: `git rebase 3fdb3380` on your own branch (your commits are already there, so they drop out as duplicates; if any does not, stop and tell me). Then:\n1. combobox:437 — fix the real defect: when options shrink while the panel is open, clamp or reset the active index so `aria-activedescendant` never names a row that no longer exists. Behaviour test through the harness (shrink options while open, assert the active descendant is a present row or none). The `?.scrollIntoView` null arm should then be unreachable — restructure it away, do not keep a dead guard.\n2. mask:371 — fix the mask test harness so a dispatched `beforeinput`/`InputEvent` can carry `data: null` as real browsers do for cut/paste (happy-dom coerces null to ''), then cover the null path with a behaviour test.\n3. rating:380 — the root is a type that admits `undefined` the invariant forbids. Restructure the types/data flow (e.g. a lookup that returns a non-optional value by construction, or narrowing at the source) so the fallback/optional disappears. No non-null assertions, no casts, no suppressions.\nAfter each: `npx vitest related <changed files> --run --maxWorkers=2`, eslint --max-warnings 0 on touched files, and the tsc configs that own them (lib + testing). Scoped runs only; max 2 workers run on this machine. Commit each; report branch + SHAs.",
+        "type": "message",
+        "recipient": "a98337f392cc1d8da",
+        "content": "New follow-up from the coordinator (CTO decision)…"
+      },
+      "recipientMeta": {
+        "agentType": "general-purpose",
+        "worktreePath": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude\\worktrees\\agent-a98337f392cc1d8da",
+        "spawnedWithWorktree": true,
+        "worktreeBranch": "worktree-agent-a98337f392cc1d8da",
+        "description": "Coverage g2 form controls",
+        "toolUseId": "toolu_01XVPSja7mcdsGscyXUA3qV2",
+        "parentAgentId": "a8e8251030ea24789",
+        "spawnDepth": 2,
+        "requestShape": "background",
+        "requestNonInteractive": true
+      }
+    },
+    {
+      "label": "REAL NEAR MISS: `git rebase` in a code span, stated as denied",
+      "expected": "allow",
+      "faces": [],
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_01YRbm11wFF7XtraZ8eMUh5D"
+      },
+      "tool": "SendMessage",
+      "input": {
+        "to": "a1e604955a90d185a",
+        "summary": "Resume the suppressions waves on the new develop",
+        "message": "MEASURED (by me, just now): develop is now 602d2e05 (it gained the dev-start commits, a coverage floor, the hooks-path import fix, the deck, and the CI registry preflight). `w9-suppressions-to-zero` is 3 commits ahead of it but built on an older base, and your worktree holds 14 changed paths.\nHYPOTHESIS: none.\n\nThe limit has reset. Continue where you stopped — your last note was on the JSDoc descriptions the linter flagged. Commit the wave as soon as it is green, then rebase your branch onto develop 602d2e05 before the next wave, so the distance does not keep growing: `git rebase` is denied here, so branch off develop and cherry-pick your commits, resolving any i18n sidecar collision by taking develop's side as a stated decision and re-running `npm run i18n:review` to recompute every digest.\nThe brief stands: zero suppressions, code fixed with the owning parser or plain string ops, or the RULE narrowed with a written justification in its source and in docs/LINTING.md. No eslint-disable, no new suppression entries, no widened ignores. Report the remaining `npm run lint` count after each wave. No push, and no `build:ci-pr`.",
+        "type": "message",
+        "recipient": "a1e604955a90d185a",
+        "content": "MEASURED (by me, just now): develop is now 602d2e…"
+      },
+      "recipientMeta": {
+        "agentType": "general-purpose",
+        "worktreePath": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude\\worktrees\\agent-a1e604955a90d185a",
+        "spawnedWithWorktree": true,
+        "worktreeBranch": "worktree-agent-a1e604955a90d185a",
+        "description": "Drive lint suppressions to zero",
+        "toolUseId": "toolu_01Wt34swNqYf2fUNYugdcHUu",
+        "spawnDepth": 1,
+        "requestShape": "background",
+        "requestNonInteractive": true
+      }
+    },
+    {
+      "label": "REAL NEAR MISS: isolation worker told \"`git rebase` is denied to workers by permissions\"",
+      "expected": "allow",
+      "faces": [],
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_0124FvFAXMfLPLn1TSAwaGnV"
+      },
+      "tool": "Agent",
+      "input": {
+        "description": "Guard: refs de respaldo antes de mover ramas",
+        "subagent_type": "general-purpose",
+        "isolation": "worktree",
+        "prompt": "Build a mechanism so that a worker dying mid-history-rewrite can never leave its commits reachable only through the reflog. (A previous worker on this errand could not be resumed because its worktree was never created on disk. Nothing of it exists, so start clean.)\n\nMEASURED (by me, 2026-09-15):\n- A worker replaying its branch onto develop reset branch `worktree-agent-a153f28c32544646b` to 9f282737 (reflog entry \"branch: Reset to 9f282737\"), then hit a session limit and died.\n- Its 11 commits (706a4b74..ebf3cf88) were left reachable ONLY from the reflog, which is GC-eligible. I saved them by hand with `git update-ref refs/backup/a11y-a153-2026-09-14 ebf3cf88`.\n- Earlier, a `git branch -D` left a commit dangling in the same way.\n- `git rebase` is denied to workers by permissions, so they emulate it with reset + cherry-pick. That emulation is the risky window.\n\nHYPOTHESIS: the root is that any command that moves a branch ref to a point not containing its current tip (or deletes the branch) drops commits from every ref, and nothing records them first.\n- One option: a PreToolUse hook on Bash|PowerShell that detects ref-moving commands (`git reset`, `git branch -f/-D/-M`, `git checkout -B`, `git switch -C`, `git update-ref`) and, BEFORE they run, writes `refs/backup/<branch>/<timestamp>` at the current tip whenever that tip is not contained in the target.\n- The alternative is to refuse the command unless such a backup exists.\n- Decide which is right and state the tradeoffs: a hook cannot run after the command, and refusing blocks legitimate replays.\n\nBUILD in your worktree's .claude/ (gitignored; nothing enters git). Worktree isolation will refuse writes to the main checkout, so do NOT route around it.\n- The hook.\n- A selftest.mjs over CONSTRUCTED throwaway repos covering at least:\n  - tip contained in the target (no backup needed);\n  - tip not contained (a backup is made and resolves to the old tip);\n  - branch delete;\n  - non-git commands;\n  - the tokens appearing as DATA (heredoc, echo, commit message);\n  - commands run in worktrees;\n  - PowerShell payload shape.\n- A `list` command that reports backup refs whose commits are not on develop, so they get triaged instead of piling up.\n- An idempotent install script (`--dry-run` supported) that copies the files into the main checkout's .claude/ and registers the hook in .claude/settings.local.json, backing that file up first and printing everything it does.\n\nReport: files, selftest count, the design decision with tradeoffs, and the install command. I will read the code and run the install plus a real-payload proof from the main session."
+      },
+      "recipientMeta": null
+    },
+    {
+      "label": "REAL NEAR MISS: the brief that commissioned this guard DESCRIBES all three faces to a main-checkout worker",
+      "expected": "allow",
+      "faces": [],
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_01432WRS7wusgwqY1tS8egqh"
+      },
+      "tool": "Agent",
+      "input": {
+        "description": "Delegation guard: brief feasibility for the worker's environment",
+        "subagent_type": "general-purpose",
+        "model": "opus",
+        "prompt": "TENANCY: claude-global-config — you write ONLY under `C:\\Users\\adrian.jimenez\\.claude\\brief-feasibility\\` (new), plus its registration in the global delegation dispatch manifest under `C:\\Users\\adrian.jimenez\\.claude\\hook-dispatch\\manifests\\`, plus `C:\\Users\\adrian.jimenez\\.claude\\.gitignore` if it needs an allowlist entry. The file is an allowlist; check it. You READ anything. You never modify project repos.\n\nMEASURED (by me): lesson `instructed-a-worker-to-run-a-denied-command` recurred a 3rd time, so the owner's stop-the-line rule requires a mechanism now. Its three faces, all mine:\n1. A brief told a worker to `git rebase`, which is in the permissions deny list. See the project's `.claude/settings.local.json` deny entries, and `~/.claude/settings.json`.\n2. A brief told an `isolation: \"worktree\"` worker to `git worktree add` a new worktree and work there. EnterWorktree then made the worktree-isolation guard refuse all its shell calls, and ExitWorktree is refused for subagents.\n3. Briefs told worktree workers to run `node .claude/diff-coverage/diff-coverage.mjs`. `.claude/` tooling is gitignored and exists only in the main checkout (`C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude\\`), so a relative `.claude/...` path fails inside a worktree.\nMEASURED: the rule text is in `~/.claude/rules/promoted-rules.md` under that key.\nMEASURED: the closest existing pattern is `~/.claude/brief-provenance/guard.mjs` (PreToolUse on Agent/Task/SendMessage, a literal line scan, refusal messages that NAME the problem and the fix). Read it and its selftest first, and follow its architecture and quality bar.\nHYPOTHESIS (verify each against real payloads before relying on it):\n- The Agent payload carries `isolation`, and a SendMessage payload carries `to`, from which the recipient's worktree can be resolved through `<b100-am-ui>/.claude/agent-liveness/liveness.mjs` (agentRecords/TENANCY).\n- The deny list can be read from the merged settings files.\n\n**Build `~/.claude/brief-feasibility/guard.mjs` + `selftest.mjs` (+ mutants, reusing the mutant runner the other guards use).** It refuses a delegation or resume brief that:\n- (a) instructs a command matching a DENY rule of the settings that apply to the worker. Tokenize the shell command lines found in the brief with the existing shell tokenizer used by the other guards, never a regex. A command appearing as a prohibition (\"never run git rebase\", \"rebase and reset are denied\") must NOT trigger. Decide how to tell an instruction from a prohibition deterministically, e.g. by requiring the command in a code span or an imperative \"run/ejecuta\" line, and exercise that near miss in the selftest;\n- (b) tells a worktree-isolated or TENANCY-worktree worker to create or enter another worktree (`git worktree add` + work there, EnterWorktree);\n- (c) references a gitignored `.claude/<tool>` script by a RELATIVE path when the worker runs in a linked worktree (isolation worktree, or a TENANCY naming `.claude/worktrees/...`). The refusal prints the absolute replacement.\n\nEach refusal names the face, the offending line, and the working alternative.\n\nSelftest states, with real-shaped payloads captured from this harness (never typed from memory):\n- each face → deny;\n- each face's near miss → allow: the command stated as a prohibition, an absolute tooling path, a main-checkout worker using a relative path;\n- an unrelated brief → allow;\n- a malformed payload → allow + exit 0.\nReplay the three real incidents from this session's transcripts under `C:\\Users\\adrian.jimenez\\.claude\\projects\\C--Users-adrian-jimenez-Desktop-Projects-b100-am-ui\\c45d798b-d78f-4f60-9a32-1f722bbe86e5\\` (the main transcript and subagents/*.jsonl). Find the actual briefs containing `git worktree add .claude/worktrees/lang-sweep-2` and `node .claude/diff-coverage/diff-coverage.mjs`. The guard must deny them.\n\n**Then:**\n- Register it in the delegation dispatch manifest, the same way brief-provenance is registered.\n- Run `node C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude\\failure-capture\\capture.mjs promote --key instructed-a-worker-to-run-a-denied-command --mechanism C:\\Users\\adrian.jimenez\\.claude\\brief-feasibility\\guard.mjs` and report its output.\n- Commit and PUSH to the ~/.claude repo: `git -C C:/Users/adrian.jimenez/.claude add ... && git -C C:/Users/adrian.jimenez/.claude commit -m \"<English Conventional>\" && git -C C:/Users/adrian.jimenez/.claude push origin master`. The owner rule requires config changes pushed in the same turn.\n\nConstraints:\n- No regex for structure.\n- Never npm install.\n- Keep your context small by redirecting outputs to files in your private scratch directory.",
+        "run_in_background": "true"
+      },
+      "recipientMeta": null
+    },
+    {
+      "label": "LIVE TRUE POSITIVE: an isolated worker pointed at `.claude/AGENT-LEDGER.md` by a relative path",
+      "expected": "deny",
+      "faces": [
+        "relative-tooling-path"
+      ],
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_01Ss67vLVqxgK3g7yB7gyt89"
+      },
+      "tool": "Agent",
+      "input": {
+        "description": "Quality gate for honest component output typing",
+        "subagent_type": "general-purpose",
+        "model": "sonnet",
+        "isolation": "worktree",
+        "prompt": "You are building a quality gate for @base100/b100-am-ui (Angular 19 library). The contract in `.claude/AGENT-LEDGER.md` binds you. Read it first if its heading is not in your context. All `.claude/` tooling lives only in the main checkout, so always call it by absolute path: `C:/Users/adrian.jimenez/Desktop/Projects/b100-am-ui/.claude/...`. Never change worktree, never `git rebase`, never `npm install` in your worktree.\n\nGOAL (owner directive): the next time a component's public types lie, a gate fails. It must not depend on a reviewer noticing.\n\nThe defect class, from three real incidents this week:\n1. Over-wide outputs. `B100ButtonToggleComponent.valueChange` was `output<T[] | T>()` whatever `multiple` was. `B100InputComponent.valueChange` was `output<string | number | null>()` for every `config.type`. Consumers had to handle arms they could never receive.\n2. Casts instead of types. A demo worker \"fixed\" (1) with lying `as` casts in consumer code and turned off `@typescript-eslint/non-nullable-type-assertion-style` project-wide (rejected and reverted). Then a library fix typed `valueChange` generically but emitted through `value as B100InputValueOf<C>`, plus a default `input<C>({} as C)`.\n3. Two sources of truth for a discriminant. b100-input still has an inline `type` input that overrides `config.type`, so the generic type computed from the config is unsound.\n\nMEASURED (by me, reading branch worktree-agent-ad29a95bc2ed88cb0 at 9e19ce53): `src/lib/components/b100-input/b100-input.component.ts` has `readonly type = input<...>()` at :135, `readonly config = input<C>({} as C)` at :126, and `this.valueChange.emit(value as B100InputValueOf<C>)` at :391.\nMEASURED (by me): commit 3c2d4899 on branch integrate/spec-typecheck-a splits button-toggle into `valueChange: T` and `valuesChange: readonly T[]`, routed by a real type guard with no cast.\nHYPOTHESIS (unverified, settle it with the tools): `@typescript-eslint/consistent-type-assertions` with `assertionStyle: 'never'` (const assertions stay allowed) can ban value-level `as` in `src/lib/**`. How many offenders exist today is unknown. Measure it with `eslint --print-config` plus a real run, never a grep count.\nHYPOTHESIS: face 3 needs a custom rule in the repo's own plugin, `tools/b100-eslint-plugin`, using type information. It would flag a component class that declares both a `config` input whose type is a union (or Partial of a union) discriminated by a literal-typed property, and a separate `input()` with the same name as that discriminant.\n\nWHAT TO DO:\n1. THINK FIRST. For each face, write down what property the gate decides, which tool owns that question (ESLint core, a typescript-eslint rule, a custom type-aware rule, or a `check:*` script), and what would make the gate wrong: false positives on legitimate code such as `as const` or `satisfies`, and false negatives on the real incidents above.\n2. MEASURE the current population in lib, demo and consumer-app per face, with the owning tool. List every offender with file:line.\n3. BUILD the mechanism with the best architecture available: prefer existing official rules, and write a custom rule only where no official one decides the property. Each custom rule gets RuleTester tests covering the whole state space, including near misses: the three real incidents reproduced as fixtures, `as const`, `satisfies`, a legitimate generic default without a cast, and a component with an inline override that is NOT a discriminant. It also gets bilingual docs matching the plugin's existing rule docs.\n4. ENABLE ONLY AT ZERO. Owner rule, `failure-hidden-in-a-central-exception-registry`: no suppressions file, no baseline, no ignore list, no per-file `off`. If the offenders are in your reach, fix them at the root with typed APIs, the way 3c2d4899 did, not with casts. Do NOT touch b100-input: worker ad29a95 is fixing it. It is a live, owned file, so leave it and report it as the known offender. If offenders remain, register the rule but do NOT enable it, and report the exact list.\n5. Prove each rule DISCRIMINATES: re-introduce one real incident on a scratch copy, show the gate goes red, revert it, show it goes green. Paste both runs.\n6. Verification, with exit codes: `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build:demo`, the plugin's own test suite, and `npx jiti scripts/test/test.ts --project lib`. If the plugin is consumed through a `file:` package, confirm your gates resolve YOUR copy.\n7. Everything bilingual (English + `@es`), commits in English Conventional form with no attribution. Commit before reporting.\n\nReport: commits, the file list, each face with its owning tool and why, the measured population, the discrimination proof, and which rules are enabled versus registered-but-pending with their offender lists."
+      },
+      "recipientMeta": null
+    },
+    {
+      "label": "LIVE FALSE POSITIVE, fixed: \"These are denied or forbidden here: changing worktree, `git rebase`, …\" — a prohibition governing a colon-introduced list",
+      "expected": "allow",
+      "faces": [],
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_01688cY9APnpfbwMfB1XMZ1r"
+      },
+      "tool": "Agent",
+      "input": {
+        "description": "Quality gate for honest component output typing",
+        "subagent_type": "general-purpose",
+        "model": "sonnet",
+        "isolation": "worktree",
+        "prompt": "You are building a quality gate for @base100/b100-am-ui (Angular 19 library). The contract at C:/Users/adrian.jimenez/Desktop/Projects/b100-am-ui/.claude/AGENT-LEDGER.md binds you; read it first if its heading is not in your context. Gitignored tooling exists only in the main checkout, so always use absolute paths under C:/Users/adrian.jimenez/Desktop/Projects/b100-am-ui/.claude/. These are denied or forbidden here: changing worktree, `git rebase`, and a plain `npm install` in your worktree.\n\nGOAL (owner directive): the next time a component's public types lie, a gate fails. No reviewer has to notice.\n\nThe defect class comes from three real incidents this week:\n1. Over-wide outputs. `B100ButtonToggleComponent.valueChange` was `output<T[] | T>()` whatever the value of `multiple`. `B100InputComponent.valueChange` was `output<string | number | null>()` for every `config.type`. Consumers had to handle arms they could never receive.\n2. Casts instead of types.\n   - A demo worker \"fixed\" (1) with lying `as` casts in consumer code and turned off `@typescript-eslint/non-nullable-type-assertion-style` project-wide. That was rejected and reverted.\n   - A later library fix typed `valueChange` generically, but emitted through `value as B100InputValueOf<C>` and set a default `input<C>({} as C)`.\n3. Two sources of truth for a discriminant. b100-input still has an inline `type` input that overrides `config.type`, so the generic type derived from the config is unsound.\n\nMEASURED (by me, reading branch worktree-agent-ad29a95bc2ed88cb0 at 9e19ce53): `src/lib/components/b100-input/b100-input.component.ts` contains:\n- `readonly type = input<...>()` at :135;\n- `readonly config = input<C>({} as C)` at :126;\n- `this.valueChange.emit(value as B100InputValueOf<C>)` at :391.\nMEASURED (by me): commit 3c2d4899 on branch integrate/spec-typecheck-a splits button-toggle into `valueChange: T` and `valuesChange: readonly T[]`, routed by a real type guard with no cast.\nHYPOTHESIS (unverified, settle it with the tools): `@typescript-eslint/consistent-type-assertions` with `assertionStyle: 'never'` (const assertions stay allowed) can ban value-level `as` in `src/lib/**`. The offender count today is unknown. Measure it with `eslint --print-config` plus a real run, never a grep count.\nHYPOTHESIS: face 3 needs a custom type-aware rule in the repo's own plugin, `tools/b100-eslint-plugin`. It would flag a component class that declares both of these:\n- a `config` input whose type is a union, or a Partial of a union, discriminated by a literal-typed property;\n- a separate `input()` with the same name as that discriminant.\n\nWHAT TO DO:\n1. THINK FIRST. For each face, write down:\n   - the property the gate decides;\n   - which tool owns that question (ESLint core, a typescript-eslint rule, a custom type-aware rule, or a `check:*` script);\n   - what would make it wrong: false positives on legitimate code (`as const`, `satisfies`) and false negatives on the real incidents above.\n2. MEASURE the current population in lib, demo and consumer-app, per face, with the owning tool. List every offender with file:line.\n3. BUILD the mechanism with the best available architecture. Prefer existing official rules; write a custom rule only where none decides the property.\n   - Each custom rule gets RuleTester tests covering the whole state space, including near misses: the three real incidents reproduced as fixtures, `as const`, `satisfies`, a legitimate generic default without a cast, and a component with an inline override that is NOT a discriminant.\n   - Each custom rule gets bilingual docs that match the plugin's existing rule docs.\n4. ENABLE ONLY AT ZERO (owner rule `failure-hidden-in-a-central-exception-registry`): no suppressions file, no baseline, no ignore list, no per-file `off`.\n   - Fix offenders within your reach at the root with typed APIs, the way 3c2d4899 did, never with casts.\n   - Leave b100-input alone: worker ad29a95 owns that file and is fixing it right now. Report it as the known offender.\n   - If offenders remain, register the rule but leave it NOT enabled, and report the exact list.\n5. Prove every rule DISCRIMINATES. On a scratch copy, re-introduce one real incident and show the gate going red; revert it and show it going green. Paste both runs.\n6. Verify, with exit codes: `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build:demo`, the plugin's own test suite, and `npx jiti scripts/test/test.ts --project lib`. If the plugin is consumed through a `file:` package, confirm your gates resolve YOUR copy.\n7. Everything bilingual (English + `@es`). Commits in English, Conventional form, no attribution. Commit before reporting.\n\nReport:\n- the commits and the file list;\n- for each face, its owning tool and why;\n- the measured population;\n- the discrimination proof;\n- which rules are enabled and which are registered-but-pending, with their offender lists."
+      },
+      "recipientMeta": null
+    },
+    {
+      "label": "LIVE FALSE POSITIVE, fixed: a report QUOTING that sentence between double quotes — quoted text is data",
+      "expected": "allow",
+      "faces": [],
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_015pAv89izKixsbymUkvrCcJ"
+      },
+      "tool": "SendMessage",
+      "input": {
+        "to": "a991094652bfe6d94",
+        "message": "Brief-feasibility is now live and working: it refused a real relative `.claude/AGENT-LEDGER.md` path, which was correct. But it has one false positive, a near-miss state missing from your selftest.\n\nMEASURED (by me, this turn): this sentence in a brief was refused as an ORDER to run a denied command:\n\"These are denied or forbidden here: changing worktree, `git rebase`, and a plain `npm install` in your worktree.\"\nThe prohibition words sit in the same sentence, before a colon that introduces the list. Rewriting it as \"`git rebase` is denied here.\" passed.\nHYPOTHESIS: your clause splitter cuts at ':' or ',' and loses the prohibition that governs a colon-introduced list.\n\nMake a prohibition that governs a list (the \"X are denied: a, b, c\" shape) apply to every item in that list. Keep the stricter reading where a list is introduced by an imperative (\"Run: a, b\"). Add both states plus this exact sentence to the selftest, prove the discrimination, then commit and push.",
+        "type": "message",
+        "recipient": "a991094652bfe6d94",
+        "content": "Brief-feasibility is now live and working: it ref…"
+      },
+      "recipientMeta": {
+        "agentType": "general-purpose",
+        "description": "Delegation guard: brief feasibility for the worker's environment",
+        "toolUseId": "toolu_01432WRS7wusgwqY1tS8egqh",
+        "spawnDepth": 1,
+        "requestShape": "background",
+        "requestNonInteractive": true,
+        "model": "opus"
+      }
+    }
+  ],
+  "recipients": {
+    "cwdOnly": {
+      "agentId": "a30ec848f7aeb4f0b",
+      "meta": {
+        "agentType": "general-purpose",
+        "description": "Coverage g6 harness/gates",
+        "toolUseId": "toolu_01L4wEMt8GbRJayZDSs8fPzt",
+        "parentAgentId": "a8e8251030ea24789",
+        "spawnDepth": 2,
+        "requestShape": "background",
+        "requestNonInteractive": true,
+        "worktreeCleanlyRemoved": true,
+        "cwd": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude\\worktrees\\agent-g6-cov"
+      }
+    }
+  },
+  "refusedDrafts": [
+    {
+      "label": "REAL: a delegation brief-provenance refused, which also points an isolated worker at a relative .claude/ path",
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_014V9s582CX7Q66j3v4qs8yL"
+      },
+      "tool": "Agent",
+      "input": {
+        "description": "Close pre-push hunk with test",
+        "subagent_type": "general-purpose",
+        "isolation": "worktree",
+        "model": "opus",
+        "prompt": "Finish and PROVE the deletion-only early exit in `.husky/pre-push`, which a previous worker wrote, reported as done, and left uncommitted.\n\nMEASURED: branch `worktree-agent-a2ee8987827de2e9d` carries two commits that are NOT on develop — `bee475ef feat(hooks): make a push prove the CI gate set and a bypass leave a record` and `bb14c94f perf(hooks): reuse a green verification instead of repeating it on every push`. Your worktree may not have them. Check for `.husky/lib/push-proof.sh`; if it is absent, base your work on that branch (`git merge worktree-agent-a2ee8987827de2e9d` or reset onto it) before doing anything else, and say in your report which you did.\n\nMEASURED: `git -C .claude/worktrees/agent-a2ee8987827de2e9d status --porcelain` returns ` M .husky/pre-push` — the early-exit hunk is uncommitted there and exists nowhere else. Read it with `git -C .claude/worktrees/agent-a2ee8987827de2e9d diff .husky/pre-push` and carry it forward. Do NOT edit inside that dead worktree; it is not yours.\n\nMEASURED: a search for a spec covering `.husky/pre-push` (`rg -l 'pre-push' scripts/ src/ --glob '*spec*'`) returns only `live-counters/testing/counter-trigger.spec.ts` and `generate-presentation/testing/deck-artifacts.spec.ts` — neither covers the hook. That shell path has zero test coverage today.\n\nWHAT THE HUNK DOES: a push publishing no commits (a deletion-only push, where `b100_pushed_local_shas` drops git's all-zero local shas) exits 0 before `--verify-trees`, because removing a ref from the server cannot introduce a red and charging it a full local verification is cost for zero information.\n\nYOUR JOB:\n1. Land that hunk as a commit, with a test that proves the early exit DISCRIMINATES rather than merely runs. Enumerate the state space the decision ranges over and exercise each state: a deletion-only push takes the early exit; a normal push does NOT and still reaches `--verify-trees`; and the NEAR MISS — a push plan mixing a deletion with a real ref update — must NOT take the early exit. A guard proven only to fire is not a guard proven to decide.\n2. Prove your test can go RED: mutate the early exit (e.g. make it unconditional), run the test, and report exactly which assertions fail and that the others do not. A test suite that stays green under a mutation of the thing it tests is measuring your execution order, not the code.\n3. Decide where the harness lives and justify it in the code. There is precedent for a zero-dep `.mjs` selftest — see `.claude/fleet-env/reap.selftest.mjs` — and precedent for a vitest spec under `scripts/**/testing/`. A shell path with no coverage is not an acceptable outcome; neither is a test that cannot go red.\n4. Verify `docs/SCRIPTS.md` describes the behaviour if it does not already. VERIFY BEFORE WRITING: line 445 already documents the final-`&&`-position check on the `push-proof:record` row, so check what is actually missing rather than assuming.\n\nPROVE IT WITH THE FULL GATE SET: `npm run build:ci-pr`. Not a subset you picked. Redirect its output to a file and READ the file — do not trust an inline echo or exit code.\n\nCOMMIT BEFORE YOU REPORT. Your deliverable must exist somewhere other than one directory before you claim anything is done, and a report composed from what you remember writing cannot tell a committed edit from one that never reached a commit — that is exactly how the hunk you are recovering was lost. Read `git status --porcelain` and `git log --oneline` on your own branch before writing your report, and if anything is still dirty, say PENDING, never done.\n\nReport: the commit sha, the mutation evidence (which assertions went red), the `build:ci-pr` exit code read from the file, and anything you left undone."
+      },
+      "liveRefusalHead": "BRIEF-PROVENANCE REFUSED this delegation: the brief has nowhere to tell a measured fact from a guess."
+    },
+    {
+      "label": "REAL: a resume brief-provenance refused",
+      "source": {
+        "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
+        "toolUseId": "toolu_01NJfg8WTPhLqGHp9URpEsw5"
+      },
+      "tool": "SendMessage",
+      "input": {
+        "to": "aace9fe6d1188fb29",
+        "summary": "17 uncommitted files in your worktree — commit them",
+        "message": "Tienes 17 ficheros sin commitear. Eso es lo primero.\n\nMEASURED (por mí, ahora, con `git status --porcelain` sobre tu worktree y `git merge-base`): `phase2-3-replay-ef86e7fc` = `ee900503`, 2 commits sobre `ef86e7fc` — la base es correcta, eso está bien — pero el árbol tiene **17 entradas sin commitear**.\n\nUn worktree con trabajo sin commitear es invisible: no sale en `git log`, no sale en nada que yo pueda leer desde el checkout principal, y desaparece si el worktree se limpia. Ya perdimos trabajo así.\n\n1. Commitea lo que esté terminado, con su mensaje convencional y su spec en rojo primero.\n2. Lo que NO esté terminado, dímelo explícitamente en tu informe en vez de dejarlo suelto en el árbol.\n3. Sobre el log de lint que estabas vigilando: si el proceso murió con el límite de sesión, ese log está TRUNCADO y un log truncado no es un resultado. Compruébalo y relánzalo si hace falta, con `npm run build` delante para que todo artefacto derivado se regenere dentro de esa misma corrida.\n\nCierra diciéndome: sha de la cabeza, árbol limpio o qué queda sucio y por qué, y los gates con su exit code real.",
+        "type": "message",
+        "recipient": "aace9fe6d1188fb29",
+        "content": "Tienes 17 ficheros sin commitear. Eso es lo prime…"
+      },
+      "liveRefusalHead": "BRIEF-PROVENANCE REFUSED this message (SendMessage): the brief has nowhere to tell a measured fact from a guess."
+    }
+  ]
+}
