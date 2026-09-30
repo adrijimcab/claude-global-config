@@ -208,38 +208,75 @@ export function observedMasterIdPairings(text) {
  * DIFFERENT shape from `observedMasterIdPairings`'s own JSON `"topic_key":"…"` scan (which only sees a
  * `mem_save` CALL's own input, never a READ's result), so it is a second, independent extraction over
  * the SAME text, not a replacement.
+ *
+ * SECOND LIVE DEFECT, found the day after the first fix shipped (45888ec): a real
+ * `mem_get_observation` in the main session's own transcript — never a subagent's, never a fixture —
+ * teaches NOTHING, because the marker was unescaped-only. MEASURED directly against session
+ * `c45d798b-d78f-4f60-9a32-1f722bbe86e5`'s own transcript file (never guessed): the unescaped
+ * `"result":"#972` occurs ZERO times in it, while the ESCAPED form `\"result\":\"#972` occurs 14
+ * times. The reason is the same one `ID_FIELD_MARKERS` already documents for `"id":` two members
+ * below: a `tool_result`'s `content[].text` is a JSON STRING whose VALUE is itself JSON-object-shaped
+ * text, so every literal `"` inside that value — including the ones around `result` and `#972` —
+ * is escaped ONCE when the whole line is serialized. `ID_FIELD_MARKERS` got both forms from the
+ * start; this marker only ever got the unescaped one, because the mem_save-result fixture the first
+ * fix was built against happened to be a SHORTER, differently-shaped result that never went through
+ * this exact escaping depth in the unit tests that exercised it.
  * @es SEGUNDA FUENTE, hallada ausente en uso real: el resultado de `mem_get_observation` (y de
  * `mem_save`) lleva un pie de metadatos legible por humanos — medido contra un transcript real antes de
  * arreglarlo. El id va justo tras `#`, el topic_key tras una línea literal `Topic: `, ambos dentro del
  * MISMO string de resultado. Es una forma DISTINTA al escaneo JSON de `observedMasterIdPairings`
  * (que solo ve el INPUT de una llamada `mem_save`, nunca el resultado de una lectura).
+ * SEGUNDO DEFECTO EN VIVO, hallado al día siguiente del primer arreglo: un `mem_get_observation` REAL
+ * de la sesión principal no enseña NADA, porque el marcador solo tenía la forma sin escapar. MEDIDO
+ * contra el transcript real de la sesión `c45d798b-d78f-4f60-9a32-1f722bbe86e5`: la forma sin escapar
+ * aparece CERO veces; la forma ESCAPADA aparece 14 veces — el mismo motivo que ya documenta
+ * `ID_FIELD_MARKERS` dos miembros más abajo.
  */
-const RESULT_ID_MARKER = '"result":"#';
+const RESULT_ID_MARKERS = ['"result":"#', '\\"result\\":\\"#'];
 const TOPIC_LABEL_MARKER = 'Topic: ';
 const RESULT_METADATA_WINDOW = 8000;
 
-/** The earliest of a literal newline or a JSON-escaped `\n` after `from`, or `text.length` if neither appears — the metadata footer's own line ending. @es El primero de un salto real o uno escapado `\n`, o el final del texto. */
+/**
+ * The earliest of a literal newline, a JSON-escaped `\n`, or a DOUBLY-escaped `\\n` after `from`, or
+ * `text.length` if none appear — the metadata footer's own line ending.
+ *
+ * THE DOUBLY-ESCAPED FORM, found in live use the day after the first fix shipped: MEASURED directly
+ * against session `c45d798b-d78f-4f60-9a32-1f722bbe86e5`'s real transcript, the metadata footer's own
+ * newlines appear as THREE raw bytes (`\`, `\`, `n`) right after the topic value, not two — one level
+ * deeper than the `"result":"#` marker itself, which is only single-escaped. A single-escaped-only
+ * check finds the SECOND backslash of that pair as its match, so the slice it returns keeps the FIRST
+ * backslash as a trailing character of the topic value (`backlog/1.0.0-master\`), which then fails
+ * `isMasterBacklogTopicKey`'s exact `-master` suffix check and teaches nothing. Checking all three
+ * forms and taking the EARLIEST is what stops the exact escaping depth from mattering.
+ * @es El primero de un salto real, uno escapado `\n`, o uno DOBLEMENTE escapado `\\n`, o el final del
+ * texto. LA FORMA DOBLEMENTE ESCAPADA, hallada en uso real: el pie de metadatos tiene sus propios
+ * saltos de línea como TRES bytes crudos, un nivel más adentro que el propio marcador `"result":"#`.
+ * Comprobar las tres formas y tomar la MÁS TEMPRANA es lo que hace que la profundidad exacta de escape
+ * deje de importar.
+ */
 function lineEndAfter(text, from) {
-  const escaped = text.indexOf('\\n', from);
   const real = text.indexOf('\n', from);
-  const candidates = [escaped, real].filter((index) => index !== -1);
+  const singleEscaped = text.indexOf('\\n', from);
+  const doubleEscaped = text.indexOf('\\\\n', from);
+  const candidates = [real, singleEscaped, doubleEscaped].filter((index) => index !== -1);
 
   return candidates.length === 0 ? text.length : Math.min(...candidates);
 }
 
-function observedFromResultMetadata(text) {
+/** One marker's pairings: every `{ id, topicKey }` this ONE `RESULT_ID_MARKERS` shape can observe in `text`. @es Las parejas que UNA forma de `RESULT_ID_MARKERS` puede observar en `text`. */
+function observedFromResultMetadataMarker(text, marker) {
   const pairings = [];
   let searchFrom = 0;
 
-  for (let markerAt = text.indexOf(RESULT_ID_MARKER, searchFrom); markerAt !== -1; markerAt = text.indexOf(RESULT_ID_MARKER, searchFrom)) {
-    const idStart = markerAt + RESULT_ID_MARKER.length;
+  for (let markerAt = text.indexOf(marker, searchFrom); markerAt !== -1; markerAt = text.indexOf(marker, searchFrom)) {
+    const idStart = markerAt + marker.length;
     let idEnd = idStart;
 
     while (idEnd < text.length && DIGITS.includes(text[idEnd])) idEnd += 1;
 
     const id = idEnd > idStart ? Number(text.slice(idStart, idEnd)) : undefined;
 
-    searchFrom = idEnd > idStart ? idEnd : markerAt + RESULT_ID_MARKER.length + 1;
+    searchFrom = idEnd > idStart ? idEnd : markerAt + marker.length + 1;
 
     if (id === undefined) continue;
 
@@ -256,6 +293,10 @@ function observedFromResultMetadata(text) {
   }
 
   return pairings;
+}
+
+function observedFromResultMetadata(text) {
+  return RESULT_ID_MARKERS.flatMap((marker) => observedFromResultMetadataMarker(text, marker));
 }
 
 /**

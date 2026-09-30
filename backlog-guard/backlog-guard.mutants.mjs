@@ -44,12 +44,16 @@ const MUTANTS = [
   //     mem_update fix shipped: a READ's result footer teaches an id/topic_key pairing too)
   ['the metadata-footer source is never consulted, so a mem_get_observation result teaches nothing', 'master-save.mjs', 'return [...pairings, ...observedFromResultMetadata(text)];', 'return pairings;'],
   ['a Topic: line with no master shape is no longer filtered out, so ANY topic teaches a pairing', 'master-save.mjs', 'if (isMasterBacklogTopicKey(topicKey)) pairings.push({ id, topicKey });', 'pairings.push({ id, topicKey });'],
-  ['a result with no Topic: line at all stops being skipped, reading past the window instead', 'master-save.mjs', 'if (topicAt === -1) continue;', '']
+  ['a result with no Topic: line at all stops being skipped, reading past the window instead', 'master-save.mjs', 'if (topicAt === -1) continue;', ''],
+  // --- the second live defect, found the day after the first fix shipped: a real transcript's own
+  //     bytes escape the "result" marker and its internal newlines at DIFFERENT depths.
+  ['the escaped "result" marker form is dropped, so a real (single-escaped) mem_get_observation result teaches nothing', 'master-save.mjs', "const RESULT_ID_MARKERS = ['\"result\":\"#', '\\\\\"result\\\\\":\\\\\"#'];", "const RESULT_ID_MARKERS = ['\"result\":\"#'];"],
+  ['the doubly-escaped newline form is dropped, so a real metadata footer\'s topic value keeps a trailing backslash and fails the -master check', 'master-save.mjs', "const doubleEscaped = text.indexOf('\\\\\\\\n', from);", 'const doubleEscaped = -1;']
 ];
 
 const survivors = runMutants({
   fleetRoot: HERE,
-  paths: ['decide.mjs', 'guard.mjs', 'markers.mjs', 'master-save.mjs', 'state.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'],
+  paths: ['decide.mjs', 'guard.mjs', 'markers.mjs', 'master-save.mjs', 'state.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json', 'fixtures'],
   selftest: 'selftest.mjs',
   mutants: MUTANTS
 });

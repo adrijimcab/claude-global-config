@@ -244,14 +244,35 @@ check('observedMasterIdPairings is empty for undefined/empty input', observedMas
 //     never a `mem_save` call's JSON input. Fixtures use the EXACT shape measured against this
 //     session's own real transcript (session c45d798b, lines 76992-76993).
 {
-  // The exact literal shape measured on this session's own real transcript (session c45d798b, line
-  // 76993): a `"result":"#<id> [...` prefix, and — later in the SAME string, separated by a
-  // JSON-escaped newline (`\n`, two characters: backslash then `n`) — a `Topic: <topic_key>` line.
-  const REAL_GET_OBSERVATION_RESULT = '"result":"#972 [decision] BACKLOG MAESTRO 1.0.0\\nmucho contenido aqui\\nTopic: backlog/1.0.0-master\\nDuplicates: 1\\nRevisions: 12"';
+  // A SIMPLIFIED, hand-typed shape (unescaped `"result":"#`, single-backslash `\n`) exercising the
+  // parsing LOGIC in isolation — not itself a claim of being byte-for-byte real (the genuinely
+  // byte-for-byte fixture, extracted mechanically from the actual transcript, follows below).
+  const SIMPLIFIED_GET_OBSERVATION_RESULT = '"result":"#972 [decision] BACKLOG MAESTRO 1.0.0\\nmucho contenido aqui\\nTopic: backlog/1.0.0-master\\nDuplicates: 1\\nRevisions: 12"';
 
   check(
-    'observedMasterIdPairings learns {id, topicKey} from a REAL mem_get_observation result\'s metadata footer',
-    observedMasterIdPairings(REAL_GET_OBSERVATION_RESULT),
+    'observedMasterIdPairings learns {id, topicKey} from a simplified mem_get_observation result shape',
+    observedMasterIdPairings(SIMPLIFIED_GET_OBSERVATION_RESULT),
+    [{ id: 972, topicKey: 'backlog/1.0.0-master' }]
+  );
+}
+{
+  // THE GENUINELY BYTE-FOR-BYTE FIXTURE, found necessary after a SECOND live defect (the day after the
+  // first fix, 45888ec): a real `mem_get_observation(972)` in the MAIN session's own turn taught
+  // nothing, because the real bytes are escaped at a DEEPER level than the hand-typed fixture above
+  // assumed. MEASURED directly (readFileSync + charCodeAt, never a terminal's re-escaped display) off
+  // session `c45d798b-d78f-4f60-9a32-1f722bbe86e5`'s own transcript file: the `"result":"#` marker
+  // itself is escaped ONCE (`\"result\":\"#`), but the metadata footer's OWN internal newlines are
+  // escaped TWICE (`\\n`, three raw bytes: backslash, backslash, `n`) — one level deeper than the
+  // marker around it. This file is that exact byte range, extracted mechanically by
+  // `_extract-fixture.mjs` (not retyped), never hand-edited.
+  // @es EL FIXTURE GENUINAMENTE BYTE A BYTE, necesario tras un SEGUNDO defecto en vivo: un
+  // `mem_get_observation(972)` real de la sesión principal no enseñó nada porque los bytes reales
+  // están escapados un nivel MÁS ADENTRO de lo que asumía el fixture tecleado a mano de arriba.
+  const REAL_TRANSCRIPT_FIXTURE = readFileSync(path.join(HERE, 'fixtures', 'real-mem-get-observation-972-result.txt'), 'utf8');
+
+  check(
+    'observedMasterIdPairings learns {id, topicKey} from the REAL byte-for-byte mem_get_observation result (doubly-escaped newlines)',
+    observedMasterIdPairings(REAL_TRANSCRIPT_FIXTURE),
     [{ id: 972, topicKey: 'backlog/1.0.0-master' }]
   );
 }
