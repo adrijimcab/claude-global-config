@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Edit|Write|MultiEdit"
+    }
+  ],
+  "why": "Real incidents this week: `value as B100InputValueOf<C>`, `input<C>({} as C)`, and demo code that 'fixed' type errors with lying `as` casts. Owner directive: 'no quiero que se vuelva a escribir código así en ningún repo, y quiero que lo cace algún gate' — this is the authoring-time gate, ahead of any lint, across every repository on this machine."
+}

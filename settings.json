@@ -60,6 +60,15 @@
             "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/pretooluse-delegation.json\""
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/pretooluse-authoring.json\""
+          }
+        ]
       }
     ],
     "SessionStart": [

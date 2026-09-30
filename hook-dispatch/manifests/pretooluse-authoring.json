@@ -1,0 +1,6 @@
+{
+  "event": "PreToolUse",
+  "guards": [
+    "../../type-assertion-guard/guard.mjs"
+  ]
+}

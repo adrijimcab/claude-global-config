@@ -88,6 +88,17 @@
 !/engram-persistence/*.json
 /engram-persistence/state/
 
+# `PreToolUse` on Edit/Write/MultiEdit, every repo on this machine: refuses a value-level TypeScript
+# type assertion (`x as T`, `<T>x`, `as unknown as T`, the postfix `!`) from being newly ADDED. Owner
+# directive 2026-09-30: "no quiero que se vuelva a escribir código así en ningún repo, y quiero que lo
+# cace algún gate." Code and registration sidecars yes; live state, scratch and mutation-proof sandboxes
+# no.
+!/type-assertion-guard/
+!/type-assertion-guard/*.mjs
+!/type-assertion-guard/*.json
+/type-assertion-guard/state/
+/type-assertion-guard/scratch/
+
 # ── Reincluir ficheros sueltos de config propia ──────────────────────────────────────────────────
 !/CLAUDE.md
 !/settings.json
