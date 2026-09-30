@@ -30,6 +30,8 @@
 /config-sync-guard/state/
 !/mutation-proof/
 !/mutation-proof/**
+!/selftest-runner/
+!/selftest-runner/**
 !/agents/
 !/agents/**
 !/skills/
