@@ -209,28 +209,35 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   measurement it is turns their evidence into my assertion. **RULE: when passing a worker's finding to
   the owner, either verify it myself or name whose measurement it is IN THE SAME SENTENCE.** Without
   it, an inherited verdict is indistinguishable from one I established.
-  - **A CLAIM ABOUT SOMEONE ELSE'S ARTEFACT, RELAYED AS AN ORDER.** RULE: never relay a claim about
+  - **A CLAIM ABOUT SOMEONE ELSE'S ARTEFACT, RELAYED AS AN ORDER (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: never relay a claim about
     the CONTENT of an artefact as an instruction without reading that artefact at its CURRENT
     revision; where reading is not possible, name the revision the claim was made against.
-  - **A PREDICTION RECORDED AS A FACT.** RULE: a prediction may never enter a durable record as fact —
+  - **A PREDICTION RECORDED AS A FACT (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: a prediction may never enter a durable record as fact —
     either run the thing and record the result, or write it as the author's expectation. On this
     machine, no claim that a directory removal will succeed is ever safe.
-  - **A PLAN READ BACK AS A ROSTER.** RULE: a statement of what is running is assembled from receipts,
+  - **A PLAN READ BACK AS A ROSTER (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: a statement of what is running is assembled from receipts,
     never recited from the plan; if you cannot point at the receipt for an entry, it does not go on
     the list.
-  - **"THE HOOK COVERS IT", RELAYED AS A CLOSURE.** RULE: whether a hook covers a tool is decided by
+  - **"THE HOOK COVERS IT", RELAYED AS A CLOSURE (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: whether a hook covers a tool is decided by
     exactly two things — the registration matcher, and a real-shaped payload driven through it with
     the expected verdict. A diff inside the hook's own code proves neither.
-  - **A REFUSED ACTION REMEMBERED AS A DONE ONE.** RULE: after a refused tool call, the RETRY is the
+  - **A REFUSED ACTION REMEMBERED AS A DONE ONE (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: after a refused tool call, the RETRY is the
     next action, before any reporting. A status line naming work as delegated or running is assembled
     from this turn's launch receipts, never from the brief you wrote.
-  - **A WORKER'S OPEN QUESTION FORWARDED AS WORK FOR THE OWNER.** RULE: an item goes on the owner's
+  - **A WORKER'S OPEN QUESTION FORWARDED AS WORK FOR THE OWNER (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: an item goes on the owner's
     work list only after an engram search for it and a read of the code in the same turn; otherwise it
     goes on the list marked as the worker's unverified claim.
-  - **A WORKER'S PLAN RELAYED WITH ITS ENVIRONMENT PREMISES UNCHECKED.** RULE: before relaying a
+  - **A WORKER'S PLAN RELAYED WITH ITS ENVIRONMENT PREMISES UNCHECKED (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: before relaying a
     worker's activation, deploy or rollout plan, measure the environment premises it rests on (default
     branch, branches in use, roles and permissions, schedules) in the same turn, or mark them
     unverified.
+  - **AN OLDER RECORD'S STATE CLAIM RELAYED WHILE A NEWER RECORD CONTRADICTED IT (2026-09-30,
+    `worker-claim-about-unreachable-file-committed-as-fact`).** I told the owner the local `v1.0.0`
+    tag "has no parent", copied from engram #927 into the backlog, while #978 (newer) already
+    recorded it at 18cd5d4d with parent 8340076f; one `git log` refuted it. RULE: a state claim
+    taken from any durable record (engram, backlog, report) is re-measured in the same turn before
+    it reaches the owner, or goes out naming the record and its date in the same sentence; and
+    before relaying it, check newer records on the same subject for a contradiction.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/worker-claim-about-unreachable-file-committed-as-fact.md`.
 
 - **`provisioning-bound-to-delegation-not-worktree-creation`** — A worktree you create YOURSELF
