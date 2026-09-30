@@ -196,6 +196,11 @@ backlog es SOLO del orquestador.
 
 - Cada proyecto tiene UN backlog maestro en engram, con `topic_key` `backlog/<hito>-master` (en
   b100-am-ui: `backlog/1.0.0-master`, observación #972). Es la fuente única de lo que queda.
+  **TODO proyecto, siempre (dueño, 2026-10-01: «SEGÚN QUE APAREZCA UN HALLAZGO HAY QUE GUARDARLO EN
+  ENGRAM COMO PENDIENTE, ESTO TIENE QUE SER ASÍ AHORA SIEMPRE Y EN TODOS LOS PROYECTOS»):** si el
+  proyecto en el que se trabaja todavía no tiene backlog maestro, se CREA en el primer hallazgo
+  (`backlog/<hito o «main»>-master`); ningún proyecto queda exento y ningún hallazgo espera al final
+  de la tarea.
 - Todo hallazgo, defecto, deuda, decisión pendiente del dueño o tarea «encolada» que aparezca —de un
   agente, de una medición o de la conversación— se escribe en ese backlog EN EL MISMO TURNO en que
   aparece. Nunca queda solo en el chat, en un reporte de agente o en una nota suelta.
