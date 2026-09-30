@@ -41,7 +41,7 @@
  * de comando. Falla ABIERTO ante cualquier cosa ilegible.
  */
 
-import { isSubagentCaller } from '../backlog-owner-guard/identify-caller.mjs';
+import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
 import { commandWordIndex, dialectOfTool, DIALECTS, executableName, simpleCommands } from '../shell-command/shell-command.mjs';
 
 /** The executables that change the directory of the shell that runs them. @es Los ejecutables que cambian el directorio de la shell que los corre. */

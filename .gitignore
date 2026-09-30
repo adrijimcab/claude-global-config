@@ -107,6 +107,9 @@
 !/backlog-owner-guard/
 !/backlog-owner-guard/**
 /backlog-owner-guard/state/
+!/hook-caller/
+!/hook-caller/**
+/hook-caller/state/
 !/brief-tenancy/
 !/brief-tenancy/**
 /brief-tenancy/state/

@@ -29,7 +29,6 @@ import path from 'node:path';
 
 import { decide } from './decide.mjs';
 import { evaluate, GUARDED_TOOLS } from './guard.mjs';
-import { isSubagentCaller } from './identify-caller.mjs';
 import { defaultDatabasePath, resolveTopicKeyById } from './resolve-topic-key.mjs';
 
 let passed = 0;
@@ -66,14 +65,8 @@ const dbPath = path.join(scratch, 'engram.db');
 
 const resolver = (id) => resolveTopicKeyById(id, { databasePath: dbPath });
 
-// ── identify-caller.mjs: both signals, independently and together ──────────────────────────────────
-check('agent_id alone marks a subagent', isSubagentCaller({ agent_id: 'a123' }), true);
-check('subagents transcript path alone marks a subagent', isSubagentCaller({ transcript_path: 'C:\\...\\subagents\\agent-a123.jsonl' }), true);
-check('both signals together still mark a subagent', isSubagentCaller({ agent_id: 'a123', transcript_path: 'C:\\...\\subagents\\agent-a123.jsonl' }), true);
-check('neither signal is the main session', isSubagentCaller({ transcript_path: 'C:\\...\\session.jsonl' }), false);
-check('an empty agent_id string does not count', isSubagentCaller({ agent_id: '', transcript_path: 'C:\\...\\session.jsonl' }), false);
-check('a non-object payload is never a subagent', isSubagentCaller(null), false);
-check('transcript_path containing "subagents" only as a substring elsewhere still counts (conservative OR)', isSubagentCaller({ transcript_path: 'C:\\repo\\subagents-archive\\old.jsonl' }), true);
+// Caller identity is proved by `../hook-caller/selftest.mjs`; this proof drives it through `decide()`.
+// @es La identidad del llamante la prueba `../hook-caller/selftest.mjs`; aquí se ejerce vía `decide()`.
 
 // ── resolve-topic-key.mjs: against the real disposable sqlite database ─────────────────────────────
 check('resolves a master row', resolveTopicKeyById(972, { databasePath: dbPath }).topicKey, 'backlog/1.0.0-master');

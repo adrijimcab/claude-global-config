@@ -34,7 +34,7 @@
  */
 
 import { isMasterBacklogTopicKey } from '../backlog-guard/master-save.mjs';
-import { isSubagentCaller } from './identify-caller.mjs';
+import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
 
 /** The engram save-family tools this guard covers, both mount points, per tool family. @es Las herramientas de la familia de guardado de engram que cubre esta guardia, ambos montajes, por familia. */
 export const SAVE_TOOLS = new Set(['mcp__engram__mem_save', 'mcp__plugin_engram_engram__mem_save']);

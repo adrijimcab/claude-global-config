@@ -16,7 +16,7 @@
  *
  * EVERY PAYLOAD HAS THE REAL SHAPE: built by `hook-payloads/payloads.mjs` from the recorded Bash / PowerShell
  * payload, then made a MAIN-session payload the way the harness sends it (no `agent_id`, a transcript path not
- * under `subagents/`; measured on 3,040 real payloads in `backlog-owner-guard/identify-caller.mjs`). The first
+ * under `subagents/`; measured on 3,040 real payloads in `hook-caller/identify-caller.mjs`). The first
  * row replays the exact command of the 2026-09-30 incident.
  *
  * @es PRUEBA DE DISCRIMINACIÓN de `cwd-change-guard`. Espacio de estados: llamante, herramienta, modo de

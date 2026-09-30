@@ -20,7 +20,7 @@
  * engram store or a live subagent session. This file is the thin shim: stdin -> `evaluate()` -> stdout,
  * plus a journal so a real refusal is auditable evidence.
  *
- * CALLER IDENTITY (`identify-caller.mjs`) is MEASURED against 3,040 real `PreToolUse` payloads captured
+ * CALLER IDENTITY (`../hook-caller/identify-caller.mjs`, shared) is MEASURED against 3,040 real `PreToolUse` payloads captured
  * this session, not assumed: a subagent payload always carries `agent_id`, and its `transcript_path`
  * always sits under `.../subagents/agent-<id>.jsonl`; a main-session payload has neither. Both signals
  * are checked (OR), so one drifting alone cannot misclassify a subagent as the main session.

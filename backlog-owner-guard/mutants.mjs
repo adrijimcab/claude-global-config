@@ -19,10 +19,8 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const MUTANTS = [
-  // --- identify-caller.mjs: caller identity, both signals ---
-  ["dropping the OR loses a subagent identified by only ONE signal", 'backlog-owner-guard/identify-caller.mjs', 'return hasAgentId || hasSubagentTranscript;', 'return hasAgentId && hasSubagentTranscript;'],
-  ["the agent_id signal is ignored entirely", 'backlog-owner-guard/identify-caller.mjs', "const hasAgentId = typeof agentId === 'string' && agentId.length > 0;", 'const hasAgentId = false;'],
-  ["the subagent-transcript-path signal is ignored entirely", 'backlog-owner-guard/identify-caller.mjs', 'const hasSubagentTranscript = typeof transcriptPath === \'string\' && transcriptPath.includes(SUBAGENT_TRANSCRIPT_MARKER);', 'const hasSubagentTranscript = false;'],
+  // Caller identity (`hook-caller/identify-caller.mjs`) is mutated by `hook-caller/mutants.mjs`.
+  // @es La identidad del llamante la muta `hook-caller/mutants.mjs`.
 
   // --- decide.mjs: the caller gate ---
   ['the main-session/subagent gate is inverted: the orchestrator gets refused, subagents get through', 'backlog-owner-guard/decide.mjs', 'if (!isSubagentCaller(payload)) return undefined;', 'if (isSubagentCaller(payload)) return undefined;'],
@@ -55,7 +53,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['backlog-owner-guard', 'backlog-guard'],
+  paths: ['backlog-owner-guard', 'backlog-guard', 'hook-caller'],
   selftest: 'backlog-owner-guard/selftest.mjs',
   mutants: MUTANTS
 });

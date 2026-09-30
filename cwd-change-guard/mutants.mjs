@@ -18,8 +18,8 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const MUTANTS = [
   // --- who is asked.
   ['a subagent is refused too: the caller identity is never consulted', 'cwd-change-guard/decide.mjs', 'if (isSubagentCaller(payload)) return undefined;', ''],
-  ['the identity check looks at `agent_id` only: a transcript-only subagent reads as the main session', 'backlog-owner-guard/identify-caller.mjs', 'return hasAgentId || hasSubagentTranscript;', 'return hasAgentId;'],
-  ['the identity check looks at the transcript only: an `agent_id`-only subagent reads as the main session', 'backlog-owner-guard/identify-caller.mjs', 'return hasAgentId || hasSubagentTranscript;', 'return hasSubagentTranscript;'],
+  ['the identity check looks at `agent_id` only: a transcript-only subagent reads as the main session', 'hook-caller/identify-caller.mjs', 'return hasAgentId || hasSubagentTranscript;', 'return hasAgentId;'],
+  ['the identity check looks at the transcript only: an `agent_id`-only subagent reads as the main session', 'hook-caller/identify-caller.mjs', 'return hasAgentId || hasSubagentTranscript;', 'return hasSubagentTranscript;'],
   ['a call that runs no shell is decided as bash', 'cwd-change-guard/decide.mjs', 'if (dialect === undefined || toolInput === null', 'if (toolInput === null'],
   ['a background call is refused: the clock mode is never consulted', 'cwd-change-guard/decide.mjs', 'if (toolInput.run_in_background === true) return undefined;', ''],
 
@@ -58,7 +58,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['cwd-change-guard', 'shell-command', 'backlog-owner-guard', 'hook-dispatch', 'hook-payloads', 'mutation-proof', 'cherry-pick-guard', 'exit-code-guard', 'eval-guard', 'gentle-ai-sync-guard', 'collision-guard', 'commit-pathspec-guard', 'config-sync-guard'],
+  paths: ['cwd-change-guard', 'shell-command', 'hook-caller', 'hook-dispatch', 'hook-payloads', 'mutation-proof', 'cherry-pick-guard', 'exit-code-guard', 'eval-guard', 'gentle-ai-sync-guard', 'collision-guard', 'commit-pathspec-guard', 'config-sync-guard'],
   selftest: 'cwd-change-guard/selftest.mjs',
   mutants: MUTANTS
 });
