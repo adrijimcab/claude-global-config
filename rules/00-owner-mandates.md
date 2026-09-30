@@ -155,6 +155,14 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
 - **Código e identificadores, API pública, nombres de fichero, claves i18n:** inglés.
 - **Comentarios, JSDoc y documentación:** bilingües — inglés primero y el espejo `@es` en español con
   ortografía correcta (ñ, tildes, acentos; nunca aplanado a ASCII).
+- **TODO texto del código es bilingüe, también el de ejecución** (dueño, 2026-09-30: «TODO BILINGUE,
+  TODO LO DEL CÓDIGO YA SE CONSOLE.LOG, JSDOC TODO BILINGUE, COMO REGLA»): `console.*`, loggers
+  (`context.logger.*` de schematics incluido), mensajes de errores lanzados, avisos de DevMode, salidas
+  de scripts y de gates. Forma de la casa: inglés primero y el español marcado con `@es` en el mismo
+  mensaje («English text. @es Texto en español.»), o líneas en inglés seguidas de sus líneas `@es` en
+  un bloque de varias líneas. NUNCA se traduce un mensaje español a solo inglés ni al revés: se
+  completa la mitad que falta. Excepción única: los identificadores, las claves i18n y los valores que
+  un programa parsea (códigos B100-XXXX, JSON de salida de máquina) no se traducen.
 - **Mensajes de commit:** SIEMPRE en inglés (estándar de empresa), Conventional `type(scope): description`,
   sin atribución de IA. Sustituye la regla del 2026-09-28 que los pedía en español.
 - Registro neutro y profesional en todo artefacto: la voz Gentleman es solo para la conversación.
