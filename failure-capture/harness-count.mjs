@@ -10,9 +10,9 @@
  * `max(40000, round(contextTokens * 0.05 * charsPerToken))` and the total limit is `max(120000, perFile)`;
  * a file over the per-file limit is left out of the sum that raises the warning. The harness defaults to a
  * 200,000-token context and to 4 chars per token for some models, else 3.
- * NOT PORTED, so this count is an UPPER BOUND of the harness's: frontmatter is not removed, and only a block
- * starting in column 0 is recognised (a block inside a list item or quote, which the harness keeps, is
- * kept too). Inline markers such as `<!--fc:KEY#N-->` are counted, as the harness counts them.
+ * NOT PORTED, so this count is an UPPER BOUND of the harness's: only a block starting in column 0 is recognised
+ * (a block inside a list item or quote, which the harness keeps, is kept too). Frontmatter is removed
+ * exactly as the harness does (a leading `---` block, found by the same rule as its pattern). Inline markers such as `<!--fc:KEY#N-->` are counted, as the harness counts them.
  * NO REGEX, as in the rest of this directory.
  *
  * @es Cómo cuenta el harness de Claude Code un fichero de instrucciones y cuáles son sus límites:
@@ -25,9 +25,10 @@
  * límite por fichero es `max(40000, round(contextTokens * 0.05 * charsPerToken))` y el total
  * `max(120000, perFile)`; un fichero sobre el límite por fichero queda fuera de la suma que dispara el
  * aviso. El harness supone 200.000 tokens de contexto y 4 caracteres por token en algunos modelos, si no 3.
- * NO PORTADO, así que este recuento es una COTA SUPERIOR del del harness: no se quita el frontmatter y solo se
- * reconoce un bloque que empieza en la columna 0 (uno dentro de una lista o cita, que el harness conserva,
- * también se conserva). Los marcadores en línea como `<!--fc:KEY#N-->` se cuentan, igual que el harness.
+ * NO PORTADO, así que este recuento es una COTA SUPERIOR de la del harness: solo se reconoce un bloque que empieza
+ * en la columna 0 (uno dentro de una lista o cita, que el harness conserva, también se conserva). El
+ * frontmatter se quita exactamente como lo hace el harness (un bloque inicial `---`, hallado con la misma
+ * regla que su patrón). Los marcadores en línea como `<!--fc:KEY#N-->` se cuentan, igual que el harness.
  * SIN REGEX, como el resto del directorio.
  */
 
@@ -35,6 +36,8 @@ export const HARNESS_VERSION = '2.1.286';
 
 const COMMENT_OPEN = '<!--';
 const COMMENT_CLOSE = '-->';
+const FRONTMATTER_MARK = '---';
+const BYTE_ORDER_MARK = 0xfeff;
 const FENCE_CHARACTERS = ['`', '~'];
 const MAX_FENCE_INDENT = 3;
 const MIN_FENCE_LENGTH = 3;
@@ -96,7 +99,7 @@ function fenceOf(line) {
 }
 
 /** The fence in force after `line`: the one it opens, or none when it is a bare closing fence of the same character and at least the same length. @es La valla vigente tras `line`: la que abre, o ninguna si es una valla de cierre sola, del mismo carácter y al menos igual de larga. */
-function fenceAfter(open, line) {
+export function fenceAfter(open, line) {
   const fence = fenceOf(line);
 
   if (open === undefined) return fence;
@@ -106,19 +109,43 @@ function fenceAfter(open, line) {
   return closes ? undefined : open;
 }
 
-/** The characters of a comment block that stay once its comments go: nothing when only blanks remain. @es Los caracteres de un bloque de comentarios que permanecen al quitar sus comentarios: nada si solo quedan blancos. */
-function remainderLength(block) {
+/** The text of a comment block that stays once its comments go: nothing when only blanks remain. @es El texto de un bloque de comentarios que permanece al quitar sus comentarios: nada si solo quedan blancos. */
+function remainderOf(block) {
   const rest = removeComments(block);
 
-  return rest.trim().length > 0 ? rest.length : 0;
+  return rest.trim().length > 0 ? rest : '';
 }
 
-/** The characters the harness counts for an instruction file with this `text`. @es Los caracteres que el harness cuenta para un fichero con este `text`. */
-export function countedLength(text) {
-  if (!text.includes(COMMENT_OPEN)) return text.length;
+/** The index after the run of whitespace that starts at `from`. @es El índice tras la racha de blancos que empieza en `from`. */
+function skipBlanks(text, from) {
+  let index = from;
 
-  const source = normalizeLineBreaks(text);
-  let counted = 0;
+  while (index < text.length && text[index].trim() === '') index += 1;
+
+  return index;
+}
+
+/** `text` without its leading `---` frontmatter block; unchanged when it has none. A byte-order mark is ignored when looking, and kept when nothing is removed. @es `text` sin su bloque inicial de frontmatter `---`; igual si no lo tiene. */
+function withoutFrontmatter(text) {
+  const source = text.charCodeAt(0) === BYTE_ORDER_MARK ? text.slice(1) : text;
+
+  if (!source.startsWith(FRONTMATTER_MARK)) return text;
+
+  const gapEnd = skipBlanks(source, FRONTMATTER_MARK.length);
+  const lastBreak = source.lastIndexOf('\n', gapEnd - 1);
+  const close = lastBreak < FRONTMATTER_MARK.length ? -1 : source.indexOf(FRONTMATTER_MARK, lastBreak + 1);
+
+  return close === -1 ? text : source.slice(skipBlanks(source, close + FRONTMATTER_MARK.length));
+}
+
+/** The text the harness keeps of an instruction file: no frontmatter and no top-level comment blocks. @es El texto que el harness conserva de un fichero de instrucciones: sin frontmatter ni bloques de comentarios de nivel superior. */
+export function instructionContent(text) {
+  const body = withoutFrontmatter(text);
+
+  if (!body.includes(COMMENT_OPEN)) return body;
+
+  const source = normalizeLineBreaks(body);
+  let kept = '';
   let position = 0;
   let fence;
 
@@ -126,7 +153,7 @@ export function countedLength(text) {
     if (fence === undefined && source.startsWith(COMMENT_OPEN, position)) {
       const blockEnd = commentBlockEnd(source, position);
 
-      counted += remainderLength(source.slice(position, blockEnd));
+      kept += remainderOf(source.slice(position, blockEnd));
       position = blockEnd;
       continue;
     }
@@ -135,12 +162,15 @@ export function countedLength(text) {
     const lineEnd = newline === -1 ? source.length : newline + 1;
 
     fence = fenceAfter(fence, source.slice(position, lineEnd));
-    counted += lineEnd - position;
+    kept += source.slice(position, lineEnd);
     position = lineEnd;
   }
 
-  return counted;
+  return kept;
 }
+
+/** The characters the harness counts for an instruction file with this `text`. @es Los caracteres que el harness cuenta para un fichero con este `text`. */
+export const countedLength = (text) => instructionContent(text).length;
 
 /** The per-file and total limits, in characters, for a context of `contextTokens` at `charsPerToken`. @es Los límites por fichero y total, en caracteres, para un contexto de `contextTokens` a `charsPerToken`. */
 export function harnessLimits({ contextTokens, charsPerToken = DEFAULT_CHARS_PER_TOKEN }) {

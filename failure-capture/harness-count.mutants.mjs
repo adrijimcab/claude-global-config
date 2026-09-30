@@ -20,8 +20,8 @@ const PER_FILE = 'Math.max(MIN_FILE_LIMIT, Math.round(tokens * CONTEXT_SHARE * c
 
 const MUTANTS = [
   // --- counting: what is stripped and what is kept
-  ['the no-comment shortcut is gone, so CRLF text is normalised without a comment', FILE, 'if (!text.includes(COMMENT_OPEN)) return text.length;', ''],
-  ['line breaks are not normalised', FILE, 'const source = normalizeLineBreaks(text);', 'const source = text;'],
+  ['the no-comment shortcut is gone, so CRLF text is normalised without a comment', FILE, 'if (!body.includes(COMMENT_OPEN)) return body;', ''],
+  ['line breaks are not normalised', FILE, 'const source = normalizeLineBreaks(body);', 'const source = body;'],
   ['a lone CR is not normalised', FILE, ".split('\\r').join('\\n')", ''],
   ['an indented comment is treated as a top-level block', FILE, 'source.startsWith(COMMENT_OPEN, position)', "(source.startsWith(COMMENT_OPEN, position) || source.startsWith(' ' + COMMENT_OPEN, position))"],
   ['`<!-->` is not recognised as a whole comment', FILE, "text.startsWith('>', bodyStart) || ", ''],
@@ -30,12 +30,23 @@ const MUTANTS = [
   ['the blank lines after a block are kept', FILE, "while (text[end] === '\\n') end += 1;", ''],
   ['only one blank line after a block goes with it', FILE, "while (text[end] === '\\n') end += 1;", "if (text[end] === '\\n') end += 1;"],
   ['a block ends at its first line, not at the line with its closing mark', FILE, "text.indexOf('\\n', close)", "text.indexOf('\\n', start)"],
-  ['text left after the comments is dropped', FILE, 'return rest.trim().length > 0 ? rest.length : 0;', 'return 0;'],
-  ['a block left with only blanks is kept', FILE, 'return rest.trim().length > 0 ? rest.length : 0;', 'return rest.length;'],
+  ['text left after the comments is dropped', FILE, "return rest.trim().length > 0 ? rest : '';", "return '';"],
+  ['a block left with only blanks is kept', FILE, "return rest.trim().length > 0 ? rest : '';", 'return rest;'],
   ['only the first comment of a block is removed', FILE, 'position = close + COMMENT_CLOSE.length;', 'return rest + raw.slice(close + COMMENT_CLOSE.length);'],
   ['an opener with no closer is dropped with what follows', FILE, 'if (close === -1) return rest + raw.slice(position);', 'if (close === -1) return rest + raw.slice(position, open === -1 ? raw.length : open);'],
   ['the comment body search starts at the opener', FILE, 'raw.indexOf(COMMENT_CLOSE, open + COMMENT_OPEN.length)', 'raw.indexOf(COMMENT_CLOSE, open)'],
-  ['a counted line is one char short', FILE, 'counted += lineEnd - position;', 'counted += lineEnd - position - 1;'],
+  ['a counted line is one char short', FILE, 'kept += source.slice(position, lineEnd);', 'kept += source.slice(position, lineEnd - 1);'],
+
+  // --- frontmatter
+  ['frontmatter is never removed', FILE, 'if (!source.startsWith(FRONTMATTER_MARK)) return text;', 'return text;'],
+  ['a byte-order mark hides the frontmatter', FILE, 'text.charCodeAt(0) === BYTE_ORDER_MARK ? text.slice(1) : text', 'text'],
+  ['a byte-order mark is dropped from text that has no frontmatter', FILE, 'if (!source.startsWith(FRONTMATTER_MARK)) return text;', 'if (!source.startsWith(FRONTMATTER_MARK)) return source;'],
+  ['a byte-order mark is dropped when no frontmatter is found', FILE, 'return close === -1 ? text : ', 'return close === -1 ? source : '],
+  ['frontmatter that never closes is removed', FILE, 'return close === -1 ? text : source.slice(skipBlanks(source, close + FRONTMATTER_MARK.length));', 'return source.slice(skipBlanks(source, close + FRONTMATTER_MARK.length));'],
+  ['the opener needs no line break after it', FILE, 'lastBreak < FRONTMATTER_MARK.length ? -1 : ', ''],
+  ['the blanks after the closing mark stay', FILE, 'source.slice(skipBlanks(source, close + FRONTMATTER_MARK.length))', 'source.slice(close + FRONTMATTER_MARK.length)'],
+  ['only a space counts as a blank', FILE, "text[index].trim() === ''", "text[index] === ' '"],
+  ['the blank run is not bounded by the text', FILE, 'index < text.length && ', ''],
 
   // --- fences: a comment inside one is not a block
   ['fences are ignored', FILE, 'fence === undefined && source.startsWith', 'source.startsWith'],
