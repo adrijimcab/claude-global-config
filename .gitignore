@@ -107,6 +107,9 @@
 !/backlog-owner-guard/
 !/backlog-owner-guard/**
 /backlog-owner-guard/state/
+!/backlog-content-guard/
+!/backlog-content-guard/**
+/backlog-content-guard/state/
 !/hook-caller/
 !/hook-caller/**
 /hook-caller/state/

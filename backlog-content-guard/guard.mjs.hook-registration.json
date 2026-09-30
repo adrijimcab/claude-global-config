@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "mcp__engram__mem_save|mcp__plugin_engram_engram__mem_save|mcp__engram__mem_update|mcp__plugin_engram_engram__mem_update"
+    }
+  ],
+  "why": "a mem_save on an existing topic_key is a full upsert: a save meant as an append replaced the detailed record of engram observation #1092 with a short update, the second time the backlog lost measured detail (backlog-rewritten-from-summary-lost-detail)."
+}
