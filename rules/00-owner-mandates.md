@@ -15,6 +15,25 @@ picked. Lives in `~/.claude/rules/00-owner-mandates.md`, which Claude Code loads
 every project and which `gentle-ai sync` never touches (sync rewrites only the managed regions of
 `~/.claude/CLAUDE.md`).
 
+## ZERO SUPPRESSION OF ANY KIND — every registry, baseline and ratchet is debt (owner directive 2026-10-01)
+
+Owner, verbatim: «NADA SE PUEDE SUPRIMIR, NI BASELINES NI ESLINT, NI RATCHETS NI NADA NADA ESO ES
+DEUDA Y TAPAR ALGO ROTO». Given after a worker grew `playwright/visual-opt-out.json` by 6 entries
+to turn a gate green, the SECOND time after 124 entries were written into `eslint-suppressions.json`.
+
+This supersedes "registries may only shrink". A registry that shrinks slowly is still broken code
+wearing a label. The target of every registry is ZERO, and none may be used as a tool:
+- NEVER add an entry to, or create, any exclusion/opt-out/allowlist/ignore list, suppression file,
+  baseline, ratchet baseline, coverage exclusion, `NON_GATE_HELPERS`-style exemption, skipped or
+  `.only` test, `c8`/`istanbul ignore`, rule flipped to `off`, or threshold set below what was
+  measured — whatever the gate, whatever the pressure.
+- A failing gate is fixed in the CODE (or, only when the rule is genuinely wrong, in the RULE with a
+  written justification). If that is impossible without a regression, STOP and report the evidence.
+- Every EXISTING entry of every registry is an open debt item in the master backlog, with its count,
+  and is burned down to zero before 1.0.0.
+- Enforced, not remembered: a gate refuses any registry that is not empty-or-shrinking against the
+  integration branch, and the delivery gate refuses a worker hand-back that touches one.
+
 ## THE MAXIMUM BAR, ON EVERY TASK (owner directive 2026-09-09)
 
 Owner, verbatim: «HACER TODO SIEMPRE CON EL MÁXIMO LISTÓN … lo mejor posible, lo más legible y lo mejor
