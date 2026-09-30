@@ -18,6 +18,8 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const LINE = 'failure-capture/ledger-line.mjs';
 const STORE = 'failure-capture/evidence.mjs';
 const PROOF = 'failure-capture/conservation.mjs';
+const CAPTURE = 'failure-capture/tiered-capture.mjs';
+const COMMAND = 'failure-capture/capture.mjs';
 
 const MUTANTS = [
   // --- the marker grammar is byte-stable
@@ -71,6 +73,23 @@ const MUTANTS = [
   ['the marker of a stub is trusted instead of the original\'s', PROOF, 'mechanism: stub.mechanism, marker: before.marker }', 'mechanism: stub.mechanism, marker: stub.marker }'],
   ['a refusal no longer says how far the closest line agrees', PROOF, 'Math.max(best, sharedPrefix(line, original))', 'best'],
   ['a refusal no longer names the characters that were lost', PROOF, 'filter((character) => !evidence.includes(character))', 'filter(() => false)'],
+  ['the Spanish half of an unreadable original loses its reason', PROOF, '`el original no se puede leer: ${spanish}`', "'el original no se puede leer.'"],
+
+  // --- capture --rule: a shortened line is accepted only after the proof, and the full line is the fallback
+  ['a failed shortening is written anyway instead of falling back to the full line', CAPTURE, 'if (proof?.ok) return { line: built.line, tiered: true };', 'return { line: built.line, tiered: true };'],
+  ['the conservation proof is skipped: a line that cannot be proved is shortened', CAPTURE, 'const proof = archived.ok ? proveConservation({ original: full, shortened: built.line, evidence: readEvidence(ledgerFile, key) }) : undefined;', 'const proof = archived.ok ? { ok: true } : undefined;'],
+  ['the full line is never archived before it is shortened', CAPTURE, "const archived = built.ok ? appendEvidence({ ledgerFile, key, line: full, date, kind: 'captured' }) : built;", 'const archived = built;'],
+  ['the legacy form is built as a tiered line', CAPTURE, 'if (rule === undefined) return { line:', 'if (false) return { line:'],
+  ['a rule under the minimum length is accepted', CAPTURE, 'rule.trim().length < MINIMUM_RULE_LENGTH ?', 'false ?'],
+  ['a newline is accepted in a capture text', CAPTURE, "text.includes('\\n') || text.includes('\\r') ?", 'false ?'],
+  ['a marker opener is accepted in a capture text', CAPTURE, 'text.includes(MARK_OPEN) ?', 'false ?'],
+  ['a rule carrying its own RULE: label is accepted', CAPTURE, "rule.includes('RULE:') ?", 'false ?'],
+  ['the lesson is not checked for newlines or marker openers', CAPTURE, "typeof lesson === 'string' ? oneLineProblems('--lesson', lesson) : []", '[]'],
+  ['a --rule flag with no value is treated as a rule', CAPTURE, "typeof rule !== 'string') return", 'false) return'],
+  ['the rule never reaches the spool, so capture always writes the legacy line', COMMAND, '...(rule === undefined ? {} : { rule })', '...{}'],
+  ['the fallback to the full line is not announced', COMMAND, 'if (mine.fallback !== undefined) console.log(', 'if (false) console.log('],
+  ['the legacy lesson no longer has to state its RULE', COMMAND, "if (rule === undefined && typeof lesson === 'string' && !lesson.includes('RULE'))", 'if (false)'],
+  ['a recurrence no longer bumps the counter', COMMAND, 'const count = marker.count + 1;', 'const count = marker.count;'],
 ];
 
 const survivors = runMutants({

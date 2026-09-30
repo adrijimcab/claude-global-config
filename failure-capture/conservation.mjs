@@ -13,7 +13,7 @@
  * del fichero de evidencia releído de disco, y la línea acortada no debe inventar nada: solo trozos del
  * original y las etiquetas fijas del constructor. Pura: el llamante archiva y relee, así la prueba no
  * puede satisfacerse con la escritura que comprueba. Contención de línea entera y no recuento de
- * caracteres: un prefijo, una tilde perdida o otro contador contienen casi todo el original. Los
+ * caracteres: un prefijo, una tilde perdida u otro contador contienen casi todo el original. Los
  * caracteres que faltan se NOMBRAN.
  */
 
@@ -52,7 +52,11 @@ function archiveDeficits(original, evidence) {
 function expectedShortening(original, shortened) {
   const before = parseEntry(original);
 
-  if (!before.ok) return refuse(`the original is not readable: ${before.problem}`, 'el original no se puede leer.');
+  if (!before.ok) {
+    const [english, spanish] = before.problem.split(' @es ');
+
+    return refuse(`the original is not readable: ${english}`, `el original no se puede leer: ${spanish}`);
+  }
 
   const stub = parseStub(shortened);
 

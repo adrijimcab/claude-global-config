@@ -45,6 +45,7 @@ import { closureClause, closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readCl
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
+import { captureTextProblems, newLessonLine } from './tiered-capture.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The PROJECT this command runs in (`project.mjs`), never the folder this code sits in: the loop is
@@ -278,9 +279,14 @@ function reconcile() {
         const ledger = ledgerForScope(ledgers, entry.scope);
         const marker = `${MARK_OPEN}${entry.key}#1${MARK_CLOSE}`;
 
-        ledger.lines.push(`- [${entry.scope}] ${entry.date} — ${entry.lesson} ${marker}`);
+        // A capture with a `--rule` is written tiered, or as the full line when shortening fails
+        // (`tiered-capture.mjs`); without one the line is exactly what it always was.
+        // @es Una captura con `--rule` se escribe con niveles, o completa si acortar falla.
+        const made = newLessonLine({ ledgerFile: ledger.file, scope: entry.scope, date: entry.date, key: entry.key, lesson: entry.lesson, rule: entry.rule, marker });
+
+        ledger.lines.push(made.line);
         touched.add(ledger);
-        folded.push({ ...entry, count: 1, recurrence: false });
+        folded.push({ ...entry, count: 1, recurrence: false, fallback: made.problem });
       } else {
         const { ledger, index } = found;
         const marker = readMarker(ledger.lines[index]);
@@ -333,14 +339,16 @@ function commandKeys() {
 }
 
 function commandCapture(args) {
-  const { key, scope, actor, lesson, session } = args;
+  const { key, scope, actor, lesson, rule, session } = args;
   const problems = [];
 
   if (!isValidKey(key)) problems.push('--key must be lowercase-kebab-case, 4-60 chars (it becomes the parity anchor if this lesson is ever promoted)');
   if (!SCOPES.includes(scope)) problems.push(`--scope must be ${SCOPES.map((one) => `"${one}"`).join(' or ')} here${PROJECT === undefined ? ' (no project holds this directory: run from inside one to record a project lesson)' : ''}`);
   if (typeof actor !== 'string' || (actor !== 'orchestrator' && !actor.startsWith('worker'))) problems.push('--actor must be "orchestrator" or "worker:<agent-type>"');
   if (typeof lesson !== 'string' || lesson.length < 40) problems.push('--lesson must be a real one-line lesson (40+ chars)');
-  if (typeof lesson === 'string' && !lesson.includes('RULE')) problems.push('--lesson must state the rule explicitly and contain the word RULE (ledger format: what went wrong -> root cause -> RULE)');
+  if (rule === undefined && typeof lesson === 'string' && !lesson.includes('RULE')) problems.push('--lesson must state the rule explicitly and contain the word RULE (ledger format: what went wrong -> root cause -> RULE)');
+
+  problems.push(...captureTextProblems({ lesson, rule }));
 
   if (problems.length > 0) {
     console.error('capture REFUSED — the entry would not be a usable lesson:');
@@ -357,7 +365,7 @@ function commandCapture(args) {
   // reconciliación posterior vea los mismos dos ledgers.
   const project = PROJECT === undefined ? undefined : { scope: PROJECT.scope, ledgerFile: PROJECT.ledgerFile };
 
-  spool({ key, scope, actor, lesson, date: today(), session: session ?? 'unknown', at: new Date().toISOString(), ...(project === undefined ? {} : { project }) });
+  spool({ key, scope, actor, lesson, ...(rule === undefined ? {} : { rule }), date: today(), session: session ?? 'unknown', at: new Date().toISOString(), ...(project === undefined ? {} : { project }) });
 
   const { folded, deferred } = reconcile();
 
@@ -376,6 +384,8 @@ function commandCapture(args) {
 
     return 0;
   }
+
+  if (mine.fallback !== undefined) console.log(`NOTE — ${mine.fallback}`);
 
   if (mine.count < PROMOTION_THRESHOLD) {
     console.log(`RECORDED in the lessons ledger as a NEW lesson: ${key} (1x).`);
@@ -799,6 +809,7 @@ const USAGE = `failure-capture — record a correction as a durable lesson.
   keys                 list existing lesson keys (reuse one when it is the SAME lesson)
   capture   --key <kebab-key> --scope <global|<this project's scope>> --actor <orchestrator|worker:<type>>
             --lesson "<what went wrong -> root cause -> RULE ...>" [--session <id>]
+            or --lesson "<what went wrong -> root cause>" --rule "<the rule, one sentence>" (tiered ledger line)
   dismiss   --reason "<why this is not a correction>" [--marker <m>] [--session <id>]
   promote   --key <kebab-key> (--mechanism <guard path> | --no-mechanism "<why none is possible>")
   status   counts, ledger token cost, and which lessons are due for promotion

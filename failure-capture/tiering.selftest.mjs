@@ -11,9 +11,11 @@
  * temporal: nunca se lee el ledger ni la evidencia reales.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { holdsWholeLine, proveConservation } from './conservation.mjs';
 import { appendEvidence, evidenceFile, readEvidence } from './evidence.mjs';
@@ -175,6 +177,115 @@ check('a rewrite is refused when the evidence on disk was truncated behind its b
 
   return proveConservation({ original: ORIGINAL, shortened: SHORT.line, evidence: readEvidence(ledger, 'truncated-key') }).ok === false;
 })());
+
+const unreadable = deficitsOf(proves('not an entry\n', SHORT.line, 'not an entry'));
+check('an unreadable original carries its reason in BOTH languages', unreadable.split(' @es ')[1]?.includes('no es una línea de entrada') === true, unreadable);
+
+// --- `capture --rule`, end to end in a constructed repository and home --------------------------------
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const NARRATIVE = 'I asserted a number from memory and it was wrong, root cause: I never measured it, so the claim was a guess';
+const SAID = 'always measure a number before you state it';
+
+/** A fresh repository holding a copy of the loop, and a fresh home: the real ledger is never touched. @es Un repositorio y un home nuevos. */
+function world(name) {
+  const repo = path.join(scratch, name, 'repo');
+  const home = path.join(scratch, name, 'home');
+  const loop = path.join(repo, '.claude', 'failure-capture');
+
+  mkdirSync(path.join(loop, 'state'), { recursive: true });
+  mkdirSync(path.join(home, '.claude'), { recursive: true });
+  for (const file of readdirSync(HERE)) if (file.endsWith('.mjs')) copyFileSync(path.join(HERE, file), path.join(loop, file));
+  writeFileSync(path.join(repo, '.claude', 'CLAUDE.md'), '# Project\n', 'utf8');
+  writeFileSync(path.join(repo, '.claude', 'failure-capture.json'), JSON.stringify({ scope: 'b100-am-ui' }), 'utf8');
+
+  return { repo, home, loop, ledger: path.join(home, '.claude', 'lessons-ledger.md'), evidenceDir: path.join(home, '.claude', 'lessons', 'evidence') };
+}
+
+/** Runs `capture` in a world: `{ status, out }`. @es Ejecuta `capture` en un mundo. */
+function capture(target, key, extra) {
+  const args = ['capture', '--key', key, '--scope', 'global', '--actor', 'orchestrator', ...extra];
+
+  try {
+    const out = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), ...args], { cwd: target.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, HOME: target.home, USERPROFILE: target.home }, timeout: 60_000 });
+
+    return { status: 0, out };
+  } catch (error) {
+    return { status: typeof error?.status === 'number' ? error.status : 'did-not-run', out: `${error?.stdout ?? ''}${error?.stderr ?? ''}` };
+  }
+}
+
+const readOr = (file) => (existsSync(file) && statSync(file).isFile() ? readFileSync(file, 'utf8') : '');
+const lineFor = (text, key) => text.split('\n').find((line) => line.includes(`<!--fc:${key}#`)) ?? '';
+
+{
+  const target = world('rule-new');
+  const run = capture(target, 'rule-lesson', ['--lesson', NARRATIVE, '--rule', SAID]);
+  const line = lineFor(readOr(target.ledger), 'rule-lesson');
+  const evidence = readOr(path.join(target.evidenceDir, 'rule-lesson.md'));
+  const entry = parseEntry(line);
+
+  check('--rule (without the word RULE) is accepted', run.status === 0, run.out);
+  check('...the ledger line is the tiered line: label written by the builder, pointer, marker', entry.ok && line.endsWith(` — RULE: ${SAID} Evidence: lessons/evidence/rule-lesson.md <!--fc:rule-lesson#1-->`) && !line.includes('measured'), line);
+  check('...the full legacy line is a whole line of the evidence file', entry.ok && holdsWholeLine(evidence, `- [global] ${entry.date} — ${NARRATIVE} RULE: ${SAID} <!--fc:rule-lesson#1-->`), evidence);
+  check('...the incident log keeps the narrative and the rule as today', readOr(path.join(target.loop, 'state', 'incidents.jsonl')).includes(JSON.stringify(NARRATIVE)) && readOr(path.join(target.loop, 'state', 'incidents.jsonl')).includes(JSON.stringify(SAID)));
+
+  const again = capture(target, 'rule-lesson', ['--lesson', NARRATIVE, '--rule', SAID]);
+  const bumped = readOr(target.ledger).split('\n').filter((one) => one.includes('rule-lesson'));
+
+  check('a recurrence bumps the counter of the tiered line, keeping ONE line', again.status === 0 && bumped.length === 1 && bumped[0].endsWith('Evidence: lessons/evidence/rule-lesson.md <!--fc:rule-lesson#2-->'), bumped.join('\n'));
+  check('...and a recurrence is announced as such', again.out.includes('RECURRENCE'), again.out);
+}
+
+{
+  const target = world('legacy');
+  const legacy = `${NARRATIVE} -> RULE: measure it`;
+  const run = capture(target, 'legacy-lesson', ['--lesson', legacy]);
+  const entry = parseEntry(lineFor(readOr(target.ledger), 'legacy-lesson'));
+
+  check('--lesson alone writes today\'s full line and no evidence', run.status === 0 && entry.ok && entry.body === legacy && !existsSync(target.evidenceDir), run.out);
+}
+
+for (const [name, extra, fragment] of [
+  ['a rule under the minimum length', ['--lesson', NARRATIVE, '--rule', 'measure it'], 'at least'],
+  ['a --rule flag with no value', ['--lesson', NARRATIVE, '--rule'], 'needs a sentence'],
+  ['a rule carrying a newline', ['--lesson', NARRATIVE, '--rule', `${SAID}\nsecond line`], 'one line'],
+  ['a rule carrying a marker opener', ['--lesson', NARRATIVE, '--rule', `${SAID} <!--fc:other#1-->`], '<!--fc:'],
+  ['a rule carrying its own RULE: label', ['--lesson', NARRATIVE, '--rule', `RULE: ${SAID}`], 'RULE:'],
+  ['a lesson carrying a newline', ['--lesson', `${NARRATIVE}\nsecond line`, '--rule', SAID], 'one line'],
+  ['a lesson carrying a marker opener', ['--lesson', `${NARRATIVE} <!--fc:other#1-->`, '--rule', SAID], '<!--fc:'],
+  ['a legacy lesson carrying a marker opener', ['--lesson', `${NARRATIVE} -> RULE: x <!--fc:other#1-->`], '<!--fc:'],
+]) {
+  const target = world(`refused-${String(passed)}`);
+  const run = capture(target, 'refused-lesson', extra);
+
+  check(`refused: ${name}`, run.status === 1 && run.out.includes(fragment) && run.out.includes(' @es ') && !existsSync(target.ledger), `exit ${run.status}: ${run.out}`);
+}
+
+{
+  const target = world('unwritable-evidence');
+  mkdirSync(path.join(target.evidenceDir, 'blocked-lesson.md'), { recursive: true });
+
+  const run = capture(target, 'blocked-lesson', ['--lesson', NARRATIVE, '--rule', SAID]);
+  const line = lineFor(readOr(target.ledger), 'blocked-lesson');
+
+  check('evidence that cannot be written: the FULL line is recorded, the capture still succeeds', run.status === 0 && line.includes(NARRATIVE) && line.includes(`RULE: ${SAID}`) && !line.includes('Evidence:') && readOr(target.ledger).includes('#1-->'), `${run.out}\n${line}`);
+  check('...and the fallback is announced in both languages', run.out.includes('not shortened') && run.out.includes(' @es '), run.out);
+}
+
+{
+  const target = world('unprovable');
+  const twoLabels = `${NARRATIVE} -> RULE: measure`;
+  const run = capture(target, 'unprovable-lesson', ['--lesson', twoLabels, '--rule', SAID]);
+  const line = lineFor(readOr(target.ledger), 'unprovable-lesson');
+
+  check('a full line whose conservation cannot be proved (two RULE: labels) is recorded in full, not shortened', run.status === 0 && line.includes(twoLabels) && !line.includes('Evidence:') && run.out.includes('not shortened'), `${run.out}\n${line}`);
+}
+
+{
+  const run = capture(world('legacy-refused'), 'legacy-refused', ['--lesson', NARRATIVE]);
+
+  check('a legacy --lesson without the word RULE is still refused', run.status === 1 && run.out.includes('contain the word RULE'), run.out);
+}
 
 rmSync(scratch, { recursive: true, force: true });
 
