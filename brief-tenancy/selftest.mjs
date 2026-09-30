@@ -361,6 +361,7 @@ check(
   'REFUSAL suggests a declaration naming the measured owner',
   (() => {
     const refusal = refusalFor(`\n${INCIDENT_BRIEF}`, constructedProbe(FARM_LAYOUT));
+    if (refusal === undefined) return false;
     const owner = refusal.checkouts[0].tenancy.owner.split('\\').join('/').split('/').filter((part) => part.length > 0).at(-1);
 
     return reason(refusal, 'delegation', 'Agent').includes(`node_modules is a junction into ${owner}; nothing is installed there.`);
