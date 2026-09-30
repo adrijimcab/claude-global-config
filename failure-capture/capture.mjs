@@ -42,6 +42,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { closureClause, closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
+import { describeOutcome, newRunId, runCondense } from './condense.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { withLock } from './ledger-lock.mjs';
@@ -771,6 +772,36 @@ function commandInit() {
   return 0;
 }
 
+/**
+ * Shortens the ledger lines that can be shortened without losing their text (`condense.mjs`): a dry run
+ * unless `--write` is given, with an optional `--keys <file>` holding `{ "keys": [{ "line", "key" }] }` that
+ * names the key of each marker-less line. Exit 0 clean, 1 a line was left unchanged, 2 the ledger is locked.
+ * @es Acorta las líneas del ledger que pueden acortarse sin perder su texto: simulacro salvo con `--write`,
+ * y `--keys <fichero>` opcional con la clave de cada línea sin marcador. Salida 0 limpia, 1 si quedó alguna
+ * línea sin cambiar, 2 si el ledger está bloqueado.
+ */
+function commandCondense(args) {
+  let keyMap = [];
+
+  if (args.keys !== undefined) {
+    try {
+      keyMap = JSON.parse(readFileSync(String(args.keys), 'utf8')).keys;
+
+      if (!Array.isArray(keyMap)) throw new TypeError('the file has no "keys" array');
+    } catch (error) {
+      console.error(`condense REFUSED — --keys needs a JSON file of the form {"keys":[{"line":"...","key":"..."}]} (${error instanceof Error ? error.message : String(error)}). @es condense RECHAZADO: --keys necesita un fichero JSON de la forma {"keys":[{"line":"...","key":"..."}]}.`);
+
+      return 1;
+    }
+  }
+
+  const outcome = runCondense({ load: () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined), keyMap, write: args.write === true, date: today(), runId: newRunId(), lockFile: LOCK_FILE, preImageRoot: path.join(STATE_DIR, 'condense') });
+
+  for (const line of describeOutcome(outcome)) console.log(line);
+
+  return outcome.status;
+}
+
 const USAGE = `failure-capture — record a correction as a durable lesson.
 
   init                 give this project its own ledger and import it from .claude/CLAUDE.md
@@ -780,6 +811,7 @@ const USAGE = `failure-capture — record a correction as a durable lesson.
             or --lesson "<what went wrong -> root cause>" --rule "<the rule, one sentence>" (tiered ledger line)
   dismiss   --reason "<why this is not a correction>" [--marker <m>] [--session <id>]
   promote   --key <kebab-key> (--mechanism <guard path> | --no-mechanism "<why none is possible>")
+  condense  [--keys <file>] [--write]   shorten ledger lines whose text is kept in evidence (dry run without --write)
   status   counts, ledger token cost, and which lessons are due for promotion
 `;
 
@@ -820,6 +852,8 @@ function main() {
       return commandDismiss(args);
     case 'promote':
       return commandPromote(args);
+    case 'condense':
+      return commandCondense(args);
     case 'status':
       return commandStatus();
     default:
