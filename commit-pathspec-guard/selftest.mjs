@@ -89,6 +89,9 @@ const cases = [
   ['allow', bashAt(b100ProjectRoot, `git -C "${claudeRepo.worktree}" commit -m "x" -- foo.txt`), '`-C` plus an explicit pathspec'],
   ['deny', bashAt(claudeRepo.worktree, 'git commit -m "x" --'), 'NEAR MISS: a bare trailing `--` names NO path at all — still refuse'],
 
+  // --- THE STAGED-CONTENT TOOL: it runs its own git commit after checking the index, so the guard has nothing to refuse in the command itself.
+  ['allow', bashAt(claudeRepo.worktree, 'node ~/.claude/commit-pathspec-guard/commit-staged.mjs --repo "~/.claude" --expect rules/promoted-rules.md -- -m "chore(rules): tweak"'), 'the staged-content tool is not a commit for the guard to refuse: it verifies the index itself'],
+
   // --- a commit that lands OUTSIDE any declared repo: the project itself, not its `.claude` backup.
   ['allow', bashAt(b100ProjectRoot, 'git commit -m "feat(x): add rule"'), 'a commit in b100-am-ui ITSELF (its project root, not the declared `.claude` backup) is none of this guard\'s business'],
 
@@ -150,6 +153,9 @@ for (const [expected, input, label, expectedText] of cases) {
   report(denied.includes('compare the staged set with what you actually intended'), 'the ENGLISH block names the staged-set comparison');
   report(denied.includes('comparar lo que está en stage con lo que realmente se pretendía'), 'the SPANISH block names the staged-set comparison');
   report(occurrencesOf(denied, 'git diff --cached --name-only') === 2, 'the comparison command appears once per language, not merged or dropped');
+  report(occurrencesOf(denied, 'commit-staged.mjs') === 2, 'the refusal names the staged-content tool once per language');
+  report(denied.includes('--expect <path>') && denied.includes('--expect <ruta>'), 'each language shows the declaration flag with its own placeholder');
+  report(denied.includes('WORKTREE content') && denied.includes('ÁRBOL DE TRABAJO'), 'each language says WHY `-- <paths>` is not the staged-content form');
 }
 
 // --- THE WIRING: the tools the declaration registers are exactly the ones the decision knows a dialect for.

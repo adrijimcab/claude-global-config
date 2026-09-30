@@ -37,6 +37,10 @@ const MUTANTS = [
   ['the refusal loses its Spanish mirror', 'commit-pathspec-guard/guard.mjs', "    `@es COMMIT-PATHSPEC GUARD RECHAZÓ este comando: commitea en ${repo.name}, un repositorio de respaldo`,\n", ''],
   ['the refusal no longer names the staged-set comparison command', 'commit-pathspec-guard/guard.mjs', "    'and BEFORE committing, compare the staged set with what you actually intended:',\n    '',\n    '  git diff --cached --name-only',\n    '',\n", ''],
 
+  // --- guard.mjs: the refusal points at the staged-content tool, in both languages.
+  ['the English refusal stops naming the staged-content tool', 'commit-pathspec-guard/guard.mjs', '    `  ${STAGED_COMMIT_TOOL} --repo "${repo.name}" --expect <path> -- -m "type(scope): description"`,\n', ''],
+  ['the Spanish refusal stops naming the staged-content tool', 'commit-pathspec-guard/guard.mjs', '    `  ${STAGED_COMMIT_TOOL} --repo "${repo.name}" --expect <ruta> -- -m "type(scope): description"`\n', "    ''\n"],
+
   // --- the data face, owned by the shared parser: a heredoc body and an echoed string are not commands.
   ['heredoc bodies are scanned as commands, so an ECHOED mention of the refused shape would be refused', 'shell-command/shell-command.mjs', "if (operator === '\\n') this.skipHeredocBodies();", '']
 ];

@@ -38,6 +38,9 @@ import { fileURLToPath } from 'node:url';
 
 import { offendingInvocationFor } from './decide.mjs';
 
+/** The command that commits exactly the staged content after verifying the declaration (`commit-staged.mjs`). @es El comando que commitea exactamente lo que está en stage. */
+const STAGED_COMMIT_TOOL = 'node ~/.claude/commit-pathspec-guard/commit-staged.mjs';
+
 /** The bilingual refusal for one offending invocation. @es La negativa bilingüe para una invocación infractora. */
 function refusalText({ text, repo }) {
   const rewritten = `${text} -- <paths>`;
@@ -63,6 +66,11 @@ function refusalText({ text, repo }) {
     '',
     '`commit --only <paths>` (git\'s own "these paths only" form) is accepted too.',
     '',
+    '`-- <paths>` commits the WORKTREE content of those paths. To commit exactly the STAGED content instead',
+    '(a hunk of a file another session is also editing), declare the paths and let the tool check the index:',
+    '',
+    `  ${STAGED_COMMIT_TOOL} --repo "${repo.name}" --expect <path> -- -m "type(scope): description"`,
+    '',
     `@es COMMIT-PATHSPEC GUARD RECHAZÓ este comando: commitea en ${repo.name}, un repositorio de respaldo`,
     'declarado, SIN un pathspec explícito tras `--`.',
     '',
@@ -81,7 +89,13 @@ function refusalText({ text, repo }) {
     '',
     '  git diff --cached --name-only',
     '',
-    'También se acepta `commit --only <rutas>` (la forma propia de git «solo estas rutas»).'
+    'También se acepta `commit --only <rutas>` (la forma propia de git «solo estas rutas»).',
+    '',
+    '`-- <rutas>` commitea el contenido del ÁRBOL DE TRABAJO de esas rutas. Para commitear exactamente lo que',
+    'está en STAGE (un hunk de un fichero que otra sesión también edita), declara las rutas y deja que la',
+    'herramienta compruebe el índice:',
+    '',
+    `  ${STAGED_COMMIT_TOOL} --repo "${repo.name}" --expect <ruta> -- -m "type(scope): description"`
   ].join('\n');
 }
 
