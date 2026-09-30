@@ -155,14 +155,50 @@ export function verifyMechanism({ mechanismPath, key, repoRoot, home }) {
   return { ok: true, selftest, selftestExit: 0 };
 }
 
+/**
+ * One spelling of a contract file's path, used both when a closure is RECORDED and when it is compared,
+ * so the same file always matches itself: absolute, forward slashes, and lower case on Windows, whose
+ * file system ignores case.
+ * @es Una sola grafía de la ruta de un fichero de contrato, al GRABAR y al COMPARAR un cierre: absoluta,
+ * con barras `/` y en minúsculas en Windows, cuyo sistema de ficheros ignora la capitalización.
+ */
+export function contractFileId(file) {
+  const absolute = path.resolve(file).split(path.sep).join('/');
+
+  return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+}
+
+/**
+ * The newest closure whose token count was measured on `file`, or `undefined` when there is none.
+ *
+ * DECISION, legacy records. A closure written before records carried their file (`file` absent) is NOT a
+ * baseline for ANY file: which file its count came from cannot be recovered, and measured on
+ * 2026-09-30 a guessed attribution refused a legitimately grown text ("2 vs 3" across two different
+ * files). The cost is stated: the first closure after this change on a key with only legacy records is
+ * free, exactly like a first promotion, and from then on the key is guarded by a file-tagged baseline.
+ * @es DECISIÓN, registros antiguos. Un cierre anterior a que los registros llevaran su fichero (`file`
+ * ausente) NO es línea base de NINGÚN fichero: no se puede recuperar de cuál salió su cuenta, y atribuirlo
+ * a ciegas rechazó un texto que sí había crecido. Coste: el primer cierre tras este cambio, en una clave
+ * con solo registros antiguos, es libre como una primera promoción; desde ahí hay línea base etiquetada.
+ */
+export function baselineFor(closures, file) {
+  const id = contractFileId(file);
+  const comparable = closures.filter((entry) => typeof entry.tokenCount === 'number' && typeof entry.file === 'string' && entry.file === id);
+
+  return comparable.length === 0 ? undefined : comparable.reduce((newest, entry) => (entry.at > newest.at ? entry : newest));
+}
+
 /** The durable record of a closure, appended to the incident log. @es El registro durable de un cierre. */
-export function closureRecord({ key, closure, verification, target, tokenCount }) {
+export function closureRecord({ key, closure, verification, target, tokenCount, file }) {
   // `tokenCount` is how many times the contract text named this key AT THIS CLOSURE. It is what makes
   // the next promotion able to tell "the text grew to cover the new face" from "the same paragraph is
   // being re-promoted over a lesson it already failed to prevent"
   // (`promotion-to-contract-read-as-prevention`). @es Cuántas veces nombraba el texto a esta clave EN
   // ESTE CIERRE: es lo que permite distinguir un texto que creció de uno que se repromociona igual.
-  const base = { kind: 'promotion', key, target, tokenCount, date: new Date().toISOString().slice(0, 10), at: new Date().toISOString() };
+  // `file` is the contract file that count was taken from, in the form `contractFileId` produces. A count
+  // is only comparable with another count of the SAME file. @es `file` es el fichero del que se tomó la
+  // cuenta, en la forma de `contractFileId`: una cuenta solo es comparable con otra del MISMO fichero.
+  const base = { kind: 'promotion', key, target, tokenCount, file, date: new Date().toISOString().slice(0, 10), at: new Date().toISOString() };
 
   return closure.kind === 'mechanism'
     ? { ...base, closure: { mechanism: closure.path, selftestExit: verification.selftestExit } }

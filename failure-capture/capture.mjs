@@ -41,7 +41,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { closureClause, closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
+import { baselineFor, closureClause, closureRecord, contractFileId, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
 import { describeOutcome, newRunId, runCondense } from './condense.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
@@ -507,16 +507,17 @@ const contractFileOf = (target) => (target === 'claude-md' ? ORCHESTRATOR_RULES 
 
 function textGrowthProblem(key, target) {
   const entries = incidentsFor(key);
-  const closures = entries.filter((entry) => entry.kind === 'promotion' && typeof entry.tokenCount === 'number');
+  const file = contractFileOf(target);
+  // Only a closure measured on THIS file is a baseline (`baselineFor`): counts of two files are not comparable.
+  // @es Solo un cierre medido sobre ESTE fichero es línea base: las cuentas de dos ficheros no se comparan.
+  const last = baselineFor(entries.filter((entry) => entry.kind === 'promotion'), file);
 
-  if (closures.length === 0) return undefined;
+  if (last === undefined) return undefined;
 
-  const last = closures.reduce((newest, entry) => (entry.at > newest.at ? entry : newest));
   const recurred = entries.some((entry) => entry.kind !== 'promotion' && typeof entry.at === 'string' && entry.at > last.at);
 
   if (!recurred) return undefined;
 
-  const file = contractFileOf(target);
   const now = occurrencesOf(readFileOr(file, ''), key);
 
   if (now > last.tokenCount) return undefined;
@@ -655,7 +656,7 @@ function commandPromote(args) {
     appendFileSync(PROMOTED, `${today()} — ${key} -> ${where}; ${closureClause(closure)}\n${original}\n\n`, 'utf8');
     ledger.lines[index] = `- [promoted] ${today()} — ${key}: now a binding rule in ${where}; ${closureClause(closure)}; full incident history in ~/.claude/failure-capture/state/incidents.jsonl ${MARK_OPEN}${key}#${String(readMarker(original).count)}${MARK_CLOSE}`;
     writeLedger(ledger);
-    appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, tokenCount: occurrencesOf(readFileOr(contractFileOf(target), ''), key) }))}\n`, 'utf8');
+    appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, tokenCount: occurrencesOf(readFileOr(contractFileOf(target), ''), key), file: contractFileId(contractFileOf(target)) }))}\n`, 'utf8');
   });
 
   if (!collapsed.held) {

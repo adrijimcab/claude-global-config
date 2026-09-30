@@ -36,6 +36,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { contractFileId } from './closure.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const KEY = 'lesson-under-test';
 const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
@@ -268,24 +270,27 @@ refused(
 // ---------------------------------------------------------------------------------------------
 
 /** An incident and a closure of it, so a world can describe a lesson that was promoted and RECURRED. @es Un incidente y su cierre. */
-const promotedOn = (at, tokenCount) => ({ kind: 'promotion', key: KEY, target: 'claude-md', tokenCount, date: at.slice(0, 10), at });
+// `file` is the contract file the count was measured on; by default the one the named world will compare.
+// @es `file` es el fichero sobre el que se midió la cuenta; por defecto, el que comparará el mundo nombrado.
+const contractOf = (name) => contractFileId(path.join(scratch, name, 'home', '.claude', 'rules', 'promoted-rules.md'));
+const promotedOn = (name, at, tokenCount, file = contractOf(name)) => ({ kind: 'promotion', key: KEY, target: 'claude-md', tokenCount, file, date: at.slice(0, 10), at });
 const recurredOn = (at) => ({ key: KEY, actor: 'orchestrator', lesson: 'it came back', date: at.slice(0, 10), at });
 
 refused(
   'a key that recurred after its closure, re-promoted over UNCHANGED text',
-  promote(world('stale-text', { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), promotedOn('2026-09-02T10:00:00.000Z', 1), recurredOn('2026-09-03T10:00:00.000Z')], mentions: 1 }), ['--mechanism', '.claude/good-guard/guard.mjs']),
+  promote(world('stale-text', { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), promotedOn('stale-text', '2026-09-02T10:00:00.000Z', 1), recurredOn('2026-09-03T10:00:00.000Z')], mentions: 1 }), ['--mechanism', '.claude/good-guard/guard.mjs']),
   'has not grown'
 );
 
 {
-  const target = world('grown-text', { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), promotedOn('2026-09-02T10:00:00.000Z', 1), recurredOn('2026-09-03T10:00:00.000Z')], mentions: 2 });
+  const target = world('grown-text', { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), promotedOn('grown-text', '2026-09-02T10:00:00.000Z', 1), recurredOn('2026-09-03T10:00:00.000Z')], mentions: 2 });
   const run = promote(target, ['--mechanism', '.claude/good-guard/guard.mjs']);
 
   check('...but the same recurrence closes once the text names the new face', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
 }
 
 {
-  const target = world('no-recurrence', { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), promotedOn('2026-09-02T10:00:00.000Z', 1)], mentions: 1 });
+  const target = world('no-recurrence', { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), promotedOn('no-recurrence', '2026-09-02T10:00:00.000Z', 1)], mentions: 1 });
   const run = promote(target, ['--mechanism', '.claude/good-guard/guard.mjs']);
 
   check('NEAR MISS: re-closing an old promotion with a MECHANISM, with no recurrence since, is not blocked', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
@@ -297,6 +302,46 @@ refused(
   const run = promote(target, ['--mechanism', '.claude/good-guard/guard.mjs']);
 
   check('NEAR MISS: a closure recorded before token counts existed demands nothing (it knows no baseline)', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
+}
+
+// A baseline is only comparable on the SAME file (2026-09-30: counts taken on two different files made a
+// grown text read as "2 vs 3"). @es Una línea base solo es comparable sobre el MISMO fichero.
+{
+  const target = world('other-file-baseline', { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), promotedOn('other-file-baseline', '2026-09-02T10:00:00.000Z', 3, contractFileId(path.join(scratch, 'elsewhere', 'AGENT-LEDGER.md'))), recurredOn('2026-09-03T10:00:00.000Z')], mentions: 2 });
+  const run = promote(target, ['--mechanism', '.claude/good-guard/guard.mjs']);
+
+  check('NEAR MISS: a baseline measured on ANOTHER file (3) must not refuse a text that grew here (2)', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
+}
+
+{
+  const name = 'newest-same-file';
+  const incidents = [recurredOn('2026-09-01T10:00:00.000Z'), promotedOn(name, '2026-09-02T10:00:00.000Z', 1), promotedOn(name, '2026-09-04T10:00:00.000Z', 3), recurredOn('2026-09-05T10:00:00.000Z')];
+
+  refused('the baseline is the NEWEST same-file closure (3), not an older one (1) the text has outgrown', promote(world(name, { incidents, mentions: 2 }), ['--mechanism', '.claude/good-guard/guard.mjs']), 'has not grown');
+}
+
+{
+  const name = 'legacy-does-not-shadow';
+  const legacy = { kind: 'promotion', key: KEY, target: 'claude-md', tokenCount: 5, date: '2026-09-04', at: '2026-09-04T10:00:00.000Z' };
+  const incidents = [recurredOn('2026-09-01T10:00:00.000Z'), promotedOn(name, '2026-09-02T10:00:00.000Z', 1), legacy, recurredOn('2026-09-05T10:00:00.000Z')];
+
+  refused('a NEWER legacy closure (no file) neither shadows nor replaces the file-tagged baseline: 1 vs 1 still refuses', promote(world(name, { incidents, mentions: 1 }), ['--mechanism', '.claude/good-guard/guard.mjs']), 'has not grown');
+}
+
+{
+  const name = 'legacy-with-count-only';
+  const legacy = { kind: 'promotion', key: KEY, target: 'claude-md', tokenCount: 3, date: '2026-09-02', at: '2026-09-02T10:00:00.000Z' };
+  const run = promote(world(name, { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), legacy, recurredOn('2026-09-03T10:00:00.000Z')], mentions: 2 }), ['--mechanism', '.claude/good-guard/guard.mjs']);
+
+  check('legacy record WITH a count but no file is no baseline for any file: a grown text (2) is not refused against it (3)', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
+}
+
+{
+  const name = 'file-without-count';
+  const pre = { kind: 'promotion', key: KEY, target: 'claude-md', file: contractOf(name), date: '2026-09-02', at: '2026-09-02T10:00:00.000Z' };
+  const run = promote(world(name, { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), pre, recurredOn('2026-09-03T10:00:00.000Z')], mentions: 1 }), ['--mechanism', '.claude/good-guard/guard.mjs']);
+
+  check('NEAR MISS: a record with a file but no count has no baseline either', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -314,6 +359,7 @@ refused(
   // Without this figure the NEXT promotion has no baseline to compare the contract text against, so the
   // growth check silently stops demanding anything. @es Sin esta cifra, la próxima promoción no tiene
   // línea base y la comprobación de crecimiento deja de exigir nada en silencio.
+  check('...and the FILE that count was measured on, in the one normalised spelling the comparison uses', run.incidents.includes(`"file":${JSON.stringify(contractOf('mechanism'))}`), run.incidents);
   check('...and the token count of the contract text AT THIS CLOSURE, which the next promotion measures against', run.incidents.includes('"tokenCount":1'), run.incidents);
 }
 

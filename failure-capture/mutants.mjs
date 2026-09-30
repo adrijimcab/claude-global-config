@@ -33,8 +33,13 @@ const MUTANTS = [
   // --- the text must grow when the lesson comes back
   ['the growth check is never consulted: the same paragraph is re-promoted over a lesson it failed to prevent', 'failure-capture/capture.mjs', 'if (stale !== undefined) {', 'if (false) {'],
   ['growth is demanded even with no recurrence, so re-closing an old promotion is blocked', 'failure-capture/capture.mjs', 'if (!recurred) return undefined;', ''],
+  ['the baseline ignores which file it was measured on, so counts of two files are compared', 'failure-capture/closure.mjs', "typeof entry.file === 'string' && entry.file === id", 'true'],
+  ['a closure with no file is read as a baseline for every file', 'failure-capture/closure.mjs', "typeof entry.file === 'string' && entry.file === id", '(entry.file === undefined || entry.file === id)'],
+  ['the baseline is the OLDEST same-file closure instead of the newest', 'failure-capture/closure.mjs', 'entry.at > newest.at ? entry : newest', 'entry.at < newest.at ? entry : newest'],
+  ['the closure record does not carry its file', 'failure-capture/closure.mjs', 'tokenCount, file, date:', 'tokenCount, date:'],
+  ['the file is recorded in a raw spelling, not the one the comparison uses', 'failure-capture/capture.mjs', 'file: contractFileId(contractFileOf(target))', 'file: contractFileOf(target)'],
   ['growth is satisfied by standing still', 'failure-capture/capture.mjs', 'if (now > last.tokenCount) return undefined;', 'if (now >= last.tokenCount) return undefined;'],
-  ['closures recorded before token counts existed are read as a baseline of zero', 'failure-capture/capture.mjs', "typeof entry.tokenCount === 'number'", 'true'],
+  ['closures recorded before token counts existed are read as a baseline of zero', 'failure-capture/closure.mjs', "typeof entry.tokenCount === 'number' && ", ''],
   ['the token count is not recorded, so the next promotion has no baseline at all', 'failure-capture/closure.mjs', 'const base = { kind: \'promotion\', key, target, tokenCount,', 'const base = { kind: \'promotion\', key, target,'],
 
   // --- the checks that were already there
