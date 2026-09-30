@@ -30,6 +30,9 @@ const MUTANTS = [
   ['the stale limit shrinks to a millisecond, so a fresh lock reads as dead', LOCK, 'export const STALE_AFTER_MS = 60_000;', 'export const STALE_AFTER_MS = 1;'],
   ['the stale limit grows past any real age, so a dead lock is never broken', LOCK, 'export const STALE_AFTER_MS = 60_000;', 'export const STALE_AFTER_MS = 600_000_000;'],
   ['one attempt too many is made', LOCK, 'attempt < attempts', 'attempt <= attempts'],
+  ['a failure other than "already exists" is waited out as if another writer held the lock', LOCK, "if (error?.code !== 'EEXIST') throw new Error(", "if (false) throw new Error("],
+  ['contention is thrown as a fault instead of waited out', LOCK, "error?.code !== 'EEXIST'", "error?.code === 'EEXIST'"],
+  ['the fault refusal loses its Spanish half', LOCK, '. @es no se pudo crear el lock del ledger', '. no se pudo crear el lock del ledger'],
   ['the taker never pauses between attempts', LOCK, '      wait();', '      '],
   ['the default retry bound shrinks to one attempt', LOCK, 'attempts = 40', 'attempts = 1'],
 

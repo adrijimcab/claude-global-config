@@ -30,8 +30,8 @@
  * centinela; y los fixtures se CONSTRUYEN en un repositorio y un home temporales.
  */
 
-import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -222,6 +222,45 @@ refused(
   refused('the ledger is locked by another writer', run, 'the ledger is locked by another writer');
   check('the locked ledger: the refusal is bilingual and says nothing was changed', run.out.includes(' @es ') && run.out.includes('Nothing was changed'), run.out.trim().slice(0, 400));
   check('the locked ledger: no closure is recorded and the holder\'s lock is untouched', run.promoted === '' && !run.incidents.includes('"kind":"promotion"') && existsSync(path.join(target.loop, 'state', 'ledger.lock')), run.incidents);
+}
+
+{
+  // A line is written to the ledger while promote waits for the lock: promote must read the ledger only
+  // once it holds the lock, or it writes back its stale copy and the line is lost. The wait is bounded
+  // (promote gives up after two seconds) and the late write comes well inside it.
+  // @es Se escribe una línea en el ledger mientras promote espera el lock: promote debe leer el ledger solo
+  // cuando ya tiene el lock, o reescribe su copia vieja y la línea se pierde. La espera está acotada.
+  const target = world('ledger-changed-while-waiting');
+  const ledgerFile = path.join(target.home, '.claude', 'lessons-ledger.md');
+  const late = '- [global] 2026-09-30 — a lesson captured while promote waited -> RULE: keep me <!--fc:late-lesson#1-->';
+
+  write(target.loop, { 'state/ledger.lock': '' });
+
+  const child = spawn(process.execPath, [path.join(target.loop, 'capture.mjs'), 'promote', '--key', KEY, '--mechanism', '.claude/good-guard/guard.mjs'], { cwd: target.repo, stdio: 'ignore', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
+  const closed = new Promise((resolve) => child.on('close', resolve));
+
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  appendFileSync(ledgerFile, `${late}\n`, 'utf8');
+  rmSync(path.join(target.loop, 'state', 'ledger.lock'), { force: true });
+
+  const status = await closed;
+  const after = readFileSync(ledgerFile, 'utf8');
+
+  check('promote that waited for the lock closes the lesson', status === 0 && after.includes('[promoted]') && after.includes('<!--fc:lesson-under-test#2-->'), `exit ${String(status)}: ${after}`);
+  check('...and keeps the line written while it waited, because it read the ledger under the lock', after.includes('<!--fc:late-lesson#1-->'), after);
+}
+
+{
+  // No state directory, so the lock file cannot be created: the refusal names that, not contention.
+  // @es Sin directorio de estado no se puede crear el lock: la negativa nombra eso, no una contienda.
+  const target = world('no-state-dir');
+
+  rmSync(path.join(target.loop, 'state'), { recursive: true, force: true });
+
+  const run = promote(target, ['--mechanism', '.claude/good-guard/guard.mjs']);
+
+  check('a lock that cannot be created is refused with its real cause, not as contention', run.status !== 0 && run.out.includes('could not be created') && run.out.includes('ENOENT') && !run.out.includes('locked by another writer'), `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
+  check('...in both languages, and the ledger line is not collapsed', run.out.includes(' @es ') && !run.ledger.includes('[promoted]'), run.out.trim().slice(0, 400));
 }
 
 // ---------------------------------------------------------------------------------------------

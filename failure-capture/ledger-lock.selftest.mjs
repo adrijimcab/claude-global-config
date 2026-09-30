@@ -109,6 +109,15 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
   check('a lock that vanishes while it is being examined is no error, and is taken next', outcome === true, String(outcome));
 }
 
+{
+  // "It already exists" is contention to wait out; anything else (a missing directory, say) is a fault to name at once.
+  // @es «Ya existe» es contienda que se espera; cualquier otra cosa (un directorio ausente, por ejemplo) es un fallo que se nombra de inmediato.
+  let waits = 0;
+  const fault = attempt(() => takeLock(path.join(scratch, 'no-such-dir', 'x.lock'), options(Date.now(), { wait: () => { waits += 1; } })));
+
+  check('a lock that cannot be created for another reason throws at once, naming the cause in both languages', fault instanceof Error && fault.cause?.code === 'ENOENT' && fault.message.includes('could not be created') && fault.message.includes('ENOENT') && fault.message.includes(' @es ') && waits === 0, `${String(fault)} waits: ${String(waits)}`);
+}
+
 // --- withLock: released on success and on failure -------------------------------------------------------
 {
   const lock = path.join(scratch, 'with-success.lock');

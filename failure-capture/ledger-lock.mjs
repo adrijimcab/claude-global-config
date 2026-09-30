@@ -44,7 +44,13 @@ export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_M
       closeSync(openSync(lockFile, 'wx'));
 
       return true;
-    } catch {
+    } catch (error) {
+      // Only "it already exists" is contention worth waiting for; any other failure (a missing or unwritable
+      // directory) will not clear by waiting and must not be reported as another writer holding the lock.
+      // @es Solo «ya existe» es contienda que vale la pena esperar; cualquier otro fallo (directorio ausente o
+      // sin permiso) no se arregla esperando y no debe presentarse como otro escritor con el lock.
+      if (error?.code !== 'EEXIST') throw new Error(`the ledger lock ${lockFile} could not be created: ${error instanceof Error ? error.message : String(error)}. @es no se pudo crear el lock del ledger ${lockFile}.`, { cause: error });
+
       if (isStale(lockFile, staleAfterMs, now)) releaseLock(lockFile);
 
       wait();

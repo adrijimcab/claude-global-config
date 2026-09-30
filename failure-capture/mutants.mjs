@@ -45,6 +45,8 @@ const MUTANTS = [
   // --- the ledger lock: promote writes only while it holds it (the module is proved by ledger-lock.mutants.mjs)
   ['promote takes some other lock, so a held ledger lock is ignored', 'failure-capture/capture.mjs', 'const collapsed = withLock(LOCK_FILE, () => {', "const collapsed = withLock(path.join(STATE_DIR, 'other.lock'), () => {"],
   ['promote does not notice that the lock was refused, and reports a closure that never happened', 'failure-capture/capture.mjs', 'if (!collapsed.held) {', 'if (false) {'],
+  ['promote reads the ledger before it holds the lock, so it writes back a stale copy', 'failure-capture/capture.mjs', 'const collapsed = withLock(LOCK_FILE, () => {\n    const found = locateKey(readLedgers(LEDGERS), key, readMarker);', 'const early = locateKey(readLedgers(LEDGERS), key, readMarker);\n  const collapsed = withLock(LOCK_FILE, () => {\n    const found = early;'],
+  ['the stub of a promoted lesson loses its recurrence counter', 'failure-capture/capture.mjs', '#${String(readMarker(original).count)}', "#${'1'}"],
   ['the refusal to promote loses its Spanish half', 'failure-capture/capture.mjs', 'Nothing was changed. @es promote:', 'Nothing was changed. promote:'],
 
   // --- alcance: cada lección en el ledger de su alcance (ledgers.mjs, 2026-09-28)

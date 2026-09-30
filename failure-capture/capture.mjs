@@ -639,24 +639,28 @@ function commandPromote(args) {
   // borrarse: `SendMessage` NO dispara el inyector de delegación, así que un worker reanudado puede no
   // recibir el contrato en esta sesión; borrarla cambiaría impuesto de tokens por un agujero.
   const where = target === 'claude-md' ? '~/.claude/rules/promoted-rules.md' : `the delegated-worker contract (${WORKER_CONTRACTS.length > 1 ? `all ${String(WORKER_CONTRACTS.length)} files` : 'its file'})`;
-  const found = locateKey(readLedgers(LEDGERS), key, readMarker);
+  // The ledger is read only once the lock is held: a copy read before it would be written back over any
+  // line another writer added while this one waited, and would carry an out-of-date recurrence counter.
+  // @es El ledger se lee solo con el lock ya tomado: una copia leída antes se reescribiría encima de las
+  // líneas que otro escritor añadiera mientras este esperaba, y llevaría un contador de recurrencia viejo.
+  const collapsed = withLock(LOCK_FILE, () => {
+    const found = locateKey(readLedgers(LEDGERS), key, readMarker);
 
-  if (found !== undefined) {
-    const collapsed = withLock(LOCK_FILE, () => {
-      const { ledger, index } = found;
-      const original = ledger.lines[index];
+    if (found === undefined) return;
 
-      appendFileSync(PROMOTED, `${today()} — ${key} -> ${where}; ${closureClause(closure)}\n${original}\n\n`, 'utf8');
-      ledger.lines[index] = `- [promoted] ${today()} — ${key}: now a binding rule in ${where}; ${closureClause(closure)}; full incident history in ~/.claude/failure-capture/state/incidents.jsonl ${MARK_OPEN}${key}#${String(keys.get(key))}${MARK_CLOSE}`;
-      writeLedger(ledger);
-      appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, tokenCount: occurrencesOf(readFileOr(contractFileOf(target), ''), key) }))}\n`, 'utf8');
-    });
+    const { ledger, index } = found;
+    const original = ledger.lines[index];
 
-    if (!collapsed.held) {
-      console.error('promote: the ledger is locked by another writer — re-run in a moment. Nothing was changed. @es promote: el ledger está bloqueado por otro escritor; reintenta en un momento. No se cambió nada.');
+    appendFileSync(PROMOTED, `${today()} — ${key} -> ${where}; ${closureClause(closure)}\n${original}\n\n`, 'utf8');
+    ledger.lines[index] = `- [promoted] ${today()} — ${key}: now a binding rule in ${where}; ${closureClause(closure)}; full incident history in ~/.claude/failure-capture/state/incidents.jsonl ${MARK_OPEN}${key}#${String(readMarker(original).count)}${MARK_CLOSE}`;
+    writeLedger(ledger);
+    appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, tokenCount: occurrencesOf(readFileOr(contractFileOf(target), ''), key) }))}\n`, 'utf8');
+  });
 
-      return 1;
-    }
+  if (!collapsed.held) {
+    console.error('promote: the ledger is locked by another writer — re-run in a moment. Nothing was changed. @es promote: el ledger está bloqueado por otro escritor; reintenta en un momento. No se cambió nada.');
+
+    return 1;
   }
 
   // Report only what was actually checked. Claiming "parity gate green" on the CLAUDE.md path, where
