@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * The decisions of the ledger lock, each broken once, that `ledger-lock.selftest.mjs` must catch. The runner and its rules live in `../mutation-proof/run-mutants.mjs`.
+ * The decisions of the ledger lock and of the fold that takes it, each broken once, that
+ * `ledger-lock.selftest.mjs` must catch. The runner and its rules live in `../mutation-proof/run-mutants.mjs`.
  * A blind spot here lets two writers overwrite each other's ledger lines in silence, or wedges every capture
  * behind a lock nobody will ever release.
  *
- * @es Las decisiones del lock del ledger, rotas una a una. Un punto ciego aquí deja
+ * @es Las decisiones del lock del ledger y del pliegue que lo toma, rotas una a una. Un punto ciego aquí deja
  * que dos escritores se pisen líneas del ledger en silencio, o bloquea toda captura tras un lock que nadie
  * soltará.
  */
@@ -15,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const LOCK = 'failure-capture/ledger-lock.mjs';
+const COMMAND = 'failure-capture/capture.mjs';
 const REFUSE_HELD = 'if (!takeLock(lockFile, options)) return { held: false };';
 const RELEASE_ALWAYS = '} finally {\n    releaseLock(lockFile);\n  }';
 
@@ -40,6 +42,12 @@ const MUTANTS = [
   ['a refused writer removes the holder\'s lock', LOCK, REFUSE_HELD, 'if (!takeLock(lockFile, options)) { releaseLock(lockFile); return { held: false }; }'],
   ['the lock is not released when the work fails', LOCK, RELEASE_ALWAYS, '} catch (error) {\n    throw error;\n  } finally {\n  }'],
   ['the lock is released only when the work fails', LOCK, RELEASE_ALWAYS, '} catch (error) {\n    releaseLock(lockFile);\n    throw error;\n  }'],
+
+  // --- the fold that takes it
+  ['the fold takes some other lock, so a held ledger lock is ignored', COMMAND, 'const outcome = withLock(LOCK_FILE, () => {', "const outcome = withLock(path.join(STATE_DIR, 'other.lock'), () => {"],
+  ['a refused fold reports no waiting entries', COMMAND, ': { folded: [], deferred: pending.length };', ': { folded: [], deferred: 0 };'],
+  ['a refused fold is reported as a fold that found nothing', COMMAND, 'return outcome.held ? { folded: outcome.value, deferred: 0 } : { folded: [], deferred: pending.length };', 'return { folded: outcome.value ?? [], deferred: 0 };'],
+  ['the refusal to fold loses its Spanish half', COMMAND, 'Nothing is lost. @es El ledger', 'Nothing is lost. El ledger'],
 ];
 
 const survivors = runMutants({

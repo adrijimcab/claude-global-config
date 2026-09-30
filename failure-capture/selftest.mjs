@@ -211,6 +211,19 @@ refused(
   'has not actually landed'
 );
 
+{
+  // Another writer holds the ledger lock: promote stands aside, in both languages, writing nothing.
+  // @es Otro escritor tiene el lock del ledger: promote se aparta, en ambos idiomas, sin escribir nada.
+  const target = world('ledger-locked');
+
+  write(target.loop, { 'state/ledger.lock': '' });
+
+  const run = promote(target, ['--mechanism', '.claude/good-guard/guard.mjs']);
+  refused('the ledger is locked by another writer', run, 'the ledger is locked by another writer');
+  check('the locked ledger: the refusal is bilingual and says nothing was changed', run.out.includes(' @es ') && run.out.includes('Nothing was changed'), run.out.trim().slice(0, 400));
+  check('the locked ledger: no closure is recorded and the holder\'s lock is untouched', run.promoted === '' && !run.incidents.includes('"kind":"promotion"') && existsSync(path.join(target.loop, 'state', 'ledger.lock')), run.incidents);
+}
+
 // ---------------------------------------------------------------------------------------------
 // THE TEXT MUST GROW WHEN THE LESSON COMES BACK (`promotion-to-contract-read-as-prevention`)
 // ---------------------------------------------------------------------------------------------

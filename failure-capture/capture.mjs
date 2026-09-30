@@ -36,7 +36,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, closeSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync, appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +44,7 @@ import { fileURLToPath } from 'node:url';
 import { closureClause, closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
+import { withLock } from './ledger-lock.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
 import { captureTextProblems, newLessonLine } from './tiered-capture.mjs';
 
@@ -158,38 +159,8 @@ function ledgerKeys() {
 
 // ---------------------------------------------------------------------------------------------
 // spool + lock — the only writer of the ledger / spool + lock: el único escritor del ledger
+// (the lock is `ledger-lock.mjs` / el lock es `ledger-lock.mjs`)
 // ---------------------------------------------------------------------------------------------
-
-/** Takes the ledger lock, or returns false. `wx` makes creation the atomic test-and-set. @es Toma el lock del ledger; `wx` hace de la creación un test-and-set atómico. */
-function takeLock() {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    try {
-      closeSync(openSync(LOCK_FILE, 'wx'));
-
-      return true;
-    } catch {
-      // A lock older than a minute belonged to a process that died holding it. Break it: the loop's
-      // whole purpose is that a crashed writer must not wedge every later capture.
-      // @es Un lock de más de un minuto es de un proceso muerto; romperlo, o un escritor caído
-      // bloquearía toda captura posterior.
-      try {
-        const age = Date.now() - Number(readFileSync(LOCK_FILE, 'utf8') || '0');
-
-        if (age > 60_000) rmSync(LOCK_FILE, { force: true });
-      } catch {
-        /* unreadable lock: fall through to the next attempt */
-      }
-
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
-    }
-  }
-
-  return false;
-}
-
-function releaseLock() {
-  rmSync(LOCK_FILE, { force: true });
-}
 
 /** Writes one spool entry atomically: temp file then rename. @es Escribe una entrada de spool atómicamente: temporal y luego rename. */
 function spool(entry) {
@@ -244,13 +215,8 @@ function reconcile() {
 
   if (pending.length === 0) return { folded: [], deferred: 0 };
 
-  if (!takeLock()) return { folded: [], deferred: pending.length };
-
-  const folded = [];
-
-  try {
-    writeFileSync(LOCK_FILE, String(Date.now()), 'utf8');
-
+  const outcome = withLock(LOCK_FILE, () => {
+    const folded = [];
     const ledgersOf = ledgerCache();
     const touched = new Set();
 
@@ -303,11 +269,11 @@ function reconcile() {
     }
 
     for (const ledger of touched) writeLedger(ledger);
-  } finally {
-    releaseLock();
-  }
 
-  return { folded, deferred: 0 };
+    return folded;
+  });
+
+  return outcome.held ? { folded: outcome.value, deferred: 0 } : { folded: [], deferred: pending.length };
 }
 
 /** Stamps that this session recorded something, so the turn guard can see it deterministically. @es Sella que esta sesión registró algo, para que el guard lo vea de forma determinista. */
@@ -372,7 +338,7 @@ function commandCapture(args) {
   stamp(session, 'capture');
 
   if (deferred > 0) {
-    console.log(`RECORDED (spooled) — the ledger is locked by another writer; ${String(deferred)} entr(y/ies) will fold on the next capture. Nothing is lost.`);
+    console.log(`RECORDED (spooled) — the ledger is locked by another writer; ${String(deferred)} entr(y/ies) will fold on the next capture. Nothing is lost. @es El ledger está bloqueado por otro escritor; ${String(deferred)} entrada(s) se plegará(n) en la próxima captura. No se pierde nada.`);
 
     return 0;
   }
@@ -676,13 +642,7 @@ function commandPromote(args) {
   const found = locateKey(readLedgers(LEDGERS), key, readMarker);
 
   if (found !== undefined) {
-    if (!takeLock()) {
-      console.error('promote: the ledger is locked by another writer — re-run in a moment. Nothing was changed.');
-
-      return 1;
-    }
-
-    try {
+    const collapsed = withLock(LOCK_FILE, () => {
       const { ledger, index } = found;
       const original = ledger.lines[index];
 
@@ -690,8 +650,12 @@ function commandPromote(args) {
       ledger.lines[index] = `- [promoted] ${today()} — ${key}: now a binding rule in ${where}; ${closureClause(closure)}; full incident history in ~/.claude/failure-capture/state/incidents.jsonl ${MARK_OPEN}${key}#${String(keys.get(key))}${MARK_CLOSE}`;
       writeLedger(ledger);
       appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, tokenCount: occurrencesOf(readFileOr(contractFileOf(target), ''), key) }))}\n`, 'utf8');
-    } finally {
-      releaseLock();
+    });
+
+    if (!collapsed.held) {
+      console.error('promote: the ledger is locked by another writer — re-run in a moment. Nothing was changed. @es promote: el ledger está bloqueado por otro escritor; reintenta en un momento. No se cambió nada.');
+
+      return 1;
     }
   }
 

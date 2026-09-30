@@ -3,19 +3,23 @@
  * Proof of the ledger lock (`ledger-lock.mjs`): the exclusive right to write a ledger. A held lock must make a
  * writer stand aside WITHOUT writing and without touching the holder's lock; a lock left by a dead process
  * (older than the stale limit) must not block; a lock the caller took must be gone afterwards, on success and
- * on failure. Every case runs on lock files in a temporary directory, never on a real ledger's lock.
+ * on failure. The units run on lock files in a temporary directory; the end-to-end cases run `capture.mjs`
+ * in a constructed repository and home (HOME and USERPROFILE overridden), never the real ledger.
  * Nothing here can hang: every wait is an injected no-op or a bounded retry loop.
  *
  * @es Prueba del lock del ledger: el derecho exclusivo a escribirlo. Un lock ocupado hace que quien escribe se
  * aparte SIN escribir y sin tocar el lock del dueño; un lock de un proceso muerto (más viejo que el límite)
- * no bloquea; un lock tomado ya no existe después, con éxito o con fallo. Todo caso corre sobre ficheros de
- * lock en un directorio temporal, nunca sobre el lock de un ledger real. Nada puede colgarse: toda espera es
- * un no-op inyectado o un bucle de reintentos acotado.
+ * no bloquea; un lock tomado ya no existe después, con éxito o con fallo. Las unidades corren sobre ficheros
+ * de lock en un directorio temporal; los casos de extremo a extremo corren `capture.mjs` en un repositorio y
+ * un home construidos, nunca el ledger real. Nada puede colgarse: toda espera es un no-op inyectado o un
+ * bucle de reintentos acotado.
  */
 
-import { existsSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { releaseLock, takeLock, withLock } from './ledger-lock.mjs';
 
@@ -128,6 +132,79 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
   const refused = withLock(lock, () => { ran += 1; }, options(at));
 
   check('withLock on a held lock does not run the work and leaves the holder\'s lock', refused.held === false && ran === 0 && existsSync(lock), JSON.stringify(refused));
+}
+
+// --- capture.mjs, end to end in a constructed repository and home --------------------------------------
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const LESSON = 'I asserted a number from memory and it was wrong, root cause: I never measured it -> RULE: measure it before stating it';
+
+/** A fresh project holding a copy of the loop, and a fresh home. @es Un proyecto con copia del loop y un home nuevos. */
+function world(name) {
+  const repo = path.join(scratch, name, 'repo');
+  const home = path.join(scratch, name, 'home');
+  const loop = path.join(repo, '.claude', 'failure-capture');
+
+  mkdirSync(path.join(loop, 'state'), { recursive: true });
+  mkdirSync(path.join(home, '.claude'), { recursive: true });
+  for (const file of readdirSync(HERE)) if (file.endsWith('.mjs')) copyFileSync(path.join(HERE, file), path.join(loop, file));
+  writeFileSync(path.join(repo, '.claude', 'CLAUDE.md'), '# Project\n', 'utf8');
+
+  return { repo, home, loop, ledger: path.join(home, '.claude', 'lessons-ledger.md'), lock: path.join(loop, 'state', 'ledger.lock'), spool: path.join(loop, 'state', 'spool') };
+}
+
+/** Runs `capture` in a world: `{ status, out }`. @es Ejecuta `capture` en un mundo. */
+function capture(target, key) {
+  const args = ['capture', '--key', key, '--scope', 'global', '--actor', 'orchestrator', '--lesson', LESSON];
+
+  try {
+    const out = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), ...args], { cwd: target.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, HOME: target.home, USERPROFILE: target.home }, timeout: 60_000 });
+
+    return { status: 0, out };
+  } catch (error) {
+    return { status: typeof error?.status === 'number' ? error.status : 'did-not-run', out: `${error?.stdout ?? ''}${error?.stderr ?? ''}` };
+  }
+}
+
+const spooled = (target) => (existsSync(target.spool) ? readdirSync(target.spool).filter((file) => file.endsWith('.json')).length : 0);
+const ledgerOf = (target) => (existsSync(target.ledger) && statSync(target.ledger).isFile() ? readFileSync(target.ledger, 'utf8') : '');
+
+{
+  const target = world('held');
+
+  writeFileSync(target.lock, '');
+
+  const run = capture(target, 'held-lesson');
+
+  check('a capture that meets a held lock is recorded as spooled, with the reason in both languages', run.status === 0 && run.out.includes('the ledger is locked by another writer') && run.out.includes(' @es '), `exit ${run.status}: ${run.out}`);
+  check('...the ledger is not written, the entry waits in the spool, the holder\'s lock is untouched', !existsSync(target.ledger) && spooled(target) === 1 && existsSync(target.lock), `spooled: ${String(spooled(target))}`);
+
+  rmSync(target.lock, { force: true });
+
+  const next = capture(target, 'second-lesson');
+
+  check('once the lock is free, the next capture folds the waiting entry too', next.status === 0 && ledgerOf(target).includes('<!--fc:held-lesson#1-->') && ledgerOf(target).includes('<!--fc:second-lesson#1-->') && spooled(target) === 0, `${next.out}\n${ledgerOf(target)}`);
+  check('...and the lock is gone after the capture', gone(target.lock));
+}
+
+{
+  const target = world('stale');
+
+  writeFileSync(target.lock, '');
+  backdate(target.lock, Date.now(), 2 * STALE_AFTER);
+
+  const run = capture(target, 'stale-lesson');
+
+  check('a capture over a stale lock folds its entry and leaves no lock behind', run.status === 0 && ledgerOf(target).includes('<!--fc:stale-lesson#1-->') && gone(target.lock), `${run.out}\n${ledgerOf(target)}`);
+}
+
+{
+  const target = world('failing');
+
+  mkdirSync(target.ledger);
+
+  const run = capture(target, 'failing-lesson');
+
+  check('a capture whose write fails exits non-zero, releases the lock and keeps the entry in the spool', run.status !== 0 && gone(target.lock) && spooled(target) === 1, `exit ${run.status}, spooled ${String(spooled(target))}`);
 }
 
 rmSync(scratch, { recursive: true, force: true });

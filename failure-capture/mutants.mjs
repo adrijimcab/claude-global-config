@@ -42,6 +42,11 @@ const MUTANTS = [
   ['the orchestrator contract is read from the old CLAUDE.md again', 'failure-capture/capture.mjs', "const ORCHESTRATOR_RULES = path.join(homedir(), '.claude', 'rules', 'promoted-rules.md');", "const ORCHESTRATOR_RULES = path.join(homedir(), '.claude', 'CLAUDE.md');"],
   ['a key that is in no ledger line can be promoted', 'failure-capture/capture.mjs', 'if (!keys.has(key)) {', 'if (false) {'],
 
+  // --- the ledger lock: promote writes only while it holds it (the module is proved by ledger-lock.mutants.mjs)
+  ['promote takes some other lock, so a held ledger lock is ignored', 'failure-capture/capture.mjs', 'const collapsed = withLock(LOCK_FILE, () => {', "const collapsed = withLock(path.join(STATE_DIR, 'other.lock'), () => {"],
+  ['promote does not notice that the lock was refused, and reports a closure that never happened', 'failure-capture/capture.mjs', 'if (!collapsed.held) {', 'if (false) {'],
+  ['the refusal to promote loses its Spanish half', 'failure-capture/capture.mjs', 'Nothing was changed. @es promote:', 'Nothing was changed. promote:'],
+
   // --- alcance: cada lección en el ledger de su alcance (ledgers.mjs, 2026-09-28)
   ['una lección nueva ignora su alcance y cae siempre en el home', 'failure-capture/capture.mjs', 'const ledger = ledgerForScope(ledgers, entry.scope);', "const ledger = ledgerForScope(ledgers, 'global');"],
   ['una recurrencia no busca la clave: se duplica en el ledger del alcance nuevo', 'failure-capture/capture.mjs', 'const found = locateKey(ledgers, entry.key, readMarker);', 'const found = undefined;'],
