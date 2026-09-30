@@ -25,7 +25,13 @@ const MUTANTS = [
   ['init rewrites an existing ledger', C, '  if (created) writeFileSync(PROJECT.ledgerFile,', '  writeFileSync(PROJECT.ledgerFile,'],
   ['a configured parity gate is never run', C, "if (target === 'contract' && PARITY_GATE !== undefined) {", 'if (false) {'],
   ['only the first contract file has to carry the token', C, 'for (const file of WORKER_CONTRACTS) if (!readFileOr(file,', 'for (const file of WORKER_CONTRACTS.slice(0, 1)) if (!readFileOr(file,'],
-  ['the walk stops only at the process HOME, so a fixture HOME lets it reach the real one', 'failure-capture/project.mjs', '    homes.push(userInfo().homedir);', '    void userInfo;']
+  ['the walk stops only at the process HOME, so a fixture HOME lets it reach the real one', 'failure-capture/project.mjs', '    homes.push(userInfo().homedir);', '    void userInfo;'],
+  ['the project ceiling key is unknown to the config', P, "'parityGate', 'loadedSetCeiling'];", "'parityGate'];"],
+  ['a fractional project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', 'typeof config.loadedSetCeiling === \'number\' && config.loadedSetCeiling > 0'],
+  ['a zero or negative project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', 'Number.isInteger(config.loadedSetCeiling)'],
+  ['a zero project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling >= 0'],
+  ['a text project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', '(config.loadedSetCeiling > 0)'],
+  ['the project ceiling is not surfaced', P, '    loadedSetCeiling: config.loadedSetCeiling\n', '']
 ];
 
 const survivors = runMutants({

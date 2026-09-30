@@ -14,7 +14,8 @@
  * because `.claude/` is excluded from git and exists only there. No project found means global-only.
  *
  * PER-PROJECT CONFIG, optional: `<project>/.claude/failure-capture.json`
- *   { "scope": "<label>", "workerContracts": ["<relative>", …], "parityGate": "<relative>" }
+ *   { "scope": "<label>", "workerContracts": ["<relative>", …], "parityGate": "<relative>", "loadedSetCeiling": <characters> }
+ * `loadedSetCeiling` is a stricter ceiling on the loaded instruction set for this project (@es un techo más estricto para este proyecto).
  * Without it: the scope is the project folder's name, the worker contract is `.claude/CLAUDE.md` (the file
  * every subagent of the project loads), and there is no parity gate.
  *
@@ -35,7 +36,7 @@ export const CONFIG_FILE = path.join('.claude', 'failure-capture.json');
 export const LEDGER_FILE = path.join('.claude', 'lessons-ledger.md');
 export const GLOBAL_SCOPE = 'global';
 
-const CONFIG_KEYS = ['scope', 'workerContracts', 'parityGate'];
+const CONFIG_KEYS = ['scope', 'workerContracts', 'parityGate', 'loadedSetCeiling'];
 
 const realpathOf = (directory) => {
   try {
@@ -125,7 +126,8 @@ export function readProjectConfig(root) {
     ...unknown.map((key) => `unknown key "${key}"`),
     ...(config.scope === undefined || (typeof config.scope === 'string' && config.scope.length > 0 && config.scope !== GLOBAL_SCOPE) ? [] : ['"scope" must be a non-empty string other than "global"']),
     ...(config.workerContracts === undefined || (Array.isArray(config.workerContracts) && config.workerContracts.length > 0 && config.workerContracts.every((entry) => typeof entry === 'string')) ? [] : ['"workerContracts" must be a non-empty list of relative paths']),
-    ...(config.parityGate === undefined || typeof config.parityGate === 'string' ? [] : ['"parityGate" must be a relative path'])
+    ...(config.parityGate === undefined || typeof config.parityGate === 'string' ? [] : ['"parityGate" must be a relative path']),
+    ...(config.loadedSetCeiling === undefined || (Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0) ? [] : ['"loadedSetCeiling" must be a positive integer (characters). @es "loadedSetCeiling" debe ser un entero positivo (caracteres)'])
   ];
 
   if (problems.length > 0) throw new Error(`${file} is invalid: ${problems.join('; ')}`);
@@ -150,6 +152,7 @@ export function projectOf(directory) {
     scope: config.scope ?? path.basename(root),
     ledgerFile: path.join(root, LEDGER_FILE),
     workerContracts: (config.workerContracts ?? ['.claude/CLAUDE.md']).map((relative) => path.join(root, ...relative.split('/'))),
-    parityGate: config.parityGate === undefined ? undefined : path.join(root, ...config.parityGate.split('/'))
+    parityGate: config.parityGate === undefined ? undefined : path.join(root, ...config.parityGate.split('/')),
+    loadedSetCeiling: config.loadedSetCeiling
   };
 }

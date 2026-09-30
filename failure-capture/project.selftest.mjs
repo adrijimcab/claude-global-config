@@ -142,7 +142,21 @@ try {
     thrown = error.message;
   }
   check('a broken project config THROWS, never reads as absent', thrown.includes('unknown key "scop"'), thrown);
+  for (const bad of [0, -5, 1.5, '140000', null]) {
+    write(app, { '.claude/failure-capture.json': JSON.stringify({ loadedSetCeiling: bad }) });
+    let refused = '';
+
+    try {
+      projectOf(app);
+    } catch (error) {
+      refused = error.message;
+    }
+    check(`a loadedSetCeiling of ${JSON.stringify(bad)} THROWS, bilingual`, refused.includes('"loadedSetCeiling" must be a positive integer') && refused.includes('@es'), refused);
+  }
+  write(app, { '.claude/failure-capture.json': JSON.stringify({ loadedSetCeiling: 140000 }) });
+  equal('a valid loadedSetCeiling is surfaced by the project context', projectOf(app)?.loadedSetCeiling, 140000);
   rmSync(path.join(app, '.claude', 'failure-capture.json'));
+  equal('no loadedSetCeiling is absent by default', projectOf(app)?.loadedSetCeiling, undefined);
 
   // --- init ---------------------------------------------------------------------------------------------
   const first = run(world, api, 'init');
