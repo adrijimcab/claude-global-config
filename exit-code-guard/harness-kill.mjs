@@ -124,7 +124,12 @@ export function mayBeKilledMidHook(toolName, toolInput, cwd) {
 
   if (typeof timeout === 'number' && timeout >= MINIMUM_TIMEOUT_MS) return undefined;
 
-  for (const { command, directory } of withWorkingDirectories(simpleCommands(toolInput.command, dialect), cwd, dialect)) {
+  const commands = simpleCommands(toolInput.command, dialect);
+  // A payload without a cwd still has its operations decided; only WHERE they run stays unknown.
+  // @es Un payload sin cwd sigue decidiendo sus operaciones; solo DÓNDE corren queda desconocido.
+  const located = typeof cwd === 'string' ? withWorkingDirectories(commands, cwd, dialect) : commands.map((command) => ({ command, directory: undefined }));
+
+  for (const { command, directory } of located) {
     const operation = hookRunningOperation(command);
 
     if (operation !== undefined) return { operation, timeout, directory: gitDirectoryOf(command, directory) };
@@ -144,10 +149,10 @@ export function mayBeKilledMidHook(toolName, toolInput, cwd) {
 function gitDirectoryOf(command, directory) {
   if (typeof directory !== 'string') return undefined;
 
-  const at = commandWordIndex(command.words);
+  const gitWord = commandWordIndex(command.words);
   let resolved = directory;
 
-  for (let index = at + 1; index < command.words.length - 1; index += 1) {
+  for (let index = gitWord + 1; index < command.words.length - 1; index += 1) {
     if (command.words[index] === '-C') resolved = path.resolve(resolved, nativeSpelling(command.words[index + 1]));
     else if (!command.words[index].startsWith('-')) break;
   }

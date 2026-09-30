@@ -201,6 +201,15 @@ try {
   mkdirSync(notARepository);
   report(verdictIn(notARepository) === 'deny', 'an existing folder git cannot answer for keeps the refusal, never reads as "no hooks"');
   report(execFileSync('node', [GUARD], { input: commitIn(preCommit), encoding: 'utf8' }).includes('pre-commit'), 'the refusal names the hooks it measured');
+
+  // The hooks are measured where the COMMIT runs, never where the line starts (measured in the move's
+  // replay: `cd <another repo> && git commit` was attributed to the payload's cwd).
+  // @es Los hooks se miden donde CORRE el commit, nunca donde empieza la línea.
+  const lineIn = (cwd, command) => (execFileSync('node', [GUARD], { input: JSON.stringify({ ...payloadFor('Bash', command, { sessionId: 'selftest' }), cwd }), encoding: 'utf8' }).includes('"deny"') ? 'deny' : 'allow');
+
+  report(lineIn(noHooks, `cd "${preCommit}" && git commit -m x`) === 'deny', 'cd into a repository WITH hooks from one without: refused');
+  report(lineIn(preCommit, `cd "${noHooks}" && git commit -m x`) === 'allow', 'cd into a repository WITHOUT hooks from one with them: allowed');
+  report(lineIn(preCommit, `git -C "${noHooks}" commit -m x`) === 'allow', 'git -C a repository without hooks: allowed');
 } catch (error) {
   report(false, `the hook-premise fixtures could not be built: ${error instanceof Error ? error.message : String(error)}`);
 } finally {

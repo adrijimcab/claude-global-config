@@ -43,6 +43,8 @@ const MUTANTS = [
   ['a repository without commit hooks is refused anyway', 'exit-code-guard/guard.mjs', '  if (hooks !== undefined && hooks.length === 0) return undefined;\n', ''],
   ['an unmeasurable directory reads as "no hooks"', 'exit-code-guard/commit-hooks.mjs', '  if (hooks === undefined) return undefined;\n  if (!existsSync(hooks)) return [];', '  if (hooks === undefined) return [];\n  if (!existsSync(hooks)) return [];'],
   ['*.sample templates count as hooks', 'exit-code-guard/commit-hooks.mjs', 'return COMMIT_HOOKS.filter((name) => present.has(name));', 'return [...present];'],
+  ['the line\'s own cd is ignored: hooks are measured where the line starts', 'exit-code-guard/harness-kill.mjs', 'directory: gitDirectoryOf(command, directory)', 'directory: cwd'],
+  ['git -C is ignored: hooks are measured in the directory the line cd-ed into', 'exit-code-guard/harness-kill.mjs', "if (command.words[index] === '-C') resolved =", 'if (false) resolved ='],
   ['core.hooksPath is ignored: only .git/hooks is read', 'exit-code-guard/commit-hooks.mjs', "['-C', directory, 'rev-parse', '--path-format=absolute', '--git-path', 'hooks']", "['-C', directory, 'rev-parse', '--path-format=absolute', '--git-dir']"],
   ['the shim never asks the status-echo decision', 'exit-code-guard/guard.mjs', 'if (endsByPrintingStatus(tool, input?.command)) return REASONS[tool];', ''],
 
@@ -55,7 +57,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['exit-code-guard', 'shell-command', 'mutation-proof'],
+  paths: ['exit-code-guard', 'shell-command', 'cherry-pick-guard', 'mutation-proof'],
   selftest: 'exit-code-guard/selftest.mjs',
   mutants: MUTANTS
 });

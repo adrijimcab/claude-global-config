@@ -179,17 +179,17 @@ function refusalFor(payload) {
 
   if (pipeline !== undefined) return pipelineReason(pipeline);
 
-  const killable = mayBeKilledMidHook(tool, input);
+  const killable = mayBeKilledMidHook(tool, input, payload?.cwd);
 
   if (killable === undefined) return undefined;
 
-  // The premise is that hooks run. Measured where it can be; a repository that runs no commit hook has
-  // nothing a clock could kill mid-write, so the refusal would state something false there.
-  const hooks = commitHooksOf(payload?.cwd);
+  // The premise is that hooks run. Measured where the git command itself runs; a repository that runs no
+  // commit hook has nothing a clock could kill mid-write, so the refusal would state something false there.
+  const hooks = commitHooksOf(killable.directory);
 
   if (hooks !== undefined && hooks.length === 0) return undefined;
 
-  return harnessKillReason(killable, hooks, hooks === undefined ? undefined : hooksFolderOf(payload.cwd));
+  return harnessKillReason(killable, hooks, hooks === undefined ? undefined : hooksFolderOf(killable.directory));
 }
 
 /**
