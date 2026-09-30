@@ -35,6 +35,20 @@ import path from 'node:path';
 const B100_PROJECT_ROOT = 'C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui';
 
 /**
+ * `b100-am-ui/.claude`'s backup git dir, DUPLICATED here rather than imported from `backup-repo.mjs`
+ * (which declares the same value as `BACKUP_GIT_DIR`). MEASURED: `backup-repo.mjs` has no "only as
+ * main" guard — it unconditionally spawns a real `git` command against `process.argv.slice(2)` at
+ * module load, outside any `import.meta.url` check — so importing it from here would run an arbitrary
+ * git invocation using THIS process's own argv the instant `repos.mjs` loads. Read straight from disk
+ * on 2026-09-30 to confirm before choosing this duplication over an import.
+ * @es Git dir de respaldo de `b100-am-ui/.claude`, DUPLICADO aquí en vez de importado de
+ * `backup-repo.mjs`: ese fichero no tiene guarda de "solo como principal" — ejecuta git de verdad al
+ * cargar el módulo — así que importarlo dispararía un comando git arbitrario con el argv de este
+ * proceso. Confirmado leyendo el fichero en disco antes de elegir esta duplicación sobre un import.
+ */
+const B100_BACKUP_GIT_DIR = path.join(homedir(), '.claude-backups', 'b100-am-ui-claude-tooling.git');
+
+/**
  * Runs `command args…` in `cwd` and returns `{ ok, stdout, stderr }` — never throws. A failed spawn or
  * a non-zero exit both come back as `ok: false`, so a caller never has to catch anything to tell
  * "measured and clean" from "could not measure".
@@ -51,10 +65,13 @@ function runCommand(command, args, cwd) {
 }
 
 /**
- * The two declared backup repos, as `{ name, worktree, run, commitCommand, pushCommand }`. `run(args)`
- * is the ONE seam a selftest replaces; `commitCommand`/`pushCommand` are the exact, copy-pasteable
- * commands a block message names.
- * @es Los dos repos de respaldo declarados. `run(args)` es el ÚNICO seam que un selftest reemplaza.
+ * The two declared backup repos, as `{ name, worktree, gitDir, run, commitCommand, pushCommand }`.
+ * `run(args)` is the ONE seam a selftest replaces for status/commit/push-shaped commands;
+ * `commitCommand`/`pushCommand` are the exact, copy-pasteable commands a block message names; `gitDir`
+ * is the explicit `--git-dir` `fingerprint.mjs` qualifies its own git calls with (never `run`, and never
+ * plain `git -C <worktree>` — see `fingerprint.mjs`'s own docblock for why).
+ * @es Los dos repos de respaldo declarados. `run(args)` es el ÚNICO seam que un selftest reemplaza para
+ * comandos con forma de status/commit/push; `gitDir` es el `--git-dir` explícito que usa `fingerprint.mjs`.
  */
 export function declaredRepos() {
   const globalClaude = path.join(homedir(), '.claude');
@@ -64,6 +81,7 @@ export function declaredRepos() {
     {
       name: '~/.claude',
       worktree: globalClaude,
+      gitDir: path.join(globalClaude, '.git'),
       run: (args) => runCommand('git', ['-C', globalClaude, ...args], globalClaude),
       commitCommand: 'git -C ~/.claude add -A && git -C ~/.claude commit -m "type(scope): description"',
       pushCommand: 'git -C ~/.claude push origin master'
@@ -71,6 +89,7 @@ export function declaredRepos() {
     {
       name: 'b100-am-ui/.claude',
       worktree: b100Claude,
+      gitDir: B100_BACKUP_GIT_DIR,
       run: (args) => runCommand(process.execPath, [path.join(b100Claude, 'backup-repo.mjs'), ...args], b100Claude),
       commitCommand: 'node .claude/backup-repo.mjs add -A && node .claude/backup-repo.mjs commit -m "type(scope): description"',
       pushCommand: 'node .claude/backup-repo.mjs push origin master'

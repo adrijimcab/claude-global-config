@@ -20,8 +20,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { agentRecords, isLive, liveOwnerOf, liveTranscriptTexts } from './attribution.mjs';
-import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs } from './dismiss.mjs';
+import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs, readDismissals } from './dismiss.mjs';
 import { decide } from './decide.mjs';
+import { measureFingerprint } from './fingerprint.mjs';
 import { evaluate } from './guard.mjs';
 import { parseStatusPorcelain } from './status.mjs';
 
@@ -172,6 +173,106 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
 }
 
 // ---------------------------------------------------------------------------------------------
+// STATE SPACE: dismissals, scoped to a fingerprint (`fingerprint.mjs`) of the EXACT repo state at
+// the moment of the dismissal. `fingerprintOf` and `dismissals` are injected fakes throughout this
+// block — never the real `measureFingerprint`/`readDismissals()` — so these are pure unit tests of
+// `decide.mjs`'s own matching logic; the REAL fingerprint mechanism against a real git repo is proven
+// separately, below, in the end-to-end section.
+// ---------------------------------------------------------------------------------------------
+{
+  // No dismissal recorded at all -> block. Absence excuses nothing.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map(), fingerprintOf: () => 'fixed-fingerprint-1', dismissals: [] });
+
+  check('dirty, no dismissal recorded -> block', result?.kind, 'block');
+}
+{
+  // A dismissal recorded for this EXACT repo + fingerprint -> allow, but with a note, never silently.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const dismissals = [{ repo: 'r', fingerprint: 'fixed-fingerprint-1', at: '2026-09-30T00:00:00.000Z', reason: 'the frozen agent\'s work here awaits an owner decision' }];
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map(), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
+
+  check('dirty, a MATCHING dismissal -> note, never a silent allow and never a block', result?.kind, 'note');
+  check('the note names when it was dismissed and carries the reason', result?.notes?.[0]?.includes('dismissed at 2026-09-30T00:00:00.000Z') && result?.notes?.[0]?.includes('owner decision'), true);
+}
+{
+  // A dismissal exists for this repo, but the CONTENT changed since (a different tree id) -> block.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const dismissals = [{ repo: 'r', fingerprint: '0:tree-before-the-edit', at: '2026-09-30T00:00:00.000Z', reason: 'dismissed before foo.txt was edited again' }];
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map(), fingerprintOf: () => '0:tree-after-the-edit', dismissals });
+
+  check('dirty, dismissal is for a DIFFERENT content fingerprint (edited since) -> block', result?.kind, 'block');
+}
+{
+  // A dismissal exists for this repo, but a NEW PATH appeared since (still a different tree id) ->
+  // block — a tree hash is content-addressed over EVERY path, so an added path changes it exactly as
+  // an edited byte does; same mechanism as the content-change case, different real-world trigger.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n?? new-file.txt\n' });
+  const dismissals = [{ repo: 'r', fingerprint: '0:tree-before-new-file', at: '2026-09-30T00:00:00.000Z', reason: 'dismissed before new-file.txt ever appeared' }];
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map(), fingerprintOf: () => '0:tree-after-new-file', dismissals });
+
+  check('dirty, a new path appeared since the dismissal -> block', result?.kind, 'block');
+}
+{
+  // A dismissal exists, but the AHEAD COUNT changed since (2 -> 3) -> block. `fingerprintOf` here
+  // mirrors `measureFingerprint`'s own shape (ahead count + a tree id) so the ahead segment is
+  // genuinely derived from the SAME statusText `decide.mjs` already parses, not hand-waved.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master [ahead 3]\n M foo.txt\n' });
+  const fingerprintOf = (candidate) => {
+    const status = candidate.run(['status', '--porcelain=v1', '--branch']);
+    const { aheadCount } = parseStatusPorcelain(status.stdout);
+
+    return `${String(aheadCount)}:fixed-tree`;
+  };
+  const dismissals = [{ repo: 'r', fingerprint: '2:fixed-tree', at: '2026-09-30T00:00:00.000Z', reason: 'dismissed when only 2 commits sat ahead of the remote' }];
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map(), fingerprintOf, dismissals });
+
+  check('dirty, ahead count changed since the dismissal (2 -> 3) -> block', result?.kind, 'block');
+}
+{
+  // A dismissal exists for this repo+fingerprint, but the fingerprint could NOT be measured this
+  // time (a git failure, no gitDir, whatever) -> block. An unmeasured state never reads as "matches a
+  // past excuse" — the same fail-toward-block stance as every other measurement in this mechanism.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const dismissals = [{ repo: 'r', fingerprint: 'irrelevant-because-unmeasured', at: '2026-09-30T00:00:00.000Z', reason: 'this dismissal exists but cannot be reached this time' }];
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map(), fingerprintOf: () => undefined, dismissals });
+
+  check('dirty, fingerprint could not be measured this time -> block, never excused by luck', result?.kind, 'block');
+}
+{
+  // A dismissal exists for a DIFFERENT repo name sharing the SAME fingerprint value -> block. A
+  // fingerprint alone is not a key: it is scoped to (repo name, fingerprint) TOGETHER.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const dismissals = [{ repo: 'a-different-repo', fingerprint: 'fixed-fingerprint-1', at: '2026-09-30T00:00:00.000Z', reason: 'this dismissal belongs to a different declared repo entirely' }];
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map(), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
+
+  check('dirty, a dismissal with the same fingerprint but a DIFFERENT repo name -> block', result?.kind, 'block');
+}
+
+// ---------------------------------------------------------------------------------------------
+// DIAGNOSTICS: readDismissals — tolerant of a malformed line, empty (never thrown) when unreadable.
+// ---------------------------------------------------------------------------------------------
+check(
+  'readDismissals parses a well-formed JSONL line',
+  readDismissals({ read: () => '{"repo":"r","fingerprint":"f","at":"2026-01-01T00:00:00.000Z","reason":"x"}\n' }),
+  [{ repo: 'r', fingerprint: 'f', at: '2026-01-01T00:00:00.000Z', reason: 'x' }]
+);
+check(
+  'readDismissals skips a malformed line rather than throwing, keeping the good ones',
+  readDismissals({ read: () => 'not json at all\n{"repo":"r","fingerprint":"f","at":"t","reason":"y"}\n' }).length,
+  1
+);
+check(
+  'readDismissals returns empty when the file cannot be read at all (never seen as clean)',
+  readDismissals({
+    read: () => {
+      throw new Error('ENOENT');
+    }
+  }),
+  []
+);
+
+// ---------------------------------------------------------------------------------------------
 // STATE: repo missing -> allow with a message
 // ---------------------------------------------------------------------------------------------
 {
@@ -287,17 +388,43 @@ check('agentRecords is empty for a nonexistent root, never throws', agentRecords
 // ---------------------------------------------------------------------------------------------
 check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason', 'because this drift is intentional and expected here']), { repo: 'r', reason: 'because this drift is intentional and expected here' });
 {
+  // A dismissal now MEASURES a fingerprint at record time — `repos`/`fingerprintOf` are injected fakes
+  // so this never touches a real declared repo or spawns a real git process.
   const calls = [];
-  const result = commandDismiss({ session: 's-1', repo: 'r', reason: 'this repo is a scratch clone, never meant to sync' }, { append: (...args) => calls.push(args), mkdir: () => {} });
+  const fakeDismissRepo = { name: 'r', worktree: HERE };
+  const result = commandDismiss(
+    { session: 's-1', repo: 'r', reason: 'this repo is a scratch clone, never meant to sync' },
+    { append: (...args) => calls.push(args), mkdir: () => {}, repos: [fakeDismissRepo], fingerprintOf: () => '0:fixed-tree-hash' }
+  );
 
-  check('a long-enough reason is accepted and appended', result.ok, true);
+  check('a long-enough reason, a declared repo, and a measurable fingerprint -> accepted and appended', result.ok, true);
   check('the dismissal is appended exactly once', calls.length, 1);
+  check('the appended record carries the MEASURED fingerprint, not just the reason', calls[0]?.[1]?.includes('0:fixed-tree-hash'), true);
 }
 {
   const result = commandDismiss({ session: 's-1', reason: 'too short' }, { append: () => {}, mkdir: () => {} });
 
   check('a reason shorter than the minimum is REFUSED', result.ok, false);
   check('the refusal names the minimum length', result.problems.some((p) => p.includes(String(MINIMUM_REASON_LENGTH))), true);
+}
+{
+  const result = commandDismiss(
+    { session: 's-1', repo: 'does-not-exist', reason: 'this repo is a scratch clone, never meant to sync' },
+    { append: () => {}, mkdir: () => {}, repos: [{ name: 'r', worktree: HERE }], fingerprintOf: () => '0:fixed-tree-hash' }
+  );
+
+  check('a --repo name matching no declared repo is REFUSED', result.ok, false);
+  check('the refusal names the declared repos it accepts', result.problems.some((p) => p.includes('declared backup repos')), true);
+}
+{
+  const calls = [];
+  const result = commandDismiss(
+    { session: 's-1', repo: 'r', reason: 'this repo is a scratch clone, never meant to sync' },
+    { append: (...args) => calls.push(args), mkdir: () => {}, repos: [{ name: 'r', worktree: HERE }], fingerprintOf: () => undefined }
+  );
+
+  check('an UNMEASURABLE fingerprint REFUSES the dismissal outright', result.ok, false);
+  check('a refused, unmeasurable dismissal appends nothing at all', calls.length, 0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -319,11 +446,16 @@ check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason'
 
   mkdirSync(scratch, { recursive: true });
   git('init', '-q');
-  git('-c', 'user.email=fixture@example.com', '-c', 'user.name=fixture', 'commit', '-q', '--allow-empty', '-m', 'chore: init');
+  // A REAL, non-empty first commit — unlike an `--allow-empty` commit, this is guaranteed to create a
+  // real `.git/index` on disk, which the byte-identical proof below needs something real to compare.
+  writeFileSync(path.join(scratch, 'seed.txt'), 'seed\n', 'utf8');
+  git('add', '-A');
+  git('-c', 'user.email=fixture@example.com', '-c', 'user.name=fixture', 'commit', '-q', '-m', 'chore: init');
 
   const realRepo = {
     name: 'fixture',
     worktree: scratch,
+    gitDir: path.join(scratch, '.git'),
     run: (args) => {
       try {
         const stdout = execFileSync('git', ['-C', scratch, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -338,7 +470,41 @@ check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason'
 
   check('REAL git repo, clean, no upstream configured -> allow', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveTexts: new Map() }), 'allow');
 
+  // ---------------------------------------------------------------------------------------------
+  // THE REAL FINGERPRINT MECHANISM, against a REAL git repo — never faked. Proves the three claims
+  // `fingerprint.mjs`'s docblock makes: it returns a real string, it NEVER touches the repo's real
+  // index (the byte-identical proof), and it actually DISCRIMINATES real content changes (the empty
+  // "add" or a dropped `GIT_INDEX_FILE` mutant would both fail these).
+  // ---------------------------------------------------------------------------------------------
+  const indexPath = path.join(scratch, '.git', 'index');
+  const fingerprintClean = measureFingerprint(realRepo);
+
+  check('measureFingerprint on a real, clean repo returns a defined string fingerprint', typeof fingerprintClean, 'string');
+
+  // A repo whose `run` reports a FAILED status, but whose gitDir/worktree are otherwise real and
+  // fingerprint-able on their own — proves measureFingerprint refuses on the status failure alone,
+  // never falling through to compute a tree hash regardless.
+  const realRepoWithFailingStatus = { ...realRepo, run: () => ({ ok: false, stdout: '', stderr: 'simulated status failure' }) };
+
+  check('measureFingerprint returns undefined when git status fails, even though the tree itself could still be hashed', measureFingerprint(realRepoWithFailingStatus), undefined);
+
   writeFileSync(path.join(scratch, 'untracked.txt'), 'hello\n', 'utf8');
+
+  // THE BYTE-IDENTICAL PROOF, taken on a DIRTY tree (an untracked file genuinely present), never on
+  // the clean one above. MEASURED directly, via the mutation campaign: on a CLEAN working tree, `git
+  // add -A` has nothing to stage regardless of which index it targets, so a dropped `GIT_INDEX_FILE`
+  // override survived a clean-tree version of this exact check — only a tree with something real to
+  // stage can tell "used a throwaway index" apart from "used the real one and got lucky".
+  const indexBeforeDirty = readFileSync(indexPath);
+  const fingerprintWithUntracked = measureFingerprint(realRepo);
+  const indexAfterDirty = readFileSync(indexPath);
+
+  check('measureFingerprint DIFFERS once a real untracked file is added — the tree hash is content-addressed for real', fingerprintClean === fingerprintWithUntracked, false);
+  check(
+    'the real .git/index is left BYTE-IDENTICAL after fingerprinting a DIRTY tree (a temporary index was used, never the real one)',
+    Buffer.compare(indexBeforeDirty, indexAfterDirty),
+    0
+  );
 
   const dirtyResult = decide(STOP_PAYLOAD(), { repos: [realRepo], liveTexts: new Map() });
 
@@ -348,6 +514,19 @@ check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason'
   const liveOwned = new Map([['agent-z', 'wrote untracked.txt just now']]);
 
   check('REAL git repo, same untracked file, now mentioned by a live agent\'s transcript -> allow', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveTexts: liveOwned }), 'allow');
+
+  // ---------------------------------------------------------------------------------------------
+  // THE REAL DISMISSAL LIFECYCLE: a dismissal recorded against the EXACT current real fingerprint
+  // excuses it (with a note, never silently) — and the SAME dismissal stops matching the instant the
+  // real tree changes again, proving the whole stack end to end, never just the fake-repo unit tests.
+  // ---------------------------------------------------------------------------------------------
+  const dismissals = [{ repo: 'fixture', fingerprint: fingerprintWithUntracked, at: '2026-09-30T00:00:00.000Z', reason: 'the untracked scratch file here is deliberate test fixture debris' }];
+
+  check('REAL git repo, a dismissal matching the EXACT current fingerprint -> allow with a note', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveTexts: new Map(), dismissals }), 'note');
+
+  writeFileSync(path.join(scratch, 'untracked.txt'), 'hello, but edited now\n', 'utf8');
+
+  check('REAL git repo, the SAME dismissal no longer matches once the file\'s content changed -> block again', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveTexts: new Map(), dismissals }), 'block');
 
   rmSync(scratch, { recursive: true, force: true });
 }

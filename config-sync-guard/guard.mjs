@@ -14,12 +14,15 @@
  *
  * BOUNDED the same way every sibling Stop guard in this fleet is bounded: `stop_hook_active` limits it
  * to once per turn; any malfunction of its own exits 0 and lets the turn end; a DISMISS path
- * (`dismiss.mjs`) records a stated reason for a false positive.
+ * (`dismiss.mjs`) records a stated reason for a false positive — SCOPED to a fingerprint of the exact
+ * state dismissed (`fingerprint.mjs`), so it excuses only THAT state and re-blocks the instant anything
+ * changes (see `decide.mjs`'s own docblock for the gap this closed).
  *
  * @es Hook `Stop` — config-sync-guard. Un turno no puede terminar mientras algún repo de respaldo
  * declarado tenga commits sin subir o cambios sin commitear no atribuibles a un agente vivo. La
  * decisión vive en `decide.mjs`, pura e inyectable. Este fichero es el conducto fino. Acotado igual que
- * toda guardia `Stop` hermana de esta flota.
+ * toda guardia `Stop` hermana de esta flota. Un descarte queda ACOTADO a la huella del estado exacto
+ * que se descartó, y vuelve a bloquear en cuanto algo cambia.
  */
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
@@ -76,7 +79,10 @@ function blockOutput(dirtyRepos, sessionId) {
     '',
     '  A) COMMIT AND PUSH IT (default) — the exact commands are listed above per repo.',
     '',
-    '  B) DISMISS IT, with a reason that gets written down (not a silent escape):',
+    '  B) DISMISS IT, with a reason that gets written down (not a silent escape). The dismissal is',
+    '     scoped to the EXACT state measured right now (ahead count + a content hash of the whole',
+    '     worktree) — any later change (a new path, an edited byte, a different ahead count) produces',
+    '     a different fingerprint and re-blocks automatically:',
     '',
     `       node "${DISMISS_CLI}" --session ${sessionId} --repo "<repo name>" \\`,
     '         --reason "why this repo\'s state is not real drift here"',

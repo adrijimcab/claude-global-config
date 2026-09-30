@@ -29,12 +29,18 @@ const MUTANTS = [
   ['the double-backslash (JSON-escaped) separator form is dropped, so a real Edit/Write file_path\'s own raw shape is never matched', 'attribution.mjs', "  const needles = [forward, withSeparator(forward, '\\\\'), withSeparator(forward, '\\\\\\\\')];", '  const needles = [forward];'],
   ['repoExists always reports true, so a genuinely missing repo is measured as present instead', 'repos.mjs', 'return existsSync(repo.worktree);', 'return true;'],
   ['the shim stops blocking a decided finding, so the harness lets the turn end anyway', 'guard.mjs', 'if (verdict === undefined) return undefined;', 'if (verdict !== undefined) return undefined;'],
-  ['the shim stops journaling its refusals, so no evidence survives the block', 'guard.mjs', 'journal({ at: new Date().toISOString(), session: sessionId, repos: verdict.dirtyRepos.map((entry) => entry.repo.name) });', '']
+  ['the shim stops journaling its refusals, so no evidence survives the block', 'guard.mjs', 'journal({ at: new Date().toISOString(), session: sessionId, repos: verdict.dirtyRepos.map((entry) => entry.repo.name) });', ''],
+  ['the dismissal match stops requiring BOTH repo name and fingerprint, so a dismissal for one repo excuses ANY repo sharing its fingerprint value', 'decide.mjs', "if (record?.repo !== repoName || record?.fingerprint !== fingerprint) continue;", "if (record?.fingerprint !== fingerprint) continue;"],
+  ['the dismissal match stops comparing at all, so a dismissal NEVER matches and nothing is ever excused', 'decide.mjs', "if (record?.repo !== repoName || record?.fingerprint !== fingerprint) continue;", "continue;"],
+  ['a matched dismissal stops being reported as dismissed, so an excused repo still reads as unresolved-dirty', 'decide.mjs', "if (dismissal !== undefined) return { repo, state: 'dismissed', aheadCount, unattributed, dismissal };", ''],
+  ['the temporary index override is dropped, so fingerprinting would write into the repo\'s REAL index instead of a throwaway one', 'fingerprint.mjs', "const env = { ...process.env, GIT_INDEX_FILE: tempIndex };", "const env = { ...process.env };"],
+  ['the worktree is no longer added into the temporary index before hashing, so the tree hash is always the EMPTY tree and never discriminates on real content', 'fingerprint.mjs', "runGit(qualified(['add', '-A']), repo.worktree, env);", ''],
+  ['a failed git status stops short-circuiting fingerprinting, so a repo whose status could not be measured still gets a fingerprint computed and reported', 'fingerprint.mjs', 'if (!status.ok) return undefined;', '']
 ];
 
 const survivors = runMutants({
   fleetRoot: HERE,
-  paths: ['decide.mjs', 'guard.mjs', 'status.mjs', 'attribution.mjs', 'repos.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'],
+  paths: ['decide.mjs', 'guard.mjs', 'status.mjs', 'attribution.mjs', 'repos.mjs', 'dismiss.mjs', 'fingerprint.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'],
   selftest: 'selftest.mjs',
   mutants: MUTANTS
 });
