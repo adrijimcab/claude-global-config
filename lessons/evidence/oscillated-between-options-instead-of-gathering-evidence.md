@@ -1,0 +1,7 @@
+# `oscillated-between-options-instead-of-gathering-evidence` — full evidence / evidencia completa
+
+Ledger lines archived verbatim, append-only: each block is one original line, byte for byte, and may end with a closure note. @es Líneas del ledger archivadas literalmente, solo se añade: cada bloque es una línea original, byte a byte, y puede terminar con una nota de cierre.
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [global] 2026-08-03 — META: oscilé TRES veces sobre la misma decisión (convención de doc de harnesses): recomendé "piso >0", luego "la gate mide mal" apoyándome en un precedente real (ya excluye 458 internos ɵ), luego me auto-refuté (`hostSelector` sí tiene contrato fijado por el framework, pero `getText()` NO — en un harness de input podría devolver label/valor/placeholder, y `hasEmptyState()` es dominio puro; una regla con clave "método de harness" barrería miembros que SÍ llevan información = escapatoria con buena prosa). Además ignoré que esos JSDoc llegan a los `.d.ts` PUBLICADOS y al tooltip del IDE → RULE: oscilar entre opciones es señal de que faltan DATOS, no criterio; el movimiento correcto no es elegir mejor sino IR A BUSCAR la evidencia que decide (aquí: qué hace Angular Material con SUS harnesses leyendo los `.d.ts` de node_modules, qué manda ya CODE-STANDARDS, si el comentario llega de verdad al `.d.ts`, y el desglose por FORMA leyendo los miembros). Corolario: benchmarkear contra el ecosistema ANTES de inventar una regla propia.

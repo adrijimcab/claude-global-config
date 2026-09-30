@@ -26,3 +26,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   be "record, adopt or accept what is already there", read what is there FIRST. Overwriting is not a
   neutral default — it is the one move that cannot be undone by re-running the tool.
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-22 — collision-fixed-by-deleting-unread-side: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism .claude/collision-guard/guard.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:collision-fixed-by-deleting-unread-side#3-->

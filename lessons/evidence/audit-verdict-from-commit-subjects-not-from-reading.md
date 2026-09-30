@@ -96,3 +96,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   If the intermediate was never checked, the agreement may be coincidence, and the method that produced
   it is still live and will produce the next number unexamined.
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-30 — audit-verdict-from-commit-subjects-not-from-reading: now a binding rule in the delegated-worker contract (all 2 files); no mechanism is possible: No hook can tell whether a backlog line or brief sentence claiming a defect is open rests on a compiler reproduction or only on a located call site; the defect is in the inference after a legitimate read. What stands in place: the located-line face in both worker contracts, and briefs that carry a located line only under HYPOTHESIS.; full incident history in ~/.claude/failure-capture/state/incidents.jsonl <!--fc:audit-verdict-from-commit-subjects-not-from-reading#11-->

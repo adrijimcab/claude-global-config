@@ -87,3 +87,7 @@ Two layers, both required (mechanism-over-memory, this project's standing operat
 in this session; `engram mcp --help` documents delete as belonging to the 4-tool "admin" MCP profile,
 not the 18-tool "agent" profile subagents run under. The guard still matches it (defence in depth,
 costs nothing) in case a differently-configured profile ever exposes it.
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-30 — worker-overwrote-master-backlog: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism C:/Users/adrian.jimenez/.claude/backlog-owner-guard/guard.mjs (selftest run, exit 0); full incident history in ~/.claude/failure-capture/state/incidents.jsonl <!--fc:worker-overwrote-master-backlog#1-->

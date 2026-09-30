@@ -24,3 +24,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   Guard `~/.claude/brief-provenance/guard.mjs`; 22/22 across the decision's state space, including the
   two real refused forms, in `~/.claude/brief-provenance/selftest.mjs`.
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-30 — brief-marker-written-as-prose-not-literal-form: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism C:/Users/adrian.jimenez/.claude/brief-provenance/guard.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:brief-marker-written-as-prose-not-literal-form#3-->

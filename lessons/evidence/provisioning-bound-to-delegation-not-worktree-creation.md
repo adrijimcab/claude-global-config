@@ -19,3 +19,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   almost always the missing install, and it will masquerade as anything: a type error, a broken import,
   a red gate that has nothing to do with your change.
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-22 — provisioning-bound-to-delegation-not-worktree-creation: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism .claude/fleet-env/worktree-created.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:provisioning-bound-to-delegation-not-worktree-creation#2-->

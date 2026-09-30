@@ -123,3 +123,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   rollout plan, measure the environment premises it rests on (default branch, branches in use, roles
   and permissions, schedules) in the same turn, or mark them unverified.
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-30 — worker-claim-about-unreachable-file-committed-as-fact: now a binding rule in ~/.claude/rules/promoted-rules.md; no mechanism is possible: No hook can tell whether a sentence to the owner restates a state claim copied from an older engram record; the defect is in relaying, after legitimate reads. What stands in place: the new face in promoted-rules.md requiring re-measurement or a dated attribution, and every face of this key re-tagged with its key per the house convention.; full incident history in ~/.claude/failure-capture/state/incidents.jsonl <!--fc:worker-claim-about-unreachable-file-committed-as-fact#10-->

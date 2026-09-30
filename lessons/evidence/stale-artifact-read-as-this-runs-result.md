@@ -109,3 +109,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   worktree, or through the explicit path of its `runs/<id>/verdict.json`; never from the main checkout,
   and the report names the worktree the verdict came from.
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-30 — stale-artifact-read-as-this-runs-result: now a binding rule in the delegated-worker contract (both files); closed by mechanism .claude/gate-run/run-attribution.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:stale-artifact-read-as-this-runs-result#10-->

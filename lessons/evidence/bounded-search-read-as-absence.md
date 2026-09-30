@@ -174,3 +174,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   turno; al instalar un plugin la lista se recargó y apareció. RULE: una lista de capacidades del
   harness solo prueba lo que hay EN ESE TURNO; decir «no aparece en esta sesión», nunca «no existe».
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-30 — bounded-search-read-as-absence: now a binding rule in ~/.claude/rules/promoted-rules.md; no mechanism is possible: No hook sees whether a sentence to the owner asserts liveness from a queued-delivery notice; what stands in place is the extended promoted rule plus the heartbeat reading transcript mtime and git log, which the auto-resume cron already runs.; full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:bounded-search-read-as-absence#14-->

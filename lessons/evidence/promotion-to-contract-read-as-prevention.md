@@ -18,3 +18,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   climbs while its text stands unchanged is telling you the TEXT is the stale artifact, and a contract that
   is added to only when a key is brand new will keep collecting recurrences it was supposed to stop.
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-22 — promotion-to-contract-read-as-prevention: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism .claude/failure-capture/capture.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:promotion-to-contract-read-as-prevention#2-->

@@ -167,3 +167,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   each refusal. RULE: a kill measured over a red baseline is not evidence, and a proof is only as good
   as the runner's ability to refuse to measure.
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-29 — guard-that-cannot-go-red: now a binding rule in the delegated-worker contract (both files); closed by mechanism .claude/entry-point-check/check.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:guard-that-cannot-go-red#14-->

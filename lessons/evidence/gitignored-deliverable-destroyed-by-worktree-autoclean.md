@@ -25,3 +25,7 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   When a shared question keeps producing surprises, fix the question — never add a second answer beside
   it.
 
+
+## Ledger line archived 2026-10-01 (condensed)
+
+- [promoted] 2026-09-16 — gitignored-deliverable-destroyed-by-worktree-autoclean: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism .claude/worktree-work/worktree-work.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:gitignored-deliverable-destroyed-by-worktree-autoclean#1-->
