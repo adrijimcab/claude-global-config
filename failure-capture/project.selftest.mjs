@@ -17,7 +17,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { projectOf } from './project.mjs';
 
@@ -114,6 +114,18 @@ try {
   git(monorepo, 'worktree', 'add', '--quiet', '-b', 'work', path.join(scratch, 'monorepo-worktree'));
 
   equal('no project holds a plain folder', projectOf(plain), undefined);
+
+  // THE ESCAPE (2026-09-30): HOME pointed at a fixture, cwd OUTSIDE it — the walk climbed to the account's
+  // REAL home and took `~/.claude/CLAUDE.md` for a project. Probed in a child whose HOME is the fixture, and
+  // read-only, so a regression reddens this check instead of writing to the real file.
+  // @es LA FUGA: HOME en un fixture y cwd FUERA de él; el recorrido subía al home REAL de la cuenta.
+  const outside = path.join(scratch, 'outside-the-fixture-home');
+  const probe = path.join(scratch, 'project-probe.mjs');
+
+  write(outside, { 'file.txt': 'x\n' });
+  writeFileSync(probe, `import { projectOf } from ${JSON.stringify(pathToFileURL(path.join(HERE, 'project.mjs')).href)};\nprocess.stdout.write(JSON.stringify(projectOf(process.cwd())?.root ?? null));\n`);
+  const escaped = spawnSync(process.execPath, [probe], { cwd: outside, encoding: 'utf8', env: { ...process.env, HOME: world.home, USERPROFILE: world.home } });
+  equal('a cwd outside a fixture HOME never resolves to the account\'s real home', escaped.stdout, 'null');
   equal('a top-level project: scope is the folder name by default', projectOf(path.join(app, 'src'))?.scope, 'app');
   equal('...its ledger is its own .claude/lessons-ledger.md', projectOf(app)?.ledgerFile, path.join(app, '.claude', 'lessons-ledger.md'));
   equal('...and its default worker contract is its .claude/CLAUDE.md', projectOf(app)?.workerContracts, [path.join(app, '.claude', 'CLAUDE.md')]);

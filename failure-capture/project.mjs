@@ -27,7 +27,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import path from 'node:path';
 
 export const PROJECT_MARKER = path.join('.claude', 'CLAUDE.md');
@@ -68,6 +68,30 @@ export function mainCheckoutPath(directory) {
 const sameFolder = (left, right) => path.relative(realpathOf(left), realpathOf(right)) === '';
 
 /**
+ * Every folder whose `.claude/CLAUDE.md` is USER-level instructions, never a project: the process's home
+ * (`HOME`/`USERPROFILE`, which a fixture overrides) AND the account's own profile, which the OS reports
+ * whatever the environment says.
+ *
+ * MEASURED 2026-09-30: with only the first, a process whose HOME pointed at a fixture and whose cwd sat
+ * outside it walked up to the REAL home, took `~/.claude/CLAUDE.md` for a project, and `init` appended an
+ * `@lessons-ledger.md` section to the owner's global instructions — twice, the second time after a revert.
+ * @es Toda carpeta cuyo `.claude/CLAUDE.md` son instrucciones de USUARIO, nunca un proyecto: el home del
+ * proceso (que un fixture sobrescribe) Y el perfil real de la cuenta, que el SO informa diga lo que diga el
+ * entorno. Medido el 2026-09-30: con solo el primero, `init` añadió una sección al CLAUDE.md global real.
+ */
+function userHomes() {
+  const homes = [homedir()];
+
+  try {
+    homes.push(userInfo().homedir);
+  } catch {
+    // an account the OS cannot describe has no second home to stop at
+  }
+
+  return homes;
+}
+
+/**
  * The project root holding `.claude/CLAUDE.md` at or above `directory`, or `undefined`. The walk stops at
  * the user's HOME: `~/.claude/CLAUDE.md` is the user-level instructions file, not a project, and every
  * folder under the home would otherwise belong to it.
@@ -76,9 +100,10 @@ const sameFolder = (left, right) => path.relative(realpathOf(left), realpathOf(r
  */
 export function projectRootOf(directory) {
   let candidate = mainCheckoutPath(directory);
+  const homes = userHomes();
 
   for (;;) {
-    if (sameFolder(candidate, homedir())) return undefined;
+    if (homes.some((home) => sameFolder(candidate, home))) return undefined;
     if (existsSync(path.join(candidate, PROJECT_MARKER))) return candidate;
 
     const parent = path.dirname(candidate);

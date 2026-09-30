@@ -14,7 +14,7 @@ const P = 'failure-capture/project.mjs';
 const C = 'failure-capture/capture.mjs';
 
 const MUTANTS = [
-  ['the user home counts as a project, so every folder under it belongs to ~/.claude/CLAUDE.md', P, '    if (sameFolder(candidate, homedir())) return undefined;\n', ''],
+  ['the user home counts as a project, so every folder under it belongs to ~/.claude/CLAUDE.md', P, '    if (homes.some((home) => sameFolder(candidate, home))) return undefined;\n', ''],
   ['a linked worktree is not mapped to its main checkout', P, 'return path.join(realpathOf(path.dirname(common)), path.relative(realpathOf(top), realpathOf(directory)));', 'return realpathOf(directory);'],
   ['the configured scope is ignored', P, 'scope: config.scope ?? path.basename(root),', 'scope: path.basename(root),'],
   ['an unknown config key is accepted', P, '...unknown.map((key) => `unknown key "${key}"`),', ''],
@@ -24,7 +24,8 @@ const MUTANTS = [
   ['init adds the import every time', C, '  if (!imported) {', '  if (true) {'],
   ['init rewrites an existing ledger', C, '  if (created) writeFileSync(PROJECT.ledgerFile,', '  writeFileSync(PROJECT.ledgerFile,'],
   ['a configured parity gate is never run', C, "if (target === 'contract' && PARITY_GATE !== undefined) {", 'if (false) {'],
-  ['only the first contract file has to carry the token', C, 'for (const file of WORKER_CONTRACTS) if (!readFileOr(file,', 'for (const file of WORKER_CONTRACTS.slice(0, 1)) if (!readFileOr(file,']
+  ['only the first contract file has to carry the token', C, 'for (const file of WORKER_CONTRACTS) if (!readFileOr(file,', 'for (const file of WORKER_CONTRACTS.slice(0, 1)) if (!readFileOr(file,'],
+  ['the walk stops only at the process HOME, so a fixture HOME lets it reach the real one', 'failure-capture/project.mjs', '    homes.push(userInfo().homedir);', '    void userInfo;']
 ];
 
 const survivors = runMutants({
