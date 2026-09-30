@@ -16,6 +16,16 @@
 !/hook-dispatch/
 !/hook-dispatch/**
 /hook-dispatch/state/
+!/fleet-kit/
+!/fleet-kit/**
+/fleet-kit/state/
+/fleet-kit/scratch/
+!/backlog-guard/
+!/backlog-guard/**
+/backlog-guard/state/
+!/config-sync-guard/
+!/config-sync-guard/**
+/config-sync-guard/state/
 !/agents/
 !/agents/**
 !/skills/
