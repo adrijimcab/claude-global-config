@@ -29,6 +29,7 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { pathspecCommitCommand } from './commit-advice.mjs';
 import { decide } from './decide.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -47,15 +48,20 @@ function journal(record) {
 }
 
 /** One repo's finding, formatted for the block message. @es El hallazgo de un repo, formateado para el mensaje de bloqueo. */
-function repoFindingText({ repo, aheadCount, unattributed }) {
+function repoFindingText({ repo, unownedAhead, unownedCommits, unattributed }) {
   const lines = [`  ${repo.name} (${repo.worktree}):`];
 
-  if (aheadCount > 0) lines.push(`    - ${String(aheadCount)} commit(s) ahead of its remote — PUSH: ${repo.pushCommand}`);
+  if (unownedAhead > 0) {
+    lines.push(`    - ${String(unownedAhead)} commit(s) ahead of its remote, none owned by a live agent of another session:`);
+    for (const commit of unownedCommits) lines.push(`        ${commit.hash} ${commit.subject}${commit.writers.length > 0 ? `  (paths also written by live agent(s): ${commit.writers.join(', ')})` : ''}`);
+    lines.push(`      PUSH only commits you authored and verified: ${repo.pushCommand} — never another actor's.`);
+  }
+
   if (unattributed.length > 0) {
-    lines.push(`    - ${String(unattributed.length)} uncommitted path(s), none attributable to a currently-live agent:`);
-    for (const relativePath of unattributed.slice(0, 20)) lines.push(`        ${relativePath}`);
+    lines.push(`    - ${String(unattributed.length)} uncommitted path(s), none written by a currently-live agent:`);
+    for (const absolutePath of unattributed.slice(0, 20)) lines.push(`        ${absolutePath}`);
     if (unattributed.length > 20) lines.push(`        … and ${String(unattributed.length - 20)} more`);
-    lines.push(`      COMMIT: ${repo.commitCommand}`);
+    lines.push(`      COMMIT: ${pathspecCommitCommand(repo.gitPrefix, unattributed.map((absolutePath) => path.relative(repo.worktree, absolutePath).replaceAll('\\', '/')))}`);
   }
 
   return lines.join('\n');
@@ -74,10 +80,11 @@ function blockOutput(dirtyRepos, sessionId) {
     '',
     'This hook does NOT claim every listed path is yours to commit — an unattributed path may belong to',
     'a live agent this mechanism could not attribute (see attribution.mjs\'s stated limit: only',
-    'Edit/Write/NotebookEdit calls are tracked, never a shell-command edit). Do exactly ONE of these,',
-    'then stop again:',
+    'Edit/Write/MultiEdit/NotebookEdit calls count as a write, never a shell-command edit). Do exactly',
+    'ONE of these, then stop again:',
     '',
-    '  A) COMMIT AND PUSH IT (default) — the exact commands are listed above per repo.',
+    '  A) COMMIT AND PUSH WHAT IS YOURS (default) — the exact commands are listed above per repo; the',
+    '     commit command names the listed paths explicitly and never sweeps the shared index.',
     '',
     '  B) DISMISS IT, with a reason that gets written down (not a silent escape). The dismissal is',
     '     scoped to the EXACT state measured right now (ahead count + a content hash of the whole',

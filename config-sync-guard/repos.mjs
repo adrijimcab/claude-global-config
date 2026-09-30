@@ -65,9 +65,10 @@ function runCommand(command, args, cwd) {
 }
 
 /**
- * The two declared backup repos, as `{ name, worktree, gitDir, run, commitCommand, pushCommand }`.
- * `run(args)` is the ONE seam a selftest replaces for status/commit/push-shaped commands;
- * `commitCommand`/`pushCommand` are the exact, copy-pasteable commands a block message names; `gitDir`
+ * The two declared backup repos, as `{ name, worktree, gitDir, run, gitPrefix, pushCommand }`.
+ * `run(args)` is the ONE seam a selftest replaces for status/log/commit/push-shaped commands;
+ * `gitPrefix` (the repo's own git invocation, which `commit-advice.mjs` builds the pathspec commit on) and
+ * `pushCommand` are the copy-pasteable commands a block message names; `gitDir`
  * is the explicit `--git-dir` `fingerprint.mjs` qualifies its own git calls with (never `run`, and never
  * plain `git -C <worktree>` — see `fingerprint.mjs`'s own docblock for why).
  * @es Los dos repos de respaldo declarados. `run(args)` es el ÚNICO seam que un selftest reemplaza para
@@ -83,7 +84,7 @@ export function declaredRepos() {
       worktree: globalClaude,
       gitDir: path.join(globalClaude, '.git'),
       run: (args) => runCommand('git', ['-C', globalClaude, ...args], globalClaude),
-      commitCommand: 'git -C ~/.claude add -A && git -C ~/.claude commit -m "type(scope): description"',
+      gitPrefix: 'git -C ~/.claude',
       pushCommand: 'git -C ~/.claude push origin master'
     },
     {
@@ -91,7 +92,7 @@ export function declaredRepos() {
       worktree: b100Claude,
       gitDir: B100_BACKUP_GIT_DIR,
       run: (args) => runCommand(process.execPath, [path.join(b100Claude, 'backup-repo.mjs'), ...args], b100Claude),
-      commitCommand: 'node .claude/backup-repo.mjs add -A && node .claude/backup-repo.mjs commit -m "type(scope): description"',
+      gitPrefix: 'node .claude/backup-repo.mjs',
       pushCommand: 'node .claude/backup-repo.mjs push origin master'
     }
   ];
