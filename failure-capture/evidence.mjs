@@ -23,7 +23,7 @@ export const EVIDENCE_KINDS = ['condensed', 'captured', 'promoted'];
 export const evidenceFile = (ledgerFile, key) => path.join(path.dirname(ledgerFile), 'lessons', 'evidence', `${key}.md`);
 
 /** The bilingual header of a new evidence file. @es El encabezado bilingüe de un fichero nuevo. */
-const header = (key) => `# \`${key}\` — full evidence / evidencia completa\n\nLedger lines archived verbatim, append-only: each block is one original line, byte for byte. @es Líneas del ledger archivadas literalmente, solo se añade: cada bloque es una línea original, byte a byte.\n`;
+const header = (key) => `# \`${key}\` — full evidence / evidencia completa\n\nLedger lines archived verbatim, append-only: each block is one original line, byte for byte, and may end with a closure note. @es Líneas del ledger archivadas literalmente, solo se añade: cada bloque es una línea original, byte a byte, y puede terminar con una nota de cierre.\n`;
 
 /** The evidence text as it is on disk, or `undefined` when it is absent or unreadable (a directory, say). @es El texto de la evidencia en disco, o `undefined` si falta o no se puede leer. */
 export function readEvidence(ledgerFile, key) {
@@ -36,17 +36,19 @@ export function readEvidence(ledgerFile, key) {
 
 /**
  * Archives `line` verbatim under `key` and reports whether anything was written. A line that is already a
- * whole line of the file is not written again. The caller must RE-READ with `readEvidence` before it trusts
- * the archive.
+ * whole line of the file is not written again. An optional one-line `note` (how a promotion closed) is
+ * written after the line, in its block; a line already archived gets only the note, never a second copy.
+ * The caller must RE-READ with `readEvidence` before it trusts the archive.
  * @returns `{ ok: true, file, appended }` or `{ ok: false, problem }`, never throwing on a filesystem fault.
- * @es Archiva `line` literal bajo `key`. Una línea ya presente no se escribe otra vez. El llamante debe RELEER con `readEvidence` antes de fiarse.
+ * @es Archiva `line` literal bajo `key`. Una línea ya presente no se escribe otra vez. Una `note` opcional de una línea (cómo cerró una promoción) va tras la línea, en su bloque; si la línea ya estaba archivada solo se añade la nota. El llamante debe RELEER con `readEvidence` antes de fiarse.
  */
-export function appendEvidence({ ledgerFile, key, line, date, kind }) {
+export function appendEvidence({ ledgerFile, key, line, date, kind, note }) {
   const fault = [
     isValidKey(key) ? undefined : 'the key must be lowercase kebab-case. @es la clave debe ser kebab-case en minúsculas.',
     EVIDENCE_KINDS.includes(kind) ? undefined : `the kind must be one of ${EVIDENCE_KINDS.join(', ')}. @es el tipo debe ser uno de ${EVIDENCE_KINDS.join(', ')}.`,
     isDate(date) ? undefined : 'the date must be YYYY-MM-DD. @es la fecha debe ser AAAA-MM-DD.',
     typeof line === 'string' && line.length > 0 && !line.includes('\n') && !line.includes('\r') ? undefined : 'the line must be one non-empty line. @es la línea debe ser una sola línea no vacía.',
+    note === undefined || (typeof note === 'string' && note.length > 0 && !note.includes('\n') && !note.includes('\r')) ? undefined : 'the note must be one non-empty line. @es la nota debe ser una sola línea no vacía.',
   ].find((problem) => problem !== undefined);
 
   if (fault !== undefined) return { ok: false, problem: fault };
@@ -55,10 +57,13 @@ export function appendEvidence({ ledgerFile, key, line, date, kind }) {
 
   try {
     const existing = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+    const archived = existing !== undefined && holdsWholeLine(existing, line);
+    const noted = note === undefined || (existing !== undefined && holdsWholeLine(existing, note));
 
-    if (existing !== undefined && holdsWholeLine(existing, line)) return { ok: true, file, appended: false };
+    if (archived && noted) return { ok: true, file, appended: false };
 
-    const block = `\n## Ledger line archived ${date} (${kind})\n\n${line}\n`;
+    const noteBlock = note === undefined ? '' : `\n${note}\n`;
+    const block = archived ? noteBlock : `\n## Ledger line archived ${date} (${kind})\n\n${line}\n${noteBlock}`;
 
     mkdirSync(path.dirname(file), { recursive: true });
 

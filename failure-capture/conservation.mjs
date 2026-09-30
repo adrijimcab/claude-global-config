@@ -9,12 +9,32 @@
  * file" refuses all three, and it needs no reasoning about duplicates. The characters that are missing are
  * still NAMED, so a refusal says what was lost.
  *
+ * HOW A PROMOTION IS ADMITTED. The principle is unchanged: the shortened line may hold only text the
+ * original holds plus text the TOOL supplies by rule. A promotion turns a `[global]` line into a
+ * `[promoted]` stub with the date of the promotion and the mechanism it verified, neither of which the
+ * original holds. They are admitted as an explicit, named input (`promotion: { date, mechanism }`), not by
+ * loosening the comparison: the expected stub is built from that input and the original's own marker, and
+ * the shortened line must equal it, so a stub carrying ANY other new text (another date, another path, an
+ * extra word, another counter) still fails. Without `promotion` the proof is the condense one and refuses
+ * a changed date. Rejected: skipping the date in the comparison (it would also admit a silently altered
+ * date in a condense) and trusting the date and mechanism read back from the stub (the proof would then
+ * confirm whatever was written).
+ *
  * @es La prueba de que una línea del ledger puede acortarse: el ORIGINAL entero debe ser una línea entera
  * del fichero de evidencia releído de disco, y la línea acortada no debe inventar nada: solo trozos del
  * original y las etiquetas fijas del constructor. Pura: el llamante archiva y relee, así la prueba no
  * puede satisfacerse con la escritura que comprueba. Contención de línea entera y no recuento de
  * caracteres: un prefijo, una tilde perdida u otro contador contienen casi todo el original. Los
- * caracteres que faltan se NOMBRAN.
+ * caracteres que faltan se NOMBRAN. CÓMO SE ADMITE UNA PROMOCIÓN: el principio no cambia, la línea
+ * acortada solo puede tener texto del original más texto que la HERRAMIENTA aporta por regla. Una promoción
+ * convierte una línea `[global]` en un muñón `[promoted]` con la fecha de la promoción y el mecanismo que
+ * verificó, y el original no tiene ninguno de los dos. Se admiten como entrada explícita y con nombre
+ * (`promotion: { date, mechanism }`), no aflojando la comparación: el muñón esperado se construye con esa
+ * entrada y el marcador del propio original, y la línea acortada debe ser igual, así que un muñón con
+ * CUALQUIER otro texto nuevo (otra fecha, otra ruta, una palabra de más, otro contador) sigue fallando. Sin
+ * `promotion` la prueba es la de condense y rechaza una fecha cambiada. Descartado: ignorar la fecha en la
+ * comparación (admitiría también una fecha alterada en silencio en un condense) y fiarse de la fecha y el
+ * mecanismo leídos del muñón (la prueba confirmaría lo que se haya escrito).
  */
 
 import { evidenceKeyOf, minimalStub, parseEntry, parseStub, refuse, splitRule, tieredLine } from './ledger-line.mjs';
@@ -49,7 +69,7 @@ function archiveDeficits(original, evidence) {
 }
 
 /** The one line the original can shorten to, given the shape and the key the shortened line chose. @es La única línea a la que puede acortarse el original, dada la forma y la clave que eligió la acortada. */
-function expectedShortening(original, shortened) {
+function expectedShortening(original, shortened, promotion) {
   const before = parseEntry(original);
 
   if (!before.ok) {
@@ -57,6 +77,14 @@ function expectedShortening(original, shortened) {
 
     return refuse(`the original is not readable: ${english}`, `el original no se puede leer: ${spanish}`);
   }
+
+  // A promotion is the ONE case where the stub holds text the original does not: its date and its
+  // mechanism are facts the tool is given (the day it promoted and the closure it verified), so they are
+  // taken from `promotion`, never from the shortened line. Everything else is still the original's.
+  // @es Una promoción es el ÚNICO caso en que el muñón tiene texto que el original no tiene: su fecha y su
+  // mecanismo son hechos que recibe la herramienta (el día en que promovió y el cierre que verificó), así
+  // que salen de `promotion` y nunca de la línea acortada. Todo lo demás sigue siendo del original.
+  if (promotion !== undefined) return minimalStub({ date: promotion.date, mechanism: promotion.mechanism, marker: before.marker });
 
   const stub = parseStub(shortened);
 
@@ -81,8 +109,8 @@ function expectedShortening(original, shortened) {
 }
 
 /** Whether the shortened line is exactly what the original's own slices and the fixed labels produce. @es Si la línea acortada es exactamente lo que producen los trozos del original y las etiquetas fijas. */
-function inventionDeficits(original, shortened) {
-  const expected = expectedShortening(original, shortened);
+function inventionDeficits(original, shortened, promotion) {
+  const expected = expectedShortening(original, shortened, promotion);
 
   if (!expected.ok) return [expected.problem];
 
@@ -90,13 +118,18 @@ function inventionDeficits(original, shortened) {
 }
 
 /**
- * @param input `{ original, shortened, evidence }` — `evidence` is the file's text re-read from disk, or
- *   `undefined` when it is absent or unreadable.
+ * @param input `{ original, shortened, evidence, promotion }` — `evidence` is the file's text re-read from
+ *   disk, or `undefined` when it is absent or unreadable. `promotion` is `{ date, mechanism }` only when the
+ *   line is being promoted: the shortened line must then be exactly the minimal stub of those two facts and
+ *   the original's own marker, and any other new text is an invention. Absent, the proof is the condense one.
  * @returns `{ ok: true }` or `{ ok: false, deficits }`, each deficit a bilingual sentence naming what is lost.
  * @es `evidence` es el texto del fichero releído de disco, o `undefined` si falta o no se puede leer.
+ * `promotion` es `{ date, mechanism }` solo cuando se promueve la línea: la acortada debe ser entonces
+ * exactamente el muñón mínimo de esos dos hechos y el marcador del original; cualquier otro texto nuevo es
+ * invención. Sin él, la prueba es la de condense.
  */
-export function proveConservation({ original, shortened, evidence }) {
-  const deficits = [...archiveDeficits(original, evidence), ...inventionDeficits(original, shortened)];
+export function proveConservation({ original, shortened, evidence, promotion }) {
+  const deficits = [...archiveDeficits(original, evidence), ...inventionDeficits(original, shortened, promotion)];
 
   return deficits.length === 0 ? { ok: true } : { ok: false, deficits };
 }
