@@ -17,8 +17,8 @@
  * ANTERIOR a los commits no debe satisfacerlos.
  */
 
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -51,13 +51,33 @@ function advance(dir, subject) {
   return git(dir, ['rev-parse', 'HEAD']);
 }
 
+/**
+ * Runs the guard in `dir` with `payload` on stdin (a string is sent as it is, anything else as JSON), and
+ * reports what it printed, its exit code and its stderr. Git is told never to look above `dir`'s parent, so
+ * a fixture that must NOT be a repository cannot become one through whatever the machine keeps above it.
+ * @es Corre el guard en `dir`; un string se envía tal cual y lo demás como JSON. Git no mira por encima del
+ * padre de `dir`: un fixture que NO debe ser repo no puede serlo por lo que la máquina tenga por encima.
+ */
 function run(dir, payload) {
-  try {
-    return { output: execFileSync('node', [GUARD], { cwd: dir, input: JSON.stringify(payload), encoding: 'utf8' }), code: 0 };
-  } catch (error) {
-    return { output: error.stdout ?? '', code: error.status };
-  }
+  const result = spawnSync('node', [GUARD], {
+    cwd: dir,
+    input: typeof payload === 'string' ? payload : JSON.stringify(payload),
+    encoding: 'utf8',
+    env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(dir) }
+  });
+
+  return { output: result.stdout ?? '', code: result.status, stderr: result.stderr ?? '' };
 }
+
+const stateOf = (session) => {
+  try {
+    return JSON.parse(readFileSync(join(STATE_DIR, `${session}.json`), 'utf8'));
+  } catch {
+    return undefined;
+  }
+};
+
+const SAVED = 'start\ncalled mem_save with the decision\n';
 
 const results = [];
 const check = (label, expected, actual, extra = '') => {
@@ -235,10 +255,140 @@ mkdirSync(STATE_DIR, { recursive: true });
 }
 
 {
-  // Outside a repository entirely: no git, no verdict.
+  // Outside a repository entirely: no git, no verdict, no baseline, and nothing leaked on stderr.
+  // @es Fuera de todo repo: sin git no hay veredicto ni línea base, y nada se filtra por stderr.
   const dir = mkdtempSync(join(tmpdir(), 'engram-guard-nogit-'));
+  const session = `st-nogit-${Date.now()}`;
+  const r = run(dir, { session_id: session, transcript_path: 'nope' });
 
-  check('outside a git repository', 'allow', verdict(run(dir, { session_id: 'st-nogit', transcript_path: 'nope' })));
+  check('outside a git repository', 'allow', verdict(r));
+  check('  and it records no baseline', undefined, stateOf(session));
+  check('  and git\'s own complaint does not leak to stderr', '', r.stderr);
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// --- THE REST OF THE STATE SPACE. Each case below pins one decision the guard makes.
+// @es EL RESTO DEL ESPACIO DE ESTADOS. Cada caso fija una decisión del guard.
+
+/** A fresh repo with a transcript and a baseline already recorded for `name`. @es Un repo con transcript y línea base para `name`. */
+function baselined(name, transcriptText = 'start\n') {
+  const dir = makeRepo();
+  const transcript = join(dir, 't.jsonl');
+  const session = `st-${name}-${Date.now()}`;
+
+  writeFileSync(transcript, transcriptText, 'utf8');
+  run(dir, { session_id: session, transcript_path: transcript });
+
+  return { dir, transcript, session };
+}
+
+{
+  // A save written while the guard idled (same HEAD) is still BEFORE the commits that follow it.
+  const { dir, transcript, session } = baselined('idle-save');
+
+  writeFileSync(transcript, SAVED, 'utf8');
+  run(dir, { session_id: session, transcript_path: transcript });
+  advance(dir, 'after-the-idle-stop');
+  writeFileSync(transcript, `${SAVED}plain work\n`, 'utf8');
+  check('a save made during an idle Stop does not cover later commits', 'block', verdict(run(dir, { session_id: session, transcript_path: transcript })));
+  rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  const { dir, transcript, session } = baselined('summary');
+
+  advance(dir, 'landed');
+  writeFileSync(transcript, 'start\ncalled mem_session_summary to close out\n', 'utf8');
+  check('a session summary is a save too', 'allow', verdict(run(dir, { session_id: session, transcript_path: transcript })));
+  rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  // A satisfied guard moves its baseline: the same save cannot be spent on the next commits.
+  const { dir, transcript, session } = baselined('spent');
+
+  advance(dir, 'first');
+  writeFileSync(transcript, SAVED, 'utf8');
+  run(dir, { session_id: session, transcript_path: transcript });
+  advance(dir, 'second');
+  check('a save already spent on earlier commits does not cover new ones', 'block', verdict(run(dir, { session_id: session, transcript_path: transcript })));
+  rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  // A state file whose head is not a string is no baseline: the run re-baselines instead of comparing.
+  const dir = makeRepo();
+  const session = `st-corrupt-${Date.now()}`;
+
+  writeFileSync(join(STATE_DIR, `${session}.json`), JSON.stringify({ head: 42, offset: 0 }), 'utf8');
+  writeFileSync(join(dir, 't.jsonl'), 'start\nno save\n', 'utf8');
+  check('a state file with a non-string head reads as a first sighting', 'allow', verdict(run(dir, { session_id: session, transcript_path: join(dir, 't.jsonl') })));
+  check('  and the baseline is rewritten as the real HEAD', git(dir, ['rev-parse', 'HEAD']), stateOf(session)?.head);
+  rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  // Commits landed but the transcript cannot be read: no honest verdict, so allow and re-baseline.
+  const { dir, session } = baselined('unreadable');
+  const landed = advance(dir, 'landed');
+
+  check('an unreadable transcript lets the turn end', 'allow', verdict(run(dir, { session_id: session, transcript_path: join(dir, 'missing.jsonl') })));
+  check('  and the baseline moves to the new HEAD', landed, stateOf(session)?.head);
+  rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  // HEAD moved BACKWARDS (a reset): nothing landed, so there is nothing to record.
+  const { dir, transcript, session } = baselined('reset');
+  const reset = git(dir, ['rev-parse', 'HEAD']);
+
+  advance(dir, 'landed');
+  writeFileSync(transcript, SAVED, 'utf8');
+  run(dir, { session_id: session, transcript_path: transcript });
+  git(dir, ['reset', '-q', '--hard', reset]);
+  // The transcript lives in the repository here and `advance` committed it, so the reset removed it: put it
+  // back, or the run would be judged on a missing transcript instead of on the moved HEAD.
+  // @es El transcript vive en el repo y `advance` lo commiteó, así que el reset lo quitó: se repone.
+  writeFileSync(transcript, SAVED, 'utf8');
+  check('a HEAD that moved backwards has no new commits to record', 'allow', verdict(run(dir, { session_id: session, transcript_path: transcript })));
+  rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  // A recorded head git does not know (rebased away, gone): the range is unreadable, allow and change nothing.
+  const dir = makeRepo();
+  const session = `st-gone-${Date.now()}`;
+  const gone = '0000000000000000000000000000000000000001';
+
+  writeFileSync(join(STATE_DIR, `${session}.json`), JSON.stringify({ head: gone, offset: 0 }), 'utf8');
+  writeFileSync(join(dir, 't.jsonl'), 'start\nno save\n', 'utf8');
+  check('a recorded head git cannot resolve lets the turn end', 'allow', verdict(run(dir, { session_id: session, transcript_path: join(dir, 't.jsonl') })));
+  check('  and leaves the recorded head untouched', gone, stateOf(session)?.head);
+  rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  // Thirteen commits landed: the refusal names the newest twelve, never an unbounded list.
+  const { dir, transcript, session } = baselined('many');
+
+  for (let index = 1; index <= 13; index += 1) advance(dir, `c${String(index).padStart(2, '0')}`);
+
+  const r = run(dir, { session_id: session, transcript_path: transcript });
+
+  check('thirteen commits with no save — refuses', 'block', verdict(r));
+  check('  and it lists the newest of them', true, r.output.includes('feat(x): c13'));
+  check('  and it lists the twelfth newest', true, r.output.includes('feat(x): c02'));
+  check('  and it leaves the oldest unlisted', false, r.output.includes('feat(x): c01'));
+  rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  // A payload written by PowerShell carries a byte-order mark and must still be judged.
+  const { dir, transcript, session } = baselined('bom');
+
+  advance(dir, 'landed');
+  writeFileSync(transcript, 'start\nno save\n', 'utf8');
+  check('a payload with a byte-order mark is still judged', 'block', verdict(run(dir, `﻿${JSON.stringify({ session_id: session, transcript_path: transcript })}`)));
   rmSync(dir, { recursive: true, force: true });
 }
 

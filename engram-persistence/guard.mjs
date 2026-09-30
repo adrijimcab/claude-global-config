@@ -72,7 +72,11 @@ function writeState(sessionId, state) {
   }
 }
 
-const git = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+// Git's own stderr is ignored: outside a repository it prints `fatal: not a git repository`, which is the
+// expected "no verdict" answer and not something to leak into the hook's output.
+// @es El stderr de git se ignora: fuera de un repo imprime `fatal: not a git repository`, que es la respuesta
+// esperada «sin veredicto» y no debe filtrarse a la salida del hook.
+const git = (args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 
 /**
  * Transcript written since `offset`. Reading only the new tail is what makes the check ORDER-aware:
