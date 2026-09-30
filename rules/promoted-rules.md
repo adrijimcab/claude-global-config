@@ -166,6 +166,14 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   check is a literal line scan, never a regex, and it names which of three refusal states applies
   (`absent`, `buried`, `no-colon`). Guard `~/.claude/brief-provenance/guard.mjs`; 22/22 across the
   decision's state space in `~/.claude/brief-provenance/selftest.mjs`.
+  - **THE RESUME WRITTEN AS PROSE (2026-09-30).** The guard refused 39 delegations in one session
+    (measured from the transcript): 13 SendMessages with neither marker, ~5 with MEASURED buried in
+    a sentence ("Ownership update. MEASURED: …"). No damage reached a worker, but every refusal is a
+    wasted round, and it recurs because short resumes are drafted as conversation with the markers
+    bolted on. RULE: every Agent prompt and every worker SendMessage is drafted FROM the skeleton —
+    line 1 `MEASURED: …`, line 2 `HYPOTHESIS: …`, then the instruction — even a two-line resume; for
+    a non-trivial brief run `node ~/.claude/brief-feasibility/preflight.mjs <draft>`, which runs every
+    delegation guard in one pass, before sending.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/brief-marker-written-as-prose-not-literal-form.md`.
 
 - **`promotion-to-contract-read-as-prevention`** — Promoting a lesson into a binding contract is not
