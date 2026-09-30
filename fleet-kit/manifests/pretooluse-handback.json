@@ -1,0 +1,4 @@
+{
+  "event": "PreToolUse",
+  "guards": ["../handback/guard.mjs"]
+}

@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "SubagentHandback"
+    }
+  ],
+  "why": "a worker's report is delivered by the handback tool itself, so a completion claim over uncommitted work or uncovered changed lines must be refused before the tool runs, not at SubagentStop (completed-report-with-uncommitted-deliverable)."
+}

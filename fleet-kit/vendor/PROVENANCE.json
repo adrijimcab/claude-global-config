@@ -1,0 +1,42 @@
+{
+  "sourceRoot": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude",
+  "syncedAt": "2026-09-30T01:15:51.253Z",
+  "files": [
+    {
+      "path": "shell-command/shell-command.mjs",
+      "sha256": "b6f835b362c4029829f019d9bfb1c476fe07c38ccae00bade88dbd0004f62ee9"
+    },
+    {
+      "path": "shell-command/git-invocations.mjs",
+      "sha256": "e97425a0bbd8cf910354450aea2313982b79a6e57582d2210a84033db3c48c3e"
+    },
+    {
+      "path": "cherry-pick-guard/working-directory.mjs",
+      "sha256": "5f347be6ff2ddb410157099a9c2b00c14e0b56796e1505b4d5c3321f4afc5f1e"
+    },
+    {
+      "path": "diff-coverage/lib/diff-parse.mjs",
+      "sha256": "124c7cc376ce8b049ed896af3e0c1012e747f7c5f047b671d0134900d794b7a0"
+    },
+    {
+      "path": "diff-coverage/lib/lcov-parse.mjs",
+      "sha256": "f0c98a60346935e7d2fd43df1249daf22319b19b20292155204927e595bcf365"
+    },
+    {
+      "path": "diff-coverage/lib/grade.mjs",
+      "sha256": "8d0521f551b21f75be2b149f86437f72d808e4b7db50b2f6548b474c809de6c9"
+    },
+    {
+      "path": "agent-liveness/liveness.mjs",
+      "sha256": "8eda4c82222c39a30b4f2bcc4f50e53e234f49acd8cbae6cf767b86a9c181e12"
+    },
+    {
+      "path": "brief-tenancy/tenancy-declaration.mjs",
+      "sha256": "e76e0f8f9d4dcd87c7941580fbe754a764ff0f1cc9d1572a0beb3d536ce6f982"
+    },
+    {
+      "path": "mutation-proof/run-mutants.mjs",
+      "sha256": "30a6f1f83f0366aa6e1220895c88099826b4bb9c5981972b270f296f37373094"
+    }
+  ]
+}

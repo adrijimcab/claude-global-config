@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a mutating git command from either shell can land on a worktree whose agent is still writing, committing or resetting its tree mid-run (acted-on-a-live-actors-working-state)."
+}

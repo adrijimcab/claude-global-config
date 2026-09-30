@@ -1,0 +1,4 @@
+{
+  "event": "PreToolUse",
+  "guards": ["../landing-guard/guard.mjs", "../worktree-tenancy/guard.mjs"]
+}

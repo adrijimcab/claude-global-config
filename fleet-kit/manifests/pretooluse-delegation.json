@@ -1,0 +1,4 @@
+{
+  "event": "PreToolUse",
+  "guards": ["../orphan-work/guard.mjs"]
+}

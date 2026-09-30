@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "any shell line can move an integration branch (merge, push, reset, update-ref, commit, cherry-pick) to a tree no green unit-suite run graded; the guard must see every shell tool call to see every such line."
+}
