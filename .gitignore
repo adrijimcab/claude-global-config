@@ -122,6 +122,11 @@
 !/failure-capture/
 !/failure-capture/**
 /failure-capture/state/
+# Proof that a tiering of a loaded rule file conserves it; code only, its selftest sandboxes never. @es
+# Prueba de que un escalonado de un fichero de reglas cargado lo conserva; solo código, nunca sus sandboxes.
+!/rule-tiering/
+!/rule-tiering/*.mjs
+/rule-tiering/scratch/
 /delegation-receipts/scratch/
 
 # Shared modules the global guards import, vendored byte-identical from b100-am-ui (vendored/PROVENANCE.json).
