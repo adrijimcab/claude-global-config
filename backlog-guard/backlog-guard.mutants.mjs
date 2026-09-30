@@ -39,7 +39,12 @@ const MUTANTS = [
   ['the mem_update tool-name requirement is dropped: a bare known id anywhere in the tail now counts', 'master-save.mjs', 'if (!tail.includes(UPDATE_TOOL_MARKER)) return false;', ''],
   ['hasMasterBacklogUpdate stops checking membership, so ANY id satisfies once mem_update appears', 'master-save.mjs', 'for (const id of idsInTail) if (known.has(id)) return true;', 'return true;'],
   ['observedMasterIdPairings stops filtering by master shape, so ANY topic_key teaches an id as master', 'master-save.mjs', 'if (!isMasterBacklogTopicKey(topicKey)) continue;', ''],
-  ['learned id/topic_key pairings are no longer merged into the durable known-ids record', 'state.mjs', 'for (const { id } of pairings) known.add(id);', '']
+  ['learned id/topic_key pairings are no longer merged into the durable known-ids record', 'state.mjs', 'for (const { id } of pairings) known.add(id);', ''],
+  // --- the mem_get_observation metadata-footer source (found missing in live use the day after the
+  //     mem_update fix shipped: a READ's result footer teaches an id/topic_key pairing too)
+  ['the metadata-footer source is never consulted, so a mem_get_observation result teaches nothing', 'master-save.mjs', 'return [...pairings, ...observedFromResultMetadata(text)];', 'return pairings;'],
+  ['a Topic: line with no master shape is no longer filtered out, so ANY topic teaches a pairing', 'master-save.mjs', 'if (isMasterBacklogTopicKey(topicKey)) pairings.push({ id, topicKey });', 'pairings.push({ id, topicKey });'],
+  ['a result with no Topic: line at all stops being skipped, reading past the window instead', 'master-save.mjs', 'if (topicAt === -1) continue;', '']
 ];
 
 const survivors = runMutants({

@@ -1,0 +1,374 @@
+#!/usr/bin/env node
+/**
+ * DISCRIMINATION PROOF for config-sync-guard — the `Stop` mechanism enforcing the owner directive
+ * "Config de agentes versionada y subida en el momento" (`~/.claude/rules/00-owner-mandates.md`).
+ *
+ * Exercises `decide()`'s whole state space with constructed fixtures and injected dependencies, then
+ * `attribution.mjs`'s liveness filtering against REAL constructed transcript files (with real, deliberately
+ * backdated mtimes — the one property `isLive` actually reads), then runs the real `guard.mjs` process
+ * end to end over one small, real, constructed git repo.
+ *
+ * @es PRUEBA DE DISCRIMINACIÓN de config-sync-guard. Ejercita `decide()` con fixtures construidos, la
+ * liveness real de `attribution.mjs` contra transcripts reales con mtime retrasado a propósito, y
+ * `guard.mjs` de punta a punta sobre un repo git real y construido.
+ */
+
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { agentRecords, isLive, liveOwnerOf, liveTranscriptTexts } from './attribution.mjs';
+import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs } from './dismiss.mjs';
+import { decide } from './decide.mjs';
+import { evaluate } from './guard.mjs';
+import { parseStatusPorcelain } from './status.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const GUARD_CLI = path.join(HERE, 'guard.mjs');
+
+let passed = 0;
+const failures = [];
+
+function check(name, actual, expected) {
+  const actualText = JSON.stringify(actual);
+  const expectedText = JSON.stringify(expected);
+
+  if (actualText === expectedText) {
+    passed += 1;
+    return;
+  }
+
+  failures.push(`${name} — expected ${expectedText}, got ${actualText}`);
+}
+
+/** A fake repo for `decide()`. `worktree` defaults to `HERE` (a real, existing directory), so "exists" is true unless a test overrides it to a nonexistent path. @es Un repo falso para `decide()`. */
+function fakeRepo(name, { statusOk = true, statusText = '## master...origin/master\n', worktree = HERE } = {}) {
+  return {
+    name,
+    worktree,
+    run: () => (statusOk ? { ok: true, stdout: statusText, stderr: '' } : { ok: false, stdout: '', stderr: 'simulated git failure' }),
+    commitCommand: `commit-${name}`,
+    pushCommand: `push-${name}`
+  };
+}
+
+const STOP_PAYLOAD = (overrides = {}) => ({ session_id: 's-1', hook_event_name: 'Stop', stop_hook_active: false, ...overrides });
+
+function verdictKind(payload, deps) {
+  const result = decide(payload, deps);
+
+  return result === undefined ? 'allow' : result.kind;
+}
+
+// ---------------------------------------------------------------------------------------------
+// STATE: clean -> allow
+// ---------------------------------------------------------------------------------------------
+check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')], liveTexts: new Map() }), 'allow');
+
+// ---------------------------------------------------------------------------------------------
+// STATE: ahead -> block
+// ---------------------------------------------------------------------------------------------
+{
+  const repo = fakeRepo('r', { statusText: '## master...origin/master [ahead 2]\n' });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map() });
+
+  check('ahead of remote -> block', result?.kind, 'block');
+  check('ahead of remote: the finding names the ahead count', result?.dirtyRepos?.[0]?.aheadCount, 2);
+}
+
+// ---------------------------------------------------------------------------------------------
+// STATE: dirty mine (unattributed) -> block
+// ---------------------------------------------------------------------------------------------
+{
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map() });
+
+  check('dirty, no live owner -> block', result?.kind, 'block');
+  check('the unattributed list names the path', result?.dirtyRepos?.[0]?.unattributed, [path.join(HERE, 'foo.txt')]);
+}
+
+// ---------------------------------------------------------------------------------------------
+// STATE: dirty owned by a live agent -> allow. Attribution is now a SUBSTRING match of the dirty
+// path's last segment against the live agent's FULL transcript text (see `attribution.mjs`'s own
+// docblock for the two earlier, measured-wrong designs this replaced).
+// ---------------------------------------------------------------------------------------------
+{
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const liveTexts = new Map([['agent-x', 'assistant edited C:\\fake\\foo.txt just now']]);
+
+  check('dirty, but a LIVE agent\'s transcript mentions the path -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveTexts }), 'allow');
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE SECOND FACE, found in live use the day this guard shipped: `git status --porcelain` collapses a
+// wholly-untracked NEW directory into ONE entry (`?? dir/`), never the individual files inside — this
+// tool's own `config-sync-guard/` tripped as "unattributed" despite every file inside being Written
+// directly. Verified against a REAL, constructed git repo before fixing (see `attribution.mjs`'s own
+// docblock): `?? sub/` for two brand-new files under `sub/`, never `sub/a.txt`/`sub/b.txt`. Under the
+// current substring-over-full-transcript design, the collapsed directory's own NAME just needs to
+// appear anywhere in a live agent's transcript text — e.g. inside a file_path it DID write.
+// ---------------------------------------------------------------------------------------------
+{
+  // A git status line reporting a wholly-new, untracked DIRECTORY (`??  new-dir/`), never a file.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n?? new-dir/\n' });
+  const liveTexts = new Map([['agent-x', 'wrote C:\\fake\\new-dir\\inner-file.ts']]);
+
+  check('a collapsed, wholly-untracked NEW DIRECTORY is attributed via its name appearing in a live agent\'s transcript -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveTexts }), 'allow');
+}
+{
+  // The SAME collapsed directory, but no live agent's transcript mentions its name at all -> still blocks.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n?? new-dir/\n' });
+
+  check('a collapsed NEW DIRECTORY no live agent\'s transcript mentions -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map() }), 'block');
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE OWNER-REQUESTED STATES, found missing in live use: attribution only ever tracked Edit/Write/
+// NotebookEdit `file_path` values, so a file changed through a Bash/PowerShell command (a script, a
+// shell redirect) was unattributed even when the SAME live agent's transcript plainly named it. The
+// current design fixes this by substring-matching the dirty path's last segment against the agent's
+// WHOLE transcript text, which a Bash tool_use's own `input.command` is part of.
+// ---------------------------------------------------------------------------------------------
+{
+  // The live agent never Edited/Wrote `owned-dir/generated.json` directly — its transcript shows a
+  // Bash tool_use whose OWN COMMAND names the file (a redirect, a generator script) — but the file's
+  // name still appears, in full, in that agent's transcript text.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M owned-dir/generated.json\n' });
+  const liveTexts = new Map([['agent-shell', '{"name":"Bash","input":{"command":"node scripts/gen.mjs > owned-dir/generated.json"}}']]);
+
+  check('a shell/script-written path whose name a live agent\'s Bash command names -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveTexts }), 'allow');
+}
+{
+  // The SAME shape, but the mentioning agent is now STALE (absent from the live map entirely, exactly
+  // like `liveTranscriptTexts` excludes a dead agent's transcript) -> block.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M owned-dir/generated.json\n' });
+  const liveTexts = new Map([['agent-other', '{"name":"Bash","input":{"command":"node scripts/gen.mjs > unrelated-dir/other-output.txt"}}']]);
+
+  check('the same shape, but the mentioning agent is now STALE (absent from the live map) -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveTexts }), 'block');
+}
+{
+  // A path no live agent's transcript mentions at all -> block.
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M nobody-mentions-this.ts\n' });
+  const liveTexts = new Map([['agent-x', 'wrote C:\\fake\\somewhere-else\\a.ts']]);
+
+  check('a path no live agent mentions at all -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveTexts }), 'block');
+}
+
+// ---------------------------------------------------------------------------------------------
+// STATE: dirty owned by a DEAD agent -> block. Tested at the decide() level the same as "dirty
+// mine" (a dead agent's transcript is simply ABSENT from the liveTexts map decide() consumes — that
+// absence is exactly what `liveTranscriptTexts` produces for a dead agent, proven separately below at
+// the attribution.mjs level with a REAL backdated transcript file).
+// ---------------------------------------------------------------------------------------------
+{
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  // A live-texts map that mentions a DIFFERENT path only (standing in for "the agent who once touched
+  // foo.txt is now dead, so it teaches nothing about foo.txt any more").
+  const liveTexts = new Map([['agent-y', 'wrote C:\\fake\\unrelated.txt']]);
+
+  check('dirty, owning agent is DEAD (absent from the live map) -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveTexts }), 'block');
+}
+
+// ---------------------------------------------------------------------------------------------
+// STATE: repo missing -> allow with a message
+// ---------------------------------------------------------------------------------------------
+{
+  const repo = fakeRepo('r', { worktree: path.join(HERE, 'this-directory-does-not-exist-at-all') });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map() });
+
+  check('missing repo -> allow (never a block)', result === undefined || result.kind === 'note', true);
+  check('missing repo -> a note is produced', result?.kind, 'note');
+  check('the note names the repo and says "not found"', result?.notes?.[0]?.includes('not found'), true);
+}
+
+// ---------------------------------------------------------------------------------------------
+// STATE: git failure -> allow with a message, never a false clean
+// ---------------------------------------------------------------------------------------------
+{
+  const repo = fakeRepo('r', { statusOk: false });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveTexts: new Map() });
+
+  check('git failure -> allow (never a block)', result === undefined || result.kind === 'note', true);
+  check('git failure -> a note is produced, never silent success', result?.kind, 'note');
+  check('the note says it could not verify, and does NOT claim clean', result?.notes?.[0]?.includes('cannot verify'), true);
+}
+
+// ---------------------------------------------------------------------------------------------
+// stop_hook_active -> allow, even with a dirty, unattributed repo
+// ---------------------------------------------------------------------------------------------
+{
+  const repo = fakeRepo('r', { statusText: '## master...origin/master [ahead 5]\n M foo.txt\n' });
+
+  check('stop_hook_active -> allow regardless', verdictKind(STOP_PAYLOAD({ stop_hook_active: true }), { repos: [repo], liveTexts: new Map() }), 'allow');
+}
+
+// ---------------------------------------------------------------------------------------------
+// malformed payload -> allow + exit 0, via the real evaluate()
+// ---------------------------------------------------------------------------------------------
+check('malformed JSON -> evaluate() allows (undefined)', evaluate('NOT JSON AT ALL'), undefined);
+check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
+
+// The REAL `evaluate()`, with FAKE repos injected through its optional second parameter — proves the
+// shim's OWN wiring (JSON parsing, block formatting, the journal write), not just `decide()` in
+// isolation. See `guard.mjs`'s own docblock for why this seam exists and why production never uses it.
+{
+  const journalPath = path.join(HERE, 'state', 'refusals.jsonl');
+  const journalledFor = (session) => (existsSync(journalPath) ? readFileSync(journalPath, 'utf8').split('\n').filter((line) => line.includes(session)).length : 0);
+  const session = `selftest-evaluate-${String(process.pid)}-${String(Date.now())}`;
+  const before = journalledFor(session);
+
+  const dirtyRepo = fakeRepo('fixture-repo', { statusText: '## master...origin/master [ahead 1]\n M foo.txt\n' });
+  const raw = JSON.stringify(STOP_PAYLOAD({ session_id: session }));
+  const output = evaluate(raw, { repos: [dirtyRepo], liveTexts: new Map() });
+
+  check('evaluate() with a real dirty finding returns a block decision', output?.decision, 'block');
+  check('evaluate() names the guard in its additionalContext', output?.hookSpecificOutput?.additionalContext?.includes('CONFIG-SYNC-GUARD TRIPPED'), true);
+  check('evaluate() journals the refusal for real, under this exact session id', journalledFor(session) - before, 1);
+
+  const cleanOutput = evaluate(JSON.stringify(STOP_PAYLOAD({ session_id: session })), { repos: [fakeRepo('fixture-repo')], liveTexts: new Map() });
+
+  check('evaluate() with a clean fixture repo allows', cleanOutput, undefined);
+}
+
+// ---------------------------------------------------------------------------------------------
+// DIAGNOSTICS: status.mjs parsing, in isolation.
+// ---------------------------------------------------------------------------------------------
+check('parseStatusPorcelain: clean', parseStatusPorcelain('## master...origin/master\n'), { aheadCount: 0, dirtyPaths: [] });
+check('parseStatusPorcelain: ahead', parseStatusPorcelain('## master...origin/master [ahead 3]\n'), { aheadCount: 3, dirtyPaths: [] });
+check('parseStatusPorcelain: dirty tracked + untracked', parseStatusPorcelain('## master...origin/master\n M tracked.ts\n?? untracked.ts\n'), { aheadCount: 0, dirtyPaths: ['tracked.ts', 'untracked.ts'] });
+check('parseStatusPorcelain: no branch line at all -> 0 ahead', parseStatusPorcelain(' M a.ts\n').aheadCount, 0);
+check('parseStatusPorcelain: non-string input is empty, never throws', parseStatusPorcelain(undefined), { aheadCount: 0, dirtyPaths: [] });
+
+// ---------------------------------------------------------------------------------------------
+// DIAGNOSTICS: attribution.mjs, against REAL constructed transcript files (never the real fleet).
+// ---------------------------------------------------------------------------------------------
+{
+  const scratch = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-selftest-'));
+
+  const liveTranscript = path.join(scratch, 'live.jsonl');
+  const deadTranscript = path.join(scratch, 'dead.jsonl');
+
+  writeFileSync(liveTranscript, '{"name":"Edit","input":{"file_path":"C:\\\\fake\\\\live.ts"}}\n', 'utf8');
+  writeFileSync(deadTranscript, '{"name":"Edit","input":{"file_path":"C:\\\\fake\\\\dead.ts"}}\n', 'utf8');
+
+  const now = Date.now();
+  const longAgo = new Date(now - 60 * 60 * 1000); // 1h ago, past the 30-minute ACTIVE_WINDOW_MS
+
+  utimesSync(deadTranscript, longAgo, longAgo); // REAL backdated mtime — the one property isLive reads
+
+  const liveRecord = { id: 'agent-live', transcript: liveTranscript };
+  const deadRecord = { id: 'agent-dead', transcript: deadTranscript };
+
+  check('isLive: a transcript written NOW is live', isLive(liveRecord, now), true);
+  check('isLive: a transcript backdated past the window is DEAD', isLive(deadRecord, now), false);
+
+  const texts = liveTranscriptTexts(now, [liveRecord, deadRecord]);
+
+  check('liveTranscriptTexts includes the live agent', texts.has('agent-live'), true);
+  check('liveTranscriptTexts EXCLUDES the dead agent entirely', texts.has('agent-dead'), false);
+  check('liveOwnerOf finds the live agent for its own path', liveOwnerOf('C:\\fake\\live.ts', texts), 'agent-live');
+  check('liveOwnerOf finds nothing for the dead agent\'s path (its transcript is not even in the map)', liveOwnerOf('C:\\fake\\dead.ts', texts), undefined);
+  check('liveOwnerOf is case-insensitive (Windows paths)', liveOwnerOf('c:\\FAKE\\LIVE.TS', texts), 'agent-live');
+  check('liveOwnerOf: no match in an unrelated path no live agent mentions', liveOwnerOf('C:\\somewhere-else\\x.ts', texts), undefined);
+  // An unparseable dirty path (empty, or all separators) yields an EMPTY needle — without a guard,
+  // `''.includes('')` is true for every string, so it would match the FIRST agent in the map by
+  // accident regardless of content. Proves that guard is load-bearing, not merely present.
+  check('liveOwnerOf: an empty/unparseable path never matches by accident, even with agents present', liveOwnerOf('', texts), undefined);
+
+  rmSync(scratch, { recursive: true, force: true });
+}
+
+check('agentRecords is empty for a nonexistent root, never throws', agentRecords(path.join(HERE, 'no-such-root')), []);
+
+// ---------------------------------------------------------------------------------------------
+// DIAGNOSTICS: the dismiss CLI's own validation.
+// ---------------------------------------------------------------------------------------------
+check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason', 'because this drift is intentional and expected here']), { repo: 'r', reason: 'because this drift is intentional and expected here' });
+{
+  const calls = [];
+  const result = commandDismiss({ session: 's-1', repo: 'r', reason: 'this repo is a scratch clone, never meant to sync' }, { append: (...args) => calls.push(args), mkdir: () => {} });
+
+  check('a long-enough reason is accepted and appended', result.ok, true);
+  check('the dismissal is appended exactly once', calls.length, 1);
+}
+{
+  const result = commandDismiss({ session: 's-1', reason: 'too short' }, { append: () => {}, mkdir: () => {} });
+
+  check('a reason shorter than the minimum is REFUSED', result.ok, false);
+  check('the refusal names the minimum length', result.problems.some((p) => p.includes(String(MINIMUM_REASON_LENGTH))), true);
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE WHOLE HOOK, END TO END, over a REAL constructed git repo and a REAL `guard.mjs` process. This
+// cannot use `decide.mjs`'s own default `declaredRepos()` (the two REAL owner repos) without either
+// touching real state or being flaky against whatever is actually dirty on this machine right now —
+// so this end-to-end proof targets the WIRING (stdin -> decide -> stdout -> journal) using the same
+// pure `decide()` this selftest already trusts, invoked through the real `guard.mjs` module's own
+// `evaluate()` — which is already exercised above via malformed-payload cases. What end-to-end
+// coverage adds here is the REAL git repo path through `repos.mjs`'s own `runCommand`, proven via a
+// throwaway repo and a hand-built `decide` call that mirrors exactly what `guard.mjs` does.
+// @es EL HOOK ENTERO, sobre un repo git real construido. No puede usar los dos repos REALES del
+// dueño sin tocar estado real; en su lugar prueba la ruta git real de `repos.mjs` con un repo
+// desechable.
+// ---------------------------------------------------------------------------------------------
+{
+  const scratch = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-repo-'));
+  const git = (...args) => execFileSync('git', ['-C', scratch, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+  mkdirSync(scratch, { recursive: true });
+  git('init', '-q');
+  git('-c', 'user.email=fixture@example.com', '-c', 'user.name=fixture', 'commit', '-q', '--allow-empty', '-m', 'chore: init');
+
+  const realRepo = {
+    name: 'fixture',
+    worktree: scratch,
+    run: (args) => {
+      try {
+        const stdout = execFileSync('git', ['-C', scratch, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        return { ok: true, stdout, stderr: '' };
+      } catch (error) {
+        return { ok: false, stdout: '', stderr: String(error?.stderr ?? error) };
+      }
+    },
+    commitCommand: 'git commit',
+    pushCommand: 'git push'
+  };
+
+  check('REAL git repo, clean, no upstream configured -> allow', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveTexts: new Map() }), 'allow');
+
+  writeFileSync(path.join(scratch, 'untracked.txt'), 'hello\n', 'utf8');
+
+  const dirtyResult = decide(STOP_PAYLOAD(), { repos: [realRepo], liveTexts: new Map() });
+
+  check('REAL git repo, one real untracked file, no live owner -> block', dirtyResult?.kind, 'block');
+  check('REAL git repo: the unattributed path is the real untracked file', dirtyResult?.dirtyRepos?.[0]?.unattributed, [path.join(scratch, 'untracked.txt')]);
+
+  const liveOwned = new Map([['agent-z', 'wrote untracked.txt just now']]);
+
+  check('REAL git repo, same untracked file, now mentioned by a live agent\'s transcript -> allow', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveTexts: liveOwned }), 'allow');
+
+  rmSync(scratch, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE WIRING: the guard is registered for Stop, and the REAL global manifest lists it.
+// ---------------------------------------------------------------------------------------------
+{
+  const declaration = JSON.parse(readFileSync(path.join(HERE, 'guard.mjs.hook-registration.json'), 'utf8'));
+  check('the declaration registers Stop', declaration.registrations?.[0]?.event, 'Stop');
+
+  // Read from `homedir()`, deliberately NOT relative to `HERE`: a mutation-proof sandbox copies this
+  // selftest into a throwaway directory with no sibling `hook-dispatch/` at all.
+  // @es Leído desde `homedir()`, nunca relativo a `HERE`: un sandbox de mutación no tiene `hook-dispatch/` hermano.
+  const manifestPath = path.join(homedir(), '.claude', 'hook-dispatch', 'manifests', 'stop.json');
+  const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { guards: [] };
+  check('the REAL global Stop manifest lists config-sync-guard', manifest.guards.some((entry) => entry.includes('config-sync-guard/guard.mjs')), true);
+}
+
+process.stdout.write(`config-sync-guard.selftest: ${String(passed)} passed, ${String(failures.length)} failed\n`);
+
+for (const failure of failures) process.stdout.write(`  FAIL ${failure}\n`);
+
+process.exit(failures.length === 0 && passed > 0 ? 0 : 1);

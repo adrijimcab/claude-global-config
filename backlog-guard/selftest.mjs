@@ -239,6 +239,40 @@ check('numericIdValuesIn is empty for text with no id field', [...numericIdValue
 check('observedMasterIdPairings ignores a topic_key that is not master-shaped', observedMasterIdPairings('"topic_key":"decision/foo""id":631'), []);
 check('observedMasterIdPairings is empty for undefined/empty input', observedMasterIdPairings(undefined), []);
 
+// --- SECOND SOURCE, found missing in live use the day AFTER the mem_update fix shipped: a
+//     `mem_get_observation` RESULT's own human-readable metadata footer (`Topic: backlog/…-master`),
+//     never a `mem_save` call's JSON input. Fixtures use the EXACT shape measured against this
+//     session's own real transcript (session c45d798b, lines 76992-76993).
+{
+  // The exact literal shape measured on this session's own real transcript (session c45d798b, line
+  // 76993): a `"result":"#<id> [...` prefix, and — later in the SAME string, separated by a
+  // JSON-escaped newline (`\n`, two characters: backslash then `n`) — a `Topic: <topic_key>` line.
+  const REAL_GET_OBSERVATION_RESULT = '"result":"#972 [decision] BACKLOG MAESTRO 1.0.0\\nmucho contenido aqui\\nTopic: backlog/1.0.0-master\\nDuplicates: 1\\nRevisions: 12"';
+
+  check(
+    'observedMasterIdPairings learns {id, topicKey} from a REAL mem_get_observation result\'s metadata footer',
+    observedMasterIdPairings(REAL_GET_OBSERVATION_RESULT),
+    [{ id: 972, topicKey: 'backlog/1.0.0-master' }]
+  );
+}
+check(
+  'the metadata-footer source ignores a non-master Topic (a per-item backlog note, not the master record)',
+  observedMasterIdPairings('"result":"#631 [decision] some note\\nTopic: backlog/1.0.0-item-7\\nDuplicates: 0"'),
+  []
+);
+check(
+  'the metadata-footer source works with a REAL (unescaped) newline too, not only the JSON-escaped \\\\n form',
+  observedMasterIdPairings('"result":"#972 [decision] x\nTopic: backlog/1.0.0-master\nDuplicates: 1"'),
+  [{ id: 972, topicKey: 'backlog/1.0.0-master' }]
+);
+check('the metadata-footer source is silent when there is no "Topic: " line at all', observedMasterIdPairings('"result":"#972 [decision] no metadata footer here"'), []);
+// Adversarial: with NO "Topic: " label, the six characters right after the id happen to spell out a
+// real master-shaped value starting at the exact offset a missing not-found guard would fall through
+// to (`indexOf` returning `-1`, then `-1 + 'Topic: '.length === 6`), and nothing after it (no trailing
+// character, no newline) to break the `-master` ending. Proves the guard is load-bearing, not merely
+// present: remove it and this exact fixture teaches a pairing that was never really announced.
+check('the metadata-footer source does not fabricate a match from a coincidental offset when "Topic: " is absent', observedMasterIdPairings('"result":"#972 ABCDEbacklog/1.0.0-master'), []);
+
 check('hasMasterBacklogUpdate is false with no mem_update marker at all', hasMasterBacklogUpdate('"id":972', new Set([972])), false);
 check('hasMasterBacklogUpdate is false with an empty known-ids set', hasMasterBacklogUpdate('mem_update "id":972', new Set()), false);
 check('hasMasterBacklogUpdate accepts a plain array too, not only a Set', hasMasterBacklogUpdate('mem_update "id":972', [972]), true);
@@ -352,6 +386,42 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
         const known = JSON.parse(readFileSync(knownIdsFile, 'utf8'));
 
         writeFileSync(knownIdsFile, JSON.stringify(known.filter((id) => id !== masterId)), 'utf8');
+      } catch {
+        /* best-effort cleanup; a proof may not crash over housekeeping */
+      }
+    }
+  }
+
+  // Turns 6/7: REPLAY of the second live defect, structurally — `mem_get_observation`'s metadata-footer
+  // pairing (NOT the mem_save topic_key pairing turn 4/5 already proved) learned in an EARLIER, separate
+  // process, then a `mem_update` of that SAME id in a LATER turn with a pending phrase. MEASURED
+  // sequence this replays (this session, in order): a `mem_get_observation({id:972})` result carried
+  // `Topic: backlog/1.0.0-master` in the turn BEFORE the one that tripped; a `mem_update({id:972,...})`
+  // ran in the tripping turn; the guard still blocked, because at the time this ran the metadata-footer
+  // source did not exist yet (turn 4/5 above only ever exercises the mem_save-input `topic_key` source).
+  // A fresh id (never 972, never 90210) keeps this replay independent of both real production state and
+  // the earlier fixture's cleanup.
+  const metadataLearnedId = 55501;
+  appendToFile(
+    transcriptPath,
+    `{"name":"mcp__engram__mem_get_observation","input":{"id":${String(metadataLearnedId)}}}\n{"result":"#${String(metadataLearnedId)} [decision] BACKLOG MAESTRO\\nTopic: backlog/1.0.0-master\\nDuplicates: 1"}\n`
+  );
+  const turn6 = runGuard(CLEAN_MESSAGE);
+  check('END TO END turn 6 (mem_get_observation metadata footer, no pending phrase): allowed', `${String(turn6.code)}/${turn6.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+
+  appendToFile(transcriptPath, `{"name":"mcp__engram__mem_update","input":{"id":${String(metadataLearnedId)},"content":"revised, real cross-turn metadata-footer replay"}}\n`);
+  const turn7 = runGuard(PENDING_MESSAGE);
+  check('END TO END turn 7 (mem_update of an id LEARNED ONLY from an earlier turn\'s mem_get_observation metadata footer): allowed', `${String(turn7.code)}/${turn7.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+
+  // Cleanup: turn 6 taught the real, durable known-ids record this fixture's id too.
+  {
+    const knownIdsFile = path.join(HERE, 'state', 'known-master-ids.json');
+
+    if (existsSync(knownIdsFile)) {
+      try {
+        const known = JSON.parse(readFileSync(knownIdsFile, 'utf8'));
+
+        writeFileSync(knownIdsFile, JSON.stringify(known.filter((id) => id !== metadataLearnedId)), 'utf8');
       } catch {
         /* best-effort cleanup; a proof may not crash over housekeeping */
       }

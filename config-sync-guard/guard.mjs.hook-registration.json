@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "Stop"
+    }
+  ],
+  "why": "a turn can end while a declared backup repo (~/.claude or b100-am-ui/.claude) has unpushed commits or uncommitted config/hook/gate changes not attributable to a live agent — owner directive: every such change is committed AND pushed the SAME turn it is made."
+}

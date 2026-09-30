@@ -196,6 +196,65 @@ export function observedMasterIdPairings(text) {
     for (const id of idsInWindow) pairings.push({ id, topicKey });
   }
 
+  return [...pairings, ...observedFromResultMetadata(text)];
+}
+
+/**
+ * SECOND SOURCE, found missing in live use: `mem_get_observation`'s (and `mem_save`'s) own RESULT text
+ * carries a human-readable metadata footer — measured directly against a real transcript before fixing
+ * this (owner directive: read the real records, never guess): `"result":"#972 [decision] BACKLOG
+ * MAESTRO…\nTopic: backlog/1.0.0-master\nDuplicates: 1\nRevisions: 12\n…"`. The id sits right after
+ * `#`, the topic_key after a literal `Topic: ` line, both inside the SAME result string. This is a
+ * DIFFERENT shape from `observedMasterIdPairings`'s own JSON `"topic_key":"…"` scan (which only sees a
+ * `mem_save` CALL's own input, never a READ's result), so it is a second, independent extraction over
+ * the SAME text, not a replacement.
+ * @es SEGUNDA FUENTE, hallada ausente en uso real: el resultado de `mem_get_observation` (y de
+ * `mem_save`) lleva un pie de metadatos legible por humanos — medido contra un transcript real antes de
+ * arreglarlo. El id va justo tras `#`, el topic_key tras una línea literal `Topic: `, ambos dentro del
+ * MISMO string de resultado. Es una forma DISTINTA al escaneo JSON de `observedMasterIdPairings`
+ * (que solo ve el INPUT de una llamada `mem_save`, nunca el resultado de una lectura).
+ */
+const RESULT_ID_MARKER = '"result":"#';
+const TOPIC_LABEL_MARKER = 'Topic: ';
+const RESULT_METADATA_WINDOW = 8000;
+
+/** The earliest of a literal newline or a JSON-escaped `\n` after `from`, or `text.length` if neither appears — the metadata footer's own line ending. @es El primero de un salto real o uno escapado `\n`, o el final del texto. */
+function lineEndAfter(text, from) {
+  const escaped = text.indexOf('\\n', from);
+  const real = text.indexOf('\n', from);
+  const candidates = [escaped, real].filter((index) => index !== -1);
+
+  return candidates.length === 0 ? text.length : Math.min(...candidates);
+}
+
+function observedFromResultMetadata(text) {
+  const pairings = [];
+  let searchFrom = 0;
+
+  for (let markerAt = text.indexOf(RESULT_ID_MARKER, searchFrom); markerAt !== -1; markerAt = text.indexOf(RESULT_ID_MARKER, searchFrom)) {
+    const idStart = markerAt + RESULT_ID_MARKER.length;
+    let idEnd = idStart;
+
+    while (idEnd < text.length && DIGITS.includes(text[idEnd])) idEnd += 1;
+
+    const id = idEnd > idStart ? Number(text.slice(idStart, idEnd)) : undefined;
+
+    searchFrom = idEnd > idStart ? idEnd : markerAt + RESULT_ID_MARKER.length + 1;
+
+    if (id === undefined) continue;
+
+    const window = text.slice(idEnd, idEnd + RESULT_METADATA_WINDOW);
+    const topicAt = window.indexOf(TOPIC_LABEL_MARKER);
+
+    if (topicAt === -1) continue;
+
+    const valueStart = topicAt + TOPIC_LABEL_MARKER.length;
+    const valueEnd = lineEndAfter(window, valueStart);
+    const topicKey = window.slice(valueStart, valueEnd);
+
+    if (isMasterBacklogTopicKey(topicKey)) pairings.push({ id, topicKey });
+  }
+
   return pairings;
 }
 
