@@ -91,6 +91,18 @@ const cases = [
   ['deny', legacyMemory('**What**: measured 0</content>\n<parameter name="tags">coverage,vitest</parameter>'), 'REAL SHAPE: the older engram tool name, with a swallowed tags parameter'],
   ['deny', memory('A real content.', { title: 'Coverage floors</title>\n<parameter name="type">decision' }), 'a saved memory TITLE carrying the markup'],
   ['deny', resume(`${BODY}\n\nOne backtick \` opened and never closed, then </parameter> leaks.`), 'NEAR MISS: an unbalanced backtick does not hide a tag that follows the closed span'],
+  ['deny', taskCreate('A real description.', { activeForm: 'Running the gates</parameter>' }), 'TaskCreate.activeForm carrying the markup', 'TaskCreate.activeForm'],
+  ['deny', as('TaskUpdate', 'A real description.', { input: { subject: 'Closing</parameter>' } }), 'TaskUpdate.subject carrying the markup', 'TaskUpdate.subject'],
+  ['deny', as('TaskUpdate', 'A real description.', { input: { activeForm: 'Closing</parameter>' } }), 'TaskUpdate.activeForm carrying the markup', 'TaskUpdate.activeForm'],
+  ['deny', as('mcp__plugin_engram_engram__mem_save', 'Real content.', { toolName: 'mcp__engram__mem_save', input: { title: 'Floors</title>\n<invoke name="x">' } }), 'the older engram tool name: a title carrying the markup', 'mcp__engram__mem_save.title'],
+  ['deny', resume(`${BODY}\n\nA swallowed parameter opens like <parameter name="activeForm"> here.`), 'a bare parameter OPENING tag alone', '<parameter name='],
+  ['deny', resume(`${BODY}\n\nA swallowed call opens like <invoke name="SendMessage"> here.`), 'a bare invoke OPENING tag alone', '<invoke name='],
+  ['deny', resume(`${BODY}\n\nQuoted \`</parameter>\` first, and then the same </parameter> bare on one line, then \`code\`.`), 'NEAR MISS: a quoted tag does not hide the same tag bare later on its line'],
+  ['deny', agent('Do it now. ¿Procedo?'), 'the refusal states the real tail length of a short brief', 'last 20 characters'],
+  ['deny', resume(`${BODY}\n\n\`\`\`\n</parameter>\n\`\`\`\nThe fence is closed now, so this </parameter> is bare.`), 'NEAR MISS: a closed fence stops quoting what follows it'],
+  ['allow', resume(`${BODY}\n\n~~~\n</parameter>\n~~~\nThe tilde fence quotes the tag above.`), 'a tilde-fenced quotation passes'],
+  ['allow', resume(`${BODY}\n\n   \`\`\`\n   </parameter>\n   \`\`\`\nAn indented fence quotes the tag above.`), 'an indented fence quotes too'],
+  ['deny', agent(`${BODY}\n\n¿Procedo con la descomposición? ${'Then report the shas. '.repeat(27)}`), 'a decider phrase about 600 characters from the end is still in the tail'],
 
   // ---------------------------------------------------------------------------------------------
   // FAIL-OPEN: every malfunction of its own must let the call run.
@@ -150,6 +162,22 @@ try {
   }
 } catch (error) {
   report(false, `the registration declaration is unreadable: ${error instanceof Error ? error.message : String(error)}`);
+}
+
+// --- THE PHRASE LIST, pinned literally: each phrase is one decision, and reading the list back from the
+//     module under test could never notice a phrase leaving it.
+// @es La lista de frases, fijada a mano: cada frase es una decisión y leerla del propio módulo no notaría que una sale.
+const PINNED_PHRASES = [
+  '¿las lanzo', '¿lo lanzo', '¿las quieres', '¿lo quieres', '¿quieres que', '¿te parece', '¿sigo con', '¿procedo', '¿lo hago', 'dime si',
+  'dime qué prefieres', 'tú decides', 'es tuyo decidir', 'shall i launch', 'shall i proceed', 'do you want me to', 'would you prefer', 'let me know if you', 'up to you'
+];
+
+if (carriers !== undefined) {
+  const { deciderPhrases, DECIDER_PHRASES } = await import('./audience.mjs');
+
+  for (const phrase of PINNED_PHRASES) report(deciderPhrases(`${BODY}\n\n${phrase.toUpperCase()}`).includes(phrase), `the tail check recognises "${phrase}"`);
+
+  report(DECIDER_PHRASES.length === PINNED_PHRASES.length, `the module lists exactly the ${PINNED_PHRASES.length} pinned phrases (it lists ${DECIDER_PHRASES.length})`);
 }
 
 console.log(`\n${total - failures}/${total} passed`);
