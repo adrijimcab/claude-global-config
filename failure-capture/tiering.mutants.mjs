@@ -16,6 +16,8 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const LINE = 'failure-capture/ledger-line.mjs';
+const STORE = 'failure-capture/evidence.mjs';
+const PROOF = 'failure-capture/conservation.mjs';
 
 const MUTANTS = [
   // --- the marker grammar is byte-stable
@@ -45,6 +47,30 @@ const MUTANTS = [
   ['a fat line counts as shortened', LINE, 'return split.ok && evidenceKeyOf(split.rule) !== undefined;', 'return split.ok;'],
   ['a fat promoted line reads as a stub', LINE, 'return entry.body.startsWith(lead) && entry.body.length > lead.length ?', 'return true ?'],
   ['the minimal stub forgets its mechanism path', LINE, '${mechanism === undefined ? NO_MECHANISM : `mechanism ${mechanism}`}', '${NO_MECHANISM}'],
+
+  // --- the evidence store is append-only, verbatim and never throws
+  ['an existing evidence file is overwritten, not appended to', STORE, "else appendFileSync(file, block, 'utf8');", "else writeFileSync(file, block, 'utf8');"],
+  ['the header is written again on every append', STORE, "else appendFileSync(file, block, 'utf8');", "else appendFileSync(file, `${header(key)}${block}`, 'utf8');"],
+  ['an already archived line is archived again', STORE, 'if (existing !== undefined && holdsWholeLine(existing, line)) return', 'if (false) return'],
+  ['only the narrative half of the line is archived', STORE, '(${kind})\\n\\n${line}', "(${kind})\\n\\n${line.slice(0, line.indexOf('RULE: '))}"],
+  ['a filesystem fault is reported as success', STORE, 'return { ok: false, problem: `the evidence could not', 'return { ok: true, file, appended: false, problem: `the evidence could not'],
+  ['the evidence directory is not created', STORE, "mkdirSync(path.dirname(file), { recursive: true });", 'mkdirSync(path.dirname(file), {});'],
+  ['a key that could climb out of the evidence directory is accepted', STORE, "isValidKey(key) ? undefined : 'the key must be", "true ? undefined : 'the key must be"],
+  ['a multi-line text is archived as if it were one line', STORE, "!line.includes('\\n') && !line.includes('\\r') ? undefined", 'true ? undefined'],
+
+  // --- conservation: the deficit decides, and it decides on the whole line
+  ['the deficit is ignored: every shortening is accepted', PROOF, 'return deficits.length === 0 ? { ok: true } : { ok: false, deficits };', 'return { ok: true };'],
+  ['containment is weakened to a substring, so a longer line holds the original', PROOF, '`\\n${text}\\n`.includes(`\\n${line}\\n`)', 'text.includes(line)'],
+  ['the first and last lines of the file are not lines', PROOF, '`\\n${text}\\n`.includes(', 'text.includes('],
+  ['the invention check is skipped', PROOF, 'const deficits = [...archiveDeficits(original, evidence), ...inventionDeficits(original, shortened)];', 'const deficits = [...archiveDeficits(original, evidence)];'],
+  ['an absent evidence file is tolerated', PROOF, 'if (evidence === undefined) return [', 'if (evidence === undefined) return [] || ['],
+  ['the marker of the shortened line is trusted instead of the original\'s', PROOF, 'tally: kept.tally, rule: kept.rule, key, marker: before.marker }', 'tally: kept.tally, rule: kept.rule, key, marker: after.marker }'],
+  ['the date of the shortened line is trusted instead of the original\'s', PROOF, 'tieredLine({ scope: before.scope, date: before.date,', 'tieredLine({ scope: before.scope, date: after.date,'],
+  ['the tally of the shortened line is trusted instead of the original\'s', PROOF, 'tally: kept.tally,', 'tally: splitRule(after.body).tally,'],
+  ['a stub may name a mechanism the original never held', PROOF, 'if (stub.mechanism !== undefined && !original.includes(stub.mechanism)) return refuse(', 'if (false) return refuse('],
+  ['the marker of a stub is trusted instead of the original\'s', PROOF, 'mechanism: stub.mechanism, marker: before.marker }', 'mechanism: stub.mechanism, marker: stub.marker }'],
+  ['a refusal no longer says how far the closest line agrees', PROOF, 'Math.max(best, sharedPrefix(line, original))', 'best'],
+  ['a refusal no longer names the characters that were lost', PROOF, 'filter((character) => !evidence.includes(character))', 'filter(() => false)'],
 ];
 
 const survivors = runMutants({
