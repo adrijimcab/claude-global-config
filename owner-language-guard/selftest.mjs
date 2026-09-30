@@ -29,7 +29,7 @@ import { evaluate } from './evaluate.mjs';
 import { readTurnTexts, turnTextsFromLines } from './turn.mjs';
 
 const HERE = import.meta.dirname;
-const CAPTURED = JSON.parse(readFileSync(path.join(HERE, 'fixtures', 'stop-payload.captured.json'), 'utf8')).payload;
+const STOP_PAYLOAD = JSON.parse(readFileSync(path.join(HERE, 'fixtures', 'stop-payload.constructed.json'), 'utf8')).payload;
 
 const results = [];
 
@@ -169,7 +169,7 @@ try {
 
   writeFileSync(smallTranscript, `${[userPrompt('Dale'), assistant([text(SPANISH)])].join('\n')}\n`, 'utf8');
 
-  const payload = (overrides) => ({ ...CAPTURED, transcript_path: smallTranscript, last_assistant_message: SPANISH, ...overrides });
+  const payload = (overrides) => ({ ...STOP_PAYLOAD, transcript_path: smallTranscript, last_assistant_message: SPANISH, ...overrides });
 
   check('evaluate: payload capturado en español pasa', evaluate(payload({})).verdict.block, false);
   check('evaluate: last_assistant_message en inglés aún no volcado al transcript bloquea', evaluate(payload({ last_assistant_message: ENGLISH })).verdict.block, true);

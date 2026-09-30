@@ -63,7 +63,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: FLEET,
-  paths: ['brief-tenancy', 'toolchain-guard', 'shell-command', 'cherry-pick-guard'],
+  paths: ['brief-tenancy', 'toolchain-guard', 'shell-command', 'cherry-pick-guard', 'hook-payloads', 'brief-provenance'],
   selftest: 'brief-tenancy/selftest.mjs',
   mutants: MUTANTS
 });

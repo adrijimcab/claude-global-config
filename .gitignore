@@ -143,7 +143,11 @@
 !/owner-language-guard/
 !/owner-language-guard/*.mjs
 !/owner-language-guard/*.json
-/owner-language-guard/fixtures/
+# Only the hand-built Stop payload is versioned; the captured one stays ignored. @es Solo se versiona el
+# payload Stop construido a mano; el capturado sigue ignorado.
+!/owner-language-guard/fixtures/
+/owner-language-guard/fixtures/*
+!/owner-language-guard/fixtures/stop-payload.constructed.json
 
 !/engram-persistence/
 !/engram-persistence/*.mjs

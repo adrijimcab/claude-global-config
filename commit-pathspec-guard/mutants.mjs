@@ -43,7 +43,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['commit-pathspec-guard', 'shell-command', 'cherry-pick-guard', 'config-sync-guard', 'mutation-proof'],
+  paths: ['commit-pathspec-guard', 'shell-command', 'cherry-pick-guard', 'config-sync-guard', 'mutation-proof', 'hook-payloads'],
   selftest: 'commit-pathspec-guard/selftest.mjs',
   mutants: MUTANTS
 });

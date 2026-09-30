@@ -20,7 +20,6 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
@@ -28,7 +27,7 @@ import { readFileSync } from 'node:fs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GUARD = join(HERE, 'guard.mjs');
 
-const { payloadFor } = await import(pathToFileURL(join(homedir(), '.claude', 'hook-payloads', 'payloads.mjs')).href);
+const { payloadFor } = await import(pathToFileURL(join(HERE, '..', 'hook-payloads', 'payloads.mjs')).href);
 const { declaredRepos } = await import(pathToFileURL(join(HERE, '..', 'config-sync-guard', 'repos.mjs')).href);
 const { dialectOfTool } = await import(pathToFileURL(join(HERE, '..', 'shell-command', 'shell-command.mjs')).href);
 

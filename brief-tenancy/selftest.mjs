@@ -36,7 +36,6 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -51,8 +50,10 @@ export const LESSON_KEY = 'unmeasured-rationale-stated-as-fact-in-brief';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GUARD = join(HERE, 'guard.mjs');
-const CARRIERS = pathToFileURL(join(homedir(), '.claude', 'brief-provenance', 'provenance.mjs')).href;
-const PAYLOADS = pathToFileURL(join(homedir(), '.claude', 'hook-payloads', 'payloads.mjs')).href;
+const CARRIERS_PATH = join(HERE, '..', 'brief-provenance', 'provenance.mjs');
+const PAYLOADS_PATH = join(HERE, '..', 'hook-payloads', 'payloads.mjs');
+const CARRIERS = pathToFileURL(CARRIERS_PATH).href;
+const PAYLOADS = pathToFileURL(PAYLOADS_PATH).href;
 
 const PLUGIN_ESLINT = 'C:/Users/adrian.jimenez/Desktop/Projects/plugin-eslint';
 const PLUGIN_STYLELINT = 'C:/Users/adrian.jimenez/Desktop/Projects/plugin-stylelint';
@@ -479,8 +480,8 @@ check(
   matcher === Object.keys(BRIEF_CARRIERS).sort().join('|'),
   `declared ${matcher}, carriers ${Object.keys(BRIEF_CARRIERS).sort().join('|')}`
 );
-check('DEPENDENCY: the carrier map resolves from the home directory', existsSync(join(homedir(), '.claude', 'brief-provenance', 'provenance.mjs')));
-check('DEPENDENCY: the recorded payload store resolves', existsSync(join(homedir(), '.claude', 'hook-payloads', 'payloads.mjs')));
+check('DEPENDENCY: the carrier map resolves beside this checkout', existsSync(CARRIERS_PATH));
+check('DEPENDENCY: the recorded payload store resolves beside this checkout', existsSync(PAYLOADS_PATH));
 
 // ── 9. THE PARTS, DIRECTLY ──────────────────────────────────────────────────────────────────────────
 

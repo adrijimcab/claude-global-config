@@ -23,13 +23,12 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GUARD = join(HERE, 'guard.mjs');
-const { payloadFor } = await import(pathToFileURL(join(homedir(), '.claude', 'hook-payloads', 'payloads.mjs')).href);
+const { payloadFor } = await import(pathToFileURL(join(HERE, '..', 'hook-payloads', 'payloads.mjs')).href);
 
 const SESSION = 'selftest';
 const as = (tool, text, options = {}) => JSON.stringify(payloadFor(tool, text, { sessionId: SESSION, ...options }));

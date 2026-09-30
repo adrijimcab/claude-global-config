@@ -25,13 +25,13 @@
 
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GUARD = join(HERE, 'guard.mjs');
-const { payloadFor } = await import(pathToFileURL(join(homedir(), '.claude', 'hook-payloads', 'payloads.mjs')).href);
+const { payloadFor } = await import(pathToFileURL(join(HERE, '..', 'hook-payloads', 'payloads.mjs')).href);
 
 // `input` carries the call's OWN fields — `timeout`, `run_in_background` — which real payloads were
 // measured to hold (`.claude/gate-run/state/refusals.jsonl` journals both, verbatim from the harness),

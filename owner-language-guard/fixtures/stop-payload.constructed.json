@@ -1,0 +1,16 @@
+{
+  "provenance": "CONSTRUCTED by hand, not captured. Same field shape as the Stop payload the harness sends (session_id, transcript_path, cwd, prompt_id, permission_mode, effort, hook_event_name, stop_hook_active, last_assistant_message, background_tasks, session_crons); every value is invented. @es CONSTRUIDO a mano, no capturado. Misma forma de campos que el payload Stop del harness; todos los valores son inventados.",
+  "payload": {
+    "session_id": "00000000-0000-4000-8000-000000000001",
+    "transcript_path": "C:\\Users\\fixture-owner\\.claude\\projects\\fixture-project\\00000000-0000-4000-8000-000000000001.jsonl",
+    "cwd": "C:\\Users\\fixture-owner\\fixture-project",
+    "prompt_id": "00000000-0000-4000-8000-000000000002",
+    "permission_mode": "default",
+    "effort": {"level": "medium"},
+    "hook_event_name": "Stop",
+    "stop_hook_active": false,
+    "last_assistant_message": "fixture reply",
+    "background_tasks": [],
+    "session_crons": []
+  }
+}
