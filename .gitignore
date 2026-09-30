@@ -110,6 +110,9 @@
 !/hook-caller/
 !/hook-caller/**
 /hook-caller/state/
+!/worker-delegation-guard/
+!/worker-delegation-guard/**
+/worker-delegation-guard/state/
 !/brief-tenancy/
 !/brief-tenancy/**
 /brief-tenancy/state/

@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Agent|Task"
+    }
+  ],
+  "why": "a delegated worker split its errand among 6 agents of its own, past the owner's cap of 3 heavy workers, because only a sentence in a brief forbade a worker to delegate (ledger key worker-subdelegated-past-the-concurrency-cap). Task is covered with Agent because it is the older name of the same tool."
+}
