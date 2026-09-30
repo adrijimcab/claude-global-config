@@ -26,6 +26,8 @@
 !/config-sync-guard/
 !/config-sync-guard/**
 /config-sync-guard/state/
+!/mutation-proof/
+!/mutation-proof/**
 !/agents/
 !/agents/**
 !/skills/

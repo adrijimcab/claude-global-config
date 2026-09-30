@@ -2,6 +2,7 @@
   "event": "Stop",
   "guards": [
     "../../hooks/claim-guard.mjs",
-    "../../owner-language-guard/guard.mjs"
+    "../../owner-language-guard/guard.mjs",
+    "../../backlog-guard/guard.mjs"
   ]
 }

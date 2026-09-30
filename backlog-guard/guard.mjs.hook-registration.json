@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "Stop"
+    }
+  ],
+  "why": "a turn can end after announcing a finding, a defect, debt, or an owner decision left pending, with nothing saved to the project's master backlog — owner directive: every such finding is saved in the SAME turn it appears, never left only in chat or an agent report."
+}
