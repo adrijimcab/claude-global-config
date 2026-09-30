@@ -36,3 +36,9 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
   — runs with `B100_LANDING_GUARD=enforce` in that shell, no exception, so it cannot move without a
   complete green `build:ci-pr` verdict on that exact tree.
 
+
+## Ledger line archived 2026-10-01 (promoted)
+
+- [promoted] 2026-09-30 — integrated-a-range-without-running-its-cheap-gates: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism .claude/ungated-landing-guard/guard.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:integrated-a-range-without-running-its-cheap-gates#5-->
+
+Promoted 2026-10-01 to ~/.claude/rules/promoted-rules.md; closed by mechanism C:/Users/adrian.jimenez/Desktop/Projects/b100-am-ui/.claude/ungated-landing-guard/guard.mjs (selftest run, exit 0)
