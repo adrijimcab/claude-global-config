@@ -89,6 +89,9 @@
 !/commit-pathspec-guard/
 !/commit-pathspec-guard/**
 /commit-pathspec-guard/state/
+!/cwd-change-guard/
+!/cwd-change-guard/**
+/cwd-change-guard/state/
 !/stash-watch/
 !/stash-watch/**
 /stash-watch/state/

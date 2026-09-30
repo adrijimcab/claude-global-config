@@ -5,6 +5,7 @@
     "../../gentle-ai-sync-guard/guard.mjs",
     "../../exit-code-guard/guard.mjs",
     "../../collision-guard/guard.mjs",
-    "../../commit-pathspec-guard/guard.mjs"
+    "../../commit-pathspec-guard/guard.mjs",
+    "../../cwd-change-guard/guard.mjs"
   ]
 }

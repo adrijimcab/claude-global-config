@@ -493,9 +493,16 @@ function emptyCommand() {
 
 /**
  * Every simple command `script` runs, in execution order. See the module header for the shape.
- * @es Cada comando simple que ejecuta `script`, en orden de ejecución.
+ *
+ * `includeNested: false` keeps only the commands that run in THE LINE'S OWN SHELL: what `$(...)`, backticks,
+ * `bash -c`, `powershell -Command` and `cmd /c` run is a child process or a substitution, so it cannot
+ * change the directory (or any other state) of the shell that ran the line.
+ * @es Cada comando simple que ejecuta `script`, en orden de ejecución. `includeNested: false` deja solo los
+ * comandos que corren en la shell PROPIA de la línea: lo que ejecutan `$(...)`, las comillas invertidas,
+ * `bash -c`, `powershell -Command` y `cmd /c` es un proceso hijo o una sustitución, y no cambia el
+ * directorio de la shell que corrió la línea.
  */
-export function simpleCommands(script, dialect = DIALECTS.BASH) {
+export function simpleCommands(script, dialect = DIALECTS.BASH, { includeNested = true } = {}) {
   if (typeof script !== 'string' || GRAMMAR[dialect] === undefined) return [];
 
   const tokens = new Lexer(script, dialect).tokenize();
@@ -505,11 +512,13 @@ export function simpleCommands(script, dialect = DIALECTS.BASH) {
   let targetPending = false;
 
   const flush = (separator) => {
-    for (const nested of current.nested) commands.push(...simpleCommands(nested.script, nested.dialect));
+    if (includeNested) {
+      for (const nested of current.nested) commands.push(...simpleCommands(nested.script, nested.dialect));
 
-    const inner = nestedShellScript(current.words);
+      const inner = nestedShellScript(current.words);
 
-    if (inner !== undefined) commands.push(...simpleCommands(inner.script, inner.dialect));
+      if (inner !== undefined) commands.push(...simpleCommands(inner.script, inner.dialect));
+    }
 
     if (current.words.length > 0) commands.push({ words: current.words, text: script.slice(current.start, current.end), separator, depth });
 

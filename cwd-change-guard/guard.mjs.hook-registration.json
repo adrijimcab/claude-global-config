@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a foreground `cd` from the main session moved the harness's Primary working directory and that Environment update reached live workers (measured twice on 2026-09-30, orchestrator-cwd-change-leaked-to-workers); subshells and background calls did not move it."
+}

@@ -409,3 +409,30 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   --remote <remote>` (verifies in the worktree, then fast-forwards, pushes and reads the remote tip back);
   never commit to, merge into or fast-forward the shared branch by hand. CLOSED BY MECHANISM:
   `~/.claude/worktree-landing/land.mjs`.
+
+- **`orchestrator-cwd-change-leaked-to-workers`** — CLOSED BY MECHANISM 2026-09-30. A FOREGROUND
+  shell call from the main session that changes the session shell's directory (`cd`, `pushd`,
+  `Set-Location`…) moves the harness's "Primary working directory", and the harness announces that to
+  every live worker as an "Environment update". MEASURED twice on 2026-09-30: the first reached a live
+  worker (a595e4b34a58b8c1d), the second was a foreground `cd …/worktrees/fix-spec-types && node …`
+  answered with "Primary working directory: …/fix-spec-types (was …/b100-am-ui)", restored by a later
+  `cd`. MEASURED as NOT moving it: a `( cd X && … )` subshell and a `run_in_background` call. The rule was
+  a ledger line ("never `cd` in a Bash call") and recurred, so it is now a mechanism, not a memory.
+  RULE: the main session runs a command in another directory with (1) absolute paths or `git -C <dir>`,
+  (2) a `( cd <dir> && … )` subshell, or (3) `run_in_background`. Mechanism:
+  `~/.claude/cwd-change-guard/guard.mjs`, registered through the shell dispatcher manifest
+  (`hook-dispatch/manifests/pretooluse-shell.json`), decided over the shared tokenizer
+  (`shell-command/shell-command.mjs`, now with `includeNested: false`), never a regex or substring: a
+  `cd` counts only in command position at the line's top level, in ANY position (not only the first),
+  and never inside `( )`, `$( )`, backticks, `bash -c`, `cmd /c`, a pipe member, a `&` job, or as DATA
+  (an `echo`, a commit message, a heredoc). A subagent's call is never refused: the caller is told apart
+  by the same two signals `backlog-owner-guard` uses. Selftest 81/81, mutants 29/29 killed, and the
+  wiring proven separately (removing the guard from the manifest turns the selftest red). The real
+  incident command replayed through the real dispatcher: DENY. Replayed over the 83 real main-session
+  shell payloads of session c45d798b: 42 refused, each a foreground `cd`, and the 2 `cd` calls with
+  `run_in_background` allowed. NOT MEASURED, stated: whether a PowerShell `Set-Location` moves the
+  harness cwd the way bash `cd` does — the guard covers it on the same premise.
+  @es Una llamada de shell en PRIMER PLANO de la sesión principal que cambia el directorio de la shell
+  (`cd`, `pushd`, `Set-Location`) mueve el «Primary working directory» del harness, y este lo anuncia a
+  todos los workers vivos. Usar rutas absolutas o `git -C`, un subshell `( cd X && … )` o
+  `run_in_background`. Lo impide `~/.claude/cwd-change-guard/guard.mjs`.
