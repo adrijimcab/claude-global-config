@@ -316,6 +316,23 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     it. Record it with `node .claude/gate-run/gate-run.mjs ci:test` in a clean worktree of the target
     commit. The full `build:ci-pr` chain stays advisory unless `B100_LANDING_GUARD=enforce`. Replayed
     on the real incident (develop `283d2c77` -> `cfe6a6ff`, real verdict store): DENY in both modes.
+  - **THE UNIT SUITE NEVER TYPE-CHECKS A SPEC (2026-09-30,
+    `integrated-a-range-without-running-its-cheap-gates`, fifth occurrence).** develop was
+    fast-forwarded twice on a green `gate-run.mjs ci:test` plus a list I picked; `ci:test` (harness +
+    `test:all-coverage`) never type-checks a spec, and `check:spec-typecheck` — the only gate that does —
+    was red afterwards (a13f6b18: 2 x TS2322; 5ead4385: 5 x TS2532), caught by GitLab pipeline 5824.
+    RULE: a move whose content changes any `*.spec.ts` is also graded by `check:spec-typecheck`.
+    CLOSED BY MECHANISM: the landing guard's floor now has a second part, refused in EVERY mode — when
+    the trees differ by a `*.spec.ts` (added, modified, deleted or renamed; decided on the tree the
+    branch points at today versus the tree it would point at, `touched-specs.mjs`), a complete, green,
+    unmoved gate-run verdict of `check:spec-typecheck` on that exact tree (or a bookkeeping tree
+    beneath it) is required beside the `ci:test` one. The gate labels are derived from the tree's own
+    `package.json`; a tree that declares no such script is not asked for one. Record it with
+    `node .claude/gate-run/gate-run.mjs check:spec-typecheck` in a clean worktree of the target commit.
+    A bookkeeping-only push over an already published spec stays unflagged. Selftest 225/225, mutants
+    87/87 killed (one survivor found and closed by a Spanish-half assertion). Replayed on the real range
+    `15193b23..d20ca9d2` (touches the date-range parent-sync spec): DENY in both modes, naming the
+    missing spec type-check verdict.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/integrated-a-range-without-running-its-cheap-gates.md`.
 
 - **`acted-on-a-live-actors-working-state`** — Acting on shared repository state — a worktree, an index —
