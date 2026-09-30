@@ -37,6 +37,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { contractFileId } from './closure.mjs';
+import { holdsWholeLine } from './conservation.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const KEY = 'lesson-under-test';
@@ -131,6 +132,21 @@ function world(name, { ruleLanded = true, incidents, mentions = 1, inLedger = tr
 
   return { repo, home, loop };
 }
+
+/** Today as YYYY-MM-DD in local time, the way `capture.mjs` dates a promotion. @es Hoy como AAAA-MM-DD en hora local, como fecha `capture.mjs` una promoción. */
+const todayLocal = () => {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+
+  return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+};
+
+/** The evidence file a world's home ledger archives `KEY` to, read as it is on disk. @es La evidencia de `KEY` del ledger del home de un mundo. */
+const homeEvidence = (target) => {
+  const file = path.join(target.home, '.claude', 'lessons', 'evidence', `${KEY}.md`);
+
+  return existsSync(file) ? readFileSync(file, 'utf8') : '';
+};
 
 /** Runs `promote` inside a world and returns `{ status, out, ledger, incidents, promoted }`. @es Ejecuta `promote` en un mundo. */
 function promote(target, extraArgs) {
@@ -355,6 +371,11 @@ refused(
   check('a passing mechanism closes the lesson (exit 0)', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
   check('...and its selftest was RUN, not merely found (the sentinel it writes is on disk)', existsSync(path.join(target.repo, '.claude', 'good-guard', 'selftest-ran.txt')), 'no sentinel');
   check('...the ledger stub names the mechanism', run.ledger.includes('[promoted]') && run.ledger.includes('.claude/good-guard/guard.mjs'), run.ledger);
+  // Changed on purpose with `ledger-tiering-budget`: the stub is the MINIMAL one (date, key, mechanism path,
+  // marker), not the old long sentence, and the full line is archived in evidence. @es Cambiado a propósito.
+  check('...and the stub is EXACTLY the minimal one: promotion date, key, mechanism path, the original marker', run.ledger.split('\n').includes(`- [promoted] ${todayLocal()} — ${KEY}: mechanism .claude/good-guard/guard.mjs <!--fc:${KEY}#2-->`), run.ledger);
+  check('...the line it replaced is archived WHOLE in the evidence file beside the ledger, with the closure note', holdsWholeLine(homeEvidence(target), `- [global] 2026-09-14 — a lesson that recurred -> RULE: do the thing <!--fc:${KEY}#2-->`) && homeEvidence(target).includes('closed by mechanism .claude/good-guard/guard.mjs (selftest run, exit 0)'), homeEvidence(target));
+  check('...and nothing is written to the old state/promoted.md: the evidence store is the one place', run.promoted === '', run.promoted);
   check('...the incident log records the closure with the selftest exit code', run.incidents.includes('"mechanism":".claude/good-guard/guard.mjs"') && run.incidents.includes('"selftestExit":0'), run.incidents);
   // Without this figure the NEXT promotion has no baseline to compare the contract text against, so the
   // growth check silently stops demanding anything. @es Sin esta cifra, la próxima promoción no tiene
@@ -376,7 +397,11 @@ refused(
   const run = promote(target, ['--no-mechanism', REASON]);
 
   check('a written reason closes the lesson (exit 0)', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
-  check('...the reason is in the ledger stub VERBATIM', run.ledger.includes('[promoted]') && run.ledger.includes(REASON), run.ledger);
+  // Changed on purpose with `ledger-tiering-budget`: the reason is no longer in the ledger stub (that is what
+  // made every promotion regrow the always-loaded set); it is VERBATIM in the evidence file, and the stub
+  // says only that there is no mechanism. @es Cambiado a propósito: el motivo ya no va en el muñón.
+  check('...the ledger stub says only "no mechanism": the reason is NOT in it', run.ledger.split('\n').includes(`- [promoted] ${todayLocal()} — ${KEY}: no mechanism <!--fc:${KEY}#2-->`) && !run.ledger.includes(REASON), run.ledger);
+  check('...the reason is in the evidence file VERBATIM, beside the archived original', homeEvidence(target).includes(`no mechanism is possible: ${REASON}`) && holdsWholeLine(homeEvidence(target), `- [global] 2026-09-14 — a lesson that recurred -> RULE: do the thing <!--fc:${KEY}#2-->`), homeEvidence(target));
   check('...and in the incident log VERBATIM', run.incidents.includes(JSON.stringify(REASON)), run.incidents);
 
   // A closure record shares the incident log; `status` must still count incidents, not closures.
@@ -384,6 +409,48 @@ refused(
   const status = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
 
   check('...and status counts the one incident, not the closure record beside it', status.includes('incidents recorded: 1'), status);
+  check('...and status no longer lists the promoted lesson as due: the stub in the ledger says it landed', !status.includes('PROMOTION DUE'), status);
+}
+
+{
+  // The same ledger BEFORE any promotion owes one (count 2), so the assertion above is not vacuous; and a
+  // promotion recorded by the OLD tool in `state/promoted.md` is still honoured, read-only.
+  // @es El mismo ledger ANTES de promover debe una promoción, así la aserción anterior no es vacía; y una
+  // promoción registrada por la herramienta ANTIGUA en `state/promoted.md` se sigue respetando.
+  const statusOf = (target) => execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
+  const before = world('status-due');
+  const legacy = world('status-legacy');
+
+  write(legacy.loop, { 'state/promoted.md': `2026-09-01 — ${KEY} -> the contract; closed by mechanism x\n- [global] old line\n\n` });
+
+  check('status lists a recurred, unpromoted lesson as due', statusOf(before).includes(`PROMOTION DUE`) && statusOf(before).includes(KEY), statusOf(before));
+  check('status still honours a promotion recorded in the old state/promoted.md', !statusOf(legacy).includes('PROMOTION DUE'), statusOf(legacy));
+
+  // The pre-shortening shape of a promoted line: the long sentence the old `promote` wrote. It IS a promotion
+  // (only `promote` writes the `[promoted]` label), so status treats it as landed and never as due.
+  // @es La forma anterior de una línea promovida: la frase larga de la `promote` antigua. ES una promoción
+  // (solo `promote` escribe la etiqueta `[promoted]`), así que status la da por aterrizada y nunca por pendiente.
+  const fat = world('status-fat-promoted');
+
+  write(fat.home, { '.claude/lessons-ledger.md': `# Lessons Ledger\n\n---\n- [promoted] 2026-09-01 — ${KEY}: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism x (selftest run, exit 0); full incident history in y <!--fc:${KEY}#2-->\n` });
+
+  check('status treats a legacy FAT [promoted] ledger line as landed, not due', statusOf(fat).includes('keyed lessons     : 1') && !statusOf(fat).includes('PROMOTION DUE'), statusOf(fat));
+}
+
+{
+  // The archive cannot be written (its path is a DIRECTORY): promote refuses in both languages, changes
+  // nothing in the ledger and records no closure — the line is never shortened without its archive.
+  // @es El archivo no se puede escribir (su ruta es un DIRECTORIO): promote se niega, en ambos idiomas, sin
+  // cambiar el ledger ni registrar el cierre: la línea nunca se acorta sin su archivo.
+  const target = world('evidence-unwritable');
+
+  mkdirSync(path.join(target.home, '.claude', 'lessons', 'evidence', `${KEY}.md`), { recursive: true });
+
+  const run = promote(target, ['--mechanism', '.claude/good-guard/guard.mjs']);
+
+  check('an unwritable archive refuses the promotion (exit 1) and names why', run.status === 1 && run.out.includes('could not be written') && run.out.includes('not promoted'), `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
+  check('...in both languages', run.out.includes(' @es ') && run.out.includes('no se promovió'), run.out.trim().slice(0, 400));
+  check('...the ledger is byte-identical and no closure is recorded', !run.ledger.includes('[promoted]') && run.ledger.includes('- [global] 2026-09-14 — a lesson that recurred') && !run.incidents.includes('"kind":"promotion"'), run.ledger);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -433,6 +500,14 @@ refused(
   const repoLedger = readFileSync(path.join(target.repo, '.claude', 'lessons-ledger.md'), 'utf8');
 
   check('alcance: promover una clave del ledger del PROYECTO colapsa SU línea, en SU archivo', repoLedger.includes('[promoted]') && repoLedger.includes('project-promoted'), `${run}\n${repoLedger}`);
+
+  const projectStatus = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
+
+  check('alcance: ...y `status` ve el muñón del ledger del PROYECTO: la clave ya no está pendiente', projectStatus.includes('keyed lessons') && !projectStatus.includes('project-promoted (2x)'), projectStatus);
+
+  const projectEvidence = path.join(target.repo, '.claude', 'lessons', 'evidence', 'project-promoted.md');
+
+  check('alcance: ...y archiva la línea original en la evidencia junto al ledger del PROYECTO, no en la del home', existsSync(projectEvidence) && readFileSync(projectEvidence, 'utf8').includes('- [b100-am-ui] 2026-09-20 — project lesson -> RULE: x <!--fc:project-promoted#2-->') && !existsSync(path.join(target.home, '.claude', 'lessons', 'evidence', 'project-promoted.md')), existsSync(projectEvidence) ? readFileSync(projectEvidence, 'utf8') : 'no evidence file');
 }
 
 // ---------------------------------------------------------------------------------------------

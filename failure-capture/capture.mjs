@@ -44,6 +44,7 @@ import { fileURLToPath } from 'node:url';
 import { baselineFor, closureClause, closureRecord, contractFileId, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
 import { describeOutcome, newRunId, runCondense } from './condense.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
+import { promotedStub } from './promotion.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { withLock } from './ledger-lock.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
@@ -60,6 +61,8 @@ const LOCK_FILE = path.join(STATE_DIR, 'ledger.lock');
 const INCIDENTS = path.join(STATE_DIR, 'incidents.jsonl');
 const DISMISSALS = path.join(STATE_DIR, 'dismissals.jsonl');
 const LAST_CAPTURE = path.join(STATE_DIR, 'last-capture.json');
+// Read-only since `ledger-tiering-budget`: the record of promotions made by the OLD tool (`status` honours it).
+// @es Solo lectura desde `ledger-tiering-budget`: el registro de promociones de la herramienta ANTIGUA.
 const PROMOTED = path.join(STATE_DIR, 'promoted.md');
 
 // One ledger per scope (`ledgers.mjs`): a project's lessons never travel to every other project.
@@ -633,13 +636,17 @@ function commandPromote(args) {
     }
   }
 
-  // The rule now lives somewhere binding. The ledger line collapses to a stub instead of being
+  // The rule now lives somewhere binding. The ledger line collapses to a MINIMAL stub instead of being
   // deleted: `SendMessage` does NOT fire the delegation-time injector, so a resumed worker may never
   // receive the contract in this session, while the ledger is loaded at every session start.
-  // Deleting outright would trade a few bytes for a hole on exactly the resume path.
-  // @es La regla ya vive en un sitio vinculante. La línea del ledger se colapsa a un muñón en vez de
+  // Deleting outright would trade a few bytes for a hole on exactly the resume path. The whole line, and how
+  // the promotion closed, go to the evidence store first (`promotion.mjs`); that store is the one place the
+  // text lives, so the old `state/promoted.md` is no longer written.
+  // @es La regla ya vive en un sitio vinculante. La línea del ledger se colapsa a un muñón MÍNIMO en vez de
   // borrarse: `SendMessage` NO dispara el inyector de delegación, así que un worker reanudado puede no
-  // recibir el contrato en esta sesión; borrarla cambiaría impuesto de tokens por un agujero.
+  // recibir el contrato en esta sesión; borrarla cambiaría impuesto de tokens por un agujero. La línea
+  // entera y cómo cerró la promoción van antes al almacén de evidencia; ese almacén es el único sitio
+  // del texto, así que `state/promoted.md` ya no se escribe.
   const where = target === 'claude-md' ? '~/.claude/rules/promoted-rules.md' : `the delegated-worker contract (${WORKER_CONTRACTS.length > 1 ? `all ${String(WORKER_CONTRACTS.length)} files` : 'its file'})`;
   // The ledger is read only once the lock is held: a copy read before it would be written back over any
   // line another writer added while this one waited, and would carry an out-of-date recurrence counter.
@@ -651,16 +658,25 @@ function commandPromote(args) {
     if (found === undefined) return;
 
     const { ledger, index } = found;
-    const original = ledger.lines[index];
+    const stub = promotedStub({ ledgerFile: ledger.file, original: ledger.lines[index], date: today(), closure, where });
 
-    appendFileSync(PROMOTED, `${today()} — ${key} -> ${where}; ${closureClause(closure)}\n${original}\n\n`, 'utf8');
-    ledger.lines[index] = `- [promoted] ${today()} — ${key}: now a binding rule in ${where}; ${closureClause(closure)}; full incident history in ~/.claude/failure-capture/state/incidents.jsonl ${MARK_OPEN}${key}#${String(readMarker(original).count)}${MARK_CLOSE}`;
+    if (!stub.ok) return stub;
+
+    ledger.lines[index] = stub.line;
     writeLedger(ledger);
     appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, tokenCount: occurrencesOf(readFileOr(contractFileOf(target), ''), key), file: contractFileId(contractFileOf(target)) }))}\n`, 'utf8');
+
+    return stub;
   });
 
   if (!collapsed.held) {
     console.error('promote: the ledger is locked by another writer — re-run in a moment. Nothing was changed. @es promote: el ledger está bloqueado por otro escritor; reintenta en un momento. No se cambió nada.');
+
+    return 1;
+  }
+
+  if (collapsed.value?.ok !== true) {
+    console.error(`promote REFUSED — ${collapsed.value?.problem ?? 'the lesson is no longer in the ledger. @es la lección ya no está en el ledger.'}`);
 
     return 1;
   }
@@ -715,9 +731,15 @@ function commandStatus() {
   // the count alone would report it as still owing a promotion for ever. `promoted.md` is the record
   // of what actually landed, so it — not the counter — decides what is still outstanding.
   // @es Una clave ya promocionada conserva su recuento en el muñón, así que contar solo por el número
-  // la reportaría como pendiente para siempre. `promoted.md` es el registro de lo que aterrizó.
+  // la reportaría como pendiente para siempre. What landed is now read from the ledger itself: a `[promoted]`
+  // line is the stub `promote` leaves (the full text is in the evidence store). `state/promoted.md`, which
+  // `promote` no longer writes, is still READ, so a promotion recorded by the old tool keeps counting.
+  // @es Lo que aterrizó se lee ahora del propio ledger: una línea `[promoted]` es el muñón que deja `promote`
+  // (el texto completo está en el almacén de evidencia). `state/promoted.md`, que `promote` ya no escribe,
+  // se sigue LEYENDO, para que una promoción registrada por la herramienta antigua siga contando.
   const promoted = readFileOr(PROMOTED, '');
-  const due = [...keys].filter(([key, count]) => count >= PROMOTION_THRESHOLD && !promoted.includes(` — ${key} -> `));
+  const stubbed = new Set(readLedgers(LEDGERS).flatMap((ledger) => (ledger.lines ?? []).filter((line) => line.startsWith('- [promoted] ')).map((line) => readMarker(line)?.key)));
+  const due = [...keys].filter(([key, count]) => count >= PROMOTION_THRESHOLD && !stubbed.has(key) && !promoted.includes(` — ${key} -> `));
 
   if (due.length > 0) {
     console.log('');
