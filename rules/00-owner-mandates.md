@@ -158,3 +158,18 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
 - **Mensajes de commit:** SIEMPRE en inglés (estándar de empresa), Conventional `type(scope): description`,
   sin atribución de IA. Sustituye la regla del 2026-09-28 que los pedía en español.
 - Registro neutro y profesional en todo artefacto: la voz Gentleman es solo para la conversación.
+
+## Backlog maestro — todo hallazgo entra en el momento (directiva del dueño 2026-09-30, global)
+
+Dueño, literal: «Apuntar esto y TODO lo que vaya saliendo más adelante directamente en el backlog …
+y que esto se haga siempre, dejarlo como regla implementada».
+
+- Cada proyecto tiene UN backlog maestro en engram, con `topic_key` `backlog/<hito>-master` (en
+  b100-am-ui: `backlog/1.0.0-master`, observación #972). Es la fuente única de lo que queda.
+- Todo hallazgo, defecto, deuda, decisión pendiente del dueño o tarea «encolada» que aparezca —de un
+  agente, de una medición o de la conversación— se escribe en ese backlog EN EL MISMO TURNO en que
+  aparece. Nunca queda solo en el chat, en un reporte de agente o en una nota suelta.
+- Guardar con el mismo `topic_key` REEMPLAZA el contenido: siempre se lee la revisión actual
+  (`mem_get_observation`) y se reescribe la revisión completa, sumando lo nuevo, sin perder nada.
+- Mecanismo: el guard `Stop` de backlog (`~/.claude/backlog-guard/`) bloquea el fin de un turno cuyo
+  mensaje final anuncia algo pendiente sin haber guardado el backlog maestro en ese turno.
