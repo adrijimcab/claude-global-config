@@ -24,7 +24,11 @@ const BARE_NAME = 'selftest.mjs';
 /** Raised when the population cannot be measured. @es Se lanza cuando no se puede medir la población. */
 export class DiscoveryError extends Error {}
 
-/** @param {string} name */
+/**
+ * True for the two selftest file names: `selftest.mjs` and `<anything>.selftest.mjs`.
+ * @es Verdadero para los dos nombres de selftest: `selftest.mjs` y `<algo>.selftest.mjs`.
+ * @param {string} name
+ */
 function isSelftestName(name) {
   return name === BARE_NAME || name.endsWith(SUFFIX);
 }
@@ -46,7 +50,11 @@ function entriesOf(output) {
   return output.split('\0').filter((entry) => entry !== '');
 }
 
-/** True unless the path exists and is not a regular file: a missing tracked file stays, to be reported RED. */
+/**
+ * True unless the path exists and is not a regular file: a missing tracked file stays, to be reported RED.
+ * @es Verdadero salvo que la ruta exista y no sea un fichero regular: un fichero seguido ausente se
+ * conserva para informarlo ROJO.
+ */
 function isRegularOrMissing(root, relative) {
   try {
     return statSync(path.join(root, relative)).isFile();

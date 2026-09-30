@@ -30,14 +30,14 @@ const OUTPUT_LIMIT_BYTES = 64 * 1024 * 1024;
  * Runs one selftest. Returns why it is red, or null when it is green.
  * @es Ejecuta un selftest. Devuelve por qué está rojo, o null si está verde.
  */
-function runOne(root, entry, timeoutMs) {
+function runOne({ root, entry, timeoutMs, spawn }) {
   const file = path.join(root, entry.path);
   try {
     statSync(file);
   } catch {
     return { exit: 'missing', reason: 'file missing on disk @es fichero ausente en disco', output: '' };
   }
-  const result = spawnSync(process.execPath, [file], {
+  const result = spawn(process.execPath, [file], {
     cwd: path.dirname(file),
     encoding: 'utf8',
     timeout: timeoutMs,
@@ -65,11 +65,15 @@ function indent(text) {
 }
 
 /**
- * @param {{ root: string, timeoutMs?: number }} options
+ * `spawn` is injectable so a result no host produces on demand (a POSIX signal death) can be fed to the
+ * verdict; it defaults to `spawnSync`.
+ * @es `spawn` es inyectable para poder alimentar al veredicto un resultado que ningún host produce a
+ * demanda (muerte por señal POSIX); por defecto es `spawnSync`.
+ * @param {{ root: string, timeoutMs?: number, spawn?: typeof spawnSync }} options
  * @returns {{ exitCode: number, report: string[] }}
  * @es Devuelve el código de salida y las líneas del informe.
  */
-export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spawnSync }) {
   let discovered;
   try {
     discovered = discoverSelftests(root);
@@ -88,7 +92,7 @@ export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   let green = 0;
   for (const entry of discovered.entries) {
     const label = entry.untracked ? ' UNTRACKED' : '';
-    const failure = runOne(discovered.root, entry, timeoutMs);
+    const failure = runOne({ root: discovered.root, entry, timeoutMs, spawn });
     if (failure === null) {
       green += 1;
       report.push(`GREEN  ${entry.path} (exit 0)${label}`);
@@ -102,7 +106,12 @@ export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   return { exitCode: green === discovered.entries.length ? EXIT_GREEN : EXIT_RED, report };
 }
 
-/** @param {string[]} argv @returns {{ root: string } | { error: string }} */
+/**
+ * Reads the command line: nothing, or `--root <dir>`; anything else is refused, so no filter can exist.
+ * @es Lee la línea de órdenes: nada, o `--root <dir>`; todo lo demás se rechaza, así no puede existir filtro.
+ * @param {string[]} argv
+ * @returns {{ root: string } | { error: string }}
+ */
 function parseArgs(argv) {
   if (argv.length === 0) return { root: process.cwd() };
   if (argv.length === 2 && argv[0] === '--root') return { root: argv[1] };
@@ -111,6 +120,10 @@ function parseArgs(argv) {
   };
 }
 
+/**
+ * Runs the command line and prints the report; returns the process exit code.
+ * @es Ejecuta la línea de órdenes e imprime el informe; devuelve el código de salida del proceso.
+ */
 function main() {
   const parsed = parseArgs(process.argv.slice(2));
   if ('error' in parsed) {

@@ -36,15 +36,21 @@ const sandboxes = [];
 let failures = 0;
 let assertions = 0;
 
-/** @param {boolean} ok @param {string} label */
+/**
+ * Records one assertion and reports it when it fails.
+ * @es Registra una aserción y la informa cuando falla.
+ * @param {boolean} ok
+ * @param {string} label
+ */
 function check(ok, label) {
   assertions += 1;
   if (!ok) {
     failures += 1;
-    console.error(`FAIL ${label}`);
+    console.error(`FAIL ${label} @es FALLO ${label}`);
   }
 }
 
+/** Runs git inside a fixture. @es Ejecuta git dentro de un fixture. */
 function git(cwd, ...args) {
   return spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
 }
@@ -56,6 +62,7 @@ function bareDir() {
   return dir;
 }
 
+/** Writes a fixture file, creating its directories. @es Escribe un fichero del fixture, creando sus directorios. */
 function put(root, relative, content) {
   mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
   writeFileSync(path.join(root, relative), content);
@@ -78,10 +85,12 @@ function repo({ tracked = {}, loose = {}, ignore = '' }) {
   return root;
 }
 
+/** Runs the real runner as a process. @es Ejecuta el runner real como proceso. */
 function cli(cwd, ...args) {
   return spawnSync(process.execPath, [RUN, ...args], { cwd, encoding: 'utf8' });
 }
 
+/** Discovered paths, an untracked one marked with `*`. @es Rutas descubiertas; las sin seguir llevan `*`. */
 function found(root) {
   return discoverSelftests(root).entries.map((entry) => `${entry.path}${entry.untracked ? '*' : ''}`).sort();
 }
@@ -100,6 +109,7 @@ const named = repo({
     'e/selftest.mjs': GREEN,
     'ignored/selftest.mjs': GREEN,
     'ignored/selftest.mjs.bak': GREEN,
+    'ignored/z.selftest.mjs/inner.txt': 'an ignored directory named like a selftest',
     'ignored/deep/selftest.mjs': GREEN,
     'scratch/x/y/selftest.mjs': GREEN,
   },
@@ -114,11 +124,13 @@ check(
 check(JSON.stringify(found(path.join(named, 'a'))) === JSON.stringify(found(named)), 'a subdirectory root reaches the top level');
 const viaRelative = cli(path.dirname(named), '--root', path.basename(named));
 check(viaRelative.status === 0 && viaRelative.stdout.includes('4/4 green'), `a relative root works: ${viaRelative.status}`);
+check(viaRelative.stdout.includes('ignored/selftest.mjs (exit 0) UNTRACKED'), 'the report labels an ignored directory selftest UNTRACKED');
 
 const outside = bareDir();
 const notRepo = cli(outside, '--root', outside);
 check(notRepo.status === 2, `a non-repository exits 2: ${notRepo.status}`);
 check(notRepo.stderr.includes('@es'), 'the non-repository message is bilingual');
+check(notRepo.stderr.includes('Cannot list the repository files'), 'the non-repository message names the git failure, not an empty listing');
 
 const empty = repo({ tracked: { 'README.md': 'nothing here' } });
 const none = cli(empty, '--root', empty);
@@ -156,15 +168,20 @@ const slow = repo({ tracked: { 'a/selftest.mjs': 'setInterval(() => {}, 1000)\n'
 const timedOut = runSelftests({ root: slow, timeoutMs: 700 });
 check(timedOut.exitCode === 1 && timedOut.report.join('\n').includes('timed out'), 'a selftest that outlives the timeout is RED');
 
+const signalDeath = { status: null, signal: 'SIGKILL', stdout: '', stderr: '' };
+const signalled = runSelftests({ root: allGreen, spawn: () => signalDeath });
+check(signalled.exitCode === 1 && signalled.report.join('\n').includes('killed by SIGKILL'), 'a death by signal with no exit status is RED on every host');
+
 const missing = repo({ tracked: { 'a/selftest.mjs': GREEN, 'b/selftest.mjs': GREEN } });
 rmSync(path.join(missing, 'a', 'selftest.mjs'));
 const gone = cli(missing, '--root', missing);
 check(gone.status === 1 && /RED\s+a\/selftest\.mjs/.test(gone.stdout), 'a tracked selftest deleted from disk is RED, not omitted');
+check(gone.stdout.includes('file missing on disk'), 'a deleted selftest is reported as missing, not run and failed by accident');
 
 // ── Nothing to filter with ───────────────────────────────────────────────────────────────────────
 const filtered = cli(allGreen, '--root', allGreen, '--only', 'a/selftest.mjs');
 check(filtered.status === 2, `an option that would filter is refused: ${filtered.status}`);
 
 for (const dir of sandboxes) rmSync(dir, { recursive: true, force: true });
-console.log(`selftest-runner selftest: ${assertions - failures}/${assertions} assertions passed`);
+console.log(`selftest-runner selftest: ${assertions - failures}/${assertions} assertions passed @es aserciones superadas`);
 process.exit(failures === 0 ? 0 : 1);
