@@ -165,6 +165,13 @@
 /type-assertion-guard/state/
 /type-assertion-guard/scratch/
 
+# Lands a verified work branch onto the shared branch; closes `unverified-commit-published-by-another-sessions-sync`.
+# Code yes; live state no. @es Aterriza una rama de trabajo verificada sobre la rama compartida. Código sí;
+# estado en vivo no.
+!/worktree-landing/
+!/worktree-landing/*.mjs
+/worktree-landing/state/
+
 # ── Reincluir ficheros sueltos de config propia ──────────────────────────────────────────────────
 !/CLAUDE.md
 !/settings.json
