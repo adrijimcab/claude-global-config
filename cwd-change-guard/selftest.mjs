@@ -158,7 +158,7 @@ for (const [expected, input, label, expectedText] of cases) {
 // --- THE REFUSAL TEACHES THE REMEDY: all three shapes, in both languages, and the recommended shape is allowed.
 const reason = refusalText({ executable: 'cd', text: 'cd x' });
 
-const [english, spanish] = reason.split('@es ');
+const [english, spanish = ''] = reason.split('@es ');
 
 check('the refusal names the `git -C` shape in English', english.includes('git -C <dir>'), true);
 check('the refusal names the subshell shape in English', english.includes('( cd <dir> && <command> )'), true);
