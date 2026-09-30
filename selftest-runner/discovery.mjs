@@ -64,6 +64,23 @@ function isRegularOrMissing(root, relative) {
 }
 
 /**
+ * Names of the selftests that sit DIRECTLY inside an ignored directory, never deeper: a deeper copy is a
+ * sandbox or a scratch clone, not the mechanism that owns the directory. The listing is the one place that
+ * decides how deep to look; the name test reads the last path segment, so it judges a file and not where the
+ * listing found it.
+ * @es Nombres de los selftests que están DIRECTAMENTE en un directorio ignorado, nunca más abajo: una copia
+ * más profunda es un sandbox o un clon de trabajo, no el mecanismo dueño del directorio. El listado es el
+ * único lugar que decide la profundidad; la prueba de nombre lee el último segmento de la ruta.
+ * @param {string} top repository top level @es raíz del repositorio
+ * @param {string} directory ignored directory with trailing slash @es directorio ignorado con barra final
+ */
+function selftestsHeldDirectlyBy(top, directory) {
+  return readdirSync(path.join(top, directory)).filter(
+    (name) => isSelftestName(path.basename(name)) && isRegularOrMissing(top, directory + name),
+  );
+}
+
+/**
  * @param {string} root any directory inside a repository, absolute or relative to the process cwd
  * @returns {{ root: string, entries: { path: string, untracked: boolean }[] }} paths relative to the top level, posix separators
  * @es Devuelve la raíz real del repo y sus selftests (ruta relativa a la raíz, separadores posix).
@@ -78,11 +95,7 @@ export function discoverSelftests(root) {
   const ignored = entriesOf(git(top, 'ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'));
   const direct = ignored
     .filter((entry) => entry.endsWith('/'))
-    .flatMap((directory) =>
-      readdirSync(path.join(top, directory))
-        .filter((name) => isSelftestName(name) && isRegularOrMissing(top, directory + name))
-        .map((name) => ({ path: directory + name, untracked: true })),
-    );
+    .flatMap((directory) => selftestsHeldDirectlyBy(top, directory).map((name) => ({ path: directory + name, untracked: true })));
 
   const entries = [...tracked, ...direct].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { root: top, entries };

@@ -164,9 +164,14 @@ check(cli(cwdCase, '--root', cwdCase).status === 0, 'each selftest runs with its
 const killed = repo({ tracked: { 'a/selftest.mjs': "process.kill(process.pid, 'SIGKILL')\n" } });
 check(cli(killed, '--root', killed).status === 1, 'a selftest killed by a signal is RED');
 
-const slow = repo({ tracked: { 'a/selftest.mjs': 'setInterval(() => {}, 1000)\n' } });
+// The sleeper is BOUNDED (4 s) against a 700 ms timeout: if a mutant stops honouring the timeout the
+// selftest ends green after 4 s and the assertion fails, instead of the campaign hanging on a child that never ends.
+// @es El durmiente está ACOTADO (4 s) frente a un timeout de 700 ms: si un mutante ignora el timeout, el
+// selftest termina en verde a los 4 s y la aserción falla, en vez de colgar la campaña con un hijo eterno.
+const slow = repo({ tracked: { 'a/selftest.mjs': 'setTimeout(() => {}, 4000);\n' } });
 const timedOut = runSelftests({ root: slow, timeoutMs: 700 });
 check(timedOut.exitCode === 1 && timedOut.report.join('\n').includes('timed out'), 'a selftest that outlives the timeout is RED');
+check(timedOut.report.some((line) => /^RED\s+a\/selftest\.mjs \(exit timeout\)/.test(line)), 'the timed-out selftest is named RED with the timeout status');
 
 const signalDeath = { status: null, signal: 'SIGKILL', stdout: '', stderr: '' };
 const signalled = runSelftests({ root: allGreen, spawn: () => signalDeath });

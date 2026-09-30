@@ -23,7 +23,8 @@ const MUTANTS = [
   ['the `.selftest.mjs` suffix is no longer recognised', DISCOVERY, 'name === BARE_NAME || name.endsWith(SUFFIX)', 'name === BARE_NAME'],
   ['any name that merely contains `selftest.mjs` matches, so `selftest.mjs.bak` runs', DISCOVERY, 'name === BARE_NAME || name.endsWith(SUFFIX)', 'name.includes(BARE_NAME)'],
   ['the bare name matches as a suffix, so `myselftest.mjs` runs', DISCOVERY, 'name === BARE_NAME ||', 'name.endsWith(BARE_NAME) ||'],
-  ['an ignored directory accepts any name containing `selftest`, so its `.bak` copy runs', DISCOVERY, '(name) => isSelftestName(name) &&', "(name) => name.includes('selftest') &&"],
+  ['an ignored directory accepts any name containing `selftest`, so its `.bak` copy runs', DISCOVERY, '(name) => isSelftestName(path.basename(name)) &&', "(name) => name.includes('selftest') &&"],
+  ['an ignored directory is listed recursively, so a selftest deeper than its direct children runs', DISCOVERY, 'readdirSync(path.join(top, directory)).filter(', 'readdirSync(path.join(top, directory), { recursive: true }).filter('],
   ['a directory named like a selftest counts as one', DISCOVERY, 'return statSync(path.join(root, relative)).isFile();', 'return true;'],
   ['a tracked file missing from disk is dropped instead of reported RED', DISCOVERY, '    return true;\n  }\n}', '    return false;\n  }\n}'],
   // Which files git lists / Qué ficheros lista git
@@ -45,6 +46,7 @@ const MUTANTS = [
   ['a discovery failure exits like a red selftest instead of not-measured', RUN, 'return { exitCode: EXIT_NOT_MEASURED, report: [error.message] };', 'return { exitCode: EXIT_RED, report: [error.message] };'],
   ['a selftest that ends without exit status 0 (a signal) is green', RUN, 'if (result.status === 0) return null;', 'if (result.status === 0 || result.status === null) return null;'],
   ['a timeout is no longer told apart from other failures', RUN, "if (result.error?.code === 'ETIMEDOUT') {", 'if (false) {'],
+  ['the timeout is not passed to the child, so a selftest that outlives it is left to finish and reads as green', RUN, 'timeout: timeoutMs,', 'timeout: 0,'],
   ['a selftest missing from disk is run instead of reported missing', RUN, '    statSync(file);', '    void file;'],
   ['each selftest runs in the root instead of its own directory', RUN, 'cwd: path.dirname(file),', 'cwd: root,'],
   ['the UNTRACKED label is dropped from the report', RUN, "const label = entry.untracked ? ' UNTRACKED' : '';", "const label = '';"],
