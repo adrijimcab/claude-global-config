@@ -232,6 +232,14 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   surprises, fix the question, never add a second answer beside it.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/gitignored-deliverable-destroyed-by-worktree-autoclean.md`.
 
+- **`brief-contradicted-a-standing-project-rule`** — A brief I write outranks nothing: the project's
+  standing rules do. Twice: I asked for API goldens in a SEPARATE commit (the rule says the same
+  commit), and I told workers to make runtime messages "English output" when the owner's intent was
+  bilingual everywhere, which made them delete the Spanish half of real messages. RULE: before fixing
+  the FORM of a deliverable in a brief (commit shape, language, where it lands), check it against the
+  project rules for that area; never extend a rule to a surface it does not name from a guess (apply
+  its evident intent or ask); and never relay an unmeasured worker claim as the basis of a brief.
+  Mechanism for the language face: the bilingual gate (every code text, runtime messages included).
 - **`instructed-a-worker-to-run-a-denied-command`** — A brief is written from the operation I want,
   and the worker's environment decides what it can actually do. Twice: a brief told a worker to
   `git rebase` (denied in settings), and a brief told an `isolation: "worktree"` worker to create a
