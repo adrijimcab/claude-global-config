@@ -131,16 +131,10 @@ destruction (see the hooks section below).
 
 ## Standing workflow premise — SDD + full contract + tooling leverage + senior audit stance (owner directive 2026-07-28)
 
-For ANY non-trivial development, fix (with real logic), refactor, or new project: the gentle-ai **SDD
-workflow** (`sdd-explore → sdd-propose → sdd-spec → sdd-design → sdd-tasks → sdd-apply → sdd-verify →
-sdd-archive` skills) + `judgment-day`/`review-*` lenses are MANDATORY — explore & spec FIRST, implement
-behind the spec, verify, archive; never jump straight to editing. Every delegated agent binds the FULL
-project contract (`.claude/AGENT-LEDGER.md` ↔ `.agents/AGENTS.md`, kept in parity by the pre-commit gate),
-and the outcome is proven by the REAL full gate set, never a subset. Trivial one-liners (typo/rename) skip
-the 8-phase SDD but STILL bind the senior stance + gates. Loaded in every project by
-`~/.claude/rules/10-contracts.md`, which imports `~/.claude/sdd-mandate.md` — that file is the SINGLE
-SOURCE (do not duplicate its text here; M8). Lives in `~/.claude/rules/`, outside anything
-`gentle-ai sync` rewrites.
+The route a change takes (SDD where the design is open, direct where it is settled), the full agent
+contract, and proof by the project's real full gate set are stated in `~/.claude/sdd-mandate.md`, which
+`~/.claude/rules/10-contracts.md` imports in every project. That file is the SINGLE SOURCE; its text is
+not repeated here (M8).
 
 ## Checklists de referencia (no auto-cargadas) — `~/.claude/checklists/`
 
