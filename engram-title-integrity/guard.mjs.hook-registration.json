@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "mcp__engram__mem_save|mcp__plugin_engram_engram__mem_save"
+    }
+  ],
+  "why": "untitled observations refill the memory store at the intake, which is how ten new ones appeared the day after 66 were backfilled by hand."
+}

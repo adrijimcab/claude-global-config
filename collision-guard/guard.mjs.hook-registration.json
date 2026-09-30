@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "`git checkout --ours/--theirs` resolves a conflict by dropping the other side unread, and a side-take loses exactly the content no gate verifies — measured: three `docs/SCRIPTS.md` conflicts resolved that way dropped a hand-authored paragraph while `check:script-docs` stayed green (`collision-fixed-by-deleting-unread-side`)."
+}

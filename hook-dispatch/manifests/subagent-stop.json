@@ -1,0 +1,6 @@
+{
+  "event": "SubagentStop",
+  "guards": [
+    "../../failure-capture/turn-guard.mjs"
+  ]
+}

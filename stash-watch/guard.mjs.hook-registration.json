@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "Stop"
+    }
+  ],
+  "why": "a stash is in no git status, no git log and no worktree, so it outlives the worktree that made it and sits unseen; three did (#40, #129, and 279cf467 for eighteen days), each found only by somebody looking."
+}

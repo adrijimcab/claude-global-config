@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Agent|Task"
+    }
+  ],
+  "why": "a fresh agent is spawned for work a recent agent already holds a transcript and a worktree for, discarding that work instead of resuming it by agentId — the failure that nearly wrote off five rate-limited agents on 2026-09-09."
+}

@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Agent|Task|SendMessage"
+    }
+  ],
+  "why": "a brief sends a worker at a package-manager mutation inside a checkout whose node_modules is a junction into another tree, on the strength of an unmeasured claim that the tree is independent — measured 2026-09-21, when a delegation said the two plugin repositories 'have their own independent trees, so npm ci is exactly the command you want' while Get-Item -Force reported LinkType=Junction into b100-am-ui/node_modules for both. Unregistered for SendMessage alone, every resume carries the same claim unguarded while the code claims to cover it: SendMessage has no `prompt`, its text is in `message`, and that gap was measured on 2026-09-14 in the sibling brief-provenance guard."
+}

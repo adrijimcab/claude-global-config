@@ -1,0 +1,197 @@
+#!/usr/bin/env node
+/**
+ * Discrimination proof of the loop's PER-PROJECT routing (`project.mjs`), which made the loop global on
+ * 2026-09-30. Every state its decisions range over, on constructed projects and a constructed home:
+ *   - which project a directory belongs to: none, a top-level project, a subfolder project, a linked
+ *     worktree mapped to its main checkout, and a sibling folder no project holds;
+ *   - the scope: the folder name by default, the configured one when given, and a broken config refused;
+ *   - `init`: creates the ledger and the import once, and changes nothing the second time;
+ *   - a capture from project A lands in A's ledger, and a spooled A entry folded by a process in project B
+ *     still lands in A's ledger, never B's;
+ *   - a worker promotion: into `.claude/CLAUDE.md` by default, into the configured contract files plus the
+ *     parity gate when configured, and refused while any file lacks the token or the gate is red.
+ * @es Prueba de discriminación del ruteo POR PROYECTO del bucle, sobre proyectos y home construidos.
+ */
+
+import { execFileSync, spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { projectOf } from './project.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+// The REAL path: Windows hands out the 8.3 spelling of the temp dir, and the loop reports real paths.
+// @es La ruta REAL: Windows da la forma 8.3 del temporal y el bucle reporta rutas reales.
+const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-capture-project-')));
+const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
+
+let passed = 0;
+const failures = [];
+
+function check(name, condition, detail) {
+  if (condition === true) passed += 1;
+  else failures.push(`${name}${detail === undefined ? '' : ` — ${String(detail).slice(0, 600)}`}`);
+}
+
+function write(root, files) {
+  for (const [relative, contents] of Object.entries(files)) {
+    const absolute = path.join(root, ...relative.split('/'));
+
+    mkdirSync(path.dirname(absolute), { recursive: true });
+    writeFileSync(absolute, contents, 'utf8');
+  }
+}
+
+/** An equality check, compared as JSON. @es Una comprobación de igualdad, comparada como JSON. */
+const equal = (name, actual, expected) => check(name, JSON.stringify(actual) === JSON.stringify(expected), `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+
+const read = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
+
+function git(directory, ...args) {
+  execFileSync('git', ['-C', directory, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+/** A home holding a copy of the loop, so its state and ledger are the fixture's own. @es Un home con una copia del bucle. */
+function makeHome(name) {
+  const home = path.join(scratch, name, 'home');
+  const loop = path.join(home, '.claude', 'failure-capture');
+
+  mkdirSync(path.join(loop, 'state'), { recursive: true });
+  for (const file of readdirSync(HERE)) if (file.endsWith('.mjs') && !file.includes('selftest') && !file.includes('mutants')) copyFileSync(path.join(HERE, file), path.join(loop, file));
+  write(home, { '.claude/lessons-ledger.md': '# Lessons Ledger — global\n\n---\n', '.claude/rules/promoted-rules.md': '# Contract\n' });
+
+  return { home, cli: path.join(loop, 'capture.mjs'), incidents: path.join(loop, 'state', 'incidents.jsonl') };
+}
+
+/** Runs the CLI in `cwd` under `home`. @returns `{ status, out }`. @es Corre el CLI en `cwd` bajo `home`. */
+function run({ home, cli }, cwd, ...args) {
+  const result = spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home } });
+
+  return { status: result.status, out: `${result.stdout}${result.stderr}` };
+}
+
+const LESSON = (key) => `what went wrong for ${key} -> root cause -> RULE: do it right every time`;
+const capture = (world, cwd, key, scope, actor = 'orchestrator') => run(world, cwd, 'capture', '--key', key, '--scope', scope, '--actor', actor, '--lesson', LESSON(key));
+
+// MEASURED 2026-09-30: a first draft of this selftest ran `init` from a folder whose walk reached the REAL
+// home, and appended an import to the real `~/.claude/CLAUDE.md`. That file is fingerprinted before and
+// after, so a fixture that escapes its sandbox fails here instead of passing silently. The real ledger is
+// NOT fingerprinted: the live fleet appends to it while this runs (measured: a concurrent capture made
+// that check red over a correct run), so its content cannot tell this test's writes from theirs.
+// @es Un primer borrador escribió en el `~/.claude/CLAUDE.md` REAL; se comparan huellas antes y después.
+// El ledger real no: la flota viva lo escribe mientras esto corre.
+const USER_FILES = [path.join(os.homedir(), '.claude', 'CLAUDE.md')];
+const fingerprint = () => USER_FILES.map((file) => (existsSync(file) ? readFileSync(file, 'utf8') : '<absent>')).join('\u0000');
+const userFilesBefore = fingerprint();
+
+try {
+  // Every project lives UNDER the fixture home, as real ones live under the real home: the walk stops at
+  // the home, whichever home the process was given.
+  // @es Los proyectos viven BAJO el home del fixture, como los reales bajo el real.
+  const world = makeHome('routing');
+  const projects = path.join(world.home, 'projects');
+  const plain = path.join(projects, 'plain');
+
+  write(plain, { 'file.txt': 'x\n' });
+
+  // --- which project a directory belongs to -----------------------------------------------------------
+  const app = path.join(projects, 'app');
+  const monorepo = path.join(projects, 'monorepo');
+  const api = path.join(monorepo, 'services', 'api');
+
+  write(app, { '.claude/CLAUDE.md': '# App\n', 'src/index.txt': 'x\n' });
+  write(monorepo, { 'README.md': 'x\n', 'services/web/index.txt': 'x\n' });
+  write(api, { '.claude/CLAUDE.md': '# Api\n', 'index.txt': 'x\n', '.claude/failure-capture.json': JSON.stringify({ scope: 'legacy-api' }) });
+  git(monorepo, 'init', '--quiet');
+  git(monorepo, 'config', 'user.email', 'fixture@example.invalid');
+  git(monorepo, 'config', 'user.name', 'Fixture');
+  git(monorepo, 'config', 'core.hooksPath', path.join(scratch, 'no-hooks'));
+  write(monorepo, { '.git/info/exclude': '.claude/\n' });
+  git(monorepo, 'add', '-A');
+  git(monorepo, 'commit', '--quiet', '-m', 'initial');
+  git(monorepo, 'worktree', 'add', '--quiet', '-b', 'work', path.join(scratch, 'monorepo-worktree'));
+
+  equal('no project holds a plain folder', projectOf(plain), undefined);
+  equal('a top-level project: scope is the folder name by default', projectOf(path.join(app, 'src'))?.scope, 'app');
+  equal('...its ledger is its own .claude/lessons-ledger.md', projectOf(app)?.ledgerFile, path.join(app, '.claude', 'lessons-ledger.md'));
+  equal('...and its default worker contract is its .claude/CLAUDE.md', projectOf(app)?.workerContracts, [path.join(app, '.claude', 'CLAUDE.md')]);
+  equal('a subfolder project takes its configured scope', projectOf(api)?.scope, 'legacy-api');
+  equal('a sibling folder of the subfolder project is held by no project', projectOf(path.join(monorepo, 'services', 'web')), undefined);
+  equal('the same subfolder inside a LINKED worktree maps to the main checkout project', projectOf(path.join(scratch, 'monorepo-worktree', 'services', 'api'))?.root, projectOf(api)?.root);
+
+  write(app, { '.claude/failure-capture.json': JSON.stringify({ scop: 'typo' }) });
+  let thrown = '';
+
+  try {
+    projectOf(app);
+  } catch (error) {
+    thrown = error.message;
+  }
+  check('a broken project config THROWS, never reads as absent', thrown.includes('unknown key "scop"'), thrown);
+  rmSync(path.join(app, '.claude', 'failure-capture.json'));
+
+  // --- init ---------------------------------------------------------------------------------------------
+  const first = run(world, api, 'init');
+  const instructions = () => read(path.join(api, '.claude', 'CLAUDE.md'));
+
+  check('init creates the project ledger with its header', first.status === 0 && read(path.join(api, '.claude', 'lessons-ledger.md')).startsWith('# Lessons Ledger — legacy-api'), first.out);
+  check('init adds exactly one @lessons-ledger.md import', instructions().split('\n').filter((line) => line.trim() === '@lessons-ledger.md').length === 1, instructions());
+  run(world, api, 'init');
+  check('init a second time changes nothing', instructions().split('\n').filter((line) => line.trim() === '@lessons-ledger.md').length === 1, instructions());
+  check('init outside every project is refused', run(world, plain, 'init').status !== 0);
+
+  // --- routing ------------------------------------------------------------------------------------------
+  check('a scope that is not this project\'s is refused', capture(world, app, 'wrong-scope-lesson', 'legacy-api').status !== 0);
+  check('outside every project only the global scope is accepted', capture(world, plain, 'nowhere-lesson', 'app').status !== 0);
+  capture(world, app, 'app-lesson', 'app');
+  check('a capture in project A lands in A\'s ledger', read(path.join(app, '.claude', 'lessons-ledger.md')).includes('<!--fc:app-lesson#1-->'));
+  check('...and in no other ledger', !read(path.join(api, '.claude', 'lessons-ledger.md')).includes('app-lesson') && !read(path.join(world.home, '.claude', 'lessons-ledger.md')).includes('app-lesson'));
+
+  // A spooled entry from project A, left by a writer that lost the lock, folded by a capture in project B.
+  const spooled = { key: 'spooled-app-lesson', scope: 'app', actor: 'orchestrator', lesson: LESSON('spooled-app-lesson'), date: '2026-09-30', session: 'x', at: new Date().toISOString(), project: { scope: 'app', ledgerFile: path.join(app, '.claude', 'lessons-ledger.md') } };
+
+  write(world.home, { '.claude/failure-capture/state/spool/0000000000001-1-a.json': JSON.stringify(spooled) });
+  capture(world, api, 'api-lesson', 'legacy-api');
+  check('an A entry folded by a process in B lands in A\'s ledger', read(path.join(app, '.claude', 'lessons-ledger.md')).includes('<!--fc:spooled-app-lesson#1-->'));
+  check('...never in B\'s', !read(path.join(api, '.claude', 'lessons-ledger.md')).includes('spooled-app-lesson'));
+  run(world, api, 'init');
+  check('init never rewrites a ledger that already exists', read(path.join(api, '.claude', 'lessons-ledger.md')).includes('<!--fc:api-lesson#1-->'));
+  check('a capture from a linked worktree lands in the main checkout\'s project ledger', capture(world, path.join(scratch, 'monorepo-worktree', 'services', 'api'), 'from-worktree-lesson', 'legacy-api').status === 0 && read(path.join(api, '.claude', 'lessons-ledger.md')).includes('<!--fc:from-worktree-lesson#1-->'));
+
+  // --- worker promotion ---------------------------------------------------------------------------------
+  capture(world, app, 'worker-lesson', 'app', 'worker:general-purpose');
+  capture(world, app, 'worker-lesson', 'app', 'worker:general-purpose');
+  check('a worker promotion into the default contract is refused while CLAUDE.md lacks the token', run(world, app, 'promote', '--key', 'worker-lesson', '--no-mechanism', REASON).out.includes(`absent from ${path.join(app, '.claude', 'CLAUDE.md')}`));
+  write(app, { '.claude/CLAUDE.md': '# App\n\n- worker-lesson: the rule, written down.\n' });
+  const promoted = run(world, app, 'promote', '--key', 'worker-lesson', '--no-mechanism', REASON);
+
+  check('...and closes once the token is in the project CLAUDE.md', promoted.status === 0 && read(path.join(app, '.claude', 'lessons-ledger.md')).includes('[promoted]'), promoted.out);
+  check('...reporting that no parity gate was declared, never that one passed', promoted.out.includes('this project declares no parity gate'), promoted.out);
+
+  write(api, {
+    '.claude/failure-capture.json': JSON.stringify({ scope: 'legacy-api', workerContracts: ['.claude/AGENT-LEDGER.md', '.agents/AGENTS.md'], parityGate: '.claude/parity.mjs' }),
+    '.claude/AGENT-LEDGER.md': '# Ledger\n\n- api-worker-lesson: rule.\n',
+    '.agents/AGENTS.md': '# Agents\n',
+    '.claude/parity.mjs': "const text = (await import('node:fs')).readFileSync(new URL('./AGENT-LEDGER.md', import.meta.url), 'utf8');\nconst ANCHORS = ['api-worker-lesson'];\nprocess.exit(ANCHORS.every((a) => text.includes(a)) ? 0 : 1);\n"
+  });
+  capture(world, api, 'api-worker-lesson', 'legacy-api', 'worker:general-purpose');
+  capture(world, api, 'api-worker-lesson', 'legacy-api', 'worker:general-purpose');
+  check('a configured contract: refused while ANY of its files lacks the token', run(world, api, 'promote', '--key', 'api-worker-lesson', '--no-mechanism', REASON).out.includes(`absent from ${path.join(api, '.agents', 'AGENTS.md')}`));
+  write(api, { '.agents/AGENTS.md': '# Agents\n\n- api-worker-lesson: regla.\n' });
+  write(api, { '.claude/parity.mjs': "process.exit(1); // 'api-worker-lesson'\n" });
+  check('a configured parity gate that is RED refuses the promotion', run(world, api, 'promote', '--key', 'api-worker-lesson', '--no-mechanism', REASON).out.includes('parity gate is RED'));
+  write(api, { '.claude/parity.mjs': "process.exit(0); // 'api-worker-lesson'\n" });
+  const gated = run(world, api, 'promote', '--key', 'api-worker-lesson', '--no-mechanism', REASON);
+
+  check('a green parity gate and every file carrying the token closes it', gated.status === 0 && gated.out.includes('parity gate ran and passed'), gated.out);
+} finally {
+  rmSync(scratch, { recursive: true, force: true });
+}
+
+check('the real user-level CLAUDE.md is untouched by every case above', fingerprint() === userFilesBefore);
+
+process.stdout.write(`failure-capture project selftest: ${passed} passed, ${failures.length} failed\n`);
+for (const failure of failures) process.stdout.write(`  FAIL ${failure}\n`);
+process.exit(failures.length === 0 ? 0 : 1);

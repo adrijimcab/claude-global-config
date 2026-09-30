@@ -1,0 +1,54 @@
+{
+  "parentUuid": "66669a84-270e-48a1-98bb-351596ef7807",
+  "isSidechain": true,
+  "agentId": "aa3437bf9bf7832a9",
+  "type": "assistant",
+  "uuid": "3b235464-7ae8-4a9c-b1cd-051e5c594b3f",
+  "timestamp": "2026-09-30T02:29:39.445Z",
+  "message": {
+    "diagnostics": null,
+    "id": "b8202536-f237-43b6-a100-ba20cf3e1889",
+    "container": null,
+    "model": "<synthetic>",
+    "role": "assistant",
+    "stop_details": null,
+    "stop_reason": "stop_sequence",
+    "stop_sequence": "",
+    "type": "message",
+    "usage": {
+      "output_tokens_details": null,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": null,
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": null,
+      "iterations": null,
+      "speed": null
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "Prompt is too long"
+      }
+    ],
+    "context_management": null
+  },
+  "error": "invalid_request",
+  "isApiErrorMessage": true,
+  "userType": "external",
+  "entrypoint": "cli",
+  "cwd": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude\\worktrees\\agent-aa3437bf9bf7832a9",
+  "sessionId": "c45d798b-d78f-4f60-9a32-1f722bbe86e5",
+  "version": "2.1.281",
+  "gitBranch": "develop",
+  "slug": "goofy-shimmying-moth"
+}

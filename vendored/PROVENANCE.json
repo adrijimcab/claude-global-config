@@ -1,0 +1,34 @@
+{
+  "sourceRoot": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude",
+  "syncedAt": "2026-09-30T02:39:46.458Z",
+  "files": [
+    {
+      "path": "shell-command/shell-command.mjs",
+      "sha256": "b6f835b362c4029829f019d9bfb1c476fe07c38ccae00bade88dbd0004f62ee9"
+    },
+    {
+      "path": "shell-command/git-invocations.mjs",
+      "sha256": "e97425a0bbd8cf910354450aea2313982b79a6e57582d2210a84033db3c48c3e"
+    },
+    {
+      "path": "cherry-pick-guard/working-directory.mjs",
+      "sha256": "5f347be6ff2ddb410157099a9c2b00c14e0b56796e1505b4d5c3321f4afc5f1e"
+    },
+    {
+      "path": "agent-liveness/liveness.mjs",
+      "sha256": "8eda4c82222c39a30b4f2bcc4f50e53e234f49acd8cbae6cf767b86a9c181e12"
+    },
+    {
+      "path": "toolchain-guard/tree-tenancy.mjs",
+      "sha256": "a2ed7da95e3ecb6293621448e6d0fb26da18cf1c5200077709b3c1d8b55e3e1f"
+    },
+    {
+      "path": "toolchain-guard/package-manager-mutations.mjs",
+      "sha256": "f56ded1c0a3227012d138414cf57e6020916093a389126d0e4abdcbca293fe71"
+    },
+    {
+      "path": "brief-tenancy/tenancy-declaration.mjs",
+      "sha256": "e76e0f8f9d4dcd87c7941580fbe754a764ff0f1cc9d1572a0beb3d536ce6f982"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a Bash or PowerShell command that ends by printing $? or $LASTEXITCODE runs again, reports the print's success as the command's exit code, and a failed step reads as a success — the shape that produced five false 'the notifier lies about exit codes' conclusions on 2026-09-09."
+}

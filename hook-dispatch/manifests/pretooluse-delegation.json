@@ -1,6 +1,11 @@
 {
   "event": "PreToolUse",
   "guards": [
-    "../../brief-feasibility/guard.mjs"
+    "../../brief-feasibility/guard.mjs",
+    "../../brief-provenance/guard.mjs",
+    "../../brief-audience/guard.mjs",
+    "../../engram-title-integrity/guard.mjs",
+    "../../resume-before-fresh/guard.mjs",
+    "../../brief-tenancy/guard.mjs"
   ]
 }

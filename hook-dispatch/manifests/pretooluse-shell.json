@@ -2,6 +2,8 @@
   "event": "PreToolUse",
   "guards": [
     "../../eval-guard/guard.mjs",
-    "../../gentle-ai-sync-guard/guard.mjs"
+    "../../gentle-ai-sync-guard/guard.mjs",
+    "../../exit-code-guard/guard.mjs",
+    "../../collision-guard/guard.mjs"
   ]
 }

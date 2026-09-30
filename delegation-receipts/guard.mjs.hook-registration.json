@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "Stop"
+    }
+  ],
+  "why": "a turn can end with a delegation it reached for and never launched: a PreToolUse refusal looks exactly like a step already taken, so the errand goes to nobody while the reply says it is delegated."
+}

@@ -53,7 +53,7 @@
         ]
       },
       {
-        "matcher": "Agent|Task|SendMessage",
+        "matcher": "Agent|Task|SendMessage|TaskCreate|TaskUpdate|mcp__plugin_engram_engram__mem_save|mcp__engram__mem_save",
         "hooks": [
           {
             "type": "command",
@@ -125,6 +125,14 @@
       }
     ],
     "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/subagent-stop.json\""
+          }
+        ]
+      },
       {
         "matcher": "",
         "hooks": [

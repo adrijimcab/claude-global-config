@@ -1,0 +1,37 @@
+#!/usr/bin/env node
+/**
+ * Mutant campaign of the loop's per-project routing against `project.selftest.mjs`: each mutant breaks one
+ * decision that made the loop global, and the selftest must go red.
+ * @es Campaña de mutantes del ruteo por proyecto: cada mutante rompe una decisión y el selftest debe ponerse rojo.
+ */
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { runMutants } from '../mutation-proof/run-mutants.mjs';
+
+const P = 'failure-capture/project.mjs';
+const C = 'failure-capture/capture.mjs';
+
+const MUTANTS = [
+  ['the user home counts as a project, so every folder under it belongs to ~/.claude/CLAUDE.md', P, '    if (sameFolder(candidate, homedir())) return undefined;\n', ''],
+  ['a linked worktree is not mapped to its main checkout', P, 'return path.join(realpathOf(path.dirname(common)), path.relative(realpathOf(top), realpathOf(directory)));', 'return realpathOf(directory);'],
+  ['the configured scope is ignored', P, 'scope: config.scope ?? path.basename(root),', 'scope: path.basename(root),'],
+  ['an unknown config key is accepted', P, '...unknown.map((key) => `unknown key "${key}"`),', ''],
+  ['a project without config has no worker contract', P, "(config.workerContracts ?? ['.claude/CLAUDE.md'])", '(config.workerContracts ?? [])'],
+  ['a spooled entry\'s own project is ignored, so another project cannot fold it', C, 'const project = entry.project ?? (PROJECT', 'const project = (PROJECT'],
+  ['any scope is accepted', C, 'if (!SCOPES.includes(scope))', 'if (false)'],
+  ['init adds the import every time', C, '  if (!imported) {', '  if (true) {'],
+  ['init rewrites an existing ledger', C, '  if (created) writeFileSync(PROJECT.ledgerFile,', '  writeFileSync(PROJECT.ledgerFile,'],
+  ['a configured parity gate is never run', C, "if (target === 'contract' && PARITY_GATE !== undefined) {", 'if (false) {'],
+  ['only the first contract file has to carry the token', C, 'for (const file of WORKER_CONTRACTS) if (!readFileOr(file,', 'for (const file of WORKER_CONTRACTS.slice(0, 1)) if (!readFileOr(file,']
+];
+
+const survivors = runMutants({
+  fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
+  paths: ['failure-capture', 'mutation-proof'],
+  selftest: 'failure-capture/project.selftest.mjs',
+  mutants: MUTANTS
+});
+
+process.exit(survivors === 0 ? 0 : 1);

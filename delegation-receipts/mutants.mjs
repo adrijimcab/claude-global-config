@@ -1,0 +1,92 @@
+#!/usr/bin/env node
+/**
+ * The decisions of the delegation-receipts guard, each broken once, that `selftest.mjs` must catch.
+ * The runner and its rules live in `../mutation-proof/run-mutants.mjs`, which mutates a COPY.
+ *
+ * WHY THIS EXISTS RATHER THAN A GREEN SELFTEST. This guard closes the seventh recurrence of a lesson
+ * whose rule was ALREADY binding contract text when the incident happened. Under the stop-the-line
+ * directive a repeat closes only on a mechanism PROVEN to discriminate, and watching a selftest pass is
+ * not watching it work: a guard that cannot go red produces output byte-identical to a healthy one.
+ * Every line below breaks one decision; a SURVIVOR means the selftest would have stayed green over that
+ * breakage.
+ *
+ * BOTH FAILURE DIRECTIONS, because they are not symmetric and both are fatal. A guard that stops seeing
+ * the hazard lets the next hour of work go to nobody while the reply says it is delegated. A guard that
+ * starts refusing turns which DID retry — or which never delegated at all — is switched off within the
+ * day, which stops nothing. So the table carries "a refusal never opens a debt" AND "a launch no longer
+ * pays one".
+ *
+ * @es Las decisiones del guard, rotas una a una, que `selftest.mjs` debe cazar; se muta una COPIA.
+ * Existe porque esto cierra una séptima recurrencia cuyo texto YA era contrato: un repetido se cierra
+ * con un mecanismo PROBADO, y ver pasar un auto-test no es verlo funcionar. Se mutan LAS DOS
+ * direcciones: dejar de ver el peligro deja el trabajo sin nadie; empezar a rechazar turnos legítimos
+ * desactiva el guard.
+ */
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { runMutants } from '../mutation-proof/run-mutants.mjs';
+
+const MUTANTS = [
+  // --- THE CLASSIFICATION: what a receipt says happened.
+  ['a refusal is read as a launch', 'delegation-receipts/turn-delegations.mjs', "attempt.outcome = block.is_error === true ? 'refused' : 'launched';", "attempt.outcome = 'launched';"],
+  ['every result is read as a refusal, so a clean turn is refused', 'delegation-receipts/turn-delegations.mjs', "attempt.outcome = block.is_error === true ? 'refused' : 'launched';", "attempt.outcome = 'refused';"],
+  ['a success with no is_error field is read as a refusal', 'delegation-receipts/turn-delegations.mjs', 'attempt.outcome = block.is_error === true ? ', 'attempt.outcome = block.is_error !== false ? '],
+  ['SendMessage stops counting, so the retry resume-before-fresh demands is invisible', 'delegation-receipts/turn-delegations.mjs', "new Set(['Agent', 'Task', 'SendMessage'])", "new Set(['Agent', 'Task'])"],
+  ['a result is paired to an attempt by position instead of by id', 'delegation-receipts/turn-delegations.mjs', 'const attempt = byId.get(block.tool_use_id);', 'const attempt = attempts[attempts.length - 1];'],
+
+  // --- THE TURN'S SCOPE: which receipts belong to the turn that is ending.
+  ['the turn boundary is never recognised', 'delegation-receipts/turn-delegations.mjs', 'if (opensTurn(entry)) {', 'if (false) {'],
+  ['a tool result opens a turn, so the scope collapses to the last one', 'delegation-receipts/turn-delegations.mjs', "return !content.some((block) => block?.type === 'tool_result');", 'return true;'],
+  ['an assistant entry opens a turn', 'delegation-receipts/turn-delegations.mjs', "if (entry.type !== 'user') return false;", 'if (false) return false;'],
+  ["a sub-agent's own sidechain traffic is read as this turn's", 'delegation-receipts/turn-delegations.mjs', 'if (entry?.isSidechain === true) continue;', ''],
+  ['the window never widens, so a turn larger than 2 MiB loses its boundary', 'delegation-receipts/turn-delegations.mjs', 'const WINDOWS = [2 * 1024 * 1024, 32 * 1024 * 1024];', 'const WINDOWS = [2 * 1024 * 1024];'],
+  ['the tail is taken from the START of the file instead of its end', 'delegation-receipts/turn-delegations.mjs', 'const read = readSync(fd, buffer, 0, buffer.length, from);', 'const read = readSync(fd, buffer, 0, buffer.length, 0);'],
+
+
+  // --- THE UNKNOWABLE, which may never read as clean: a failed measurement that looks like a clean
+  //     result is the defect this fleet has mechanised against most.
+  ['an unreadable transcript reads as a clean turn', 'delegation-receipts/guard.mjs', 'if (attempts === undefined) return undefined;', 'if (attempts === undefined) return [];'],
+  ['a transcript that cannot be opened throws instead of standing aside', 'delegation-receipts/turn-delegations.mjs', '  } catch {\n    return undefined;\n  } finally {', '  } finally {'],
+
+
+  // --- THE LEDGER: what opens a debt and what pays one.
+  // These two replace the STATEMENT rather than deleting it: deleting one arm of an if/else leaves a
+  // dangling `else`, and a mutant killed by a syntax error is a kill for the wrong reason — the
+  // selftest would have gone red without ever exercising the decision.
+  // @es Sustituyen la SENTENCIA en vez de borrarla: borrar una rama deja un `else` colgando, y un
+  // mutante matado por un error de sintaxis es rojo por el motivo equivocado.
+  ['a refusal never opens a debt', 'delegation-receipts/unlaunched.mjs', 'owed.push(attempt);', 'undefined;'],
+  ['a launch no longer pays a debt, so every retried turn is refused', 'delegation-receipts/unlaunched.mjs', "else if (attempt.outcome === 'launched') owed.pop();", 'else undefined;'],
+  ['an attempt with no result PAYS a debt', 'delegation-receipts/unlaunched.mjs', "if (attempt.outcome === 'launched') owed.pop();", "if (attempt.outcome !== 'refused') owed.pop();"],
+
+
+  // --- THE RECORDED ESCAPE, whose whole value is that it is narrow and written down.
+  ['an abandonment pays a refusal that came after it', 'delegation-receipts/unlaunched.mjs', 'return refusedAt === undefined || refusedAt <= at;', 'return true;'],
+  ['an abandonment never pays, so a deliberate stop cannot be expressed', 'delegation-receipts/unlaunched.mjs', 'if (index !== -1) owed.splice(index, 1);', ''],
+  ["another session's abandonment pays this session's debt", 'delegation-receipts/abandon.mjs', 'if (record?.session === sessionId) records.push(record);', 'records.push(record);'],
+  ['the escape accepts a reason that says nothing', 'delegation-receipts/abandon.mjs', 'reason.trim().length < 25', 'false'],
+
+  // --- THE BOUNDS, which are what make blocking safe.
+  ['stop_hook_active no longer bounds it, so the obligation can be raised twice', 'delegation-receipts/guard.mjs', 'if (payload?.stop_hook_active === true) return;', ''],
+  ['the independent cooldown is gone', 'delegation-receipts/guard.mjs', 'if (now - previous < COOLDOWN_MS) {', 'if (false) {'],
+  ['a BOM-prefixed payload is swallowed, so a failed parse reads as a clean turn', 'delegation-receipts/guard.mjs', 'raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw', 'raw'],
+  ['the guard no longer runs when the file is EXECUTED', 'delegation-receipts/guard.mjs', 'if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) run();', ''],
+
+  // --- THE REFUSAL'S OWN CONTENT. A control that decides correctly but explains poorly gets routed
+  //     around, which is the same end state as one that cannot fire, reached by another road.
+  ['the refusal stops naming which attempt was not launched', 'delegation-receipts/guard.mjs', '`  - ${attempt.tool}: ${attempt.label}', '`  - (a delegation)'],
+  ['the refusal stops quoting the guard that refused', 'delegation-receipts/guard.mjs', "attempt.reason ?? '(no reason recorded)'", "''"],
+  ['an attempt is named by its mechanism instead of by what the author wrote', 'delegation-receipts/turn-delegations.mjs', 'const named = from(input?.description) ?? from(input?.to) ?? from(input?.recipient) ?? from(input?.summary);', 'const named = undefined;'],
+  ['the refusal stops printing the runnable abandonment command', 'delegation-receipts/guard.mjs', '`     node "${ABANDON_CLI}" --session ${sessionId} \\\\`,', "'     (abandon it somehow)',"],
+];
+
+const survivors = runMutants({
+  fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
+  paths: ['delegation-receipts'],
+  selftest: 'delegation-receipts/selftest.mjs',
+  mutants: MUTANTS,
+});
+
+process.exit(survivors === 0 ? 0 : 1);

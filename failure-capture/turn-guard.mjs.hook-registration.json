@@ -1,0 +1,11 @@
+{
+  "registrations": [
+    {
+      "event": "Stop"
+    },
+    {
+      "event": "SubagentStop"
+    }
+  ],
+  "why": "a turn that contains a correction can end without recording a lesson, which returns the ledger to depending on somebody remembering to write one."
+}
