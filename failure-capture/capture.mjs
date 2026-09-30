@@ -42,8 +42,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { baselineFor, closureClause, closureRecord, contractFileId, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
+import { budgetVerdict } from './budget-verdict.mjs';
+import { renderBudget, renderUnmeasured } from './budget-report.mjs';
 import { describeOutcome, newRunId, runCondense } from './condense.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
+import { loadedSet } from './loaded-set.mjs';
 import { promotedStub } from './promotion.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { withLock } from './ledger-lock.mjs';
@@ -825,6 +828,38 @@ function commandCondense(args) {
   return outcome.status;
 }
 
+/**
+ * Measures the instruction set Claude Code loads for a project and prints its verdict against the ceiling.
+ * `--project <dir>` names the project (default: the current directory); `--ceiling <dir>` is the highest
+ * directory walked for ancestor instruction files (default: the filesystem root, as the harness does), which
+ * lets a fixture stay out of the real home. Exit 0 within, 1 over, 2 when the set cannot be measured or the
+ * project configuration is invalid.
+ * @es Mide el conjunto de instrucciones que Claude Code carga para un proyecto e imprime su veredicto frente
+ * al techo. `--project <dir>` nombra el proyecto (por omisión, el directorio actual); `--ceiling <dir>` es el
+ * directorio más alto que se recorre buscando ficheros de instrucciones de ancestros (por omisión, la raíz
+ * del sistema de ficheros, como el harness), para que un fixture no toque el home real. Salida 0 dentro, 1
+ * sobre el techo, 2 si no se puede medir o la configuración del proyecto es inválida.
+ */
+function commandBudget(args) {
+  const directory = typeof args.project === 'string' ? path.resolve(args.project) : process.cwd();
+
+  try {
+    if (!existsSync(directory)) throw new Error(`${directory} does not exist. @es ${directory} no existe.`);
+
+    const project = projectOf(directory);
+    const loaded = loadedSet({ home: homedir(), projectRoot: project?.root ?? directory, ceiling: typeof args.ceiling === 'string' ? path.resolve(args.ceiling) : undefined });
+    const verdict = budgetVerdict({ loaded, projectCeiling: project?.loadedSetCeiling });
+
+    for (const line of renderBudget({ verdict, missing: loaded.missing })) console.log(line);
+
+    return verdict.status === 'within' ? 0 : 1;
+  } catch (error) {
+    console.error(renderUnmeasured(error instanceof Error ? error.message : String(error)));
+
+    return 2;
+  }
+}
+
 const USAGE = `failure-capture — record a correction as a durable lesson.
 
   init                 give this project its own ledger and import it from .claude/CLAUDE.md
@@ -835,6 +870,7 @@ const USAGE = `failure-capture — record a correction as a durable lesson.
   dismiss   --reason "<why this is not a correction>" [--marker <m>] [--session <id>]
   promote   --key <kebab-key> (--mechanism <guard path> | --no-mechanism "<why none is possible>")
   condense  [--keys <file>] [--write]   shorten ledger lines whose text is kept in evidence (dry run without --write)
+  budget   [--project <dir>]            measure the always-loaded instruction set against its ceiling (exit 0 within, 1 over, 2 not measured)
   status   counts, ledger token cost, and which lessons are due for promotion
 `;
 
@@ -877,6 +913,8 @@ function main() {
       return commandPromote(args);
     case 'condense':
       return commandCondense(args);
+    case 'budget':
+      return commandBudget(args);
     case 'status':
       return commandStatus();
     default:
