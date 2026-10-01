@@ -4,6 +4,7 @@
  * carries a `remedy` telling a human what to do instead.
  */
 import { agentToolForbidden, agentToolRequired } from './kinds/agent-tool.mjs';
+import { lazyReviewContract } from './kinds/lazy-review-contract.mjs';
 import { ownerSectionsOutsideManagedRegions } from './kinds/owner-sections.mjs';
 import { personaRegionMatchesUpstream } from './kinds/persona-region.mjs';
 import { telemetryDisabled } from './kinds/telemetry.mjs';
@@ -14,6 +15,7 @@ export const KINDS = {
   'owner-sections-outside-managed-regions': ownerSectionsOutsideManagedRegions,
   'persona-region-matches-upstream': personaRegionMatchesUpstream,
   'telemetry-disabled': telemetryDisabled,
+  'lazy-review-contract': lazyReviewContract,
 };
 
 const kindOf = (customization) => {
@@ -22,17 +24,35 @@ const kindOf = (customization) => {
   return kind;
 };
 
-/** @returns {{ id, file?, status: 'held'|'broken'|'unverifiable', detail, reapplicable: boolean, remedy? }[]} */
+/**
+ * `syncSafe` is true for a kind that `gentle-ai sync` can only undo, never erase: the sync guard does
+ * not refuse a sync for it. @es `syncSafe` es verdadero para un tipo que `gentle-ai sync` solo puede
+ * deshacer, nunca borrar: el guard de sync no rechaza un sync por él.
+ * @returns {{ id, file?, status: 'held'|'broken'|'unverifiable', detail, reapplicable: boolean, syncSafe: boolean, remedy? }[]}
+ */
 export const evaluateAll = (customizations, context) =>
   customizations.map((customization) => {
     const kind = kindOf(customization);
-    return { id: customization.id, file: customization.file, reapplicable: typeof kind.apply === 'function', remedy: kind.remedy, ...kind.evaluate(customization, context) };
+    return { id: customization.id, file: customization.file, reapplicable: typeof kind.apply === 'function', syncSafe: kind.syncSafe === true, remedy: kind.remedy, ...kind.evaluate(customization, context) };
   });
 
-/** Apply every broken, reapplicable customization. @returns {{ id, outcome, detail }[]} */
-export function applyAll(customizations, context) {
+function brokenAndReapplicable(customizations, context) {
   const broken = new Set(evaluateAll(customizations, context).filter((result) => result.status === 'broken').map((result) => result.id));
-  return customizations
-    .filter((customization) => broken.has(customization.id) && typeof kindOf(customization).apply === 'function')
-    .map((customization) => ({ id: customization.id, ...kindOf(customization).apply(customization, context) }));
+  return customizations.filter((customization) => broken.has(customization.id) && typeof kindOf(customization).apply === 'function');
 }
+
+/** Apply every broken, reapplicable customization. @returns {{ id, outcome, detail }[]} */
+export const applyAll = (customizations, context) =>
+  brokenAndReapplicable(customizations, context).map((customization) => ({ id: customization.id, ...kindOf(customization).apply(customization, context) }));
+
+/**
+ * What `applyAll` would do, writing nothing: the kind's own `plan` when it has one.
+ * @es Lo que haría `applyAll`, sin escribir nada: el `plan` propio del tipo cuando lo tiene.
+ * @returns {{ id, outcome, detail }[]}
+ */
+export const planAll = (customizations, context) =>
+  brokenAndReapplicable(customizations, context).map((customization) => {
+    const kind = kindOf(customization);
+    const planned = typeof kind.plan === 'function' ? kind.plan(customization, context) : { outcome: 'would-apply', detail: 'apply would re-place it @es apply la volvería a colocar' };
+    return { id: customization.id, ...planned };
+  });

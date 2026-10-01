@@ -86,21 +86,22 @@ export function pointerFor(text, movedSha, stashLabel) {
  * @es En qué deben convertirse CLAUDE.md y el depósito. `keepLoaded` es verdadero cuando las revisiones
  * pueden correr o no se pudo leer el modo: el contrato se restaura, nunca se adivina. Un tramo movido
  * cuyo depósito no coincide con su centinela se rechaza, y `gentle-ai sync` regenera el texto canónico.
- * @returns {{ outcome: 'moved'|'restored'|'unchanged', text: string, stash: string|null } | { refused: string }}
+ * `form` is the span's form BEFORE reconciling. @es `form` es la forma del tramo ANTES de reconciliar.
+ * @returns {{ outcome: 'moved'|'restored'|'unchanged', form: 'absent'|'present'|'moved', text: string, stash: string|null } | { refused: string }}
  */
 export function reconcileSection(text, { keepLoaded, stash, stashLabel }) {
   const section = inspectSection(text);
   if (section.refused !== undefined) return section;
-  if (section.form === 'absent') return { outcome: 'unchanged', text, stash };
-  const { start, end } = section;
-  if (section.form === 'present') {
-    if (keepLoaded) return { outcome: 'unchanged', text, stash };
+  const { form, start, end } = section;
+  if (form === 'absent') return { outcome: 'unchanged', form, text, stash };
+  if (form === 'present') {
+    if (keepLoaded) return { outcome: 'unchanged', form, text, stash };
     const moved = text.slice(start, end);
-    return { outcome: 'moved', text: text.slice(0, start) + pointerFor(text, sha256(moved), stashLabel) + text.slice(end), stash: moved };
+    return { outcome: 'moved', form, text: text.slice(0, start) + pointerFor(text, sha256(moved), stashLabel) + text.slice(end), stash: moved };
   }
   if (stash === null || sha256(stash) !== section.sha) {
     return { refused: 'the stash is missing or does not match the sentinel; run `gentle-ai sync` @es el depósito falta o no coincide con el centinela; ejecutar `gentle-ai sync`' };
   }
-  if (!keepLoaded) return { outcome: 'unchanged', text, stash };
-  return { outcome: 'restored', text: text.slice(0, start) + stash + text.slice(end), stash };
+  if (!keepLoaded) return { outcome: 'unchanged', form, text, stash };
+  return { outcome: 'restored', form, text: text.slice(0, start) + stash + text.slice(end), stash };
 }

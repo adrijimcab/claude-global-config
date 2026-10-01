@@ -86,6 +86,16 @@ export const CUSTOMIZATIONS = [
     file: '.claude/CLAUDE.md',
     region: 'persona',
   },
+  // Owner decision 2026-10-01: the review execution contract is loaded only while gentle-ai reviews
+  // may run, until gentle-ai offers that upstream. @es Decisión del dueño 2026-10-01: el contrato de
+  // ejecución de revisiones se carga solo mientras las revisiones de gentle-ai pueden correr, hasta que
+  // gentle-ai lo ofrezca upstream.
+  {
+    id: 'review-contract-lazy-while-reviews-are-off',
+    kind: 'lazy-review-contract',
+    file: '.claude/CLAUDE.md',
+    stash: '.claude/gentle-ai-overlay/lazy/review-execution-contract.md',
+  },
   // Owner decision 2026-09-28: telemetry stays off. Checked and re-applied through the gentle-ai CLI.
   {
     id: 'gentle-ai-telemetry-disabled',

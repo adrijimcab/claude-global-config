@@ -18,6 +18,7 @@ import { CUSTOMIZATIONS } from './customizations.mjs';
 import { KINDS, applyAll, evaluateAll } from './invariants.mjs';
 import { parseManagedRegions } from './managed-regions.mjs';
 import { inspectSection, reconcileSection, sha256 } from './review-contract-section.mjs';
+import { readTextOrNull } from './text-file.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '2.99.0';
@@ -84,6 +85,13 @@ if (args === 'telemetry disable --json') {
   const dnt = (process.env.DO_NOT_TRACK ?? '') !== '';
   const decision = dnt ? { enabled: false, source: 'DO_NOT_TRACK' } : state.enabled ? { enabled: true, source: 'default' } : { enabled: false, source: state.source ?? 'state' };
   process.stdout.write(JSON.stringify({ schema: state.schema ?? 'gentle-ai.telemetry-status/v1', operation: 'status', ...decision }));
+} else if (args === 'review mode status --json') {
+  const global = state.reviewGlobal ?? '';
+  const effective = global === 'on' && !state.cloneOff ? 'on' : 'off';
+  const report = { schema: state.reviewSchema ?? 'gentle-ai.review-mode/v1', operation: 'status', scope: 'both', status: { schema: state.reviewStatusSchema ?? 'gentle-ai.rdd-mode-status/v1', global, clone_local: state.cloneOff ? 'off' : '', effective, source: 'default' } };
+  if (state.reviewFault === 'garbage') { process.stdout.write('not json at all'); process.exit(0); }
+  process.stdout.write(JSON.stringify(report));
+  if (state.reviewFault === 'exit') process.exit(4);
 } else {
   process.exit(2);
 }
@@ -388,9 +396,10 @@ const REVIEW_SPAN = ['#### Review Execution Contract', '', '# Native Compact Rev
 const STASH_LABEL = '~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md';
 
 /** A CLAUDE.md whose sdd-orchestrator region holds the review span. @es Un CLAUDE.md cuya región sdd-orchestrator contiene el tramo. */
+const orchestratorRegion = (span = REVIEW_SPAN) =>
+  region('sdd-orchestrator', ['# Agent Teams', '', '#### Native Checking Contract', '', 'Checking.', '', `${span}#### Cost and Context Balance`, '', 'Cost.'].join('\n'));
 function orchestratorMd({ span = REVIEW_SPAN, eol = '\n', after = '' } = {}) {
-  const body = ['# Agent Teams', '', '#### Native Checking Contract', '', 'Checking.', '', `${span}#### Cost and Context Balance`, '', 'Cost.'].join('\n');
-  return ['# Owner pointer', '', region('persona', PERSONA), '', region('sdd-orchestrator', body), '', region('agent-routing', 'Routing.'), after, ''].join('\n').split('\n').join(eol);
+  return ['# Owner pointer', '', region('persona', PERSONA), '', orchestratorRegion(span), '', region('agent-routing', 'Routing.'), after, ''].join('\n').split('\n').join(eol);
 }
 const spanOf = (text) => {
   const { start, end } = inspectSection(text);
@@ -489,6 +498,99 @@ test('section near misses are not headings or sentinels: a heading quoted mid-li
   expect(inspectSection(unclosed).form, 'present', 'unclosed sentinel is not a sentinel');
 });
 
+// ---------------------------------------------------------------- lazy-review-contract kind
+// The kind reads the review mode through a fake gentle-ai CLI and moves or restores the span on disk.
+// @es El tipo lee el modo de revisiones con un CLI falso de gentle-ai y mueve o restaura el tramo en disco.
+
+const lazyEntry = CUSTOMIZATIONS.find((entry) => entry.kind === 'lazy-review-contract');
+/** A fixture home with the review span in CLAUDE.md and the given CLI state. @es Un home de fixture con el tramo en CLAUDE.md y el estado de CLI dado. */
+function lazyHome(cliState, text = orchestratorMd({ eol: '\r\n' })) {
+  const context = installFakeCli(newRoot(), { enabled: false, ...cliState });
+  put(context.home, lazyEntry.file, text);
+  return context;
+}
+const stashOf = (context) => readFileSync(path.join(context.home, lazyEntry.stash), 'utf8');
+
+test('lazy kind: reviews off, span loaded -> broken, sync-safe, reapplicable; apply moves it; second apply finds nothing', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  const original = read(context.home, lazyEntry.file);
+  const [before] = evaluateAll([lazyEntry], context);
+  expect(before.status, 'broken', 'status before');
+  expect(before.syncSafe, true, 'sync-safe');
+  expect(before.reapplicable, true, 'reapplicable');
+  expect(applyAll([lazyEntry], context)[0].outcome, 'applied', 'apply');
+  expect(read(context.home, lazyEntry.file), lazy(original).text, 'CLAUDE.md after apply');
+  expect(stashOf(context), lazy(original).stash, 'stash bytes');
+  expect(evaluate(lazyEntry, context).status, 'held', 'status after');
+  expect(applyAll([lazyEntry], context).length, 0, 'second apply');
+});
+
+test('lazy kind: global on -> a moved span is broken and apply restores the original bytes', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  const original = read(context.home, lazyEntry.file);
+  applyAll([lazyEntry], context);
+  installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
+  expect(evaluate(lazyEntry, context).status, 'broken', 'status');
+  applyAll([lazyEntry], context);
+  expect(read(context.home, lazyEntry.file), original, 'restored bytes');
+  expect(evaluate(lazyEntry, context).status, 'held', 'held once loaded');
+});
+
+test('lazy kind near miss: global on while THIS clone is forced off -> the span stays loaded (another clone may review)', () => {
+  expect(evaluate(lazyEntry, lazyHome({ reviewGlobal: '', cloneOff: true })).status, 'broken', 'the same file with reviews off everywhere');
+  expect(evaluate(lazyEntry, lazyHome({ reviewGlobal: 'on', cloneOff: true })).status, 'held', 'global on, this clone off');
+});
+
+for (const [label, cliState] of [
+  ['the CLI exits non-zero', { reviewFault: 'exit' }],
+  ['the CLI prints non-JSON', { reviewFault: 'garbage' }],
+  ['the report schema changed', { reviewSchema: 'gentle-ai.review-mode/v2' }],
+  ['the status schema changed', { reviewStatusSchema: 'gentle-ai.rdd-mode-status/v2' }],
+]) {
+  test(`lazy kind: review mode unreadable (${label}) -> unverifiable, and apply keeps the span loaded`, () => {
+    const context = lazyHome(cliState);
+    const original = read(context.home, lazyEntry.file);
+    const [result] = evaluateAll([lazyEntry], context);
+    expect(result.status, 'unverifiable', 'status');
+    expect(result.syncSafe, true, 'sync-safe');
+    applyAll([lazyEntry], context);
+    expect(read(context.home, lazyEntry.file), original, 'CLAUDE.md untouched');
+  });
+}
+
+test('lazy kind: a moved span with the mode unreadable is restored, never left pointing at a stash nobody may read', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  const original = read(context.home, lazyEntry.file);
+  applyAll([lazyEntry], context);
+  expect(read(context.home, lazyEntry.file) !== original, true, 'moved first');
+  installFakeCli(context, { enabled: false, reviewFault: 'exit' });
+  applyAll([lazyEntry], context);
+  expect(read(context.home, lazyEntry.file), original, 'restored bytes');
+});
+
+test('lazy kind: the stash changed on disk -> broken, apply refuses, CLAUDE.md untouched', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  applyAll([lazyEntry], context);
+  put(context.home, lazyEntry.stash, 'edited by hand');
+  const moved = read(context.home, lazyEntry.file);
+  expect(evaluate(lazyEntry, context).status, 'broken', 'status');
+  expect(KINDS[lazyEntry.kind].apply(lazyEntry, context).outcome, 'refused', 'apply');
+  expect(read(context.home, lazyEntry.file), moved, 'CLAUDE.md bytes');
+});
+
+test('lazy kind: no span in CLAUDE.md -> held; no CLAUDE.md -> broken', () => {
+  expect(evaluate(lazyEntry, lazyHome({}, orchestratorMd({ span: '' }))).status, 'held', 'absent span');
+  expect(evaluate(lazyEntry, installFakeCli(newRoot(), { enabled: false })).status, 'broken', 'missing file');
+});
+
+test('lazy kind: plan names the move and writes nothing', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  const original = read(context.home, lazyEntry.file);
+  expect(KINDS[lazyEntry.kind].plan(lazyEntry, context).outcome, 'would-move', 'plan');
+  expect(read(context.home, lazyEntry.file), original, 'CLAUDE.md untouched');
+  expect(readTextOrNull(path.join(context.home, lazyEntry.stash)), null, 'no stash written');
+});
+
 // ---------------------------------------------------------------- the real list, through the CLIs
 
 /** A fixture home that satisfies every entry of the REAL customization list. */
@@ -552,6 +654,24 @@ test('check.mjs --json: same verdict as the exit code, results carry id, status 
   expect(report.exitCode, 1, 'exitCode field');
   const broken = report.results.filter((entry) => entry.status === 'broken').map((entry) => entry.id);
   expect(broken.join(','), 'sdd-tasks-grants-bash', 'broken ids');
+});
+
+test('apply.mjs --dry-run: the review span would move, nothing is written, exit is the current verdict; apply.mjs then moves it -> exit 0', () => {
+  const context = completeHome();
+  const withSpan = `${read(context.home, '.claude/CLAUDE.md')}${orchestratorRegion().split('\n').join('\r\n')}\r\n`;
+  put(context.home, '.claude/CLAUDE.md', withSpan);
+  const dry = run('apply.mjs', [...flags(context), '--dry-run']);
+  expect(dry.status, 1, 'dry-run exit');
+  expect(dry.stdout.includes('WOULD-MOVE review-contract-lazy-while-reviews-are-off'), true, `dry-run stdout (${dry.stdout})`);
+  expect(read(context.home, '.claude/CLAUDE.md'), withSpan, 'CLAUDE.md after dry run');
+  expect(run('apply.mjs', flags(context)).status, 0, 'apply exit');
+  expect(read(context.home, '.claude/CLAUDE.md'), lazy(withSpan).text, 'CLAUDE.md after apply');
+});
+
+test('check.mjs --json: the lazy kind reports syncSafe, every other kind does not', () => {
+  const report = JSON.parse(run('check.mjs', [...flags(completeHome()), '--json']).stdout);
+  const safe = report.results.filter((entry) => entry.syncSafe === true).map((entry) => entry.id);
+  expect(safe.join(','), 'review-contract-lazy-while-reviews-are-off', 'sync-safe ids');
 });
 
 test('check.mjs: reference unavailable, nothing broken -> exit 2', () => {
