@@ -100,3 +100,46 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
 ## Ledger line archived 2026-10-01 (condensed)
 
 - [promoted] 2026-09-30 — audit-verdict-from-commit-subjects-not-from-reading: now a binding rule in the delegated-worker contract (all 2 files); no mechanism is possible: No hook can tell whether a backlog line or brief sentence claiming a defect is open rests on a compiler reproduction or only on a located call site; the defect is in the inference after a legitimate read. What stands in place: the located-line face in both worker contracts, and briefs that carry a located line only under HYPOTHESIS.; full incident history in ~/.claude/failure-capture/state/incidents.jsonl <!--fc:audit-verdict-from-commit-subjects-not-from-reading#11-->
+
+## Loaded text archived 2026-10-01 (tiered)
+
+Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the tiering of 2026-10-01; it is archived byte for byte, and the loaded file keeps only its binding text. @es Cada bloque de abajo se cargaba desde `~/.claude/rules/promoted-rules.md` hasta el escalonado del 2026-10-01; se archiva byte a byte, y el fichero cargado conserva solo su texto vinculante.
+
+````markdown
+- **`audit-verdict-from-commit-subjects-not-from-reading`** — A SEARCH may only LOCATE candidates. The
+  VERDICT comes from reading the construct in its context, or from the tool that owns the semantics —
+  a parser, the linter, `--print-config`, the gate itself. This is the project's own "grep localiza,
+  NO dictamina" raised to a binding rule. **The asymmetry that makes this binding: a search that
+  MISSES is silent, and a search that COLLIDES looks like a hit.** Both read as evidence and neither
+  is. So when a search result contradicts a claim someone reached by READING, the search is wrong
+  until proven otherwise — check the collision before you write the contradiction. And a negative
+  claim is never established by a search returning nothing; it is established by reading the place it
+  would have to be.
+  - **PROGRESS IS NOT CLOSURE.** RULE: a task is CLOSED only against its own stated definition of
+    done, read from the task record. A number that moved the right way is progress evidence, never
+    closure evidence.
+  - **A COUNT PROVES A STRING OCCURS, NOTHING MORE.** RULE: a grep may only LOCATE a candidate —
+    before any count becomes a claim, OPEN the hits and read them in context, or ask the tool that
+    OWNS the semantics.
+  - **A FILE'S SHARE JUDGED FROM ITS LOUDEST TOKENS (2026-09-30,
+    `audit-verdict-from-commit-subjects-not-from-reading`).** I told the owner a rules file was mostly
+    specific to one project, from the project names that stood out in it; classified entry by entry,
+    1 of 14 was. RULE: a claim about what share of a file or list belongs to a category is made only
+    after classifying every entry by reading it, and the sentence carries the count (N of M).
+  - **ENTRIES CALLED DUPLICATES FROM THEIR SHARED LABEL (2026-09-30,
+    `audit-verdict-from-commit-subjects-not-from-reading`).** I proposed unloading 13 ledger stubs as
+    copies of the promoted rules; compared one by one, 5 of 13 carried a mechanism path found nowhere
+    else. RULE: "duplicate" is a share claim too — compare every entry against its supposed copy
+    before proposing to remove or unload the set, and state how many are fully covered (N of M).
+  - **A MANIFEST IS A STRUCTURED DOCUMENT, NEVER A LINE RANGE.** RULE: before any verdict about a
+    dependency, PARSE the manifest and name the SECTION the key lives in; the same package name in two
+    sections answers two different questions.
+  - **AN ACTOR IS IDENTIFIED BY A LOOKUP, NEVER BY WHAT ITS OUTPUT IS ABOUT.** RULE: identify an actor
+    by identity evidence — id, live status, start time, its worktree contents — never by subject
+    matter.
+  - **DEDUPLICATION IS A VERDICT ABOUT IDENTITY.** RULE: a census over a class counts DECLARATIONS,
+    never deduplicated names, and any identifier class includes `$`. A final figure matching
+    expectation does not validate the path — if the intermediate was never checked, the method that
+    produced it is still live and will produce the next number unexamined.
+  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/audit-verdict-from-commit-subjects-not-from-reading.md`.
+````

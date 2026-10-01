@@ -127,3 +127,45 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
 ## Ledger line archived 2026-10-01 (condensed)
 
 - [promoted] 2026-09-30 — worker-claim-about-unreachable-file-committed-as-fact: now a binding rule in ~/.claude/rules/promoted-rules.md; no mechanism is possible: No hook can tell whether a sentence to the owner restates a state claim copied from an older engram record; the defect is in relaying, after legitimate reads. What stands in place: the new face in promoted-rules.md requiring re-measurement or a dated attribution, and every face of this key re-tagged with its key per the house convention.; full incident history in ~/.claude/failure-capture/state/incidents.jsonl <!--fc:worker-claim-about-unreachable-file-committed-as-fact#10-->
+
+## Loaded text archived 2026-10-01 (tiered)
+
+Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the tiering of 2026-10-01; it is archived byte for byte, and the loaded file keeps only its binding text. @es Cada bloque de abajo se cargaba desde `~/.claude/rules/promoted-rules.md` hasta el escalonado del 2026-10-01; se archiva byte a byte, y el fichero cargado conserva solo su texto vinculante.
+
+````markdown
+- **`worker-claim-about-unreachable-file-committed-as-fact`** — A subagent's finding is UNVERIFIED BY
+  ME no matter how well that subagent measured it, and relaying it to the owner without saying whose
+  measurement it is turns their evidence into my assertion. **RULE: when passing a worker's finding to
+  the owner, either verify it myself or name whose measurement it is IN THE SAME SENTENCE.** Without
+  it, an inherited verdict is indistinguishable from one I established.
+  - **A CLAIM ABOUT SOMEONE ELSE'S ARTEFACT, RELAYED AS AN ORDER (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: never relay a claim about
+    the CONTENT of an artefact as an instruction without reading that artefact at its CURRENT
+    revision; where reading is not possible, name the revision the claim was made against.
+  - **A PREDICTION RECORDED AS A FACT (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: a prediction may never enter a durable record as fact —
+    either run the thing and record the result, or write it as the author's expectation. On this
+    machine, no claim that a directory removal will succeed is ever safe.
+  - **A PLAN READ BACK AS A ROSTER (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: a statement of what is running is assembled from receipts,
+    never recited from the plan; if you cannot point at the receipt for an entry, it does not go on
+    the list.
+  - **"THE HOOK COVERS IT", RELAYED AS A CLOSURE (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: whether a hook covers a tool is decided by
+    exactly two things — the registration matcher, and a real-shaped payload driven through it with
+    the expected verdict. A diff inside the hook's own code proves neither.
+  - **A REFUSED ACTION REMEMBERED AS A DONE ONE (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: after a refused tool call, the RETRY is the
+    next action, before any reporting. A status line naming work as delegated or running is assembled
+    from this turn's launch receipts, never from the brief you wrote.
+  - **A WORKER'S OPEN QUESTION FORWARDED AS WORK FOR THE OWNER (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: an item goes on the owner's
+    work list only after an engram search for it and a read of the code in the same turn; otherwise it
+    goes on the list marked as the worker's unverified claim.
+  - **A WORKER'S PLAN RELAYED WITH ITS ENVIRONMENT PREMISES UNCHECKED (`worker-claim-about-unreachable-file-committed-as-fact`).** RULE: before relaying a
+    worker's activation, deploy or rollout plan, measure the environment premises it rests on (default
+    branch, branches in use, roles and permissions, schedules) in the same turn, or mark them
+    unverified.
+  - **AN OLDER RECORD'S STATE CLAIM RELAYED WHILE A NEWER RECORD CONTRADICTED IT (2026-09-30,
+    `worker-claim-about-unreachable-file-committed-as-fact`).** I told the owner the local `v1.0.0`
+    tag "has no parent", copied from engram #927 into the backlog, while #978 (newer) already
+    recorded it at 18cd5d4d with parent 8340076f; one `git log` refuted it. RULE: a state claim
+    taken from any durable record (engram, backlog, report) is re-measured in the same turn before
+    it reaches the owner, or goes out naming the record and its date in the same sentence; and
+    before relaying it, check newer records on the same subject for a contradiction.
+  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/worker-claim-about-unreachable-file-committed-as-fact.md`.
+````

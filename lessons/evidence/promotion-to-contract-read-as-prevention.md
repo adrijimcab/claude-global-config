@@ -22,3 +22,19 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
 ## Ledger line archived 2026-10-01 (condensed)
 
 - [promoted] 2026-09-22 — promotion-to-contract-read-as-prevention: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism .claude/failure-capture/capture.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:promotion-to-contract-read-as-prevention#2-->
+
+## Loaded text archived 2026-10-01 (tiered)
+
+Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the tiering of 2026-10-01; it is archived byte for byte, and the loaded file keeps only its binding text. @es Cada bloque de abajo se cargaba desde `~/.claude/rules/promoted-rules.md` hasta el escalonado del 2026-10-01; se archiva byte a byte, y el fichero cargado conserva solo su texto vinculante.
+
+````markdown
+- **`promotion-to-contract-read-as-prevention`** — Promoting a lesson into a binding contract is not
+  the same as preventing it, and treating the promotion as the end of the work is how a "closed"
+  lesson keeps firing. **RULE: a promoted rule prevents only the FACES ITS TEXT NAMES, never the
+  lesson in the abstract.** So on every recurrence of an ALREADY-promoted key, do not re-record it —
+  READ the existing contract text, decide whether this incident is a face that text already names,
+  and when it is not, EXTEND the text with the new face in every file that carries it before promoting
+  again. A recurrence count climbing while the text stands unchanged means the text is the stale
+  artifact.
+  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/promotion-to-contract-read-as-prevention.md`.
+````

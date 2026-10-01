@@ -113,3 +113,42 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
 ## Ledger line archived 2026-10-01 (condensed)
 
 - [promoted] 2026-09-30 — stale-artifact-read-as-this-runs-result: now a binding rule in the delegated-worker contract (both files); closed by mechanism .claude/gate-run/run-attribution.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:stale-artifact-read-as-this-runs-result#10-->
+
+## Loaded text archived 2026-10-01 (tiered)
+
+Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the tiering of 2026-10-01; it is archived byte for byte, and the loaded file keeps only its binding text. @es Cada bloque de abajo se cargaba desde `~/.claude/rules/promoted-rules.md` hasta el escalonado del 2026-10-01; se archiva byte a byte, y el fichero cargado conserva solo su texto vinculante.
+
+````markdown
+- **`stale-artifact-read-as-this-runs-result`** — Never interpret a results, exit-code, log, golden,
+  or coverage artifact without first proving it belongs to THIS run: truncate or delete it in the same
+  command that produces it, and REGENERATE whatever a gate derives from (`npm run build` before
+  `check:api`, the full suite before coverage) before reading it. An artifact that outlives the run
+  that made it is indistinguishable from this run's output, so a RED read off a stale artifact measures
+  your execution order, not the tree. Nine faces recorded to date:
+  - **AN ERROR, LIMIT, LOCK OR QUOTA NOTICE is one of these artifacts too.** RULE: before asserting
+    that something is still blocked, unavailable, rate-limited or locked, ATTEMPT IT — the attempt is
+    nearly always cheaper than the claim — or say plainly that it is unverified. Never infer a CURRENT
+    capability from a PAST refusal.
+  - **A PLAN IS AN ARTIFACT TOO.** RULE: before dispatching work from any record older than the
+    current session, verify the specific items are still open; a reconciliation runs BEFORE the work
+    it scopes, never beside it.
+  - **A BUILD RUN TO SATISFY ONE PRECONDITION CAN INVALIDATE ANOTHER.** RULE: before reading a SUITE,
+    enumerate every artefact its gates derive from and regenerate ALL of them — not just the one that
+    was complaining.
+  - **The tell is DISAGREEMENT, not the exit code**: a red set that contradicts a measurement you took
+    yourself is a claim about execution ORDER, never about the tree. The gates in this repository
+    defend themselves — several exit `2` rather than `1` when they refuse to grade a stale artefact; a
+    `2` means nothing about the code, a `1` does.
+  - **TWO LIVE PRODUCERS, ONE PATH.** RULE: an artefact is attributable to a run only when its PATH
+    carries a run id; before launching a long run, establish that no earlier one is still alive.
+  - **TWO LIVE PRODUCERS, ONE PORT** — the same defect on a resource that is not a file. RULE: before
+    launching or resuming a worker while a long chain is live, name the exclusive resources both touch
+    and forbid the overlap in the brief.
+  - **ONE RUN DIRECTORY, TWO POPULATIONS OF LOGS.** RULE: read a gate's result from the run's
+    `verdict.json` (`gates[].log`), never by picking a file out of a directory by name.
+  - **THE READER RESOLVED A DIFFERENT CHECKOUT'S STATE.** RULE: a worker's verdict is read with
+    `--read` run INSIDE that worker's worktree, or through the explicit path of its
+    `runs/<id>/verdict.json`; never from the main checkout, and the report names the worktree the
+    verdict came from.
+  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/stale-artifact-read-as-this-runs-result.md`.
+````

@@ -178,3 +178,59 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
 ## Ledger line archived 2026-10-01 (condensed)
 
 - [promoted] 2026-09-30 — bounded-search-read-as-absence: now a binding rule in ~/.claude/rules/promoted-rules.md; no mechanism is possible: No hook sees whether a sentence to the owner asserts liveness from a queued-delivery notice; what stands in place is the extended promoted rule plus the heartbeat reading transcript mtime and git log, which the auto-resume cron already runs.; full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:bounded-search-read-as-absence#14-->
+
+## Loaded text archived 2026-10-01 (tiered)
+
+Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the tiering of 2026-10-01; it is archived byte for byte, and the loaded file keeps only its binding text. @es Cada bloque de abajo se cargaba desde `~/.claude/rules/promoted-rules.md` hasta el escalonado del 2026-10-01; se archiva byte a byte, y el fichero cargado conserva solo su texto vinculante.
+
+````markdown
+- **`bounded-search-read-as-absence`** — Reading ONE empty store as "no record exists". **A tool you
+  lack is never the search that establishes absence.** Before saying a record does not exist, query
+  every store that could hold it — and when the question is about project state, history, or what
+  remains, query engram FIRST, because that is where this project deliberately puts what the tooling
+  cannot keep. The failure is cheap to avoid and expensive to make: the owner plans from the answer.
+  Recorded across many recurrences; each face below adds one more search surface that silence alone
+  does not cover:
+  - **A DOCUMENT IS NOT A SEARCH.** RULE: a document asserting "X does not exist" is a HYPOTHESIS
+    inheriting somebody else's search, never a measurement — and it may never be forwarded to a worker
+    under `MEASURED:`. Search every place the thing could live, including outside the repository,
+    before writing an absence down.
+  - **THE RULE NAMED THE STORE AND I STILL DID NOT OPEN IT.** RULE: a negative written into any
+    DURABLE record must NAME THE STORES SEARCHED inside the record itself; where a store was not
+    searched, say so rather than letting silence read as coverage.
+  - **GIT'S LOCAL REF STORE IS A CACHE, NOT THE REPOSITORY.** RULE: run `git fetch --all --tags`
+    BEFORE asserting anything about tags, branches, or ahead/behind — a local ref query is never
+    evidence about origin.
+  - **A BRIEF IS ASSEMBLED FROM THE TASK RECORD, NEVER AUTHORED FROM MY OWN SUMMARY.** RULE,
+    operational: before writing any delegation brief, READ that task's own record in the harness task
+    store; anything you would mark `HYPOTHESIS:` may already be MEASURED there.
+  - **A CAPABILITY DECLARED ABSENT FROM ONE TOOL'S SILENCE.** RULE: a tool returning nothing
+    establishes only what THAT tool enumerates; before declaring any capability, actor or record gone,
+    name what the tool you used actually covers, and ATTEMPT the recovery instead of reasoning about
+    it. CLOSED BY MECHANISM: `~/.claude/resume-before-fresh/guard.mjs`.
+  - **THE RIGHT SEARCH OF THE WRONG SURFACE.** RULE: expanding ONE dependency graph establishes
+    absence only within THAT graph — before saying anything does not gate a release, enumerate every
+    gating surface it actually passes through.
+  - **ONE MEMBER OF A CHAIN PARSED, THE WHOLE CHAIN ASSERTED.** RULE: whether a chain reaches a script
+    is a question with an owning tool (`check:ci-scripts` / `ci-build-completeness`) — ask it, never a
+    hand parse of one member.
+  - **THE GLOB'S PATH SCOPE IS THE POPULATION.** RULE: for any question about a POPULATION of files,
+    derive the population from the tool's own config, never from a directory you assumed; a negative
+    must NAME THE PATHS SEARCHED inside the record.
+  - **A PART PROBED, THE WHOLE DECLARED.** RULE: the progress of a multi-step run is read from its RUN
+    DIRECTORY or its own `--read`/verdict reader, never from one step's log or a CPU cutoff.
+  - **THE NOTIFICATION DESCRIBES THE REPORT, NOT THE BRANCH.** RULE: a worker's state is read from its
+    branch head, dirty count and transcript mtime, measured in the same turn, never from the wording
+    of a lifecycle notification. "No report yet" is not "no work yet".
+  - **«QUEUED» IS NOT «RUNNING», AND A SHRINKING COUNT IS NOT A COMMIT (2026-09-30,
+    `bounded-search-read-as-absence`).** I told the
+    owner twice that a migration agent was live and "committing path by path (19 -> 1)" and dismissed
+    a guard on that basis; its transcript had last written hours earlier (context-exhausted, a
+    dangling tool_use), my SendMessage had only been "queued for its next tool round", and git held
+    zero commits from it — the count moved because the guard attributed differently between turns.
+    RULE: liveness is read from the actor's transcript mtime and last record, progress from `git log`
+    of the repo, both in the same turn; a delivery-queued message proves nothing ran.
+  - **LA LISTA DE SKILLS DE UN TURNO ES UNA FOTO.** RULE: una lista de capacidades del harness solo
+    prueba lo que hay EN ESE TURNO; decir «no aparece en esta sesión», nunca «no existe».
+  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/bounded-search-read-as-absence.md`.
+````

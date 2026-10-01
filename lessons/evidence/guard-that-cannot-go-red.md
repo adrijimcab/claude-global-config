@@ -171,3 +171,47 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
 ## Ledger line archived 2026-10-01 (condensed)
 
 - [promoted] 2026-09-29 — guard-that-cannot-go-red: now a binding rule in the delegated-worker contract (both files); closed by mechanism .claude/entry-point-check/check.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:guard-that-cannot-go-red#14-->
+
+## Loaded text archived 2026-10-01 (tiered)
+
+Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the tiering of 2026-10-01; it is archived byte for byte, and the loaded file keeps only its binding text. @es Cada bloque de abajo se cargaba desde `~/.claude/rules/promoted-rules.md` hasta el escalonado del 2026-10-01; se archiva byte a byte, y el fichero cargado conserva solo su texto vinculante.
+
+````markdown
+- **`guard-that-cannot-go-red`** — A new guard, gate, check or classifier is NOT trusted until it has
+  been proven to DISCRIMINATE, on real cases, across the state space its decision ranges over. Silence
+  from a check is evidence ONLY once that same check has been seen to speak; testing that a mechanism
+  FIRES is not testing that it DECIDES CORRECTLY. RULE: enumerate the state space the decision ranges
+  over and exercise each state in the self-test, so the discrimination cannot silently drift back. Ten
+  faces recorded to date; each adds one more state that belongs in that enumeration:
+  - **THE NEAR MISS IS A STATE.** RULE: test the near miss, and make the refusal NAME it — do not
+    relax the form to make the message unnecessary; strictness is what stops a marker from being
+    talked around.
+  - **RED FOR THE WRONG REASON.** RULE: a fixture is CONSTRUCTED by the test, never read from a
+    branch, a tag's relationship to a branch, or any artifact that legitimately changes.
+  - **A PROBE YOU DID NOT AUTHOR.** RULE: before any probe becomes a decision signal, exercise the
+    state in which it MUST say no — a borrowed signal gets the same scrutiny as a guard you wrote.
+  - **THE DISCRIMINATOR THAT ANSWERS A DIFFERENT QUESTION.** RULE: name the question the action
+    decides, in words, BEFORE choosing the probe; when a decision has two independent preconditions,
+    satisfying one is not evidence about the other. It recurred twice more: when a status and a
+    first-hand account disagree about whether work is finished, the account wins — a lifecycle field
+    describes the process, never the task; and before any delegation, enumerate every worktree's
+    uncommitted and unmerged content and READ the diff — OPEN is not the same as UNSTARTED.
+  - **THE GUARD THAT FORBIDS WRITING ABOUT ITSELF.** RULE: when a guard forbids a token, its self-test
+    must exercise that token appearing as DATA — heredoc bodies, quoted strings, echoed text, commit
+    messages — and must prove the scan RESUMES afterwards.
+  - **THE IDENTITY GUARD THAT READ THE LABEL, NOT THE ERRAND.** RULE: an identity guard compares what
+    the author actually wrote (the brief, not the label), folds the domain's own spellings, and treats
+    a live worktree as overriding recency; where the signal is too weak to refuse, it must still
+    surface the candidate.
+  - **THE FIXTURE ALPHABET HID THE UNIT MISMATCH.** RULE: a value measured in one unit is applied in
+    that unit — a byte size cuts bytes, never a decoded string; a fixture is chosen for the data the
+    guard will really read.
+  - **"AM I BLOCKED RIGHT NOW" ANSWERING "IS THIS FINISHED".** RULE: the completion of a multi-item
+    operation is verified by COUNTING what landed against what was asked, never by a state flag;
+    prefer the tool that already owns the operation. Operational corollary: before any script reads a
+    field, print the DISTINCT FIELD SETS of the real records first; a chain whose later step certifies
+    an earlier one must stop when the earlier one fails.
+  - **THE PROOF TOOL ITSELF COULD NOT GO RED.** RULE: a kill measured over a red baseline is not
+    evidence, and a proof is only as good as the runner's ability to refuse to measure.
+  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/guard-that-cannot-go-red.md`.
+````
