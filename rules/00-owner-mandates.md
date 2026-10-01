@@ -147,6 +147,9 @@ SOLO AL FINAL».
 
 - Durante el trabajo, cada cambio corre SOLO los gates que pueden leer lo que tocó: los relacionados
   con sus rutas, más la spec que fija un generador si se tocó uno. Nunca una cadena completa por cambio.
+- Un agente delegado verifica SOLO lo suyo: lint y typecheck de lo que tocó, los tests y mutantes de los
+  módulos que cambió y los gates que leen esas rutas — ni más ni menos. Nunca la suite completa ni la
+  cadena entera: esa corrida es del orquestador, una vez, al aterrizar. El brief nombra esos comandos.
 - Las ramas se acumulan en UNA rama de tanda. La rama de integración (develop) se mueve UNA sola vez, al
   final, con la cadena completa (`build:ci-pr`, y el suelo del landing guard) sobre ese árbol exacto. Ese
   aterrizaje cierra también, con `--close`, todos los worktrees cuyo contenido entra en él.
