@@ -389,3 +389,16 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   @es Ante un comportamiento raro de una herramienta, reproducirlo primero con una entrada mínima propia;
   un defecto sin reproducir es una hipótesis sobre el uso propio y nunca va a un brief. La forma del
   comando (terminar con `echo $?`) la rechaza `~/.claude/exit-code-guard/guard.mjs`.
+
+- **`replied-to-owner-in-english`** — Every line the owner can see is addressed to the owner, including
+  the one-line narration written between tool calls; twice in one session (2026-10-01) that narration
+  went out in English because it was written in the language of the tool work. RULE: every visible
+  line, interstitial narration included, is written in Rioplatense Spanish with the Gentleman tone;
+  English appears only quoted, in a code block, or as a technical term. No mechanism can prevent it,
+  because no hook sees assistant text before it is shown; in its place, `~/.claude/owner-language-guard/guard.mjs`
+  (a `Stop` guard) refuses the turn and forces a full Spanish rewrite in the same turn.
+  @es Toda línea visible para el dueño va dirigida al dueño, también la narración de una línea entre
+  llamadas a herramientas. REGLA: todo texto visible, narración incluida, va en español rioplatense con
+  tono Gentleman; el inglés solo aparece citado, en bloque de código o como término técnico. Ningún hook
+  ve el texto antes de mostrarse; en su lugar, `~/.claude/owner-language-guard/guard.mjs` (guard `Stop`)
+  rechaza el turno y obliga a reescribirlo entero en español en el mismo turno.
