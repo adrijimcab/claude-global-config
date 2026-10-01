@@ -56,12 +56,24 @@ const MUTANTS = [
   ['a matched dismissal stops being reported as dismissed, so an excused repo still reads as unresolved-dirty', 'decide.mjs', "if (dismissal !== undefined) return { ...finding, state: 'dismissed', dismissal };", ''],
   ['the temporary index override is dropped, so fingerprinting would write into the repo\'s REAL index instead of a throwaway one', 'fingerprint.mjs', "const env = { ...process.env, GIT_INDEX_FILE: tempIndex };", "const env = { ...process.env };"],
   ['the worktree is no longer added into the temporary index before hashing, so the tree hash is always the EMPTY tree and never discriminates on real content', 'fingerprint.mjs', "runGit(qualified(['add', '-A']), repo.worktree, env);", ''],
-  ['a failed git status stops short-circuiting fingerprinting, so a repo whose status could not be measured still gets a fingerprint computed and reported', 'fingerprint.mjs', 'if (!status.ok) return undefined;', '']
+  ['a failed git status stops short-circuiting fingerprinting, so a repo whose status could not be measured still gets a fingerprint computed and reported', 'fingerprint.mjs', 'if (!status.ok) return undefined;', ''],
+  ['PowerShell calls stop counting as shell windows, so a Windows shell write is never explained', 'shell-windows.mjs', "new Set(['Bash', 'PowerShell'])", "new Set(['Bash'])"],
+  ['every tool call counts as a shell window, so a read or an edit explains any file written meanwhile', 'shell-windows.mjs', 'SHELL_TOOLS.has(block.name)', 'true'],
+  ['a finished call stays open, so it also reads as interrupted and adds a second window', 'shell-windows.mjs', '        open.delete(block.tool_use_id);\n', ''],
+  ['an interrupted call ends now instead of at the last record, so a dead call explains every later write', 'shell-windows.mjs', 'end: start < last ? last : now', 'end: now'],
+  ['a call still running ends at the last record instead of now, so a long command explains nothing', 'shell-windows.mjs', 'end: start < last ? last : now', 'end: last'],
+  ['the last timestamp is never tracked, so an interrupted call is not told from a running one', 'shell-windows.mjs', 'last = Math.max(last, at);', 'last = Math.min(last, at);'],
+  ['a record without a timestamp opens a window at NaN, so it corrupts the windows', 'shell-windows.mjs', 'if (Number.isNaN(at)) continue;', ''],
+  ['the clock tolerance is gone, so a write at the very edge of a call is not explained', 'shell-windows.mjs', 'export const CLOCK_TOLERANCE_MS = 1000;', 'export const CLOCK_TOLERANCE_MS = 0;'],
+  ['the tolerance before a call is dropped, so a write just before its recorded start is not explained', 'shell-windows.mjs', 'window.start - tolerance', 'window.start'],
+  ['the tolerance after a call is dropped, so a write just after its result is not explained', 'shell-windows.mjs', 'window.end + tolerance', 'window.end'],
+  ['the window start stops being inclusive, so a write exactly at the edge is not explained', 'shell-windows.mjs', 'mtimeMs >= window.start', 'mtimeMs > window.start'],
+  ['the window end stops being inclusive, so a write exactly at the edge is not explained', 'shell-windows.mjs', 'mtimeMs <= window.end', 'mtimeMs < window.end']
 ];
 
 const survivors = runMutants({
   fleetRoot: HERE,
-  paths: ['decide.mjs', 'guard.mjs', 'status.mjs', 'attribution.mjs', 'transcript-writes.mjs', 'unpushed-commits.mjs', 'commit-advice.mjs', 'repos.mjs', 'dismiss.mjs', 'fingerprint.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'],
+  paths: ['decide.mjs', 'guard.mjs', 'status.mjs', 'attribution.mjs', 'transcript-writes.mjs', 'shell-windows.mjs', 'unpushed-commits.mjs', 'commit-advice.mjs', 'repos.mjs', 'dismiss.mjs', 'fingerprint.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'],
   selftest: 'selftest.mjs',
   mutants: MUTANTS
 });

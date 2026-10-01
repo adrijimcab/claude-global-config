@@ -25,6 +25,7 @@ import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs, readDismissals } from
 import { decide } from './decide.mjs';
 import { measureFingerprint } from './fingerprint.mjs';
 import { evaluate } from './guard.mjs';
+import { CLOCK_TOLERANCE_MS, shellWindowsIn, withinWindow } from './shell-windows.mjs';
 import { parseStatusPorcelain } from './status.mjs';
 import { parseAheadLog } from './unpushed-commits.mjs';
 import { writtenPathsIn } from './transcript-writes.mjs';
@@ -403,6 +404,29 @@ check(
   writtenPathsIn([edit('C:\\A\\One.ts'), edit('c:/a/one.ts'), toolCall('Write', { file_path: 'C:\\a\\two.ts' }), toolCall('MultiEdit', { file_path: 'C:\\a\\three.ts' }), toolCall('NotebookEdit', { notebook_path: 'C:\\a\\n.ipynb' }), bash('touch C:\\a\\four.ts'), toolCall('Read', { file_path: 'C:\\a\\five.ts' }), prose('C:\\a\\six.ts'), '{"tool_use": cut off', toolCall('Edit', {})].join('\n')),
   ['c:/a/one.ts', 'c:/a/two.ts', 'c:/a/three.ts', 'c:/a/n.ipynb']
 );
+{
+  const at = (second) => `2026-10-01T00:00:${String(second).padStart(2, '0')}.000Z`;
+  const ms = (second) => Date.parse(at(second));
+  const callAt = (second, id, name, input = {}) => `${JSON.stringify({ timestamp: at(second), type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } })}\n`;
+  const resultAt = (second, id) => `${JSON.stringify({ timestamp: at(second), type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } })}\n`;
+  const now = ms(59);
+
+  check('a shell call is a window from its tool_use to its tool_result', shellWindowsIn(callAt(1, 'a', 'Bash') + resultAt(4, 'a'), now), [{ start: ms(1), end: ms(4) }]);
+  check('PowerShell counts, Read and Edit do not; parallel calls pair by id', shellWindowsIn(callAt(1, 'a', 'Bash') + callAt(2, 'p', 'PowerShell') + callAt(3, 'r', 'Read') + callAt(3, 'e', 'Edit') + resultAt(5, 'p') + resultAt(9, 'a') + resultAt(9, 'r'), now), [{ start: ms(2), end: ms(5) }, { start: ms(1), end: ms(9) }]);
+  check('a call that is the last record is still running: it ends at now', shellWindowsIn(callAt(1, 'a', 'Bash'), now), [{ start: ms(1), end: now }]);
+  check('a call with later records but no result was interrupted: it ends at the last timestamp', shellWindowsIn(callAt(1, 'a', 'Bash') + callAt(7, 'b', 'Read') + resultAt(8, 'b'), now), [{ start: ms(1), end: ms(8) }]);
+  check('lines that are not JSON or carry no timestamp are skipped, the rest still read', shellWindowsIn(`{"tool_use": cut\n${JSON.stringify({ message: { content: [{ type: 'tool_use', id: 'x', name: 'Bash' }] } })}\n${callAt(1, 'a', 'Bash')}${resultAt(2, 'a')}`, now), [{ start: ms(1), end: ms(2) }]);
+
+  const windows = [{ start: ms(10), end: ms(20) }];
+
+  check('the measured clock tolerance is one second', CLOCK_TOLERANCE_MS, 1000);
+  check('a time inside the window is within it', withinWindow(windows, ms(15)), true);
+  check('exactly one tolerance before the start is still within', withinWindow(windows, ms(10) - CLOCK_TOLERANCE_MS), true);
+  check('one millisecond earlier than that is outside', withinWindow(windows, ms(10) - CLOCK_TOLERANCE_MS - 1), false);
+  check('exactly one tolerance after the end is still within', withinWindow(windows, ms(20) + CLOCK_TOLERANCE_MS), true);
+  check('one millisecond later than that is outside', withinWindow(windows, ms(20) + CLOCK_TOLERANCE_MS + 1), false);
+  check('no windows explain nothing', withinWindow([], ms(15)), false);
+}
 check('parseAheadLog reads each commit with its paths, in order', parseAheadLog(logOf(['abc1234', 'feat: x: y', 'a/b.mjs', 'c.mjs'], ['def5678', 'chore: empty'])), [
   { hash: 'abc1234', subject: 'feat: x: y', paths: ['a/b.mjs', 'c.mjs'] },
   { hash: 'def5678', subject: 'chore: empty', paths: [] }
