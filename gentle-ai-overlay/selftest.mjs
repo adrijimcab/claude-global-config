@@ -16,6 +16,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CUSTOMIZATIONS } from './customizations.mjs';
 import { KINDS, applyAll, evaluateAll } from './invariants.mjs';
+import { parseManagedRegions } from './managed-regions.mjs';
+import { inspectSection, reconcileSection, sha256 } from './review-contract-section.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '2.99.0';
@@ -375,6 +377,116 @@ test('telemetry: status schema changed -> unverifiable', () => {
 
 test('telemetry: disabled by an unknown source -> unverifiable, not held', () => {
   expect(evaluate(telemetry, withCli({ enabled: false, source: 'CI' })).status, 'unverifiable', 'status');
+});
+
+// ---------------------------------------------------------------- review contract section (pure)
+// The span gentle-ai renders, its lazy form, and its restoration, on a multibyte fixture in both line
+// endings. @es El tramo que genera gentle-ai, su forma diferida y su restauración, sobre un fixture
+// multibyte con ambos finales de línea.
+
+const REVIEW_SPAN = ['#### Review Execution Contract', '', '# Native Compact Review Orchestration', '', 'Contract body — ñandú 日本.', '<!-- authority-first-terminal-procedure:start -->', 'Procedure.', '<!-- authority-first-terminal-procedure:end -->', '', ''].join('\n');
+const STASH_LABEL = '~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md';
+
+/** A CLAUDE.md whose sdd-orchestrator region holds the review span. @es Un CLAUDE.md cuya región sdd-orchestrator contiene el tramo. */
+function orchestratorMd({ span = REVIEW_SPAN, eol = '\n', after = '' } = {}) {
+  const body = ['# Agent Teams', '', '#### Native Checking Contract', '', 'Checking.', '', `${span}#### Cost and Context Balance`, '', 'Cost.'].join('\n');
+  return ['# Owner pointer', '', region('persona', PERSONA), '', region('sdd-orchestrator', body), '', region('agent-routing', 'Routing.'), after, ''].join('\n').split('\n').join(eol);
+}
+const spanOf = (text) => {
+  const { start, end } = inspectSection(text);
+  return { start, end, bytes: text.slice(start, end) };
+};
+const lazy = (text, stash = null, keepLoaded = false) => reconcileSection(text, { keepLoaded, stash, stashLabel: STASH_LABEL });
+const ORCHESTRATOR_OPEN = '<!-- gentle-ai:sdd-orchestrator -->';
+const ORCHESTRATOR_CLOSE = '<!-- /gentle-ai:sdd-orchestrator -->';
+/** What `gentle-ai sync` does to the region: replaces everything between its markers. @es Lo que hace `gentle-ai sync` con la región. */
+const syncRegion = (text, from) =>
+  text.slice(0, text.indexOf(ORCHESTRATOR_OPEN)) + from.slice(from.indexOf(ORCHESTRATOR_OPEN), from.indexOf(ORCHESTRATOR_CLOSE)) + text.slice(text.indexOf(ORCHESTRATOR_CLOSE));
+
+for (const eol of ['\n', '\r\n']) {
+  const label = eol === '\n' ? 'LF' : 'CRLF';
+
+  test(`section ${label}: off + present -> moved; stash is the span byte for byte; nothing outside the span changes`, () => {
+    const original = orchestratorMd({ eol });
+    const span = spanOf(original);
+    const result = lazy(original);
+    expect(result.outcome, 'moved', 'outcome');
+    expect(result.stash, span.bytes, 'stash bytes');
+    expect(result.text.slice(0, span.start), original.slice(0, span.start), 'prefix');
+    expect(result.text.endsWith(original.slice(span.end)), true, 'suffix');
+    expect(parseManagedRegions(result.text).problems.length, 0, 'markers well formed');
+  });
+
+  test(`section ${label}: the pointer carries the sentinel sha, the stash label, every trigger, both languages, and the file's line ending`, () => {
+    const original = orchestratorMd({ eol });
+    const result = lazy(original);
+    const pointer = result.text.slice(spanOf(original).start, result.text.length - (original.length - spanOf(original).end));
+    expect(pointer.includes(`sha256=${sha256(result.stash)} -->`), true, 'sentinel sha');
+    ['`~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md`', 'other than `gentle-ai review mode status`', 'consent/v3', 'effective: on', '\n@es '].forEach((needle) => expect(pointer.includes(needle), true, `pointer holds ${needle}`));
+    expect(pointer.split('\r\n').join('').includes('\n'), eol === '\n', 'line ending');
+  });
+
+  test(`section ${label}: idempotent; keepLoaded restores the original bytes; keepLoaded on a present span changes nothing`, () => {
+    const original = orchestratorMd({ eol });
+    const moved = lazy(original);
+    const again = lazy(moved.text, moved.stash);
+    expect(again.outcome, 'unchanged', 'second run outcome');
+    expect(again.text, moved.text, 'second run bytes');
+    const restored = lazy(moved.text, moved.stash, true);
+    expect(restored.outcome, 'restored', 'restore outcome');
+    expect(restored.text, original, 'restored bytes');
+    expect(lazy(original, null, true).text, original, 'present + keepLoaded');
+  });
+
+  test(`section ${label}: a sync-shaped rewrite of the moved file, then the overlay, gives the same moved file`, () => {
+    const original = orchestratorMd({ eol });
+    const moved = lazy(original);
+    expect(moved.outcome, 'moved', 'moved before the sync');
+    const synced = syncRegion(moved.text, original);
+    expect(synced, original, 'sync restores the span');
+    const again = lazy(synced, moved.stash);
+    expect(again.text, moved.text, 'moved again');
+    expect(again.stash, moved.stash, 'stash again');
+  });
+}
+
+test('section: a moved span whose stash is tampered, missing or drifted is refused, never guessed', () => {
+  const moved = lazy(orchestratorMd());
+  expect(lazy(moved.text, `${moved.stash}x`, true).refused !== undefined, true, 'tampered, restore');
+  expect(lazy(moved.text, null, true).refused !== undefined, true, 'missing, restore');
+  expect(lazy(moved.text, 'other', false).refused !== undefined, true, 'drifted, off');
+});
+
+test('section: no heading and no contract title -> absent, nothing to move', () => {
+  const text = orchestratorMd({ span: '' });
+  expect(inspectSection(text).form, 'absent', 'form');
+  expect(lazy(text).outcome, 'unchanged', 'outcome');
+});
+
+/** The refusal names the exact cause it found. @es El rechazo nombra la causa exacta que encontró. */
+const refusedFor = (text, cause) => (lazy(text).refused ?? '').startsWith(cause);
+const START_REFUSAL = '"#### Review Execution Contract" is not exactly one whole line';
+const END_REFUSAL = '"#### Cost and Context Balance" is not exactly one whole line';
+
+test('section near misses refuse, naming why: duplicated start, duplicated end, renamed start with the title still rendered', () => {
+  expect(refusedFor(orchestratorMd({ after: '#### Review Execution Contract' }), START_REFUSAL), true, 'start twice');
+  expect(refusedFor(orchestratorMd({ after: '#### Cost and Context Balance' }), END_REFUSAL), true, 'end twice');
+  expect(refusedFor(orchestratorMd({ span: REVIEW_SPAN.replace('#### Review Execution Contract', '#### Review Execution Contracts') }), START_REFUSAL), true, 'renamed start');
+});
+
+test('section near misses refuse, naming why: end heading missing, a second sdd-orchestrator region, span outside the region', () => {
+  expect(refusedFor(orchestratorMd().replace('#### Cost and Context Balance', '#### Cost'), END_REFUSAL), true, 'end missing');
+  expect(refusedFor(orchestratorMd({ after: region('sdd-orchestrator', 'Second copy.') }), 'the sdd-orchestrator region is not present exactly once'), true, 'region twice');
+  const outside = orchestratorMd({ span: '' }).replace('#### Cost and Context Balance', 'Cost heading moved.').concat(REVIEW_SPAN, '#### Cost and Context Balance\n');
+  expect(lazy(outside).refused !== undefined, true, 'outside the region');
+});
+
+test('section near misses are not headings or sentinels: a heading quoted mid-line, a sentinel without its closing', () => {
+  const quoted = orchestratorMd().replace('Checking.', 'See #### Review Execution Contract below.');
+  expect(lazy(quoted).outcome, 'moved', 'mid-line mention ignored');
+  const moved = lazy(orchestratorMd());
+  const unclosed = moved.text.replace(`${sha256(moved.stash)} -->`, sha256(moved.stash));
+  expect(inspectSection(unclosed).form, 'present', 'unclosed sentinel is not a sentinel');
 });
 
 // ---------------------------------------------------------------- the real list, through the CLIs

@@ -39,6 +39,20 @@ const MUTANTS = [
   ['kinds/telemetry.mjs', 'if (status.schema !== STATUS_SCHEMA)', 'if (false)'],
   ['kinds/telemetry.mjs', "if (unverifiable) return { status: 'unverifiable', detail: unverifiable };", "if (unverifiable) return { status: 'held', detail: unverifiable };"],
   ['kinds/telemetry.mjs', "['telemetry', 'disable', '--json']", "['telemetry', 'enable', '--json']"],
+  ['review-contract-section.mjs', 'if (lineContent(line) === needle)', 'if (lineContent(line).includes(needle))'],
+  ['review-contract-section.mjs', 'starts.length === 0 && lineStarts(text, CONTRACT_TITLE).length === 0', 'starts.length === 0'],
+  ['review-contract-section.mjs', 'if (starts.length !== 1)', 'if (starts.length > 1)'],
+  ['review-contract-section.mjs', 'if (ends.length !== 1)', 'if (ends.length > 1)'],
+  ['review-contract-section.mjs', 'if (opens.length !== 1 || closes.length !== 1)', 'if (false)'],
+  ['review-contract-section.mjs', 'if (!(opens[0] < start && start < end && end < closes[0]))', 'if (!(start < end))'],
+  ['review-contract-section.mjs', 'line.startsWith(SENTINEL_PREFIX) && line.endsWith(SENTINEL_SUFFIX)', 'line.startsWith(SENTINEL_PREFIX)'],
+  ['review-contract-section.mjs', "(text.includes('\\r\\n') ? '\\r\\n' : '\\n')", "'\\n'"],
+  ['review-contract-section.mjs', '    `@es El desarrollo guiado', '    `El desarrollo guiado'],
+  ['review-contract-section.mjs', "    if (keepLoaded) return { outcome: 'unchanged', text, stash };", ''],
+  ['review-contract-section.mjs', 'pointerFor(text, sha256(moved), stashLabel)', "pointerFor(text, 'x', stashLabel)"],
+  ['review-contract-section.mjs', 'stash === null || sha256(stash) !== section.sha', 'stash === null'],
+  ['review-contract-section.mjs', "  if (!keepLoaded) return { outcome: 'unchanged', text, stash };", ''],
+  ['review-contract-section.mjs', 'text.slice(0, start) + stash + text.slice(end)', 'text.slice(0, start) + stash.trimEnd() + text.slice(end)'],
 ];
 
 const selftestIn = (directory) => spawnSync(process.execPath, [path.join(directory, 'selftest.mjs')], { encoding: 'utf8' });
