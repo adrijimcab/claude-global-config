@@ -28,7 +28,9 @@ risk, or how urgent it feels. Points 2 and 3 bind on all three.
 3. **Prove it with the gates, never with a "done".** Definition of done = the project's REAL full gate
    set green, MEASURED, as that project's own `CLAUDE.md` or agent contract declares it (in b100-am-ui,
    `build:ci-pr` = `ci:lint` + `ci:checks` + `npm test -- --all` + `build:demo`) — never a
-   self-selected subset. The gates are what actually guarantee 0-regression, readable,
+   self-selected subset. That full run happens ONCE, at the end, by the orchestrator on the tree being
+   integrated; during the work every phase and worker (SDD apply and verify included) runs only the
+   gates that read what it changed. The gates are what actually guarantee 0-regression, readable,
    first-class-architecture, scalable code; the route is the process, the gates are the proof.
 
 **Trivial scope (typo, rename, comment tweak, a genuinely one-line no-logic change):** goes direct

@@ -9,8 +9,12 @@ state them before acting. **NEVER dodge a failing gate or check with an EXCLUSIO
 exemption, allowlist, `ignore`/`ignoreDependencies` entry, `eslint-disable`/`@ts-ignore`, or
 self-selected "green" subset. Fix the ROOT: the code; or, ONLY when a rule is genuinely wrong for the
 domain, the rule itself with a documented justification — never an escape hatch that lets the failure
-survive. And **VERIFY against the project's FULL real gate set** (every `check:*`, `knip`, `lint`,
-`typecheck`, the complete `npm test -- --all`, `build:demo` — e.g. `build:ci-pr`), NEVER a subset you picked.
+survive. And **VERIFY at two levels, never mixed up:** while working, each change runs ONLY the gates
+that can read what it touched (lint, typecheck, its own tests and mutants, the gates over those paths) —
+never hours of gates; and before anything is called done, the project's FULL real gate set (every
+`check:*`, `knip`, `lint`, `typecheck`, the complete `npm test -- --all`, `build:demo` — e.g.
+`build:ci-pr`) runs ONCE, at the end, by the orchestrator, on the exact tree being integrated. A
+hand-picked subset is never the final verdict (see "Solo los gates necesarios" below).
 
 ## ZERO SUPPRESSION OF ANY KIND — every registry, baseline and ratchet is debt (owner directive 2026-10-01)
 
