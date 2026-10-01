@@ -4,9 +4,6 @@ Two failures on 2026-07-14 (minutes apart) shared ONE root cause: an **absolute/
 the system was asserted from reasoning and memory, with zero verification, when a single search would
 have refuted it**. Both were wrong.
 
-- "`@container` contradicts our responsive-delegation decision" → false; it *materializes* it.
-- "no test would have caught the stale golden" → false; `check:api` is wired into `ci:checks`.
-
 The following is not advice. It is the contract.
 
 ## 1. Never assert what you have not verified
