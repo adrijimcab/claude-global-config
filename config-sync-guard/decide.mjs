@@ -10,10 +10,14 @@
  *
  * THREE OUTCOMES per repo, never conflated:
  *   - BLOCK: ahead of its remote by commits no live agent of ANOTHER session owns (`unpushed-commits.mjs`),
- *     or holding dirty paths NOT written by a live agent (`attribution.mjs`). Commits that other sessions'
- *     live agents own are ALLOWED WITH A NOTE: they are not this session's to push.
+ *     or holding dirty paths THIS session made (`path-ownership.mjs`: it wrote them, or they changed during
+ *     one of its shell calls). What other sessions made is ALLOWED WITH A NOTE, and so is a dirty path no
+ *     live transcript explains: nobody live can be told to commit it, so blocking would only trap
+ *     whoever ends a turn next (the owner's rule binds the MAKER, and none is known).
  *     @es BLOQUEO: adelantado por commits que ningún agente vivo de OTRA sesión posee, o con rutas sucias
- *     que ningún agente vivo escribió. Los commits de otras sesiones se permiten CON NOTA.
+ *     que ESTA sesión hizo (las escribió o cambiaron durante un shell suyo). Lo de otras sesiones se permite
+ *     CON NOTA, y también una ruta que ningún transcript vivo explica: nadie vivo puede commitearla, así
+ *     que bloquear solo atraparía a quien cierre el siguiente turno (la regla liga al AUTOR, y no se conoce).
  *   - ALLOW WITH A NOTE: the repo is missing, or `git` itself failed to answer — a measurement that did
  *     not happen is NEVER read as "clean" (`measurement-failure-is-not-a-zero`), but it is also not
  *     something this turn can fix by committing, so it surfaces as a non-blocking `systemMessage`
@@ -46,9 +50,11 @@
  * distinto — produce una huella distinta y vuelve a bloquear.
  */
 
-import { liveAgentWrites, liveOwnerOf } from './attribution.mjs';
+import { liveAgentWrites } from './attribution.mjs';
 import { readDismissals } from './dismiss.mjs';
 import { measureFingerprint } from './fingerprint.mjs';
+import { claimsOn, ownershipVerdict } from './path-ownership.mjs';
+import { latestChangeMs } from './path-mtime.mjs';
 import { declaredRepos, repoExists } from './repos.mjs';
 import { parseStatusPorcelain } from './status.mjs';
 import { classifyCommits, readAheadCommits } from './unpushed-commits.mjs';
@@ -80,15 +86,49 @@ function foreignCommitsText(commits) {
 }
 
 /**
- * One repo's classification: `{ repo, state }` where `state` is `'missing'`, `'unmeasurable'`, `'clean'`,
- * `'foreign'` (only another session's live agents' commits are ahead: allowed with a note), `'dismissed'`
- * or `'dirty'`. The last three carry `aheadCount`, `unownedAhead` (commits ahead that no other session's
- * live agent owns), `unownedCommits`, `foreignCommits` and `unattributed` (dirty paths no live agent
- * wrote); `'dismissed'` also carries `dismissal`, the matching record.
- * @es Clasificación de un repo: `state` es `'missing'`, `'unmeasurable'`, `'clean'`, `'foreign'` (solo hay
- * commits de agentes vivos de otra sesión: se permite con nota), `'dismissed'` o `'dirty'`.
+ * The non-blocking note of a `'noted'` repo: whose commits are left unpushed here, and which paths no live
+ * session made (so nobody live can be told to commit them).
+ * @es La nota no bloqueante de un repo `'noted'`: de quién son los commits que quedan sin subir aquí, y
+ * qué rutas no hizo ninguna sesión viva (nadie vivo puede commitearlas).
  */
-function classifyOneRepo(repo, { liveAgents, sessionId, fingerprintOf, dismissals }) {
+function notedText({ repo, foreignCommits, unexplained }) {
+  const parts = [];
+
+  if (foreignCommits.length > 0) parts.push(`${foreignCommitsText(foreignCommits)} belong to live agents of another session; left unpushed here`);
+  if (unexplained.length > 0) parts.push(`${String(unexplained.length)} uncommitted path(s) no live session made (not blocking; commit with an explicit pathspec once verified): ${pathsText(unexplained)}`);
+
+  return `config-sync-guard: ${repo.name} — ${parts.join('; ')}`;
+}
+
+/** `a, b, c … and N more`: the first `shown` paths of `paths`. @es Las primeras `shown` rutas de `paths`. */
+function pathsText(paths, shown = 8) {
+  return paths.length > shown ? `${paths.slice(0, shown).join(', ')} … and ${String(paths.length - shown)} more` : paths.join(', ');
+}
+
+/**
+ * Each dirty path of `repo` as `{ absolute, verdict }`: what it means for this session (`path-ownership.mjs`).
+ * @es Cada ruta sucia de `repo` como `{ absolute, verdict }`: qué significa para esta sesión.
+ */
+function judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf }) {
+  return dirtyPaths.map((relativePath) => {
+    const absolute = path.join(repo.worktree, relativePath);
+
+    return { absolute, verdict: ownershipVerdict(claimsOn(relativePath, mtimeOf(absolute), liveAgents), sessionId) };
+  });
+}
+
+/**
+ * One repo's classification: `{ repo, state }` where `state` is `'missing'`, `'unmeasurable'`, `'clean'`,
+ * `'noted'` (nothing this session must commit or push, but other sessions' commits are ahead and/or paths
+ * no live transcript explains: allowed with a note), `'dismissed'` or `'dirty'`. The last three carry
+ * `aheadCount`, `unownedAhead` (commits ahead that no other session's live agent owns), `unownedCommits`,
+ * `foreignCommits`, `ownPaths` (dirty paths this session made) and `unexplained` (dirty paths nobody live
+ * made); `'dismissed'` also carries `dismissal`, the matching record.
+ * @es Clasificación de un repo: `state` es `'missing'`, `'unmeasurable'`, `'clean'`, `'noted'` (nada que
+ * esta sesión deba commitear ni subir, pero hay commits de otras sesiones y/o rutas que ningún transcript
+ * vivo explica: se permite con nota), `'dismissed'` o `'dirty'`.
+ */
+function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, dismissals }) {
   if (!repoExists(repo)) return { repo, state: 'missing' };
 
   const status = repo.run(['status', '--porcelain=v1', '--branch']);
@@ -96,14 +136,14 @@ function classifyOneRepo(repo, { liveAgents, sessionId, fingerprintOf, dismissal
   if (!status.ok) return { repo, state: 'unmeasurable', reason: status.stderr || 'git exited non-zero with no stderr' };
 
   const { aheadCount, dirtyPaths } = parseStatusPorcelain(status.stdout);
-  const unattributed = dirtyPaths
-    .filter((relativePath) => liveOwnerOf(relativePath, liveAgents) === undefined)
-    .map((relativePath) => path.join(repo.worktree, relativePath));
+  const judged = judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf });
+  const ownPaths = judged.filter((entry) => entry.verdict === 'maker').map((entry) => entry.absolute);
+  const unexplained = judged.filter((entry) => entry.verdict === 'unexplained').map((entry) => entry.absolute);
   const { foreign, unowned } = classifyCommits(aheadCount > 0 ? readAheadCommits(repo) : [], liveAgents, sessionId);
   const unownedAhead = Math.max(0, aheadCount - foreign.length);
-  const finding = { repo, aheadCount, unownedAhead, unownedCommits: unowned, foreignCommits: foreign, unattributed };
+  const finding = { repo, aheadCount, unownedAhead, unownedCommits: unowned, foreignCommits: foreign, ownPaths, unexplained };
 
-  if (unownedAhead === 0 && unattributed.length === 0) return foreign.length === 0 ? { repo, state: 'clean' } : { ...finding, state: 'foreign' };
+  if (unownedAhead === 0 && ownPaths.length === 0) return foreign.length === 0 && unexplained.length === 0 ? { repo, state: 'clean' } : { ...finding, state: 'noted' };
 
   const fingerprint = fingerprintOf(repo);
   const dismissal = fingerprint === undefined ? undefined : latestMatchingDismissal(repo.name, fingerprint, dismissals);
@@ -121,10 +161,10 @@ function classifyOneRepo(repo, { liveAgents, sessionId, fingerprintOf, dismissal
  * @es La decisión sobre un payload `Stop` ya parseado. `undefined` (permite en silencio), `{kind:'note'}`
  * (permite con mensaje), o `{kind:'block'}` (bloquea). Toda dependencia es inyectable.
  */
-export function decide(payload, { repos = declaredRepos(), now = Date.now(), liveAgents, fingerprintOf = measureFingerprint, dismissals } = {}) {
+export function decide(payload, { repos = declaredRepos(), now = Date.now(), liveAgents, mtimeOf = latestChangeMs, fingerprintOf = measureFingerprint, dismissals } = {}) {
   if (payload?.stop_hook_active === true) return undefined;
 
-  const context = { liveAgents: liveAgents ?? liveAgentWrites(now), sessionId: payload?.session_id, fingerprintOf, dismissals: dismissals ?? readDismissals() };
+  const context = { liveAgents: liveAgents ?? liveAgentWrites(now), sessionId: payload?.session_id, mtimeOf, fingerprintOf, dismissals: dismissals ?? readDismissals() };
   const classified = repos.map((repo) => classifyOneRepo(repo, context));
 
   const dirtyRepos = classified.filter((entry) => entry.state === 'dirty');
@@ -136,7 +176,7 @@ export function decide(payload, { repos = declaredRepos(), now = Date.now(), liv
     .map((entry) => {
       if (entry.state === 'missing') return `config-sync-guard: ${entry.repo.name} not found at ${entry.repo.worktree} (skipped, not treated as clean)`;
       if (entry.state === 'unmeasurable') return `config-sync-guard: ${entry.repo.name} — git status failed (${entry.reason}); cannot verify, NOT treated as clean`;
-      if (entry.state === 'foreign') return `config-sync-guard: ${entry.repo.name} — ${foreignCommitsText(entry.foreignCommits)} belong to live agents of another session; left unpushed here`;
+      if (entry.state === 'noted') return notedText(entry);
 
       return `config-sync-guard: ${entry.repo.name} — dismissed at ${entry.dismissal.at}: ${entry.dismissal.reason}`;
     });

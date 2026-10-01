@@ -14,12 +14,12 @@
  * path a live transcript merely mentioned — 8 of 8 live transcripts mentioned `lessons-ledger.md`
  * (measured 2026-10-01). NOW: a path is attributed only to a live agent that WROTE it (`transcript-writes.mjs`),
  * matched by its WHOLE relative path at a directory boundary. THE STATED LIMIT: a single-segment path
- * (`CLAUDE.md`) matches that file name in any directory the agent wrote, and a path written by a shell
- * command is never attributed; both fail toward BLOCKING.
+ * (`CLAUDE.md`) matches that file name in any directory the agent wrote. A path changed by a shell
+ * command is attributed by TIME instead (`shell-windows.mjs`, `path-ownership.mjs`).
  *
- * A live agent belongs to the SESSION whose directory holds its transcript
- * (`projects/<project>/<session>/subagents/`), which is how an unpushed commit is told to be another
- * session's work (`unpushed-commits.mjs`).
+ * A live transcript belongs to the SESSION whose directory holds it (`projects/<project>/<session>/
+ * subagents/` for a subagent, `projects/<project>/<session>.jsonl` for the session itself), which is how
+ * an unpushed commit or a dirty path is told to be another session's work.
  *
  * @es Qué agentes VIVOS ESCRIBIERON una ruta: la fuente DETERMINISTA, nunca un título, una convención ni
  * una mención. Liveness = mtime del transcript dentro de 30 minutos. La atribución se revisó CUATRO veces
@@ -27,23 +27,27 @@
  * ruta que un transcript vivo solo MENCIONARA (8 de 8 mencionaban `lessons-ledger.md`, medido el
  * 2026-10-01). AHORA: una ruta se atribuye solo a un agente vivo que la ESCRIBIÓ (`transcript-writes.mjs`),
  * por su ruta relativa COMPLETA en frontera de directorio. LÍMITE DECLARADO: una ruta de un solo segmento
- * casa con ese nombre en cualquier directorio escrito, y una ruta escrita por shell nunca se atribuye; ambos
- * fallan hacia BLOQUEAR. Un agente vivo pertenece a la SESIÓN cuyo directorio guarda su transcript.
+ * casa con ese nombre en cualquier directorio escrito. Una ruta cambiada por shell se atribuye por HORA
+ * (`shell-windows.mjs`, `path-ownership.mjs`). Un transcript vivo pertenece a la SESIÓN cuyo directorio lo
+ * guarda (subagente: `<sesión>/subagents/`; la propia sesión: `<sesión>.jsonl`).
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import { shellWindowsIn } from './shell-windows.mjs';
 import { normalizedPath, writtenPathsIn } from './transcript-writes.mjs';
 
 /** Same measured window as `agent-liveness/liveness.mjs`, same measured reason (see module docblock). @es Misma ventana medida, mismo motivo medido. */
 export const ACTIVE_WINDOW_MS = 30 * 60 * 1000;
 
 /**
- * Every subagent record this harness has written, across all projects and sessions: `{ id, session,
- * transcript }`. `root` is injectable so a selftest can point it at a constructed fixture tree.
- * @es Cada registro de subagente que el harness ha escrito, con su sesión. `root` es inyectable.
+ * Every transcript this harness has written, across all projects and sessions: `{ id, session, subagent,
+ * transcript }` — a subagent's (`projects/<project>/<session>/subagents/`) and a session's own main one
+ * (`projects/<project>/<session>.jsonl`, `id` `main-<session>`). `root` is injectable so a selftest can
+ * point it at a constructed fixture tree.
+ * @es Cada transcript que el harness ha escrito: de subagente y principal de cada sesión. `root` es inyectable.
  */
 export function agentRecords(root = path.join(homedir(), '.claude', 'projects')) {
   const records = [];
@@ -56,6 +60,13 @@ export function agentRecords(root = path.join(homedir(), '.claude', 'projects'))
     if (!statSync(sessions).isDirectory()) continue;
 
     for (const session of readdirSync(sessions)) {
+      if (session.endsWith('.jsonl')) {
+        const own = session.slice(0, -'.jsonl'.length);
+
+        records.push({ id: `main-${own}`, session: own, subagent: false, transcript: path.join(sessions, session) });
+        continue;
+      }
+
       const dir = path.join(sessions, session, 'subagents');
 
       if (!existsSync(dir)) continue;
@@ -65,7 +76,7 @@ export function agentRecords(root = path.join(homedir(), '.claude', 'projects'))
 
         const id = file.slice(0, -'.meta.json'.length);
 
-        records.push({ id, session, transcript: path.join(dir, `${id}.jsonl`) });
+        records.push({ id, session, subagent: true, transcript: path.join(dir, `${id}.jsonl`) });
       }
     }
   }
@@ -83,9 +94,10 @@ export function isLive(record, now = Date.now()) {
 }
 
 /**
- * `Map<agentId, { session, writes }>` for every currently-LIVE agent, `writes` being what its transcript
- * wrote. `records` and `now` are injectable so a selftest never touches the real `~/.claude/projects`.
- * @es `Map<agentId, { session, writes }>` para cada agente VIVO. Inyectables.
+ * `Map<id, { session, subagent, writes, windows }>` for every currently-LIVE transcript, `writes` being
+ * what it wrote through structured calls and `windows` its shell calls (`shell-windows.mjs`). `records`
+ * and `now` are injectable so a selftest never touches the real `~/.claude/projects`.
+ * @es `Map<id, { session, subagent, writes, windows }>` para cada transcript VIVO. Inyectables.
  */
 export function liveAgentWrites(now = Date.now(), records = agentRecords()) {
   const byAgent = new Map();
@@ -94,7 +106,9 @@ export function liveAgentWrites(now = Date.now(), records = agentRecords()) {
     if (!isLive(record, now)) continue;
 
     try {
-      byAgent.set(record.id, { session: record.session, writes: writtenPathsIn(readFileSync(record.transcript, 'utf8')) });
+      const text = readFileSync(record.transcript, 'utf8');
+
+      byAgent.set(record.id, { session: record.session, subagent: record.subagent, writes: writtenPathsIn(text), windows: shellWindowsIn(text, now) });
     } catch {
       continue;
     }
@@ -119,15 +133,15 @@ function writtenMatches(written, needle) {
 
 /**
  * The live agents that WROTE `dirtyPath` (a path relative to its repo, or a collapsed directory), as
- * `[{ id, session }]`. An empty or all-separator path matches nothing, because `writtenMatches` only
- * accepts whole path segments (`''.includes('')` would match every string).
- * @es Los agentes vivos que ESCRIBIERON `dirtyPath`, como `[{ id, session }]`. Una ruta vacía no casa
- * con nada: `writtenMatches` solo acepta segmentos de ruta completos.
+ * `[{ id, session, subagent }]`. An empty or all-separator path matches nothing, because `writtenMatches`
+ * only accepts whole path segments (`''.includes('')` would match every string).
+ * @es Los agentes vivos que ESCRIBIERON `dirtyPath`, como `[{ id, session, subagent }]`. Una ruta vacía no
+ * casa con nada: `writtenMatches` solo acepta segmentos de ruta completos.
  */
 export function writersOf(dirtyPath, liveAgents) {
   const needle = withoutTrailingSeparators(normalizedPath(dirtyPath));
 
-  return [...liveAgents].filter(([, agent]) => agent.writes.some((written) => writtenMatches(written, needle))).map(([id, agent]) => ({ id, session: agent.session }));
+  return [...liveAgents].filter(([, agent]) => agent.writes.some((written) => writtenMatches(written, needle))).map(([id, agent]) => ({ id, session: agent.session, subagent: agent.subagent }));
 }
 
 /** The id of a live agent that wrote `dirtyPath`, or `undefined`. @es El id de un agente vivo que escribió `dirtyPath`, o `undefined`. */

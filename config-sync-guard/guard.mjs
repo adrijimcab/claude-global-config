@@ -48,7 +48,7 @@ function journal(record) {
 }
 
 /** One repo's finding, formatted for the block message. @es El hallazgo de un repo, formateado para el mensaje de bloqueo. */
-function repoFindingText({ repo, unownedAhead, unownedCommits, unattributed }) {
+function repoFindingText({ repo, unownedAhead, unownedCommits, ownPaths }) {
   const lines = [`  ${repo.name} (${repo.worktree}):`];
 
   if (unownedAhead > 0) {
@@ -57,11 +57,11 @@ function repoFindingText({ repo, unownedAhead, unownedCommits, unattributed }) {
     lines.push(`      PUSH only commits you authored and verified: ${repo.pushCommand} — never another actor's.`);
   }
 
-  if (unattributed.length > 0) {
-    lines.push(`    - ${String(unattributed.length)} uncommitted path(s), none written by a currently-live agent:`);
-    for (const absolutePath of unattributed.slice(0, 20)) lines.push(`        ${absolutePath}`);
-    if (unattributed.length > 20) lines.push(`        … and ${String(unattributed.length - 20)} more`);
-    lines.push(`      COMMIT: ${pathspecCommitCommand(repo.gitPrefix, unattributed.map((absolutePath) => path.relative(repo.worktree, absolutePath).replaceAll('\\', '/')))}`);
+  if (ownPaths.length > 0) {
+    lines.push(`    - ${String(ownPaths.length)} uncommitted path(s) this session made (written by it, or changed during one of its shell calls):`);
+    for (const absolutePath of ownPaths.slice(0, 20)) lines.push(`        ${absolutePath}`);
+    if (ownPaths.length > 20) lines.push(`        … and ${String(ownPaths.length - 20)} more`);
+    lines.push(`      COMMIT: ${pathspecCommitCommand(repo.gitPrefix, ownPaths.map((absolutePath) => path.relative(repo.worktree, absolutePath).replaceAll('\\', '/')))}`);
   }
 
   return lines.join('\n');
@@ -78,10 +78,9 @@ function blockOutput(dirtyRepos, sessionId) {
     '',
     ...dirtyRepos.map(repoFindingText),
     '',
-    'This hook does NOT claim every listed path is yours to commit — an unattributed path may belong to',
-    'a live agent this mechanism could not attribute (see attribution.mjs\'s stated limit: only',
-    'Edit/Write/MultiEdit/NotebookEdit calls count as a write, never a shell-command edit). Do exactly',
-    'ONE of these, then stop again:',
+    'Only what THIS session made is listed: paths it wrote, or that changed during one of its shell calls',
+    '(path-ownership.mjs). Other sessions\' work never blocks you. A path attributed here by timing may',
+    'still be a coincidence — verify it before committing. Do exactly ONE of these, then stop again:',
     '',
     '  A) COMMIT AND PUSH WHAT IS YOURS (default) — the exact commands are listed above per repo; the',
     '     commit command names the listed paths explicitly and never sweeps the shared index.',
@@ -99,7 +98,7 @@ function blockOutput(dirtyRepos, sessionId) {
 
   return {
     decision: 'block',
-    reason: `config-sync-guard: ${String(dirtyRepos.length)} backup repo(s) out of sync (unpushed commits and/or unattributed uncommitted paths).`,
+    reason: `config-sync-guard: ${String(dirtyRepos.length)} backup repo(s) out of sync (unpushed commits and/or uncommitted paths this session made).`,
     hookSpecificOutput: { hookEventName: 'Stop', additionalContext: context }
   };
 }

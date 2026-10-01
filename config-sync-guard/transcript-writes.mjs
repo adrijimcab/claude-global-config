@@ -6,15 +6,14 @@
  * `lessons-ledger.md` (the contract text that imports it rides in every context), so the ledger's
  * uncommitted hunks were excused for hours. A name in prose, a tool result or a shell command proves a
  * READ at most. A call to `Edit`/`Write`/`MultiEdit`/`NotebookEdit` names the file it changes, so that
- * is the evidence. THE STATED LIMIT: a file changed by a shell command or a tool process is not seen,
- * so it stays unattributed and blocks — the safe direction for a delivery gate.
+ * is the evidence. A file changed by a shell command is attributed by time instead (`shell-windows.mjs`).
  *
  * @es Qué ficheros ESCRIBIÓ el agente de un transcript, leído solo de llamadas estructuradas de
  * escritura. Antes se excusaba una ruta sucia si CUALQUIER transcript vivo la nombraba; medido el
  * 2026-10-01, 8 de 8 transcripts vivos contenían `lessons-ledger.md`, así que sus cambios sin commitear
  * quedaron excusados horas. Un nombre en prosa, en un resultado o en un comando prueba como mucho una
- * LECTURA; `Edit`/`Write`/`MultiEdit`/`NotebookEdit` nombran el fichero que cambian. LÍMITE DECLARADO:
- * un fichero cambiado por un comando de shell o por un proceso no se ve, queda sin atribuir y bloquea.
+ * LECTURA; `Edit`/`Write`/`MultiEdit`/`NotebookEdit` nombran el fichero que cambian. Lo cambiado por un
+ * comando de shell se atribuye por hora (`shell-windows.mjs`).
  */
 
 const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
