@@ -140,6 +140,19 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
   sin atribución de IA.
 - Registro neutro y profesional en todo artefacto: la voz Gentleman es solo para la conversación.
 
+## Solo los gates necesarios; la cadena completa, UNA vez y al final (directiva del dueño 2026-10-01)
+
+Dueño, literal: «QUE SE CORRAN SOLO LOS GATES NECESARIOS, NO HORAS DE GATES, Y SI SE HACEN AL FINAL,
+SOLO AL FINAL».
+
+- Durante el trabajo, cada cambio corre SOLO los gates que pueden leer lo que tocó: los relacionados
+  con sus rutas, más la spec que fija un generador si se tocó uno. Nunca una cadena completa por cambio.
+- Las ramas se acumulan en UNA rama de tanda. La rama de integración (develop) se mueve UNA sola vez, al
+  final, con la cadena completa (`build:ci-pr`, y el suelo del landing guard) sobre ese árbol exacto. Ese
+  aterrizaje cierra también, con `--close`, todos los worktrees cuyo contenido entra en él.
+- Una corrida completa a mitad de camino es desperdicio, salvo que la pida el dueño. Si una corrida larga
+  ya lanzada se queda sin sentido porque cambió su entrada, se para en el acto.
+
 ## Cierre de toda unidad de trabajo terminada (directiva del dueño 2026-10-01, global, todo proyecto)
 
 Cuando una unidad de trabajo TERMINA (un worker entrega, algo se integra o aterriza, un SDD pasa el
