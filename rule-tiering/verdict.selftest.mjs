@@ -61,20 +61,21 @@ check('RULE sentences: openers, word boundary, backtick dots, inner dots, every 
 const SOURCE = folded('The quick brown fox jumps over\nthe lazy dog. RULE: never feed the fox after dark.');
 
 check('the minimum slice is 12 characters', MIN_SLICE, 12);
-check('a whole slice passes', uncoveredText('the lazy dog.', SOURCE), undefined);
-check('a whole slice shorter than the minimum passes', uncoveredText('fox', SOURCE), undefined);
-check('a join of two long slices passes', uncoveredText('The quick brown fox RULE: never feed the fox', SOURCE), undefined);
-check('an invented word fails and is named', uncoveredText('The quick brown fox never sleeps', SOURCE), 'never sleeps');
-check('a join of short words fails', uncoveredText('lazy fox', SOURCE), 'lazy fox');
-check('the label Mechanism: may join', uncoveredText('Mechanism: the lazy dog.', SOURCE), undefined);
-check('the label Evidence: may join', uncoveredText('Evidence: the lazy dog.', SOURCE), undefined);
-check('any other label fails', uncoveredText('Proof: the lazy dog.', SOURCE), 'Proof: the lazy dog.');
+check('a whole slice passes', uncoveredText('the lazy dog.', SOURCE, new Set()),undefined);
+check('a whole slice shorter than the minimum fails when it is no whole original line', uncoveredText('fox', SOURCE, new Set()), 'fox');
+check('a short line that is a whole original line passes', uncoveredText('  fox', SOURCE, new Set(['fox'])), undefined);
+check('a join of two long slices passes', uncoveredText('The quick brown fox RULE: never feed the fox', SOURCE, new Set()),undefined);
+check('an invented word fails and is named', uncoveredText('The quick brown fox never sleeps', SOURCE, new Set()),'never sleeps');
+check('a join of short words fails', uncoveredText('lazy fox', SOURCE, new Set()),'lazy fox');
+check('the label Mechanism: may join', uncoveredText('Mechanism: the lazy dog.', SOURCE, new Set()),undefined);
+check('the label Evidence: may join', uncoveredText('Evidence: the lazy dog.', SOURCE, new Set()),undefined);
+check('any other label fails', uncoveredText('Proof: the lazy dog.', SOURCE, new Set()),'Proof: the lazy dog.');
 
 const EDGE = folded('ABCDEFGHIJKL zz MNOPQRSTUVWX');
 
-check('two slices of exactly the minimum join', uncoveredText('ABCDEFGHIJKLMNOPQRSTUVWX', EDGE), undefined);
-check('a slice one under the minimum does not join', uncoveredText('ABCDEFGHIJKMNOPQRSTUVWX', EDGE), 'ABCDEFGHIJKMNOPQRSTUVWX');
-check('a join is found where the longest first slice would overshoot', uncoveredText('abcdefghijklmnopqrstuvwxyz0', folded('abcdefghijklmnop | nopqrstuvwxyz0')), undefined);
+check('two slices of exactly the minimum join', uncoveredText('ABCDEFGHIJKLMNOPQRSTUVWX', EDGE, new Set()),undefined);
+check('a slice one under the minimum does not join', uncoveredText('ABCDEFGHIJKMNOPQRSTUVWX', EDGE, new Set()),'ABCDEFGHIJKMNOPQRSTUVWX');
+check('a join is found where the longest first slice would overshoot', uncoveredText('abcdefghijklmnopqrstuvwxyz0', folded('abcdefghijklmnop | nopqrstuvwxyz0'), new Set()), undefined);
 
 // --- the verdict
 const NARRATIVE = '  Narrative line that will move out to evidence.';
@@ -102,6 +103,12 @@ check('a RULE sentence re-wrapped over two lines is conserved', kinds(verdictOf(
 
 check('an anchor moved off the line start is a deficit', kinds(verdictOf([...KEPT, `  ${KEY_TWO}`], archive(NARRATIVE, TILDE, KEY_TWO))), ['anchor-lost']);
 check('an anchor removed with its line is a deficit', kinds(verdictOf(KEPT, archive(NARRATIVE, TILDE, KEY_TWO))), ['rule-lost', 'anchor-lost']);
+
+const SHORT_BEFORE = 'We never guess about the tree here.\n  green).';
+const shortVerdict = (after, evidence) => kinds(tieringVerdict({ before: SHORT_BEFORE, after, evidence, anchors: [] }));
+
+check('an added short word taken from inside a line is invented', shortVerdict(`${SHORT_BEFORE}\nnever`, []), ['invented']);
+check('a short original line re-indented is conserved', shortVerdict('We never guess about the tree here.\n    green).', archive('  green).')), []);
 
 const crlf = (text) => text.split('\n').join('\r\n');
 

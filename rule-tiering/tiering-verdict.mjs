@@ -31,6 +31,7 @@ export function tieringVerdict({ before, after, evidence, anchors }) {
   const afterLines = linesOf(after);
   const archives = evidence.map(({ text }) => linesOf(text).join('\n'));
   const source = folded(before);
+  const wholeLines = new Set(beforeLines.map(folded));
   const flatAfter = folded(after);
   const found = [];
 
@@ -43,7 +44,7 @@ export function tieringVerdict({ before, after, evidence, anchors }) {
   for (const line of afterLines) {
     if (line.trim() === '' || beforeLines.includes(line)) continue;
 
-    const gap = uncoveredText(line, source);
+    const gap = uncoveredText(line, source, wholeLines);
 
     if (gap !== undefined) found.push(deficit('invented', line, `holds text the original does not ("${gap}")`, `tiene texto que el original no tiene («${gap}»)`));
   }
