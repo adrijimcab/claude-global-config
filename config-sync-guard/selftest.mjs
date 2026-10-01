@@ -14,13 +14,14 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { agentRecords, isLive, liveAgentWrites, liveOwnerOf } from './attribution.mjs';
 import { pathspecCommitCommand } from './commit-advice.mjs';
+import { latestChangeMs } from './path-mtime.mjs';
 import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs, readDismissals } from './dismiss.mjs';
 import { decide } from './decide.mjs';
 import { measureFingerprint } from './fingerprint.mjs';
@@ -67,9 +68,18 @@ const edit = (filePath) => toolCall('Edit', { file_path: filePath });
 const bash = (command) => toolCall('Bash', { command });
 const prose = (text) => JSON.stringify({ type: 'user', message: { content: text } });
 
-/** A live agent of `session` whose transcript is `lines`: what `liveAgentWrites` builds from a real file. @es Un agente vivo de `session` con transcript `lines`. */
-const liveAgent = (session, ...lines) => ({ session, writes: writtenPathsIn(lines.join('\n')) });
+/**
+ * A live SUBAGENT of `session` whose transcript is `lines` (what `liveAgentWrites` builds from a real file),
+ * the session's own MAIN transcript, and an actor that ran one shell call over `[start, end]` ms.
+ * @es Un SUBAGENTE vivo de `session` con transcript `lines`, el transcript PRINCIPAL de la sesión, y un
+ * actor que corrió un shell durante `[start, end]` ms.
+ */
+const liveAgent = (session, ...lines) => ({ session, subagent: true, writes: writtenPathsIn(lines.join('\n')), windows: [] });
+const mainAgent = (session, ...lines) => ({ ...liveAgent(session, ...lines), subagent: false });
+const shellActor = (session, subagent, start, end) => ({ session, subagent, writes: [], windows: [{ start, end }] });
 const agents = (entries) => new Map(Object.entries(entries));
+/** Session `s-1` (the one `STOP_PAYLOAD` ends) wrote these files itself. @es La sesión `s-1` escribió estos ficheros. */
+const madeHere = (...files) => agents({ 'main-s-1': mainAgent('s-1', ...files.map((file) => edit(file))) });
 
 /** `git log --name-only` text for commits `[[hash, subject, ...paths]]`, in the format `readAheadCommits` requests. @es Texto de `git log --name-only`. */
 const logOf = (...commits) => commits.map(([hash, subject, ...paths]) => `\x01${hash} ${subject}\n\n${paths.join('\n')}\n`).join('');
@@ -99,14 +109,17 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
 }
 
 // ---------------------------------------------------------------------------------------------
-// STATE: dirty mine (unattributed) -> block
+// STATE: dirty and made by THIS session -> block; dirty and made by nobody live -> note, never a block
 // ---------------------------------------------------------------------------------------------
 {
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map() });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt') });
+  const unexplained = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map() });
 
-  check('dirty, no live owner -> block', result?.kind, 'block');
-  check('the unattributed list names the path', result?.dirtyRepos?.[0]?.unattributed, [path.join(HERE, 'foo.txt')]);
+  check('dirty, written by this session\'s own main transcript -> block', result?.kind, 'block');
+  check('the finding names the path this session made', result?.dirtyRepos?.[0]?.ownPaths, [path.join(HERE, 'foo.txt')]);
+  check('dirty, no live transcript explains it -> note, never a block', unexplained?.kind, 'note');
+  check('the note names the unexplained path and says it is not blocking', unexplained?.notes?.[0]?.includes('foo.txt') && unexplained?.notes?.[0]?.includes('no live session made') && unexplained?.notes?.[0]?.includes('not blocking'), true);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -118,6 +131,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   const liveAgents = agents({ 'agent-x': liveAgent('s-2', edit('C:\\fake\\foo.txt')) });
 
   check('dirty, and a LIVE agent WROTE the path -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'allow');
+  check('dirty, written by a live SUBAGENT of this very session (its worker mid-run) -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: agents({ w: liveAgent('s-1', edit('C:\\fake\\foo.txt')) }) }), 'allow');
 }
 {
   // Measured 2026-10-01: 8 of 8 live transcripts MENTIONED lessons-ledger.md (the contract text that
@@ -126,7 +140,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   const mentioned = agents({ 'agent-x': liveAgent('s-2', prose('@~/.claude/lessons-ledger.md is imported'), bash('rg -n RULE lessons-ledger.md')) });
   const written = agents({ 'agent-x': liveAgent('s-2', edit('C:\\Users\\me\\.claude\\lessons-ledger.md')) });
 
-  check('dirty, a live agent only MENTIONED/READ the path (prose, shell command) -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: mentioned }), 'block');
+  check('dirty, a live agent only MENTIONED/READ the path (prose, shell command) -> unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: mentioned }), 'note');
   check('dirty, the same path WRITTEN by a live agent (absolute Edit path) -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: written }), 'allow');
 }
 
@@ -150,26 +164,27 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // The SAME collapsed directory, but no live agent's transcript mentions its name at all -> still blocks.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n?? new-dir/\n' });
 
-  check('a collapsed NEW DIRECTORY no live agent\'s transcript mentions -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map() }), 'block');
+  check('a collapsed NEW DIRECTORY no live transcript wrote under -> unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map() }), 'note');
+  check('a collapsed NEW DIRECTORY this session wrote under -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\new-dir\\a.ts') }), 'block');
 }
 
 // ---------------------------------------------------------------------------------------------
 // CHANGED ON PURPOSE (2026-10-01): a path a live agent's Bash/PowerShell command merely NAMES used to
 // be attributed to it. A command naming a path may read it, so naming is a mention and excuses nothing;
-// only a structured write does. A shell-written path now blocks (the safe direction; dismiss covers it).
+// only a structured write, or a shell call running when the file changed (below), does.
 // ---------------------------------------------------------------------------------------------
 {
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M owned-dir/generated.json\n' });
   const liveAgents = agents({ 'agent-shell': liveAgent('s-2', bash('node scripts/gen.mjs > owned-dir/generated.json')) });
 
-  check('a path a live agent\'s shell command only NAMES -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'block');
+  check('a path a live agent\'s shell command only NAMES (no window, no write) -> unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'note');
 }
 {
   // A live agent that wrote a DIFFERENT file, and a same-named file elsewhere -> block.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M owned-dir/generated.json\n' });
   const liveAgents = agents({ 'agent-other': liveAgent('s-2', edit('C:\\fake\\unrelated-dir\\other-output.txt'), edit('C:\\fake\\other-dir\\generated.json'), edit('C:\\fake\\not-owned-dir\\generated.json')) });
 
-  check('the live agent wrote a different path, a same-named file elsewhere, and a longer directory name ending alike -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'block');
+  check('the live agent wrote a different path, a same-named file elsewhere, and a longer directory name ending alike -> unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'note');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -184,7 +199,31 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // foo.txt is now dead, so it teaches nothing about foo.txt any more").
   const liveAgents = agents({ 'agent-y': liveAgent('s-2', edit('C:\\fake\\unrelated.txt')) });
 
-  check('dirty, owning agent is DEAD (absent from the live map) -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'block');
+  check('dirty, owning agent is DEAD (absent from the live map) -> unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'note');
+}
+
+// ---------------------------------------------------------------------------------------------
+// STATE SPACE: a path changed by a SHELL command, attributed by time (`shell-windows.mjs`,
+// `path-ownership.mjs`). `mtimeOf` is injected; the dirty path is `foo.txt`, changed at `T`.
+// Session `s-1` ends its turn. @es ESPACIO DE ESTADOS: una ruta cambiada por SHELL, atribuida por hora.
+// ---------------------------------------------------------------------------------------------
+{
+  const T = 1_000_000;
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const kindWith = (liveAgents, mtime = T) => decide(STOP_PAYLOAD(), { repos: [repo], liveAgents, mtimeOf: () => mtime })?.kind ?? 'allow';
+  const blocksOwn = (liveAgents) => decide(STOP_PAYLOAD(), { repos: [repo], liveAgents, mtimeOf: () => T })?.dirtyRepos?.[0]?.ownPaths;
+
+  check('own shell write: this session\'s main shell call contains the mtime -> block', kindWith(agents({ m: shellActor('s-1', false, T - 500, T + 500) })), 'block');
+  check('own shell write: the block names the path', blocksOwn(agents({ m: shellActor('s-1', false, T - 500, T + 500) })), [path.join(HERE, 'foo.txt')]);
+  check('ANOTHER session\'s main shell call contains the mtime -> excused (note-free allow), never blocking this session', kindWith(agents({ m: shellActor('s-2', false, T - 500, T + 500) })), 'allow');
+  check('a live SUBAGENT of another session ran the shell call -> excused (its work in progress)', kindWith(agents({ w: shellActor('s-2', true, T - 500, T + 500) })), 'allow');
+  check('a live subagent of THIS session ran the shell call -> excused, its parent does not commit a worker\'s working state', kindWith(agents({ w: shellActor('s-1', true, T - 500, T + 500) })), 'allow');
+  check('this session and another both ran a shell call over the mtime -> block (the maker is still blocked)', kindWith(agents({ a: shellActor('s-2', false, T - 500, T + 500), b: shellActor('s-1', false, T - 500, T + 500) })), 'block');
+  check('no shell call contains the mtime (outside every window) -> unexplained, so a note', kindWith(agents({ m: shellActor('s-1', false, T - 9000, T - 5000) })), 'note');
+  check('a shell call ending exactly one tolerance before the mtime still explains it -> block', kindWith(agents({ m: shellActor('s-1', false, T - 5000, T - CLOCK_TOLERANCE_MS) })), 'block');
+  check('a shell call ending one millisecond more than that before the mtime does not -> note', kindWith(agents({ m: shellActor('s-1', false, T - 5000, T - CLOCK_TOLERANCE_MS - 1) })), 'note');
+  check('a path with no measurable time (deleted) is never explained by a window -> note', decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: agents({ m: shellActor('s-1', false, 0, 9e15) }), mtimeOf: () => undefined })?.kind, 'note');
+  check('a payload without a session id cannot tell "another session" from "mine": a main shell call blocks', decide({ hook_event_name: 'Stop' }, { repos: [repo], liveAgents: agents({ m: shellActor('s-2', false, T - 500, T + 500) }), mtimeOf: () => T })?.kind, 'block');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -233,7 +272,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
 {
   // No dismissal recorded at all -> block. Absence excuses nothing.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map(), fingerprintOf: () => 'fixed-fingerprint-1', dismissals: [] });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => 'fixed-fingerprint-1', dismissals: [] });
 
   check('dirty, no dismissal recorded -> block', result?.kind, 'block');
 }
@@ -241,7 +280,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // A dismissal recorded for this EXACT repo + fingerprint -> allow, but with a note, never silently.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
   const dismissals = [{ repo: 'r', fingerprint: 'fixed-fingerprint-1', at: '2026-09-30T00:00:00.000Z', reason: 'the frozen agent\'s work here awaits an owner decision' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map(), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
 
   check('dirty, a MATCHING dismissal -> note, never a silent allow and never a block', result?.kind, 'note');
   check('the note names when it was dismissed and carries the reason', result?.notes?.[0]?.includes('dismissed at 2026-09-30T00:00:00.000Z') && result?.notes?.[0]?.includes('owner decision'), true);
@@ -250,7 +289,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // A dismissal exists for this repo, but the CONTENT changed since (a different tree id) -> block.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
   const dismissals = [{ repo: 'r', fingerprint: '0:tree-before-the-edit', at: '2026-09-30T00:00:00.000Z', reason: 'dismissed before foo.txt was edited again' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map(), fingerprintOf: () => '0:tree-after-the-edit', dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => '0:tree-after-the-edit', dismissals });
 
   check('dirty, dismissal is for a DIFFERENT content fingerprint (edited since) -> block', result?.kind, 'block');
 }
@@ -260,7 +299,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // an edited byte does; same mechanism as the content-change case, different real-world trigger.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n?? new-file.txt\n' });
   const dismissals = [{ repo: 'r', fingerprint: '0:tree-before-new-file', at: '2026-09-30T00:00:00.000Z', reason: 'dismissed before new-file.txt ever appeared' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map(), fingerprintOf: () => '0:tree-after-new-file', dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => '0:tree-after-new-file', dismissals });
 
   check('dirty, a new path appeared since the dismissal -> block', result?.kind, 'block');
 }
@@ -276,7 +315,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
     return `${String(aheadCount)}:fixed-tree`;
   };
   const dismissals = [{ repo: 'r', fingerprint: '2:fixed-tree', at: '2026-09-30T00:00:00.000Z', reason: 'dismissed when only 2 commits sat ahead of the remote' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map(), fingerprintOf, dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf, dismissals });
 
   check('dirty, ahead count changed since the dismissal (2 -> 3) -> block', result?.kind, 'block');
 }
@@ -286,7 +325,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // past excuse" — the same fail-toward-block stance as every other measurement in this mechanism.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
   const dismissals = [{ repo: 'r', fingerprint: 'irrelevant-because-unmeasured', at: '2026-09-30T00:00:00.000Z', reason: 'this dismissal exists but cannot be reached this time' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map(), fingerprintOf: () => undefined, dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => undefined, dismissals });
 
   check('dirty, fingerprint could not be measured this time -> block, never excused by luck', result?.kind, 'block');
 }
@@ -295,7 +334,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // fingerprint alone is not a key: it is scoped to (repo name, fingerprint) TOGETHER.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
   const dismissals = [{ repo: 'a-different-repo', fingerprint: 'fixed-fingerprint-1', at: '2026-09-30T00:00:00.000Z', reason: 'this dismissal belongs to a different declared repo entirely' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map(), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
 
   check('dirty, a dismissal with the same fingerprint but a DIFFERENT repo name -> block', result?.kind, 'block');
 }
@@ -373,12 +412,12 @@ check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
 
   const dirtyRepo = fakeRepo('fixture-repo', { statusText: '## master...origin/master [ahead 1]\n M foo.txt\n?? sub/x.txt\n', logText: logOf(['eee5555', 'feat: e', 'foo.txt']) });
   const raw = JSON.stringify(STOP_PAYLOAD({ session_id: session }));
-  const output = evaluate(raw, { repos: [dirtyRepo], liveAgents: new Map() });
+  const output = evaluate(raw, { repos: [dirtyRepo], liveAgents: agents({ main: mainAgent(session, edit('C:\\fake\\foo.txt'), edit('C:\\fake\\sub\\x.txt')) }) });
   const advice = output?.hookSpecificOutput?.additionalContext ?? '';
 
   check('evaluate() with a real dirty finding returns a block decision', output?.decision, 'block');
   check('the block names the unowned commit', advice.includes('eee5555 feat: e'), true);
-  check('the block recommends an explicit-pathspec commit of the unattributed path, never a sweeping add', advice.includes('add -- "foo.txt" "sub/x.txt" &&') && advice.includes('commit -m "type(scope): description" -- "foo.txt" "sub/x.txt"') && !advice.includes('add -A'), true);
+  check('the block recommends an explicit-pathspec commit of the paths this session made, never a sweeping add', advice.includes('add -- "foo.txt" "sub/x.txt" &&') && advice.includes('commit -m "type(scope): description" -- "foo.txt" "sub/x.txt"') && !advice.includes('add -A'), true);
   check('evaluate() names the guard in its additionalContext', output?.hookSpecificOutput?.additionalContext?.includes('CONFIG-SYNC-GUARD TRIPPED'), true);
   check('evaluate() journals the refusal for real, under this exact session id', journalledFor(session) - before, 1);
 
@@ -427,6 +466,33 @@ check(
   check('one millisecond later than that is outside', withinWindow(windows, ms(20) + CLOCK_TOLERANCE_MS + 1), false);
   check('no windows explain nothing', withinWindow([], ms(15)), false);
 }
+{
+  const root = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-mtime-'));
+  const stamp = (file, seconds) => utimesSync(file, seconds, seconds);
+  const outside = path.join(root, 'outside');
+  const tree = path.join(root, 'tree');
+
+  mkdirSync(path.join(tree, 'deep'), { recursive: true });
+  mkdirSync(outside);
+  writeFileSync(path.join(tree, 'a.txt'), 'a', 'utf8');
+  writeFileSync(path.join(tree, 'deep', 'b.txt'), 'b', 'utf8');
+  writeFileSync(path.join(outside, 'far-future.txt'), 'x', 'utf8');
+  stamp(path.join(tree, 'a.txt'), 1_000);
+  stamp(path.join(tree, 'deep', 'b.txt'), 3_000);
+  stamp(path.join(outside, 'far-future.txt'), 4_200_000_000); // below 2^32 s: NTFS times through Node wrap above it (measured)
+  symlinkSync(outside, path.join(tree, 'link'), 'junction');
+  stamp(tree, 2_000);
+  stamp(path.join(tree, 'deep'), 2_000);
+
+  check('latestChangeMs of a file is its own mtime', latestChangeMs(path.join(tree, 'a.txt')), 1_000_000);
+  // The junction's OWN mtime is "now" (about 1.8e12 ms); the file it points at is stamped far later (4.2e12).
+  const found = latestChangeMs(tree);
+
+  check('latestChangeMs of a directory covers the newest file under it (3e6 ms) and never follows a junction to the far-future file (4.2e12 ms)', found >= 3_000_000 && found < 4_200_000_000_000, true);
+  check('latestChangeMs visits at most `limit` entries: with 1 it measures the directory itself (2e6 ms) and nothing under it', latestChangeMs(tree, 1), 2_000_000);
+  check('latestChangeMs of a path that cannot be measured is undefined, never zero', latestChangeMs(path.join(root, 'missing')), undefined);
+  rmSync(root, { recursive: true, force: true });
+}
 check('parseAheadLog reads each commit with its paths, in order', parseAheadLog(logOf(['abc1234', 'feat: x: y', 'a/b.mjs', 'c.mjs'], ['def5678', 'chore: empty'])), [
   { hash: 'abc1234', subject: 'feat: x: y', paths: ['a/b.mjs', 'c.mjs'] },
   { hash: 'def5678', subject: 'chore: empty', paths: [] }
@@ -442,7 +508,10 @@ check('pathspecCommitCommand stages then commits only the named paths, quoted, a
   const liveTranscript = path.join(scratch, 'live.jsonl');
   const deadTranscript = path.join(scratch, 'dead.jsonl');
 
-  writeFileSync(liveTranscript, `${edit('C:\\fake\\live.ts')}\n`, 'utf8');
+  const shellCall = JSON.stringify({ timestamp: '2026-10-01T00:00:01.000Z', message: { content: [{ type: 'tool_use', id: 'c1', name: 'Bash', input: {} }] } });
+  const shellResult = JSON.stringify({ timestamp: '2026-10-01T00:00:03.000Z', message: { content: [{ type: 'tool_result', tool_use_id: 'c1' }] } });
+
+  writeFileSync(liveTranscript, `${edit('C:\\fake\\live.ts')}\n${shellCall}\n${shellResult}\n`, 'utf8');
   writeFileSync(deadTranscript, `${edit('C:\\fake\\dead.ts')}\n`, 'utf8');
 
   const now = Date.now();
@@ -450,7 +519,7 @@ check('pathspecCommitCommand stages then commits only the named paths, quoted, a
 
   utimesSync(deadTranscript, longAgo, longAgo); // REAL backdated mtime — the one property isLive reads
 
-  const liveRecord = { id: 'agent-live', session: 's-live', transcript: liveTranscript };
+  const liveRecord = { id: 'agent-live', session: 's-live', subagent: true, transcript: liveTranscript };
   const deadRecord = { id: 'agent-dead', session: 's-dead', transcript: deadTranscript };
 
   check('isLive: a transcript written NOW is live', isLive(liveRecord, now), true);
@@ -458,7 +527,7 @@ check('pathspecCommitCommand stages then commits only the named paths, quoted, a
 
   const texts = liveAgentWrites(now, [liveRecord, deadRecord]);
 
-  check('liveAgentWrites includes the live agent, with its session and what it wrote', texts.get('agent-live'), { session: 's-live', writes: ['c:/fake/live.ts'] });
+  check('liveAgentWrites includes the live agent, with its session and what it wrote', texts.get('agent-live'), { session: 's-live', subagent: true, writes: ['c:/fake/live.ts'], windows: [{ start: Date.parse('2026-10-01T00:00:01.000Z'), end: Date.parse('2026-10-01T00:00:03.000Z') }] });
   check('liveAgentWrites EXCLUDES the dead agent entirely', texts.has('agent-dead'), false);
   check('liveOwnerOf finds the live agent for its own path', liveOwnerOf('C:\\fake\\live.ts', texts), 'agent-live');
   check('liveOwnerOf finds nothing for the dead agent\'s path (its transcript is not even in the map)', liveOwnerOf('C:\\fake\\dead.ts', texts), undefined);
@@ -479,7 +548,11 @@ check('agentRecords is empty for a nonexistent root, never throws', agentRecords
 
   mkdirSync(subagents, { recursive: true });
   writeFileSync(path.join(subagents, 'agent-a.meta.json'), '{}', 'utf8');
-  check('agentRecords names the session whose directory holds the transcript', agentRecords(root), [{ id: 'agent-a', session: 'session-7', transcript: path.join(subagents, 'agent-a.jsonl') }]);
+  writeFileSync(path.join(root, 'some-project', 'session-7.jsonl'), '', 'utf8');
+  check('agentRecords names the session of a subagent transcript and of the session\'s own main transcript', agentRecords(root), [
+    { id: 'agent-a', session: 'session-7', subagent: true, transcript: path.join(subagents, 'agent-a.jsonl') },
+    { id: 'main-session-7', session: 'session-7', subagent: false, transcript: path.join(root, 'some-project', 'session-7.jsonl') }
+  ]);
   rmSync(root, { recursive: true, force: true });
 }
 
@@ -606,14 +679,23 @@ check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason'
     0
   );
 
-  const dirtyResult = decide(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: new Map() });
+  const untracked = path.join(scratch, 'untracked.txt');
+  const madeThere = agents({ 'main-s-1': mainAgent('s-1', edit(untracked)) });
+  const dirtyResult = decide(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: madeThere });
 
-  check('REAL git repo, one real untracked file, no live owner -> block', dirtyResult?.kind, 'block');
-  check('REAL git repo: the unattributed path is the real untracked file', dirtyResult?.dirtyRepos?.[0]?.unattributed, [path.join(scratch, 'untracked.txt')]);
+  check('REAL git repo, one real untracked file this session wrote -> block', dirtyResult?.kind, 'block');
+  check('REAL git repo: the path this session made is the real untracked file', dirtyResult?.dirtyRepos?.[0]?.ownPaths, [untracked]);
+  check('REAL git repo, the same file with no live transcript explaining it -> note', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: new Map() }), 'note');
 
-  const liveOwned = agents({ 'agent-z': liveAgent('s-2', edit(path.join(scratch, 'untracked.txt'))) });
+  const liveOwned = agents({ 'agent-z': liveAgent('s-2', edit(untracked)) });
 
-  check('REAL git repo, same untracked file, now WRITTEN by a live agent -> allow', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: liveOwned }), 'allow');
+  check('REAL git repo, same untracked file, now WRITTEN by a live agent of another session -> allow', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: liveOwned }), 'allow');
+
+  // The REAL mtime of the REAL file, against a shell window around it (the default `mtimeOf`).
+  const realMtime = statSync(untracked).mtimeMs;
+
+  check('REAL file mtime inside this session\'s shell window -> block', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: agents({ m: shellActor('s-1', false, realMtime - 50, realMtime + 50) }) }), 'block');
+  check('REAL file mtime outside every window -> note', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: agents({ m: shellActor('s-1', false, realMtime - 90_000, realMtime - 60_000) }) }), 'note');
 
   // ---------------------------------------------------------------------------------------------
   // THE REAL DISMISSAL LIFECYCLE: a dismissal recorded against the EXACT current real fingerprint
@@ -622,11 +704,11 @@ check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason'
   // ---------------------------------------------------------------------------------------------
   const dismissals = [{ repo: 'fixture', fingerprint: fingerprintWithUntracked, at: '2026-09-30T00:00:00.000Z', reason: 'the untracked scratch file here is deliberate test fixture debris' }];
 
-  check('REAL git repo, a dismissal matching the EXACT current fingerprint -> allow with a note', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: new Map(), dismissals }), 'note');
+  check('REAL git repo, a dismissal matching the EXACT current fingerprint -> allow with a note', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: madeThere, dismissals }), 'note');
 
   writeFileSync(path.join(scratch, 'untracked.txt'), 'hello, but edited now\n', 'utf8');
 
-  check('REAL git repo, the SAME dismissal no longer matches once the file\'s content changed -> block again', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: new Map(), dismissals }), 'block');
+  check('REAL git repo, the SAME dismissal no longer matches once the file\'s content changed -> block again', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: madeThere, dismissals }), 'block');
 
   rmSync(scratch, { recursive: true, force: true });
 }

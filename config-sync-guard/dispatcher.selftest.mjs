@@ -12,7 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -24,6 +24,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.join(HERE, 'guard.mjs');
 const OTHER_SESSION = 'session-other';
 const THIS_SESSION = 'session-this';
+const THIRD_SESSION = 'session-third';
 
 let passed = 0;
 const failures = [];
@@ -80,7 +81,14 @@ function writeAgent(session, id, transcript) {
 }
 
 writeAgent(OTHER_SESSION, 'agent-worker', toolCall('Write', { file_path: 'C:\\wt\\config\\foo\\a.mjs' }));
-writeAgent(OTHER_SESSION, 'agent-reader', toolCall('Bash', { command: 'rg RULE notes.md' }));
+
+/** A session's own main transcript holding one shell call from `start` to `end` (epoch ms), as the harness records it. @es El transcript principal de una sesión con un shell de `start` a `end`. */
+function writeMain(session, start, end) {
+  const record = (at, content) => `${JSON.stringify({ timestamp: new Date(at).toISOString(), type: 'assistant', message: { content: [content] } })}\n`;
+  const lines = record(start, { type: 'tool_use', id: `call-${session}`, name: 'Bash', input: { command: 'node scripts/build.mjs' } }) + record(end, { type: 'tool_result', tool_use_id: `call-${session}` });
+
+  writeFileSync(path.join(projects, 'some-project', `${session}.jsonl`), lines, 'utf8');
+}
 
 // The real dispatcher, over a real manifest naming the real guard; only its decision inputs are injected.
 const manifest = path.join(scratch, 'stop.json');
@@ -113,12 +121,34 @@ try {
   check('the SAME commit, seen from the session that owns the worker: the dispatcher blocks', own.output?.decision, 'block');
   check('the block names the unowned commit', own.output?.hookSpecificOutput?.additionalContext?.includes(`${hash} feat: worker change`), true);
 
-  writeFileSync(path.join(worktree, 'notes.md'), 'hunk\n', 'utf8');
+  // A file changed by a SHELL command: the session whose shell call was running when it changed is its maker.
+  const notes = path.join(worktree, 'notes.md');
+
+  writeFileSync(notes, 'hunk\n', 'utf8');
+
+  const changedAt = statSync(notes).mtimeMs;
+
+  writeMain(THIS_SESSION, changedAt - 2000, changedAt + 500);
+  writeMain(THIRD_SESSION, changedAt - 90_000, changedAt - 80_000);
 
   const dirty = await stopThrough(THIS_SESSION);
 
-  check('a dirty path a live agent only read (a shell command names it): the dispatcher blocks', dirty.output?.decision, 'block');
+  check('a file changed during THIS session\'s shell call: the dispatcher blocks its maker', dirty.output?.decision, 'block');
   check('the block recommends an explicit-pathspec commit, never a sweeping add', dirty.output?.hookSpecificOutput?.additionalContext?.includes('add -- "notes.md"') && !dirty.output?.hookSpecificOutput?.additionalContext?.includes('add -A'), true);
+
+  const third = await stopThrough(THIRD_SESSION);
+
+  check('the SAME file seen from another live session: the dispatcher lets that turn end', third.output?.decision, undefined);
+  check('and says nothing about a path that is not its to commit', third.output?.systemMessage?.includes('notes.md'), false);
+
+  const longAgo = new Date(changedAt - 3_600_000);
+
+  utimesSync(notes, longAgo, longAgo);
+
+  const orphan = await stopThrough(THIRD_SESSION);
+
+  check('a file no live shell call explains blocks no session', orphan.output?.decision, undefined);
+  check('it is surfaced as a note naming the path, on every turn', orphan.output?.systemMessage?.includes('notes.md') && orphan.output?.systemMessage?.includes('no live session made'), true);
 
   const bounded = await stopThrough(THIS_SESSION, { stop_hook_active: true });
 
