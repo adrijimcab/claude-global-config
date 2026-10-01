@@ -152,7 +152,44 @@ test('check cannot run -> refused, never read as clean', () => {
   expect(result.reason.includes('could not run'), true, 'reason');
 });
 
-test('unexpected check exit code -> refused', () => expect(verdict('gentle-ai sync', BASH, () => ({ exitCode: 7, results: [] })), 'deny', 'decision'));
+test('unexpected check exit code -> refused, naming the code', () => {
+  const result = decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: () => ({ exitCode: 7, results: [] }) });
+  expect(result.decision, 'deny', 'decision');
+  expect(result.reason.includes('unexpected exit code 7'), true, 'reason');
+});
+
+// ------------------------------------------------ resultados seguros ante sync (sync solo los deshace)
+// Sync-safe results: sync can only undo them. @es Resultados seguros ante sync: sync solo puede deshacerlos.
+
+const SYNC_SAFE_RESULTS = [{ id: 'review-contract-lazy-while-reviews-are-off', status: 'broken', detail: 'span loaded while reviews are off', reapplicable: true, syncSafe: true }];
+
+test('only a sync-safe result is broken (exit 1) -> the sync is ALLOWED', () => {
+  expect(verdict('gentle-ai sync', BASH, () => ({ exitCode: 1, results: SYNC_SAFE_RESULTS })), 'allow', 'decision');
+});
+
+test('only a sync-safe result is unverifiable (exit 2) -> the sync is ALLOWED', () => {
+  const results = [{ ...SYNC_SAFE_RESULTS[0], status: 'unverifiable' }];
+  expect(verdict('gentle-ai sync', BASH, () => ({ exitCode: 2, results })), 'allow', 'decision');
+});
+
+test('a sync-safe result beside a real breakage -> refused, and the reason names only the real one', () => {
+  const result = decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: () => ({ exitCode: 1, results: [...SYNC_SAFE_RESULTS, ...BROKEN_RESULTS] }) });
+  expect(result.decision, 'deny', 'decision');
+  expect(result.reason.includes('sdd-spec-grants-bash'), true, 'names the real breakage');
+  expect(result.reason.includes('review-contract-lazy-while-reviews-are-off'), false, 'omits the sync-safe one');
+});
+
+test('a sync-safe result beside a real unverifiable one -> refused as unverifiable', () => {
+  const result = decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: () => ({ exitCode: 1, results: [...SYNC_SAFE_RESULTS, ...UNVERIFIABLE_RESULTS] }) });
+  expect(result.decision, 'deny', 'decision');
+  expect(result.reason.includes('could NOT VERIFY'), true, 'reason');
+});
+
+test('exit 1 that no result explains -> refused as a malfunction, never allowed', () => {
+  const result = decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: () => ({ exitCode: 1, results: [{ id: 'x', status: 'held', detail: 'ok' }] }) });
+  expect(result.decision, 'deny', 'decision');
+  expect(result.reason.includes('every result held'), true, 'reason');
+});
 
 test('the check is consulted only when a real sync is present', () => {
   let calls = 0;
@@ -195,6 +232,12 @@ test('CLI: sync with broken overlay -> exit 0 and a valid deny naming the fix', 
 test('CLI: PowerShell sync with unverifiable overlay -> deny', () => {
   const result = runGuard(payload('Set-Location x; gentle-ai sync', POWERSHELL), ['--overlay-check', fakeCheck(2, UNVERIFIABLE_RESULTS)]);
   expect(JSON.parse(result.stdout).hookSpecificOutput.permissionDecision, 'deny', 'decision');
+});
+
+test('CLI: sync while only the sync-safe lazy review contract is broken -> exit 0, silent (allowed)', () => {
+  const result = runGuard(payload('gentle-ai sync'), ['--overlay-check', fakeCheck(1, SYNC_SAFE_RESULTS)]);
+  expect(result.status, 0, 'exit');
+  expect(result.stdout, '', 'stdout');
 });
 
 test('CLI: sync with clean overlay -> exit 0, silent', () => {

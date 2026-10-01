@@ -10,6 +10,16 @@
  *
  * El check solo se consulta cuando hay un sync real que decidir; cualquier otro comando pasa sin
  * costo. `--dry-run` siempre pasa: no escribe nada.
+ *
+ * Sync-safe results never block. A result marked `syncSafe` belongs to a customization that sync can
+ * only undo, never erase (sync regenerates its canonical text and the overlay apply re-places it), so
+ * refusing the sync for it would protect nothing. The verdict is taken from the other results; an exit
+ * code of 1 or 2 that no result explains is a malfunction and is refused as one.
+ * @es Los resultados seguros ante sync nunca bloquean. Un resultado marcado `syncSafe` pertenece a una
+ * personalización que sync solo puede deshacer, nunca borrar (sync regenera su texto canónico y el
+ * apply del overlay la vuelve a colocar), así que rechazar el sync por ella no protegería nada. El
+ * veredicto sale de los demás resultados; una salida 1 o 2 que ningún resultado explica es una falla y
+ * se rechaza como tal.
  */
 import { DIALECTS } from './shell-words.mjs';
 import { syncInvocations } from './sync-invocations.mjs';
@@ -79,7 +89,10 @@ export function decide({ command, toolName }, { checkDrift }) {
   const drift = checkDrift();
   if (drift.failure !== undefined) return deny(failureReason(drift.failure));
   if (drift.exitCode === 0) return ALLOW;
-  if (drift.exitCode === 1) return deny(brokenReason(drift.results));
-  if (drift.exitCode === 2) return deny(unverifiableReason(drift.results));
-  return deny(failureReason(`unexpected exit code ${drift.exitCode}`));
+  if (drift.exitCode !== 1 && drift.exitCode !== 2) return deny(failureReason(`unexpected exit code ${drift.exitCode}`));
+  if (!drift.results.some((result) => result.status !== 'held')) return deny(failureReason(`exit code ${drift.exitCode} with every result held @es salida ${drift.exitCode} con todos los resultados en held`));
+  const blocking = drift.results.filter((result) => result.syncSafe !== true);
+  if (blocking.some((result) => result.status === 'broken')) return deny(brokenReason(blocking));
+  if (blocking.some((result) => result.status === 'unverifiable')) return deny(unverifiableReason(blocking));
+  return ALLOW;
 }
