@@ -76,6 +76,6 @@ export const lazyReviewContract = {
       writeTextAtomic(plan.stashPath, plan.stash);
     }
     writeTextAtomic(plan.claudePath, plan.text);
-    return { outcome: 'applied', detail: `${plan.outcome}: CLAUDE.md ${plan.before.length} -> ${plan.text.length} chars @es caracteres` };
+    return { outcome: 'applied', change: plan.outcome, detail: `${plan.outcome}: CLAUDE.md ${plan.before.length} -> ${plan.text.length} chars @es caracteres` };
   },
 };

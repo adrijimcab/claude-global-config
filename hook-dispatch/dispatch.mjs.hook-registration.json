@@ -5,6 +5,10 @@
       "matcher": "Bash|PowerShell"
     },
     {
+      "event": "PostToolUse",
+      "matcher": "Bash|PowerShell"
+    },
+    {
       "event": "Stop"
     },
     {

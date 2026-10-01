@@ -32,3 +32,15 @@ export function contextFromArgv(argv) {
     gentleAi: fakeCli === undefined ? ['gentle-ai'] : [process.execPath, fakeCli],
   };
 }
+
+/**
+ * The context of a hook run by the dispatcher, which passes no flags: the same two fixture seams, read
+ * from GENTLE_AI_OVERLAY_HOME and GENTLE_AI_OVERLAY_CLI_SCRIPT, which no real session sets.
+ * @es El contexto de un hook que corre el dispatcher, que no pasa flags: las mismas dos costuras de
+ * fixture, leídas de GENTLE_AI_OVERLAY_HOME y GENTLE_AI_OVERLAY_CLI_SCRIPT, que ninguna sesión real define.
+ */
+export function contextFromEnvironment(environment = process.env) {
+  const home = environment.GENTLE_AI_OVERLAY_HOME;
+  const fakeCli = environment.GENTLE_AI_OVERLAY_CLI_SCRIPT;
+  return contextFromArgv([...(home ? ['--home', home] : []), ...(fakeCli ? ['--gentle-ai-node-script', fakeCli] : [])]);
+}

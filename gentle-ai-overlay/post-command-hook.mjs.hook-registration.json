@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PostToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a `gentle-ai sync` or `gentle-ai review mode enable|disable` run from a shell tool leaves the review execution contract in the wrong place until the next session start: loaded while reviews are off, or only a pointer while they may run. @es un `gentle-ai sync` o `gentle-ai review mode enable|disable` corrido desde una herramienta de shell deja el contrato de ejecución de revisiones en el lugar equivocado hasta el próximo inicio de sesión."
+}

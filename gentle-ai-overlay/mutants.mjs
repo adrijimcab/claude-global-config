@@ -66,16 +66,42 @@ const MUTANTS = [
   ['kinds/lazy-review-contract.mjs', "    if (plan.refused !== undefined) return { outcome: 'refused', detail: plan.refused };\n    if (plan.outcome === 'unchanged')", "    if (plan.outcome === 'unchanged')"],
   ['invariants.mjs', 'syncSafe: kind.syncSafe === true,', 'syncSafe: true,'],
   ['apply.mjs', 'dryRun ? planAll(CUSTOMIZATIONS, context) : applyAll(CUSTOMIZATIONS, context)', 'applyAll(CUSTOMIZATIONS, context)'],
+  ['lazy-review-triggers.mjs', 'if (typeof command !== \'string\') return null;', ''],
+  ['lazy-review-triggers.mjs', '.some((invocation) => !invocation.dryRun)', '.some(() => true)'],
+  ['lazy-review-triggers.mjs', "return program === 'gentle-ai' && group === 'review'", "return group === 'review'"],
+  ['lazy-review-triggers.mjs', "noun === 'mode' && ", ''],
+  ['lazy-review-triggers.mjs', 'MODE_CHANGES.has(verb)', 'verb !== undefined'],
+  ['lazy-review-triggers.mjs', 'const dialect = dialectOfTool(toolName);', "const dialect = dialectOfTool('Bash');"],
+  ['post-command-hook.mjs', 'if (lazyReviewTrigger(payload?.tool_input?.command, payload?.tool_name) === null) return undefined;', ''],
+  ['post-command-hook.mjs', "hookOutput('PostToolUse',", "hookOutput('SessionStart',"],
+  ['post-command-hook.mjs', 'process.stdout.write(`${JSON.stringify({ systemMessage: `[gentle-ai overlay] the post-command hook failed', 'void (`${JSON.stringify({ systemMessage: `[gentle-ai overlay] the post-command hook failed'],
+  ['lazy-review-hook-output.mjs', "if (result.change !== 'restored') return {};", ''],
+  ['lazy-review-hook-output.mjs', ', additionalContext: read };', ' };'],
+  ['lazy-review-hook-output.mjs', "if (result.change === 'moved') return", "if (false) return"],
+  ['session-start-hook.mjs', 'const replaced = reconcileLazyReview(context);', 'const replaced = {};'],
+  ['session-start-hook.mjs', 'emit(message, joined([replaced.additionalContext, advisory]));', 'emit(message, joined([advisory]));'],
 ];
 
 const selftestIn = (directory) => spawnSync(process.execPath, [path.join(directory, 'selftest.mjs')], { encoding: 'utf8' });
 // The selftest's last line is its "N/M passed" tally.
 const tally = (run) => run.stdout.trim().split('\n').at(-1) ?? 'no tally';
 
+// The selftest reaches beyond this directory (the sync guard's shell parser, the hook dispatcher, the
+// settings entry), so each mutant runs in a copy of that whole tree, and an UNMUTATED copy must be green
+// first — otherwise a kill could be a missing sibling. @es El selftest llega más allá de este directorio
+// (el analizador de shell del guard de sync, el dispatcher de hooks, la entrada de settings), así que
+// cada mutante corre en una copia de todo ese árbol, y una copia SIN mutar debe estar verde primero.
+const TREE = ['gentle-ai-overlay', 'gentle-ai-sync-guard', 'hook-dispatch', 'settings.json'];
+function copyTree() {
+  const root = mkdtempSync(path.join(tmpdir(), 'gentle-ai-overlay-mutant-'));
+  TREE.forEach((entry) => cpSync(path.join(HERE, '..', entry), path.join(root, entry), { recursive: true }));
+  return root;
+}
+
 function measure([file, from, to]) {
-  const copy = mkdtempSync(path.join(tmpdir(), 'gentle-ai-overlay-mutant-'));
+  const root = copyTree();
+  const copy = path.join(root, 'gentle-ai-overlay');
   try {
-    cpSync(HERE, copy, { recursive: true });
     const target = path.join(copy, file);
     const source = readFileSync(target, 'utf8');
     const occurrences = source.split(from).length - 1;
@@ -85,16 +111,26 @@ function measure([file, from, to]) {
     const run = selftestIn(copy);
     return { verdict: run.status === 0 ? 'SURVIVED' : 'KILLED', note: tally(run) };
   } finally {
-    rmSync(copy, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
-const baseline = selftestIn(HERE);
-if (baseline.status !== 0) {
-  console.log(`baseline selftest is RED (${tally(baseline)}): refusing to measure mutants`);
-  process.exit(2);
+function unmutatedCopy() {
+  const root = copyTree();
+  try {
+    return selftestIn(path.join(root, 'gentle-ai-overlay'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
-console.log(`baseline: ${tally(baseline)}`);
+
+for (const [label, baseline] of [['baseline', selftestIn(HERE)], ['unmutated copy', unmutatedCopy()]]) {
+  if (baseline.status !== 0) {
+    console.log(`${label} selftest is RED (${tally(baseline)}): refusing to measure mutants @es el selftest está ROJO: no se miden mutantes`);
+    process.exit(2);
+  }
+  console.log(`${label}: ${tally(baseline)}`);
+}
 const verdicts = MUTANTS.map((mutant) => {
   const result = measure(mutant);
   console.log(`${result.verdict.padEnd(8)} ${mutant[0]}: ${mutant[1].split('\n')[0].slice(0, 60)} -> ${result.note}`);

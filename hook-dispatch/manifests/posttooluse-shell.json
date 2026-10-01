@@ -1,0 +1,6 @@
+{
+  "event": "PostToolUse",
+  "guards": [
+    "../../gentle-ai-overlay/post-command-hook.mjs"
+  ]
+}

@@ -53,6 +53,6 @@ export const applyAll = (customizations, context) =>
 export const planAll = (customizations, context) =>
   brokenAndReapplicable(customizations, context).map((customization) => {
     const kind = kindOf(customization);
-    const planned = typeof kind.plan === 'function' ? kind.plan(customization, context) : { outcome: 'would-apply', detail: 'apply would re-place it @es apply la volvería a colocar' };
+    const planned = typeof kind.plan === 'function' ? kind.plan(customization, context) : { outcome: 'would-try', detail: 'apply would try it; this kind has no dry plan @es apply lo intentaría; este tipo no tiene plan en seco' };
     return { id: customization.id, ...planned };
   });

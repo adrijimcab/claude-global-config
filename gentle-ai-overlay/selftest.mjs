@@ -18,6 +18,7 @@ import { CUSTOMIZATIONS } from './customizations.mjs';
 import { KINDS, applyAll, evaluateAll } from './invariants.mjs';
 import { parseManagedRegions } from './managed-regions.mjs';
 import { inspectSection, reconcileSection, sha256 } from './review-contract-section.mjs';
+import { lazyReviewTrigger } from './lazy-review-triggers.mjs';
 import { readTextOrNull } from './text-file.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -589,6 +590,114 @@ test('lazy kind: plan names the move and writes nothing', () => {
   expect(KINDS[lazyEntry.kind].plan(lazyEntry, context).outcome, 'would-move', 'plan');
   expect(read(context.home, lazyEntry.file), original, 'CLAUDE.md untouched');
   expect(readTextOrNull(path.join(context.home, lazyEntry.stash)), null, 'no stash written');
+});
+
+// ---------------------------------------------------------------- lazy review triggers and hooks
+// Which commands re-place the contract, and the two hooks proven through the real dispatcher, manifest
+// and settings entry. @es Qué comandos recolocan el contrato, y los dos hooks probados a través del
+// dispatcher, el manifiesto y la entrada de settings reales.
+
+const TRIGGERS = [
+  ['Bash', 'gentle-ai sync', 'sync'],
+  ['Bash', 'cd x && gentle-ai sync --agents claude-code', 'sync'],
+  ['Bash', 'gentle-ai sync --dry-run', null],
+  ['Bash', 'echo gentle-ai sync', null],
+  ['Bash', 'gentle-ai review mode enable --scope global', 'review-mode'],
+  ['Bash', 'gentle-ai review mode disable --scope global', 'review-mode'],
+  ['PowerShell', '& "C:\\go\\bin\\gentle-ai.exe" review mode enable --scope global', 'review-mode'],
+  ['Bash', 'echo "x" \\; gentle-ai review mode enable', null],
+  ['PowerShell', 'echo "x" \\; gentle-ai review mode enable', 'review-mode'],
+  ['Bash', 'gentle-ai review mode status --json', null],
+  ['Bash', 'gentle-ai review start --cwd .', null],
+  ['Bash', 'gentle-ai review modes enable', null],
+  ['Bash', 'other-tool review mode enable', null],
+];
+TRIGGERS.forEach(([tool, command, expected]) =>
+  test(`trigger (${tool}): ${JSON.stringify(command)} -> ${expected}`, () => expect(lazyReviewTrigger(command, tool), expected, 'trigger')),
+);
+test('trigger: no command string -> null', () => expect(lazyReviewTrigger(undefined, 'Bash'), null, 'trigger'));
+
+const DISPATCH = path.join(HERE, '..', 'hook-dispatch', 'dispatch.mjs');
+const POST_MANIFEST = path.join(HERE, '..', 'hook-dispatch', 'manifests', 'posttooluse-shell.json');
+const shellPayload = (command, tool = 'Bash') => JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: tool, tool_input: { command }, tool_response: { stdout: '' } });
+/** The dispatcher, the way the harness runs it, pointed at a fixture home. @es El dispatcher como lo corre el harness, apuntando a un home de fixture. */
+const dispatchPost = (context, input, manifest = POST_MANIFEST) =>
+  spawnSync(process.execPath, [DISPATCH, manifest], { input, encoding: 'utf8', env: { ...process.env, GENTLE_AI_OVERLAY_HOME: context.home, GENTLE_AI_OVERLAY_CLI_SCRIPT: context.fakeCli } });
+
+test('wiring: settings run the dispatcher on PostToolUse Bash|PowerShell with the shell manifest, which lists the hook, whose registration matches', () => {
+  const settings = JSON.parse(readFileSync(path.join(HERE, '..', 'settings.json'), 'utf8'));
+  const entries = (settings.hooks.PostToolUse ?? []).filter((entry) => entry.matcher === 'Bash|PowerShell' && entry.hooks.some((hook) => hook.command.includes('hook-dispatch/manifests/posttooluse-shell.json')));
+  expect(entries.length, 1, 'settings entry');
+  expect(JSON.parse(readFileSync(POST_MANIFEST, 'utf8')).guards.includes('../../gentle-ai-overlay/post-command-hook.mjs'), true, 'manifest lists the hook');
+  const registration = JSON.parse(readFileSync(path.join(HERE, 'post-command-hook.mjs.hook-registration.json'), 'utf8'));
+  expect(registration.registrations.map((entry) => `${entry.event}:${entry.matcher}`).join(), 'PostToolUse:Bash|PowerShell', 'hook registration');
+});
+
+test('dispatcher: a real sync with reviews off moves the span and tells the user; exit 0', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  const original = read(context.home, lazyEntry.file);
+  const result = dispatchPost(context, shellPayload('gentle-ai sync'));
+  expect(result.status, 0, 'exit');
+  expect(read(context.home, lazyEntry.file), lazy(original).text, 'CLAUDE.md moved');
+  expect(JSON.parse(result.stdout).systemMessage.includes('review contract moved'), true, `stdout (${result.stdout})`);
+});
+
+test('dispatcher: review mode enabled -> the span is restored and the model is told to read the stash now', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  const original = read(context.home, lazyEntry.file);
+  applyAll([lazyEntry], context);
+  installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
+  const output = JSON.parse(dispatchPost(context, shellPayload('gentle-ai review mode enable --scope global', 'PowerShell')).stdout);
+  expect(read(context.home, lazyEntry.file), original, 'restored bytes');
+  expect(output.hookSpecificOutput.hookEventName, 'PostToolUse', 'event');
+  expect(output.hookSpecificOutput.additionalContext.includes(`read ~/${lazyEntry.stash} IN FULL now`), true, 'model told to read');
+});
+
+test('dispatcher: an unrelated command, or a tool the registration does not name, changes nothing and says nothing', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  const original = read(context.home, lazyEntry.file);
+  expect(dispatchPost(context, shellPayload('ls -la')).stdout, '', 'unrelated command');
+  expect(dispatchPost(context, JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { command: 'gentle-ai sync' } })).stdout, '', 'Edit tool');
+  expect(read(context.home, lazyEntry.file), original, 'CLAUDE.md untouched');
+});
+
+test('dispatcher RED when unregistered: a manifest without the hook leaves the span loaded after a real sync', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  const original = read(context.home, lazyEntry.file);
+  const root = path.dirname(context.home);
+  put(root, 'unregistered/silent.mjs', 'export const evaluate = () => undefined;\n');
+  put(root, 'unregistered/posttooluse-shell.json', JSON.stringify({ event: 'PostToolUse', guards: ['./silent.mjs'] }));
+  dispatchPost(context, shellPayload('gentle-ai sync'), path.join(root, 'unregistered', 'posttooluse-shell.json'));
+  expect(read(context.home, lazyEntry.file), original, 'CLAUDE.md untouched without the registration');
+});
+
+test('post-command hook run directly (not through the dispatcher): it names its own event, PostToolUse', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  applyAll([lazyEntry], context);
+  installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
+  const env = { ...process.env, GENTLE_AI_OVERLAY_HOME: context.home, GENTLE_AI_OVERLAY_CLI_SCRIPT: context.fakeCli };
+  const result = spawnSync(process.execPath, [path.join(HERE, 'post-command-hook.mjs')], { input: shellPayload('gentle-ai review mode enable'), encoding: 'utf8', env });
+  expect(result.status, 0, 'exit');
+  expect(JSON.parse(result.stdout).hookSpecificOutput.hookEventName, 'PostToolUse', 'event');
+});
+
+test('post-command hook run directly: unreadable payload -> exit 0 and a systemMessage saying nothing was re-placed', () => {
+  const result = spawnSync(process.execPath, [path.join(HERE, 'post-command-hook.mjs')], { input: 'not json', encoding: 'utf8' });
+  expect(result.status, 0, 'exit');
+  expect(JSON.parse(result.stdout).systemMessage.includes('NOT re-placed'), true, 'message');
+});
+
+test('session start: reviews off -> the span is moved before the drift check; global on -> restored and the model is told to read it', () => {
+  const context = lazyHome({ reviewGlobal: '' });
+  const original = read(context.home, lazyEntry.file);
+  const moved = run('session-start-hook.mjs', ['--home', context.home, '--gentle-ai-node-script', context.fakeCli]);
+  expect(moved.status, 0, 'exit');
+  expect(read(context.home, lazyEntry.file), lazy(original).text, 'moved at session start');
+  expect(JSON.parse(moved.stdout).systemMessage.includes('review contract moved'), true, 'user told');
+  installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
+  const restored = JSON.parse(run('session-start-hook.mjs', ['--home', context.home, '--gentle-ai-node-script', context.fakeCli]).stdout);
+  expect(read(context.home, lazyEntry.file), original, 'restored at session start');
+  expect(restored.hookSpecificOutput.additionalContext.includes('IN FULL now'), true, 'model told to read');
 });
 
 // ---------------------------------------------------------------- the real list, through the CLIs
