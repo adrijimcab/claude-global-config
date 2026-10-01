@@ -361,3 +361,31 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   `SUPERSEDIDO`) Y las 6 primeras palabras del item literales. Lo impide
   `~/.claude/backlog-content-guard/guard.mjs` (cierra CERRADO para `backlog/*-master` si no puede leer
   el almacén; ABIERTO para registros ordinarios).
+
+- **`contract-doc-names-a-mechanism-nobody-verifies`** — A path, script name, hook or wiring quoted from a
+  memory or contract document is a HYPOTHESIS until the filesystem confirms it; confirm it before quoting
+  it to a worker or to the owner, and fix the document in the same turn when it moved. CLOSED BY MECHANISM:
+  `~/.claude/contract-path-check/check.mjs` reads every `~/.claude/…` path the contract files name, and its
+  selftest runs on every landing. SCOPE, stated: project-relative `.claude/…` spellings and wiring
+  CLAIMS (that a hook calls a script) are not checked, only that the named path exists.
+  @es Una ruta, script, hook o cableado citado de un documento de contrato es una HIPÓTESIS hasta que el
+  sistema de ficheros la confirma. Lo comprueba `~/.claude/contract-path-check/check.mjs` en cada aterrizaje.
+
+- **`delegated-role-toolset-narrower-than-its-contract`** — Before delegating to a named role, check that
+  its declared toolset can satisfy its task: a role asked to MEASURE or VERIFY needs execution (Bash).
+  When it cannot, fix the role definition, never work around it in the brief. CLOSED BY MECHANISM:
+  `~/.claude/agent-toolset-check/check.mjs` classifies every `agents/*.md` role (needs execution, or exempt
+  with a written reason; an unclassified role is a finding) and its selftest runs on every landing, so a
+  `gentle-ai sync` that strips Bash turns the next landing red.
+  @es Antes de delegar a un rol, comprobar que su conjunto de herramientas puede cumplir su tarea: medir o
+  verificar exige ejecución (Bash). Lo comprueba `~/.claude/agent-toolset-check/check.mjs` en cada aterrizaje.
+
+- **`blamed-the-tool-for-a-defect-i-built-into-the-command`** — When a tool appears to misbehave,
+  reproduce the behaviour on a MINIMAL input you fully control first; a defect you cannot reproduce
+  minimally is a hypothesis about your own usage, and an unreproduced tool defect is never written into a
+  brief. The command shape behind the incident (a command that ENDS by echoing `$?`) is refused by
+  `~/.claude/exit-code-guard/guard.mjs`; the minimal-reproduction half is a written rule only, because no
+  hook can judge whether a prose claim about a tool is true.
+  @es Ante un comportamiento raro de una herramienta, reproducirlo primero con una entrada mínima propia;
+  un defecto sin reproducir es una hipótesis sobre el uso propio y nunca va a un brief. La forma del
+  comando (terminar con `echo $?`) la rechaza `~/.claude/exit-code-guard/guard.mjs`.

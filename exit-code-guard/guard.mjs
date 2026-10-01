@@ -19,6 +19,14 @@
  * PowerShell was added 2026-09-14: the guard read Bash only while the harness also offers a PowerShell
  * tool, so the exact shape it forbids ran unguarded there.
  *
+ * It is also the mechanism of `blamed-the-tool-for-a-defect-i-built-into-the-command`: the incident below
+ * was that lesson (a surprising result read as a defect of the TOOL, when the command's own shape caused
+ * it), and the shape is what this guard refuses. The lesson's second half, never writing an unreproduced
+ * tool defect into a brief, is a free-prose claim no hook can judge true; it stays a written rule.
+ * @es También es el mecanismo de `blamed-the-tool-for-a-defect-i-built-into-the-command`: el incidente de
+ * abajo fue esa lección y su forma es lo que este guard rechaza. Su segunda mitad (no escribir en un brief
+ * un defecto de herramienta sin reproducir) es una afirmación en prosa que ningún hook puede juzgar.
+ *
  * WHAT HAPPENED, measured 2026-09-09. I told the owner FIVE times that the harness task notifier lies
  * about exit codes. It never did. Every one of those commands had the shape
  * `cmd >> log 2>&1; echo "EXIT=$?" >> log`, and the shell's exit status of a `;`-separated list is the

@@ -83,6 +83,10 @@
 !/exit-code-guard/
 !/exit-code-guard/**
 /exit-code-guard/state/
+!/contract-path-check/
+!/contract-path-check/**
+!/agent-toolset-check/
+!/agent-toolset-check/**
 !/collision-guard/
 !/collision-guard/**
 /collision-guard/state/
