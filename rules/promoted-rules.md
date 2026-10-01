@@ -9,7 +9,7 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   command that produces it, and REGENERATE whatever a gate derives from (`npm run build` before
   `check:api`, the full suite before coverage) before reading it. An artifact that outlives the run
   that made it is indistinguishable from this run's output, so a RED read off a stale artifact measures
-  your execution order, not the tree. Nine faces recorded to date:
+  your execution order, not the tree.
   - **AN ERROR, LIMIT, LOCK OR QUOTA NOTICE is one of these artifacts too.** RULE: before asserting
     that something is still blocked, unavailable, rate-limited or locked, ATTEMPT IT — the attempt is
     nearly always cheaper than the claim — or say plainly that it is unverified. Never infer a CURRENT
@@ -35,14 +35,12 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     `--read` run INSIDE that worker's worktree, or through the explicit path of its
     `runs/<id>/verdict.json`; never from the main checkout, and the report names the worktree the
     verdict came from.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/stale-artifact-read-as-this-runs-result.md`.
 
 - **`guard-that-cannot-go-red`** — A new guard, gate, check or classifier is NOT trusted until it has
   been proven to DISCRIMINATE, on real cases, across the state space its decision ranges over. Silence
   from a check is evidence ONLY once that same check has been seen to speak; testing that a mechanism
   FIRES is not testing that it DECIDES CORRECTLY. RULE: enumerate the state space the decision ranges
-  over and exercise each state in the self-test, so the discrimination cannot silently drift back. Ten
-  faces recorded to date; each adds one more state that belongs in that enumeration:
+  over and exercise each state in the self-test, so the discrimination cannot silently drift back.
   - **THE NEAR MISS IS A STATE.** RULE: test the near miss, and make the refusal NAME it — do not
     relax the form to make the message unnecessary; strictness is what stops a marker from being
     talked around.
@@ -73,15 +71,12 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     an earlier one must stop when the earlier one fails.
   - **THE PROOF TOOL ITSELF COULD NOT GO RED.** RULE: a kill measured over a red baseline is not
     evidence, and a proof is only as good as the runner's ability to refuse to measure.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/guard-that-cannot-go-red.md`.
 
 - **`bounded-search-read-as-absence`** — Reading ONE empty store as "no record exists". **A tool you
   lack is never the search that establishes absence.** Before saying a record does not exist, query
   every store that could hold it — and when the question is about project state, history, or what
   remains, query engram FIRST, because that is where this project deliberately puts what the tooling
-  cannot keep. The failure is cheap to avoid and expensive to make: the owner plans from the answer.
-  Recorded across many recurrences; each face below adds one more search surface that silence alone
-  does not cover:
+  cannot keep.
   - **A DOCUMENT IS NOT A SEARCH.** RULE: a document asserting "X does not exist" is a HYPOTHESIS
     inheriting somebody else's search, never a measurement — and it may never be forwarded to a worker
     under `MEASURED:`. Search every place the thing could live, including outside the repository,
@@ -114,16 +109,11 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     branch head, dirty count and transcript mtime, measured in the same turn, never from the wording
     of a lifecycle notification. "No report yet" is not "no work yet".
   - **«QUEUED» IS NOT «RUNNING», AND A SHRINKING COUNT IS NOT A COMMIT (2026-09-30,
-    `bounded-search-read-as-absence`).** I told the
-    owner twice that a migration agent was live and "committing path by path (19 -> 1)" and dismissed
-    a guard on that basis; its transcript had last written hours earlier (context-exhausted, a
-    dangling tool_use), my SendMessage had only been "queued for its next tool round", and git held
-    zero commits from it — the count moved because the guard attributed differently between turns.
+    `bounded-search-read-as-absence`).**
     RULE: liveness is read from the actor's transcript mtime and last record, progress from `git log`
     of the repo, both in the same turn; a delivery-queued message proves nothing ran.
   - **LA LISTA DE SKILLS DE UN TURNO ES UNA FOTO.** RULE: una lista de capacidades del harness solo
     prueba lo que hay EN ESE TURNO; decir «no aparece en esta sesión», nunca «no existe».
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/bounded-search-read-as-absence.md`.
 
 - **`collision-fixed-by-deleting-unread-side`** — Resolving a conflict by taking one whole side
   preserves only what you thought to check afterwards. **The asymmetry: a side-taking resolution
@@ -134,14 +124,11 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   - **A STATE NAME IS NOT A DIAGNOSIS.** RULE: act on what a finding SAYS, never on what its state
     name suggests. Whenever the remedy might be "record, adopt or accept what is already there", read
     what is there FIRST — overwriting is not a neutral default.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/collision-fixed-by-deleting-unread-side.md`.
 
 - **`audit-verdict-from-commit-subjects-not-from-reading`** — A SEARCH may only LOCATE candidates. The
   VERDICT comes from reading the construct in its context, or from the tool that owns the semantics —
-  a parser, the linter, `--print-config`, the gate itself. This is the project's own "grep localiza,
-  NO dictamina" raised to a binding rule. **The asymmetry that makes this binding: a search that
-  MISSES is silent, and a search that COLLIDES looks like a hit.** Both read as evidence and neither
-  is. So when a search result contradicts a claim someone reached by READING, the search is wrong
+  a parser, the linter, `--print-config`, the gate itself. **The asymmetry that makes this binding: a search that
+  MISSES is silent, and a search that COLLIDES looks like a hit.** So when a search result contradicts a claim someone reached by READING, the search is wrong
   until proven otherwise — check the collision before you write the contradiction. And a negative
   claim is never established by a search returning nothing; it is established by reading the place it
   would have to be.
@@ -152,14 +139,12 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     before any count becomes a claim, OPEN the hits and read them in context, or ask the tool that
     OWNS the semantics.
   - **A FILE'S SHARE JUDGED FROM ITS LOUDEST TOKENS (2026-09-30,
-    `audit-verdict-from-commit-subjects-not-from-reading`).** I told the owner a rules file was mostly
-    specific to one project, from the project names that stood out in it; classified entry by entry,
-    1 of 14 was. RULE: a claim about what share of a file or list belongs to a category is made only
+    `audit-verdict-from-commit-subjects-not-from-reading`).**
+    RULE: a claim about what share of a file or list belongs to a category is made only
     after classifying every entry by reading it, and the sentence carries the count (N of M).
   - **ENTRIES CALLED DUPLICATES FROM THEIR SHARED LABEL (2026-09-30,
-    `audit-verdict-from-commit-subjects-not-from-reading`).** I proposed unloading 13 ledger stubs as
-    copies of the promoted rules; compared one by one, 5 of 13 carried a mechanism path found nowhere
-    else. RULE: "duplicate" is a share claim too — compare every entry against its supposed copy
+    `audit-verdict-from-commit-subjects-not-from-reading`).**
+    RULE: "duplicate" is a share claim too — compare every entry against its supposed copy
     before proposing to remove or unload the set, and state how many are fully covered (N of M).
   - **A MANIFEST IS A STRUCTURED DOCUMENT, NEVER A LINE RANGE.** RULE: before any verdict about a
     dependency, PARSE the manifest and name the SECTION the key lives in; the same package name in two
@@ -171,28 +156,17 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     never deduplicated names, and any identifier class includes `$`. A final figure matching
     expectation does not validate the path — if the intermediate was never checked, the method that
     produced it is still live and will produce the next number unexamined.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/audit-verdict-from-commit-subjects-not-from-reading.md`.
 
 - **`brief-marker-written-as-prose-not-literal-form`** — CLOSED BY MECHANISM 2026-09-09; this entry
   states the rule the mechanism enforces. A delegation brief must carry both provenance markers, and
   the check is: **the word `MEASURED` / `HYPOTHESIS` STARTS its own line, and that line carries a
   colon somewhere.** What sits between the word and the colon is yours — a qualifier, a parenthetical,
   a date, a sha. Both of these pass: `MEASURED: 70 of 70` and
-  `- MEASURED (by me, on develop just now): 70 of 70`. The property that matters is that the brief
-  carries a provenance DECLARATION — a line whose subject is the marker — never a glued-colon
-  anywhere-in-the-brief proxy, which passed three delegations that carried no real declaration. The
-  check is a literal line scan, never a regex, and it names which of three refusal states applies
-  (`absent`, `buried`, `no-colon`). Guard `~/.claude/brief-provenance/guard.mjs`; 22/22 across the
-  decision's state space in `~/.claude/brief-provenance/selftest.mjs`.
-  - **THE RESUME WRITTEN AS PROSE (2026-09-30).** The guard refused 39 delegations in one session
-    (measured from the transcript): 13 SendMessages with neither marker, ~5 with MEASURED buried in
-    a sentence ("Ownership update. MEASURED: …"). No damage reached a worker, but every refusal is a
-    wasted round, and it recurs because short resumes are drafted as conversation with the markers
-    bolted on. RULE: every Agent prompt and every worker SendMessage is drafted FROM the skeleton —
+  `- MEASURED (by me, on develop just now): 70 of 70`. Guard `~/.claude/brief-provenance/guard.mjs`.
+  - **THE RESUME WRITTEN AS PROSE (2026-09-30).** RULE: every Agent prompt and every worker SendMessage is drafted FROM the skeleton —
     line 1 `MEASURED: …`, line 2 `HYPOTHESIS: …`, then the instruction — even a two-line resume; for
     a non-trivial brief run `node ~/.claude/brief-feasibility/preflight.mjs <draft>`, which runs every
     delegation guard in one pass, before sending.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/brief-marker-written-as-prose-not-literal-form.md`.
 
 - **`promotion-to-contract-read-as-prevention`** — Promoting a lesson into a binding contract is not
   the same as preventing it, and treating the promotion as the end of the work is how a "closed"
@@ -202,7 +176,6 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   and when it is not, EXTEND the text with the new face in every file that carries it before promoting
   again. A recurrence count climbing while the text stands unchanged means the text is the stale
   artifact.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/promotion-to-contract-read-as-prevention.md`.
 
 - **`worker-claim-about-unreachable-file-committed-as-fact`** — A subagent's finding is UNVERIFIED BY
   ME no matter how well that subagent measured it, and relaying it to the owner without saying whose
@@ -232,66 +205,49 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     branch, branches in use, roles and permissions, schedules) in the same turn, or mark them
     unverified.
   - **AN OLDER RECORD'S STATE CLAIM RELAYED WHILE A NEWER RECORD CONTRADICTED IT (2026-09-30,
-    `worker-claim-about-unreachable-file-committed-as-fact`).** I told the owner the local `v1.0.0`
-    tag "has no parent", copied from engram #927 into the backlog, while #978 (newer) already
-    recorded it at 18cd5d4d with parent 8340076f; one `git log` refuted it. RULE: a state claim
+    `worker-claim-about-unreachable-file-committed-as-fact`).**
+    RULE: a state claim
     taken from any durable record (engram, backlog, report) is re-measured in the same turn before
     it reaches the owner, or goes out naming the record and its date in the same sentence; and
     before relaying it, check newer records on the same subject for a contradiction.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/worker-claim-about-unreachable-file-committed-as-fact.md`.
 
 - **`provisioning-bound-to-delegation-not-worktree-creation`** — A worktree you create YOURSELF
   arrives with no `node_modules`, because the provisioner is bound to DELEGATION (a `PreToolUse` hook
   on `Task|Agent`), never to worktree creation. **RULE: after any `git worktree add` you performed
   yourself, give the new worktree its dependencies BEFORE running a single gate there** — and never
-  read a gate failure in a fresh worktree as a verdict about the code until `node_modules` is confirmed
-  present. The first failure in a new worktree is almost always the missing install, and it will
-  masquerade as anything: a type error, a broken import, a red gate unrelated to your change.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/provisioning-bound-to-delegation-not-worktree-creation.md`.
+  read a gate failure in a fresh worktree as a verdict about the code until `node_modules` is confirmed present.
 
-- **`gitignored-deliverable-destroyed-by-worktree-autoclean`** — CLOSED BY MECHANISM 2026-09-16. Two
-  deliveries were lost because a worktree whose whole value sat in ignored paths read as EMPTY and was
-  removed. ROOT: one `.gitignore` rule serves two opposite populations — `dist/`, `node_modules/` and
-  coverage are build product and never a deliverable, while `.claude/**` is this project's own
-  hand-authored tooling, always a deliverable and invisible to `git status --porcelain`.
+- **`gitignored-deliverable-destroyed-by-worktree-autoclean`** — CLOSED BY MECHANISM 2026-09-16.
   **THE RULE, a shared predicate rather than a habit:** the question a removal decides is "if this
   worktree were deleted right now, what would be gone for good?", answered in ONE place
   (`.claude/worktree-work/worktree-work.mjs`) that every consumer asks. **Anything ignored and
   UNDECLARED counts as work** — a path is exempt only where a declaration names the process that
-  produces it. Proof: 29/29 selftest, 23/23 mutants killed. RESIDUAL GAP: the Stop gate fires only
+  produces it. RESIDUAL GAP: the Stop gate fires only
   when a worker CLAIMS completion, so a worker that stops without claiming is still not blocked, and
   the harness's own auto-clean is untouched. Generalizes beyond worktrees: a predicate inherited by
   many consumers carries its blind spot to all of them — when a shared question keeps producing
   surprises, fix the question, never add a second answer beside it.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/gitignored-deliverable-destroyed-by-worktree-autoclean.md`.
 
 - **`brief-contradicted-a-standing-project-rule`** — A brief I write outranks nothing: the project's
-  standing rules do. Twice: I asked for API goldens in a SEPARATE commit (the rule says the same
-  commit), and I told workers to make runtime messages "English output" when the owner's intent was
-  bilingual everywhere, which made them delete the Spanish half of real messages. RULE: before fixing
+  standing rules do. RULE: before fixing
   the FORM of a deliverable in a brief (commit shape, language, where it lands), check it against the
   project rules for that area; never extend a rule to a surface it does not name from a guess (apply
   its evident intent or ask); and never relay an unmeasured worker claim as the basis of a brief.
   Mechanism for the language face: the bilingual gate (every code text, runtime messages included).
 - **`instructed-a-worker-to-run-a-denied-command`** — A brief is written from the operation I want,
-  and the worker's environment decides what it can actually do. Twice: a brief told a worker to
-  `git rebase` (denied in settings), and a brief told an `isolation: "worktree"` worker to create a
-  new worktree and move into it, which made the worktree-isolation guard refuse every later shell
-  call and left the worker without Bash for the rest of its session. RULE: before any command goes
+  and the worker's environment decides what it can actually do. RULE: before any command goes
   into a brief, check it against the worker's real environment (deny list, blocking hooks, its pinned
   worktree) and name the alternative that works. A worker never changes worktree: moving work onto a
   new base is the orchestrator's step (cherry-pick into the new worktree from the main checkout),
-  followed by a worker whose TENANCY names that worktree from launch. THIRD FACE (2026-09-30): briefs
-  told worktree workers to run `node .claude/diff-coverage/…` by a RELATIVE path; `.claude/` tooling is
-  gitignored and lives only in the main checkout, so the worker could not self-verify. Every tooling
+  followed by a worker whose TENANCY names that worktree from launch.
+  Every tooling
   command in a brief uses the main checkout's ABSOLUTE path. Mechanism: `~/.claude/brief-feasibility/`.
 - **`integrated-a-range-without-running-its-cheap-gates`** — Every integration onto `develop` runs
   every gate that can READ the changed paths, never a gate list I chose. **A hand-picked gate set is a
   bounded search written down as coverage.** RULE: after a cherry-pick, run the gates derived from the
   change (`vitest related` plus every `check:*` whose inputs include a touched path), or all of
   `ci:lint` + `ci:checks` when that is cheap enough, and read their real exit codes before calling the
-  integration done. Mechanism in build: `.claude/integrate/` plus a PreToolUse guard refusing a raw
-  `git cherry-pick` on `develop`/`main`.
+  integration done.
   - **THE GATE DEFERRED FOR A BUSY RESOURCE, and it was the only one that could see the defect.**
     RULE: a gate deferred because a resource is busy is a HARD BLOCKER on landing, written into the
     plan as one; a change to shipped styles or tokens runs `check:a11y` BEFORE anything is stacked on
@@ -303,50 +259,26 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     return: integrations onto `develop` run the full chain ADVISORY (develop is reversible and GitLab
     CI runs the full chain on it), but never below the unit-suite floor of the face below; every IRREVERSIBLE step — push/fast-forward of `main`, any release tag,
     `release:gitlab` — runs with `B100_LANDING_GUARD=enforce`, no exception.
-  - **THE GENERATOR THAT READS THE CHANGE INDIRECTLY (2026-09-30).** A new card example landed
-    after a 16-gate run I chose; `testing/goldens/content-projection-component.golden.ts` is
-    generated from the real examples directory, so `check:goldens` and `golden.spec.ts` went red on
-    develop and a worker found it three integrations later. RULE: every fast-forward of develop
+  - **THE GENERATOR THAT READS THE CHANGE INDIRECTLY (2026-09-30).** RULE: every fast-forward of develop
     requires a green `npm test -- --all` on that exact tree, on top of the related `check:*` gates;
-    a list I pick is never the landing proof. CLOSED BY MECHANISM (`integrated-a-range-without-running-its-cheap-gates`,
-    fourth occurrence): the unit suite is a FLOOR the landing guard REFUSES in EVERY mode, overriding
-    the advisory default above for that one requirement. A ref move onto `develop`/`main` is denied
-    unless a complete, green, unmoved verdict of the tree's own `ci:test` expansion (derived from its
-    `package.json`, never hardcoded) graded that exact tree, or one of the bookkeeping trees beneath
-    it. Record it with `node .claude/gate-run/gate-run.mjs ci:test` in a clean worktree of the target
-    commit. The full `build:ci-pr` chain stays advisory unless `B100_LANDING_GUARD=enforce`. Replayed
-    on the real incident (develop `283d2c77` -> `cfe6a6ff`, real verdict store): DENY in both modes.
+    a list I pick is never the landing proof.
+    CLOSED BY MECHANISM: the unit suite is a FLOOR the landing guard REFUSES in EVERY mode, overriding
+    the advisory default above for that one requirement.
+    Record it with `node .claude/gate-run/gate-run.mjs ci:test` in a clean worktree of the target
+    commit. The full `build:ci-pr` chain stays advisory unless `B100_LANDING_GUARD=enforce`.
   - **THE UNIT SUITE NEVER TYPE-CHECKS A SPEC (2026-09-30,
-    `integrated-a-range-without-running-its-cheap-gates`, fifth occurrence).** develop was
-    fast-forwarded twice on a green `gate-run.mjs ci:test` plus a list I picked; `ci:test` (harness +
-    `test:all-coverage`) never type-checks a spec, and `check:spec-typecheck` — the only gate that does —
-    was red afterwards (a13f6b18: 2 x TS2322; 5ead4385: 5 x TS2532), caught by GitLab pipeline 5824.
+    `integrated-a-range-without-running-its-cheap-gates`, fifth occurrence).**
     RULE: a move whose content changes any `*.spec.ts` is also graded by `check:spec-typecheck`.
-    CLOSED BY MECHANISM: the landing guard's floor now has a second part, refused in EVERY mode — when
-    the trees differ by a `*.spec.ts` (added, modified, deleted or renamed; decided on the tree the
-    branch points at today versus the tree it would point at, `touched-specs.mjs`), a complete, green,
-    unmoved gate-run verdict of `check:spec-typecheck` on that exact tree (or a bookkeeping tree
-    beneath it) is required beside the `ci:test` one. The gate labels are derived from the tree's own
-    `package.json`; a tree that declares no such script is not asked for one. Record it with
+    CLOSED BY MECHANISM: the landing guard's floor now has a second part, refused in EVERY mode. Record it with
     `node .claude/gate-run/gate-run.mjs check:spec-typecheck` in a clean worktree of the target commit.
-    A bookkeeping-only push over an already published spec stays unflagged. Selftest 225/225, mutants
-    87/87 killed (one survivor found and closed by a Spanish-half assertion). Replayed on the real range
-    `15193b23..d20ca9d2` (touches the date-range parent-sync spec): DENY in both modes, naming the
-    missing spec type-check verdict.
-  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/integrated-a-range-without-running-its-cheap-gates.md`.
 
 - **`acted-on-a-live-actors-working-state`** — Acting on shared repository state — a worktree, an index —
-  before establishing that no OTHER actor's work is mixed into it. Two faces recorded to date:
-  - **A LIVE ACTOR'S WORKING TREE COMMITTED MID-RUN (2026-09-09).** I committed a LIVE agent's working
-    tree while it was mid-run and captured a state it then corrected; real, load-bearing corrections
-    the agent found afterwards were lost in the snapshot I had already landed. RULE: before committing,
+  before establishing that no OTHER actor's work is mixed into it.
+  - **A LIVE ACTOR'S WORKING TREE COMMITTED MID-RUN (2026-09-09).** RULE: before committing,
     reaping, rebasing or otherwise acting on ANY worktree that is not mine, establish that its actor has
     STOPPED from the agent list, never from how finished the diff looks.
-  - **THE SHARED INDEX SWEPT INTO MY COMMIT (2026-09-30).** In the `b100-am-ui-claude-tooling` backup
-    repo I ran `git add AGENT-LEDGER.md` then `git commit`, and the bare commit swept in 63 deletions a
-    different, FROZEN actor had already staged in that same shared index — `git add <path>` only ADDS,
-    it never NARROWS what a bare `commit` then sweeps up — and the merged commit was pushed before
-    anyone read the diff. RULE: commit with an explicit pathspec (`-- <paths>`, or `--only <paths>`) in
+  - **THE SHARED INDEX SWEPT INTO MY COMMIT (2026-09-30).** `git add <path>` only ADDS,
+    it never NARROWS what a bare `commit` then sweeps up. RULE: commit with an explicit pathspec (`-- <paths>`, or `--only <paths>`) in
     ANY repo another actor may have touched, never a bare `commit` that sweeps the whole shared index.
     CLOSED BY MECHANISM: `~/.claude/commit-pathspec-guard/guard.mjs` (selftest and mutation-proof run,
     both green).
@@ -355,35 +287,15 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   project's master backlog (a `topic_key`/observation ending `-master`), because the standing "every
   finding enters the backlog the same turn" mandate is written to bind the ORCHESTRATOR and lives in a
   rules file that loads into every subagent too.
-  - **A SUBAGENT CITED THE OWNER-MANDATE SECTION AS ITS OWN AUTHORITY (2026-09-30).** Measured:
-    subagent `a7a6a1fc42286edd6` called `mem_save({ topic_key: "backlog/1.0.0-master", ... })` and
-    overwrote the owner's master backlog (engram observation #972) as revision 50, and the content it
-    saved explicitly cited `~/.claude/rules/00-owner-mandates.md`'s "Backlog maestro — todo hallazgo
-    entra en el momento" section as its own justification. That section was written for the
-    ORCHESTRATOR ("apuntar esto ... y que esto se haga siempre") and said nothing about who performs
-    the write — a worker inherited a rule intended for someone else because the rules file does not
-    distinguish. RULE: the mandate now names its subject explicitly (the orchestrator only); a
+  - **A SUBAGENT CITED THE OWNER-MANDATE SECTION AS ITS OWN AUTHORITY (2026-09-30).** RULE: the mandate now names its subject explicitly (the orchestrator only); a
     delegated agent puts its finding in its `SubagentHandback` report instead, and the orchestrator
     transcribes it into the backlog the same turn. CLOSED BY MECHANISM:
-    `~/.claude/backlog-owner-guard/guard.mjs`, a global `PreToolUse` guard denying
-    `mem_save`/`mem_update`/`mem_delete` on a master-backlog `topic_key` or observation id whenever the
-    caller is a subagent (identified by `agent_id` and/or a `subagents/` transcript path, measured
-    against 3,040 real payloads), across both engram mount points. It is the one guard in this fleet
-    that fails CLOSED rather than open — an id it cannot resolve is refused for a subagent, never
-    allowed through — because what it protects is an unrecoverable overwrite. Selftest and
-    mutation-proof run, both green (51/51, 19/19).
+    `~/.claude/backlog-owner-guard/guard.mjs`.
 
 - **`landing-gate-run-on-a-tree-that-cannot-fast-forward`** — A landing-proof gate run (the whole gate
   chain invoked with no arguments, or the unit-suite floor `ci:test`) must REFUSE before a single gate
   starts, and before any verdict is written as `running`, when its tree cannot fast-forward the
-  integration branch it means to prove — a green run there still has to be reproven at landing time, for
-  nothing. MEASURED 2026-09-30 (b100-am-ui): an integrator branched from `ae6dbdf0` while `develop` had
-  already moved to `badfdead` (a counters commit), ran a full `ci:test` through `gate-run.mjs` on that
-  stale tree, and only at LANDING TIME did `git merge --ff-only` prove impossible — after the whole unit
-  suite had already run for nothing. The run was stopped and redone on a rebuilt branch
-  (`integrate/batch-3`), costing about twelve minutes plus a rerun. ROOT CAUSE: an integration branch
-  named in a brief is an INSTRUCTION, never a PRECONDITION a tool enforces, and it rots the moment the
-  integration branch moves again. RULE: before any landing-proof gate run starts, ask git directly —
+  integration branch it means to prove. RULE: before any landing-proof gate run starts, ask git directly —
   `git merge-base --is-ancestor <integration branch> HEAD` — never trust a base named in a brief or
   remembered from an earlier turn. Where no automated gate-run capability exists yet, an orchestrator or
   worker runs that exact `merge-base --is-ancestor` check by hand before starting any landing-proof run,
@@ -391,22 +303,10 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   when it fails — never `git rebase`, which is denied in every b100-am-ui shell. CLOSED BY MECHANISM
   (b100-am-ui only, so far — this is the first occurrence, promoted early because the mechanism was
   already built rather than waiting for a second incident):
-  `.claude/gate-run/landing-precondition.mjs`, asked at the top of `gate-run.mjs`'s `gate()` before
-  `claimWorktree`/`openVerdict` run, reusing the SAME two constants (`CHAIN_SCRIPT`, `UNIT_SUITE_SCRIPT`)
-  `.claude/ungated-landing-guard/` already grades a landing against, rather than a second, invented
-  definition. Selftest `.claude/gate-run/landing-precondition.selftest.mjs` 37/37 over constructed temp
-  git repositories (never a real branch); mutants `.claude/gate-run/landing-precondition.mutants.mjs`
-  14/14 killed, including the one line wired into `gate-run.mjs` itself, proven through the real exported
-  `main`, not a reimplementation. Full incident: `.claude/lessons-ledger.md` (b100-am-ui) under this key.
-  Evidencia completa (incidente medido, literal): `~/.claude/lessons/evidence/worker-overwrote-master-backlog.md`.
+  `.claude/gate-run/landing-precondition.mjs`
 
 - **`isolation-guard-screens-edits-but-not-shell-writes`** — CLOSED BY MECHANISM 2026-09-30
-  (b100-am-ui). A rule enforced on ONE write channel and absent on the other is not a rule. MEASURED
-  twice on 2026-09-30 (workers `ad9703db` and `a5808993`): each was isolated in its own worktree, its
-  brief authorised edits to gitignored main-checkout tooling by absolute path, the harness refused its
-  `Edit`/`Write` calls while a plain `cp` onto the same path ran, and both shipped by copying across.
-  The refusal text is the HARNESS's own (it is in no guard of ours), so the edit channel is not ours to
-  change; the gap was that nothing on the shell channel said the same. **POLICY, one rule:** an isolated
+  (b100-am-ui). A rule enforced on ONE write channel and absent on the other is not a rule. **POLICY, one rule:** an isolated
   worker writes ONLY inside its own worktree and its private scratch; main-checkout tooling is changed by
   a worker that is NOT isolated and whose brief carries a `TENANCY:` line naming it. RULE: before a brief
   authorises a write by absolute path, establish whether its worker is isolated; an isolated worker is
@@ -414,10 +314,7 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   a call, never per tool, so every channel gets the same answer. Two faces of the lesson stay
   unmechanised and are stated: a brief's prose authorisation cannot be discriminated from its prohibition
   (the same measured class as `brief-tenancy`), and writes made by a child process or by `rm`/`mkdir`/
-  `touch` are not lexed. Mechanism: `.claude/isolation-boundary/guard.mjs` over the single shared
-  write-target lexer `.claude/write-targets/` (`tool-call-writes.mjs`, `shell-writes.mjs`, `redirect-targets.mjs`),
-  which `golden-guard` now reads too. Selftest 91/91, mutants 20/20 killed, and the two real incident
-  commands replayed through the real dispatcher: DENY.
+  `touch` are not lexed. Mechanism: `.claude/isolation-boundary/guard.mjs`.
 
 - **`unverified-commit-published-by-another-sessions-sync`** — In a repository other live sessions
   sync, any commit on the shared branch is published within minutes, verified or not. RULE: work in
@@ -430,25 +327,10 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
 - **`orchestrator-cwd-change-leaked-to-workers`** — CLOSED BY MECHANISM 2026-09-30. A FOREGROUND
   shell call from the main session that changes the session shell's directory (`cd`, `pushd`,
   `Set-Location`…) moves the harness's "Primary working directory", and the harness announces that to
-  every live worker as an "Environment update". MEASURED twice on 2026-09-30: the first reached a live
-  worker (a595e4b34a58b8c1d), the second was a foreground `cd …/worktrees/fix-spec-types && node …`
-  answered with "Primary working directory: …/fix-spec-types (was …/b100-am-ui)", restored by a later
-  `cd`. MEASURED as NOT moving it: a `( cd X && … )` subshell and a `run_in_background` call. The rule was
-  a ledger line ("never `cd` in a Bash call") and recurred, so it is now a mechanism, not a memory.
+  every live worker as an "Environment update".
   RULE: the main session runs a command in another directory with (1) absolute paths or `git -C <dir>`,
   (2) a `( cd <dir> && … )` subshell, or (3) `run_in_background`. Mechanism:
-  `~/.claude/cwd-change-guard/guard.mjs`, registered through the shell dispatcher manifest
-  (`hook-dispatch/manifests/pretooluse-shell.json`), decided over the shared tokenizer
-  (`shell-command/shell-command.mjs`, now with `includeNested: false`), never a regex or substring: a
-  `cd` counts only in command position at the line's top level, in ANY position (not only the first),
-  and never inside `( )`, `$( )`, backticks, `bash -c`, `cmd /c`, a pipe member, a `&` job, or as DATA
-  (an `echo`, a commit message, a heredoc). A subagent's call is never refused: the caller is told apart
-  by the same two signals `backlog-owner-guard` uses. Selftest 81/81, mutants 29/29 killed, and the
-  wiring proven separately (removing the guard from the manifest turns the selftest red). The real
-  incident command replayed through the real dispatcher: DENY. Replayed over the 83 real main-session
-  shell payloads of session c45d798b: 42 refused, each a foreground `cd`, and the 2 `cd` calls with
-  `run_in_background` allowed. NOT MEASURED, stated: whether a PowerShell `Set-Location` moves the
-  harness cwd the way bash `cd` does — the guard covers it on the same premise.
+  `~/.claude/cwd-change-guard/guard.mjs`.
   @es Una llamada de shell en PRIMER PLANO de la sesión principal que cambia el directorio de la shell
   (`cd`, `pushd`, `Set-Location`) mueve el «Primary working directory» del harness, y este lo anuncia a
   todos los workers vivos. Usar rutas absolutas o `git -C`, un subshell `( cd X && … )` o
@@ -456,21 +338,16 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
 
 - **`backlog-rewritten-from-summary-lost-detail`** — CLOSED BY MECHANISM. A memory record is saved by
   EDITING its previous revision, never by re-summarising it: `mem_save` on an existing `topic_key` is a
-  full upsert that REPLACES the content. Two faces recorded to date:
-  - **EACH FULL REWRITE AUTHORED FROM A RUNNING SUMMARY (2026-09-30).** The master backlog lost measured
-    detail across revisions 53-59. RULE: a revision is the previous one edited; a finding enters with its
+  full upsert that REPLACES the content.
+  - **EACH FULL REWRITE AUTHORED FROM A RUNNING SUMMARY (2026-09-30).** RULE: a revision is the previous one edited; a finding enters with its
     measured detail and keeps it until closed with evidence.
-  - **AN APPEND THAT WAS AN UPSERT (2026-10-01).** A save meant to append to
-    `backlog/1.0.0-bilingual-gate-hardening` (observation #1092) replaced the detailed record with a short
-    update; the prose rule above had already been promoted and recurred. RULE: read the current revision
+  - **AN APPEND THAT WAS AN UPSERT (2026-10-01).** RULE: read the current revision
     (`mem_get_observation`) and resend it WHOLE plus the addition; to retire an item on purpose, write a
     line with a closure word (`CLOSED`, `CERRADO`, `SUPERSEDED`, `SUPERSEDIDO`) AND the item's first 6
     words verbatim. CLOSED BY MECHANISM: `~/.claude/backlog-content-guard/guard.mjs`, a `PreToolUse` guard
     on `mem_save`/`mem_update` (both engram mounts, every caller) that compares logical items of the
     current revision with the new content and denies a write that drops meaningful items; reorder,
-    reflow and additions are allowed. It fails CLOSED for `backlog/*-master` when the store cannot be read
-    and OPEN for ordinary records (tradeoff: an ordinary record can lose detail while the store is
-    unreadable). Selftest, mutants and the real-incident replay in its directory.
+    reflow and additions are allowed.
   @es Un registro de memoria se guarda EDITANDO su revisión anterior, nunca re-resumiéndola: `mem_save`
   sobre un `topic_key` existente es un upsert completo que REEMPLAZA el contenido. Dos caras: cada
   reescritura completa hecha desde un resumen (2026-09-30) y un «añadido» que era un upsert
