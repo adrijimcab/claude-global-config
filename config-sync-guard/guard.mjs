@@ -31,6 +31,7 @@ import { fileURLToPath } from 'node:url';
 
 import { pathspecCommitCommand } from './commit-advice.mjs';
 import { decide } from './decide.mjs';
+import { recordUnexplained } from './pending-ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = path.join(HERE, 'state');
@@ -111,11 +112,13 @@ function blockOutput(dirtyRepos, sessionId) {
  * invocation (`main()` below calls `evaluate(raw)` with one argument, so production always gets
  * `decide()`'s own real defaults). It exists so `selftest.mjs` can drive this exact function — the real
  * wiring: JSON parsing, `decide()`, the block/note formatting, and the journal write — with FAKE repos,
- * instead of only being able to prove the wiring against the two real owner repos.
+ * instead of only being able to prove the wiring against the two real owner repos. `ledgerIo` is the same
+ * kind of seam for the pending ledger (`pending-ledger.mjs`): a selftest points it at a throwaway file.
  * @es `decideDeps` es un segundo parámetro OPCIONAL, reenviado tal cual a `decide()` — ausente en toda
- * invocación real. Existe para que `selftest.mjs` accione esta MISMA función con repos FALSOS.
+ * invocación real. Existe para que `selftest.mjs` accione esta MISMA función con repos FALSOS. `ledgerIo`
+ * es el mismo tipo de costura para el registro de pendientes: un selftest lo apunta a un fichero desechable.
  */
-export function evaluate(raw, decideDeps) {
+export function evaluate(raw, decideDeps, ledgerIo) {
   let payload;
 
   try {
@@ -136,7 +139,11 @@ export function evaluate(raw, decideDeps) {
 
   const sessionId = typeof payload?.session_id === 'string' ? payload.session_id : 'unknown';
 
-  if (verdict.kind === 'note') return { systemMessage: verdict.notes.join('\n') };
+  if (verdict.kind === 'note') {
+    recordUnexplained(verdict.unexplained, sessionId, ledgerIo);
+
+    return { systemMessage: verdict.notes.join('\n') };
+  }
 
   journal({ at: new Date().toISOString(), session: sessionId, repos: verdict.dirtyRepos.map((entry) => entry.repo.name) });
 

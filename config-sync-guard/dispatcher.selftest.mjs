@@ -12,7 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -92,6 +92,7 @@ function writeMain(session, start, end) {
 
 // The real dispatcher, over a real manifest naming the real guard; only its decision inputs are injected.
 const manifest = path.join(scratch, 'stop.json');
+const ledger = path.join(scratch, 'pending.jsonl');
 
 writeFileSync(manifest, JSON.stringify({ event: 'Stop', guards: [GUARD] }), 'utf8');
 
@@ -100,7 +101,7 @@ async function stopThrough(sessionId, extra = {}) {
   const importer = async (file) => {
     const module = await import(pathToFileURL(file).href);
 
-    return { evaluate: (raw) => module.evaluate(raw, { repos: [repo], liveAgents: liveAgentWrites(Date.now(), agentRecords(projects)), dismissals: [] }) };
+    return { evaluate: (raw) => module.evaluate(raw, { repos: [repo], liveAgents: liveAgentWrites(Date.now(), agentRecords(projects)), dismissals: [] }, { ledger }) };
   };
 
   return dispatch(manifest, JSON.stringify(payload), { importer });
@@ -148,7 +149,12 @@ try {
   const orphan = await stopThrough(THIRD_SESSION);
 
   check('a file no live shell call explains blocks no session', orphan.output?.decision, undefined);
-  check('it is surfaced as a note naming the path, on every turn', orphan.output?.systemMessage?.includes('notes.md') && orphan.output?.systemMessage?.includes('no live session made'), true);
+  check('it is surfaced as a note naming the path', orphan.output?.systemMessage?.includes('notes.md') && orphan.output?.systemMessage?.includes('no live session made'), true);
+
+  const again = await stopThrough(THIRD_SESSION);
+
+  check('and again on the next turn', again.output?.systemMessage?.includes('notes.md'), true);
+  check('the ledger holds the path exactly once, however many turns noted it', readFileSync(ledger, 'utf8').split('\n').filter((line) => line.includes('notes.md')).length, 1);
 
   const bounded = await stopThrough(THIS_SESSION, { stop_hook_active: true });
 

@@ -26,6 +26,7 @@ import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs, readDismissals } from
 import { decide } from './decide.mjs';
 import { measureFingerprint } from './fingerprint.mjs';
 import { evaluate } from './guard.mjs';
+import { recordUnexplained } from './pending-ledger.mjs';
 import { CLOCK_TOLERANCE_MS, shellWindowsIn, withinWindow } from './shell-windows.mjs';
 import { parseStatusPorcelain } from './status.mjs';
 import { parseAheadLog } from './unpushed-commits.mjs';
@@ -33,6 +34,8 @@ import { writtenPathsIn } from './transcript-writes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD_CLI = path.join(HERE, 'guard.mjs');
+/** A path inside the fake repos' worktree (`HERE`): where a dirty file's writer must have written. @es Una ruta dentro del worktree de los repos falsos. */
+const here = (...segments) => path.join(HERE, ...segments);
 
 let passed = 0;
 const failures = [];
@@ -113,7 +116,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
 // ---------------------------------------------------------------------------------------------
 {
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt') });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('foo.txt')) });
   const unexplained = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map() });
 
   check('dirty, written by this session\'s own main transcript -> block', result?.kind, 'block');
@@ -128,17 +131,17 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
 // ---------------------------------------------------------------------------------------------
 {
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
-  const liveAgents = agents({ 'agent-x': liveAgent('s-2', edit('C:\\fake\\foo.txt')) });
+  const liveAgents = agents({ 'agent-x': liveAgent('s-2', edit(here('foo.txt'))) });
 
   check('dirty, and a LIVE agent WROTE the path -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'allow');
-  check('dirty, written by a live SUBAGENT of this very session (its worker mid-run) -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: agents({ w: liveAgent('s-1', edit('C:\\fake\\foo.txt')) }) }), 'allow');
+  check('dirty, written by a live SUBAGENT of this very session (its worker mid-run) -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: agents({ w: liveAgent('s-1', edit(here('foo.txt'))) }) }), 'allow');
 }
 {
   // Measured 2026-10-01: 8 of 8 live transcripts MENTIONED lessons-ledger.md (the contract text that
   // imports it rides in every context), so every ledger hunk was excused. A mention excuses nothing.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M lessons-ledger.md\n' });
   const mentioned = agents({ 'agent-x': liveAgent('s-2', prose('@~/.claude/lessons-ledger.md is imported'), bash('rg -n RULE lessons-ledger.md')) });
-  const written = agents({ 'agent-x': liveAgent('s-2', edit('C:\\Users\\me\\.claude\\lessons-ledger.md')) });
+  const written = agents({ 'agent-x': liveAgent('s-2', edit(here('lessons-ledger.md'))) });
 
   check('dirty, a live agent only MENTIONED/READ the path (prose, shell command) -> unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: mentioned }), 'note');
   check('dirty, the same path WRITTEN by a live agent (absolute Edit path) -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: written }), 'allow');
@@ -156,7 +159,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
 {
   // A git status line reporting a wholly-new, untracked DIRECTORY (`??  new-dir/`), never a file.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n?? new-dir/\n' });
-  const liveAgents = agents({ 'agent-x': liveAgent('s-2', edit('C:\\fake\\new-dir\\inner-file.ts')) });
+  const liveAgents = agents({ 'agent-x': liveAgent('s-2', edit(here('new-dir', 'inner-file.ts'))) });
 
   check('a collapsed, wholly-untracked NEW DIRECTORY is attributed when a live agent wrote a file under it -> allow', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'allow');
 }
@@ -165,7 +168,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n?? new-dir/\n' });
 
   check('a collapsed NEW DIRECTORY no live transcript wrote under -> unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map() }), 'note');
-  check('a collapsed NEW DIRECTORY this session wrote under -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\new-dir\\a.ts') }), 'block');
+  check('a collapsed NEW DIRECTORY this session wrote under -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('new-dir', 'a.ts')) }), 'block');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -180,11 +183,13 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   check('a path a live agent\'s shell command only NAMES (no window, no write) -> unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'note');
 }
 {
-  // A live agent that wrote a DIFFERENT file, and a same-named file elsewhere -> block.
+  // A dirty file in a checkout is changed by a write to THAT file. A write to the SAME relative path in
+  // another worktree (or checkout) is a different file, and must not be blamed on whoever edited the copy.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M owned-dir/generated.json\n' });
-  const liveAgents = agents({ 'agent-other': liveAgent('s-2', edit('C:\\fake\\unrelated-dir\\other-output.txt'), edit('C:\\fake\\other-dir\\generated.json'), edit('C:\\fake\\not-owned-dir\\generated.json')) });
+  const copy = agents({ 'main-s-1': mainAgent('s-1', edit('C:\\other-worktree\\owned-dir\\generated.json'), edit(here('not-owned-dir', 'generated.json'))) });
 
-  check('the live agent wrote a different path, a same-named file elsewhere, and a longer directory name ending alike -> unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents }), 'note');
+  check('this session wrote the same relative path in another worktree, and a like-named directory here -> not its file: unexplained, so a note', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: copy }), 'note');
+  check('this session wrote the exact file in this checkout -> block', verdictKind(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('owned-dir', 'generated.json')) }), 'block');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -218,6 +223,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   check('ANOTHER session\'s main shell call contains the mtime -> excused (note-free allow), never blocking this session', kindWith(agents({ m: shellActor('s-2', false, T - 500, T + 500) })), 'allow');
   check('a live SUBAGENT of another session ran the shell call -> excused (its work in progress)', kindWith(agents({ w: shellActor('s-2', true, T - 500, T + 500) })), 'allow');
   check('a live subagent of THIS session ran the shell call -> excused, its parent does not commit a worker\'s working state', kindWith(agents({ w: shellActor('s-1', true, T - 500, T + 500) })), 'allow');
+  check('a worker WROTE the file while this session merely ran a command over the same time -> the write outranks the window: excused', decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: agents({ w: liveAgent('s-2', edit(here('foo.txt'))), m: shellActor('s-1', false, T - 500, T + 500) }), mtimeOf: () => T })?.kind ?? 'allow', 'allow');
   check('this session and another both ran a shell call over the mtime -> block (the maker is still blocked)', kindWith(agents({ a: shellActor('s-2', false, T - 500, T + 500), b: shellActor('s-1', false, T - 500, T + 500) })), 'block');
   check('no shell call contains the mtime (outside every window) -> unexplained, so a note', kindWith(agents({ m: shellActor('s-1', false, T - 9000, T - 5000) })), 'note');
   check('a shell call ending exactly one tolerance before the mtime still explains it -> block', kindWith(agents({ m: shellActor('s-1', false, T - 5000, T - CLOCK_TOLERANCE_MS) })), 'block');
@@ -249,6 +255,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   check('an ahead commit this session\'s own live agent wrote -> block', verdictFor(ahead(1, one), own)?.kind, 'block');
   check('an ahead commit written by another session AND by this one -> block (ours)', verdictFor(ahead(1, one), both)?.kind, 'block');
   check('an ahead commit nobody live wrote -> block', verdictFor(ahead(1, one), new Map())?.kind, 'block');
+  check('an ahead commit whose path another session wrote only under a longer directory name ending alike -> block', verdictFor(ahead(1, one), agents({ 'agent-other': liveAgent('s-2', edit('C:\\wt\\cfg\\xfoo\\a.mjs')) }))?.kind, 'block');
   check('an ahead commit another live agent only MENTIONED -> block', verdictFor(ahead(1, one), mentioned)?.kind, 'block');
   check('a mixed commit (one path written by another session, one by nobody) -> block', verdictFor(ahead(1, ['bbb2222', 'feat: b', 'foo/a.mjs', 'foo/c.mjs']), other)?.kind, 'block');
   check('a commit that changes no path (empty) -> block', verdictFor(ahead(1, ['ccc3333', 'chore: empty']), other)?.kind, 'block');
@@ -272,7 +279,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
 {
   // No dismissal recorded at all -> block. Absence excuses nothing.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => 'fixed-fingerprint-1', dismissals: [] });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('foo.txt')), fingerprintOf: () => 'fixed-fingerprint-1', dismissals: [] });
 
   check('dirty, no dismissal recorded -> block', result?.kind, 'block');
 }
@@ -280,7 +287,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // A dismissal recorded for this EXACT repo + fingerprint -> allow, but with a note, never silently.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
   const dismissals = [{ repo: 'r', fingerprint: 'fixed-fingerprint-1', at: '2026-09-30T00:00:00.000Z', reason: 'the frozen agent\'s work here awaits an owner decision' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('foo.txt')), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
 
   check('dirty, a MATCHING dismissal -> note, never a silent allow and never a block', result?.kind, 'note');
   check('the note names when it was dismissed and carries the reason', result?.notes?.[0]?.includes('dismissed at 2026-09-30T00:00:00.000Z') && result?.notes?.[0]?.includes('owner decision'), true);
@@ -289,7 +296,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // A dismissal exists for this repo, but the CONTENT changed since (a different tree id) -> block.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
   const dismissals = [{ repo: 'r', fingerprint: '0:tree-before-the-edit', at: '2026-09-30T00:00:00.000Z', reason: 'dismissed before foo.txt was edited again' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => '0:tree-after-the-edit', dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('foo.txt')), fingerprintOf: () => '0:tree-after-the-edit', dismissals });
 
   check('dirty, dismissal is for a DIFFERENT content fingerprint (edited since) -> block', result?.kind, 'block');
 }
@@ -299,7 +306,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // an edited byte does; same mechanism as the content-change case, different real-world trigger.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n?? new-file.txt\n' });
   const dismissals = [{ repo: 'r', fingerprint: '0:tree-before-new-file', at: '2026-09-30T00:00:00.000Z', reason: 'dismissed before new-file.txt ever appeared' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => '0:tree-after-new-file', dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('foo.txt')), fingerprintOf: () => '0:tree-after-new-file', dismissals });
 
   check('dirty, a new path appeared since the dismissal -> block', result?.kind, 'block');
 }
@@ -315,7 +322,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
     return `${String(aheadCount)}:fixed-tree`;
   };
   const dismissals = [{ repo: 'r', fingerprint: '2:fixed-tree', at: '2026-09-30T00:00:00.000Z', reason: 'dismissed when only 2 commits sat ahead of the remote' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf, dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('foo.txt')), fingerprintOf, dismissals });
 
   check('dirty, ahead count changed since the dismissal (2 -> 3) -> block', result?.kind, 'block');
 }
@@ -325,7 +332,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // past excuse" — the same fail-toward-block stance as every other measurement in this mechanism.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
   const dismissals = [{ repo: 'r', fingerprint: 'irrelevant-because-unmeasured', at: '2026-09-30T00:00:00.000Z', reason: 'this dismissal exists but cannot be reached this time' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => undefined, dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('foo.txt')), fingerprintOf: () => undefined, dismissals });
 
   check('dirty, fingerprint could not be measured this time -> block, never excused by luck', result?.kind, 'block');
 }
@@ -334,7 +341,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   // fingerprint alone is not a key: it is scoped to (repo name, fingerprint) TOGETHER.
   const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
   const dismissals = [{ repo: 'a-different-repo', fingerprint: 'fixed-fingerprint-1', at: '2026-09-30T00:00:00.000Z', reason: 'this dismissal belongs to a different declared repo entirely' }];
-  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere('C:\\fake\\foo.txt'), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
+  const result = decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: madeHere(here('foo.txt')), fingerprintOf: () => 'fixed-fingerprint-1', dismissals });
 
   check('dirty, a dismissal with the same fingerprint but a DIFFERENT repo name -> block', result?.kind, 'block');
 }
@@ -412,7 +419,7 @@ check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
 
   const dirtyRepo = fakeRepo('fixture-repo', { statusText: '## master...origin/master [ahead 1]\n M foo.txt\n?? sub/x.txt\n', logText: logOf(['eee5555', 'feat: e', 'foo.txt']) });
   const raw = JSON.stringify(STOP_PAYLOAD({ session_id: session }));
-  const output = evaluate(raw, { repos: [dirtyRepo], liveAgents: agents({ main: mainAgent(session, edit('C:\\fake\\foo.txt'), edit('C:\\fake\\sub\\x.txt')) }) });
+  const output = evaluate(raw, { repos: [dirtyRepo], liveAgents: agents({ main: mainAgent(session, edit(here('foo.txt')), edit(here('sub', 'x.txt'))) }) });
   const advice = output?.hookSpecificOutput?.additionalContext ?? '';
 
   check('evaluate() with a real dirty finding returns a block decision', output?.decision, 'block');
@@ -424,6 +431,15 @@ check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
   const cleanOutput = evaluate(JSON.stringify(STOP_PAYLOAD({ session_id: session })), { repos: [fakeRepo('fixture-repo')], liveAgents: new Map() });
 
   check('evaluate() with a clean fixture repo allows', cleanOutput, undefined);
+
+  const ledgerDir = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-evaluate-'));
+  const ledger = path.join(ledgerDir, 'pending.jsonl');
+  const orphanRepo = fakeRepo('fixture-repo', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const orphan = evaluate(raw, { repos: [orphanRepo], liveAgents: new Map() }, { ledger });
+
+  check('evaluate() with a path no live session made notes it and does not block', orphan?.decision === undefined && orphan?.systemMessage?.includes('foo.txt'), true);
+  check('evaluate() records that path in the ledger under this session', readFileSync(ledger, 'utf8').includes(`"session":"${session}"`) && readFileSync(ledger, 'utf8').includes('foo.txt'), true);
+  rmSync(ledgerDir, { recursive: true, force: true });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -491,6 +507,21 @@ check(
   check('latestChangeMs of a directory covers the newest file under it (3e6 ms) and never follows a junction to the far-future file (4.2e12 ms)', found >= 3_000_000 && found < 4_200_000_000_000, true);
   check('latestChangeMs visits at most `limit` entries: with 1 it measures the directory itself (2e6 ms) and nothing under it', latestChangeMs(tree, 1), 2_000_000);
   check('latestChangeMs of a path that cannot be measured is undefined, never zero', latestChangeMs(path.join(root, 'missing')), undefined);
+  rmSync(root, { recursive: true, force: true });
+}
+{
+  const root = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-ledger-'));
+  const ledger = path.join(root, 'state', 'pending.jsonl');
+  const io = { ledger, now: () => new Date('2026-10-01T10:00:00.000Z') };
+  const entry = (repo, file) => ({ repo, path: file });
+  const lines = () => readFileSync(ledger, 'utf8').split('\n').filter((line) => line.length > 0).map((line) => JSON.parse(line));
+
+  check('a path seen for the first time is recorded with the time and the session', recordUnexplained([entry('r', '/a')], 's-9', io), [entry('r', '/a')]);
+  check('the record carries when, who saw it, which repo and which path', lines(), [{ at: '2026-10-01T10:00:00.000Z', session: 's-9', repo: 'r', path: '/a' }]);
+  check('the same repo and path seen again is not recorded twice', recordUnexplained([entry('r', '/a')], 's-10', io), []);
+  check('the same path in another repo, and a new path, are recorded', recordUnexplained([entry('r', '/a'), entry('other', '/a'), entry('r', '/b')], 's-10', io), [entry('other', '/a'), entry('r', '/b')]);
+  check('the ledger holds each repo and path exactly once', lines().length, 3);
+  check('a ledger that cannot be written records nothing and throws nothing', recordUnexplained([entry('r', '/c')], 's', { ledger: path.join(root, 'state', 'pending.jsonl', 'not-a-directory.jsonl') }), []);
   rmSync(root, { recursive: true, force: true });
 }
 check('parseAheadLog reads each commit with its paths, in order', parseAheadLog(logOf(['abc1234', 'feat: x: y', 'a/b.mjs', 'c.mjs'], ['def5678', 'chore: empty'])), [

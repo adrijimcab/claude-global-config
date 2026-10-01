@@ -126,9 +126,15 @@ function withoutTrailingSeparators(value) {
   return value.slice(0, end);
 }
 
-/** Whether the normalized `written` path is `needle` or sits at a directory boundary around it. @es Si `written` es `needle` o lo contiene en frontera de directorio. */
+/**
+ * Whether the normalized `written` path is `needle`, ends with it at a directory boundary (a RELATIVE
+ * commit path matched in a worktree that was later landed), or lies under it (an ABSOLUTE `needle` that
+ * git collapsed to a directory).
+ * @es Si `written` es `needle`, termina en él en frontera de directorio (ruta relativa de un commit de un
+ * worktree luego aterrizado) o está bajo él (`needle` ABSOLUTA que git colapsó a un directorio).
+ */
 function writtenMatches(written, needle) {
-  return written === needle || written.endsWith(`/${needle}`) || written.includes(`/${needle}/`);
+  return written === needle || written.endsWith(`/${needle}`) || written.startsWith(`${needle}/`);
 }
 
 /**

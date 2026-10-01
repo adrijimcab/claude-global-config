@@ -113,7 +113,7 @@ function judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf }) {
   return dirtyPaths.map((relativePath) => {
     const absolute = path.join(repo.worktree, relativePath);
 
-    return { absolute, verdict: ownershipVerdict(claimsOn(relativePath, mtimeOf(absolute), liveAgents), sessionId) };
+    return { absolute, verdict: ownershipVerdict(claimsOn(absolute, mtimeOf(absolute), liveAgents), sessionId) };
   });
 }
 
@@ -155,8 +155,8 @@ function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, 
 
 /**
  * The decision over a parsed Stop payload. Returns `undefined` (allow silently),
- * `{ kind: 'note', notes }` (allow, with a non-blocking message), or `{ kind: 'block', dirtyRepos }`
- * (block). Every dependency is injectable so the whole state space is exercisable without a live fleet
+ * `{ kind: 'note', notes, unexplained }` (allow, with a non-blocking message; `unexplained` lists the
+ * `{ repo, path }` no live session made, for the ledger), or `{ kind: 'block', dirtyRepos }` (block). Every dependency is injectable so the whole state space is exercisable without a live fleet
  * or a real git repo.
  * @es La decisión sobre un payload `Stop` ya parseado. `undefined` (permite en silencio), `{kind:'note'}`
  * (permite con mensaje), o `{kind:'block'}` (bloquea). Toda dependencia es inyectable.
@@ -181,5 +181,7 @@ export function decide(payload, { repos = declaredRepos(), now = Date.now(), liv
       return `config-sync-guard: ${entry.repo.name} — dismissed at ${entry.dismissal.at}: ${entry.dismissal.reason}`;
     });
 
-  return notes.length > 0 ? { kind: 'note', notes } : undefined;
+  const unexplained = classified.flatMap((entry) => (entry.state === 'noted' ? entry.unexplained.map((absolute) => ({ repo: entry.repo.name, path: absolute })) : []));
+
+  return notes.length > 0 ? { kind: 'note', notes, unexplained } : undefined;
 }

@@ -39,17 +39,25 @@ import { writersOf } from './attribution.mjs';
 import { withinWindow } from './shell-windows.mjs';
 
 /**
- * Every live actor claiming `relativePath`, as `[{ session, subagent }]`: those that wrote it, and those
- * that ran a shell call around `mtimeMs`. A path with no measurable time (`undefined`) is inside no
- * window: every comparison with `undefined` is false.
- * @es Cada actor vivo que reclama `relativePath`: los que la escribieron y los que corrieron un shell
- * alrededor de `mtimeMs`. Una ruta sin hora medible (`undefined`) no cae en ninguna ventana.
+ * Every live actor claiming `dirtyPath`, as `[{ session, subagent }]`: those that wrote it, and those
+ * that ran a shell call around `mtimeMs`. `dirtyPath` is the ABSOLUTE path in the checkout: a dirty file
+ * in a checkout is changed by a write to THAT file, never by a write to the same relative path in another
+ * worktree (which a relative match would blame on whoever edited the copy). WRITES OUTRANK WINDOWS: a
+ * structured write names the maker exactly, a shell window only says who happened to be running a command
+ * (measured on the real state 2026-10-01: a coordinator's long shell call overlapped the time a worker
+ * wrote two files, and would have blamed the coordinator); windows speak only when no write does. A path
+ * with no measurable time (`undefined`) is inside no window: every comparison with `undefined` is false.
+ * @es Cada actor vivo que reclama `dirtyPath`, ABSOLUTA en el checkout: un fichero sucio lo cambia una
+ * escritura a ESE fichero, nunca una a la misma ruta relativa en otro worktree. LAS ESCRITURAS PESAN MÁS
+ * QUE LAS VENTANAS: una escritura estructurada nombra al autor; una ventana solo dice quién corría un
+ * comando (medido en el estado real: un shell largo del coordinador coincidió con la escritura de un
+ * worker y le habría culpado). Sin hora medible no cae en ninguna ventana.
  */
-export function claimsOn(relativePath, mtimeMs, liveAgents) {
-  const writers = writersOf(relativePath, liveAgents);
-  const runners = [...liveAgents.values()].filter((agent) => withinWindow(agent.windows ?? [], mtimeMs));
+export function claimsOn(dirtyPath, mtimeMs, liveAgents) {
+  const writers = writersOf(dirtyPath, liveAgents);
+  const claimants = writers.length > 0 ? writers : [...liveAgents.values()].filter((agent) => withinWindow(agent.windows ?? [], mtimeMs));
 
-  return [...writers, ...runners].map(({ session, subagent }) => ({ session, subagent }));
+  return claimants.map(({ session, subagent }) => ({ session, subagent }));
 }
 
 /** `'maker'`, `'theirs'` or `'unexplained'` for `claims` as seen by `sessionId`. @es El desenlace de `claims` visto por `sessionId`. */
