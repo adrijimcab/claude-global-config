@@ -348,6 +348,11 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     on `mem_save`/`mem_update` (both engram mounts, every caller) that compares logical items of the
     current revision with the new content and denies a write that drops meaningful items; reorder,
     reflow and additions are allowed.
+  - **AN IN-PLACE EDIT IS A DROP (2026-10-01, `backlog-rewritten-from-summary-lost-detail`).** Resending
+    the whole record while rewording an item, or inserting a line INSIDE a paragraph (contiguous unmarked
+    lines are ONE item), reads as that item deleted. RULE: an existing item is resent byte-identical; new
+    facts go in their own paragraph or bullet; changing an item means a closure line for the old one plus
+    the new one. The guard refused all three such writes, so the mechanism held; this face names the shape.
   @es Un registro de memoria se guarda EDITANDO su revisión anterior, nunca re-resumiéndola: `mem_save`
   sobre un `topic_key` existente es un upsert completo que REEMPLAZA el contenido. Dos caras: cada
   reescritura completa hecha desde un resumen (2026-09-30) y un «añadido» que era un upsert

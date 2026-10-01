@@ -43,3 +43,9 @@ Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the t
   `~/.claude/backlog-content-guard/guard.mjs` (cierra CERRADO para `backlog/*-master` si no puede leer
   el almacén; ABIERTO para registros ordinarios).
 ````
+
+## Ledger line archived 2026-10-01 (promoted)
+
+- [promoted] 2026-10-01 — backlog-rewritten-from-summary-lost-detail: mechanism C:/Users/adrian.jimenez/.claude/backlog-content-guard/guard.mjs <!--fc:backlog-rewritten-from-summary-lost-detail#4-->
+
+Promoted 2026-10-01 to ~/.claude/rules/promoted-rules.md; closed by mechanism C:/Users/adrian.jimenez/.claude/backlog-content-guard/guard.mjs (selftest run, exit 0)
