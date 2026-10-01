@@ -19,7 +19,7 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { agentRecords, isLive, liveAgentWrites, liveOwnerOf } from './attribution.mjs';
+import { agentRecords, FINISHED_HORIZON_MS, isLive, liveAgentWrites, liveOwnerOf } from './attribution.mjs';
 import { pathspecCommitCommand } from './commit-advice.mjs';
 import { latestChangeMs } from './path-mtime.mjs';
 import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs, readDismissals } from './dismiss.mjs';
@@ -77,9 +77,12 @@ const prose = (text) => JSON.stringify({ type: 'user', message: { content: text 
  * @es Un SUBAGENTE vivo de `session` con transcript `lines`, el transcript PRINCIPAL de la sesión, y un
  * actor que corrió un shell durante `[start, end]` ms.
  */
-const liveAgent = (session, ...lines) => ({ session, subagent: true, writes: writtenPathsIn(lines.join('\n')), windows: [] });
+const liveAgent = (session, ...lines) => ({ session, subagent: true, live: true, writes: writtenPathsIn(lines.join('\n')), windows: [] });
 const mainAgent = (session, ...lines) => ({ ...liveAgent(session, ...lines), subagent: false });
-const shellActor = (session, subagent, start, end) => ({ session, subagent, writes: [], windows: [{ start, end }] });
+const shellActor = (session, subagent, start, end) => ({ session, subagent, live: true, writes: [], windows: [{ start, end }] });
+/** A subagent of `session` that has STOPPED (transcript past the liveness window). @es Un subagente de `session` que YA PARÓ. */
+const finishedAgent = (session, ...lines) => ({ ...liveAgent(session, ...lines), live: false });
+const finishedShell = (session, start, end) => ({ ...shellActor(session, true, start, end), live: false });
 const agents = (entries) => new Map(Object.entries(entries));
 /** Session `s-1` (the one `STOP_PAYLOAD` ends) wrote these files itself. @es La sesión `s-1` escribió estos ficheros. */
 const madeHere = (...files) => agents({ 'main-s-1': mainAgent('s-1', ...files.map((file) => edit(file))) });
@@ -229,6 +232,25 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   check('a shell call ending exactly one tolerance before the mtime still explains it -> block', kindWith(agents({ m: shellActor('s-1', false, T - 5000, T - CLOCK_TOLERANCE_MS) })), 'block');
   check('a shell call ending one millisecond more than that before the mtime does not -> note', kindWith(agents({ m: shellActor('s-1', false, T - 5000, T - CLOCK_TOLERANCE_MS - 1) })), 'note');
   check('a path with no measurable time (deleted) is never explained by a window -> note', decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: agents({ m: shellActor('s-1', false, 0, 9e15) }), mtimeOf: () => undefined })?.kind, 'note');
+  // FINISHED workers (transcript past the liveness window): their output belongs to the session that delegated them.
+  const finishedBlock = (liveAgents, payload = STOP_PAYLOAD()) => decide(payload, { repos: [repo], liveAgents, mtimeOf: () => T });
+  const wroteIt = finishedBlock(agents({ w: finishedAgent('s-1', edit(here('foo.txt'))) }));
+
+  check('a FINISHED worker of this session wrote the file -> block: its parent must commit or discard it', wroteIt?.kind, 'block');
+  check('the finding names the path and the finished worker that made it', wroteIt?.dirtyRepos?.[0]?.workerOutput, [{ path: here('foo.txt'), workers: ['w'] }]);
+  check('a FINISHED worker of this session ran the shell call over the mtime (no write) -> block, naming the worker', finishedBlock(agents({ w: finishedShell('s-1', T - 500, T + 500) }))?.dirtyRepos?.[0]?.workerOutput, [{ path: here('foo.txt'), workers: ['w'] }]);
+  check('only THIS session\'s finished workers are named, not another session\'s that also wrote it', finishedBlock(agents({ f: finishedAgent('s-1', edit(here('foo.txt'))), g: finishedAgent('s-2', edit(here('foo.txt'))) }))?.dirtyRepos?.[0]?.workerOutput, [{ path: here('foo.txt'), workers: ['f'] }]);
+
+  const twoPaths = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n M bar.txt\n' });
+  const held = decide(STOP_PAYLOAD(), { repos: [twoPaths], mtimeOf: () => T, liveAgents: agents({ f: finishedAgent('s-1', edit(here('foo.txt')), edit(here('bar.txt'))), l: liveAgent('s-2', edit(here('bar.txt'))) }) });
+
+  check('a path a live worker holds is not listed as worker output even when a finished worker of this session also wrote it', [held?.dirtyRepos?.[0]?.ownPaths, held?.dirtyRepos?.[0]?.workerOutput], [[here('foo.txt')], [{ path: here('foo.txt'), workers: ['f'] }]]);
+  check('a FINISHED worker of ANOTHER session wrote the file -> excused: not this session\'s to commit', finishedBlock(agents({ w: finishedAgent('s-2', edit(here('foo.txt'))) }))?.kind ?? 'allow', 'allow');
+  check('a FINISHED worker of this session and a LIVE worker of another both wrote it -> the live worker holds it: excused', finishedBlock(agents({ f: finishedAgent('s-1', edit(here('foo.txt'))), l: liveAgent('s-2', edit(here('foo.txt'))) }))?.kind ?? 'allow', 'allow');
+  check('a FINISHED worker of this session wrote it and a main session of another did too -> block (the finished worker is ours)', finishedBlock(agents({ f: finishedAgent('s-1', edit(here('foo.txt'))), m: mainAgent('s-2', edit(here('foo.txt'))) }))?.kind, 'block');
+  check('a payload without a session id: a finished worker\'s write blocks (cannot tell whose it is)', finishedBlock(agents({ w: finishedAgent('s-2', edit(here('foo.txt'))) }), { hook_event_name: 'Stop' })?.kind, 'block');
+  check('a LIVE worker of this session beside its main transcript is not named as finished worker output', finishedBlock(agents({ m: mainAgent('s-1', edit(here('foo.txt'))), w: liveAgent('s-1', edit(here('foo.txt'))) }))?.dirtyRepos?.[0]?.workerOutput, []);
+  check('a path this session\'s main transcript wrote (no finished worker) names no worker output', finishedBlock(agents({ m: mainAgent('s-1', edit(here('foo.txt'))) }))?.dirtyRepos?.[0]?.workerOutput, []);
   check('a payload without a session id cannot tell "another session" from "mine": a main shell call blocks', decide({ hook_event_name: 'Stop' }, { repos: [repo], liveAgents: agents({ m: shellActor('s-2', false, T - 500, T + 500) }), mtimeOf: () => T })?.kind, 'block');
 }
 
@@ -419,8 +441,10 @@ check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
 
   const dirtyRepo = fakeRepo('fixture-repo', { statusText: '## master...origin/master [ahead 1]\n M foo.txt\n?? sub/x.txt\n', logText: logOf(['eee5555', 'feat: e', 'foo.txt']) });
   const raw = JSON.stringify(STOP_PAYLOAD({ session_id: session }));
-  const output = evaluate(raw, { repos: [dirtyRepo], liveAgents: agents({ main: mainAgent(session, edit(here('foo.txt')), edit(here('sub', 'x.txt'))) }) });
+  const output = evaluate(raw, { repos: [dirtyRepo], liveAgents: agents({ main: mainAgent(session, edit(here('foo.txt'))), 'agent-finished': finishedAgent(session, edit(here('sub', 'x.txt'))) }) });
   const advice = output?.hookSpecificOutput?.additionalContext ?? '';
+
+  check('the block says a path is the output of the session\'s finished worker, by id, and what to do with it', advice.includes('sub/x.txt is the output of your finished worker agent-finished: review it, then commit it with a pathspec or discard it deliberately.') && !advice.includes('foo.txt is the output'), true);
 
   check('evaluate() with a real dirty finding returns a block decision', output?.decision, 'block');
   check('the block names the unowned commit', advice.includes('eee5555 feat: e'), true);
@@ -550,18 +574,33 @@ check('pathspecCommitCommand stages then commits only the named paths, quoted, a
 
   utimesSync(deadTranscript, longAgo, longAgo); // REAL backdated mtime — the one property isLive reads
 
+  // A finished subagent whose last record is a shell call that never returned (it stopped mid-command), a
+  // main transcript as old as the dead one, and a subagent past the horizon.
+  const cutOff = path.join(scratch, 'cut-off.jsonl');
+  const ancient = path.join(scratch, 'ancient.jsonl');
+
+  writeFileSync(cutOff, `${shellCall}\n`, 'utf8');
+  writeFileSync(ancient, `${edit('C:\\fake\\ancient.ts')}\n`, 'utf8');
+  utimesSync(cutOff, longAgo, longAgo);
+  utimesSync(ancient, new Date(now - FINISHED_HORIZON_MS - 1000), new Date(now - FINISHED_HORIZON_MS - 1000));
+
   const liveRecord = { id: 'agent-live', session: 's-live', subagent: true, transcript: liveTranscript };
-  const deadRecord = { id: 'agent-dead', session: 's-dead', transcript: deadTranscript };
+  const deadRecord = { id: 'agent-dead', session: 's-dead', subagent: true, transcript: deadTranscript };
+  const deadMain = { id: 'main-dead', session: 's-dead', subagent: false, transcript: deadTranscript };
 
   check('isLive: a transcript written NOW is live', isLive(liveRecord, now), true);
   check('isLive: a transcript backdated past the window is DEAD', isLive(deadRecord, now), false);
 
-  const texts = liveAgentWrites(now, [liveRecord, deadRecord]);
+  const texts = liveAgentWrites(now, [liveRecord, deadRecord, deadMain, { id: 'agent-cut-off', session: 's-dead', subagent: true, transcript: cutOff }, { id: 'agent-ancient', session: 's-dead', subagent: true, transcript: ancient }]);
 
-  check('liveAgentWrites includes the live agent, with its session and what it wrote', texts.get('agent-live'), { session: 's-live', subagent: true, writes: ['c:/fake/live.ts'], windows: [{ start: Date.parse('2026-10-01T00:00:01.000Z'), end: Date.parse('2026-10-01T00:00:03.000Z') }] });
-  check('liveAgentWrites EXCLUDES the dead agent entirely', texts.has('agent-dead'), false);
+  check('liveAgentWrites includes the live agent, with its session and what it wrote', texts.get('agent-live'), { session: 's-live', subagent: true, live: true, writes: ['c:/fake/live.ts'], windows: [{ start: Date.parse('2026-10-01T00:00:01.000Z'), end: Date.parse('2026-10-01T00:00:03.000Z') }] });
+  check('liveAgentWrites keeps a FINISHED subagent within the horizon, marked not live, with what it wrote', texts.get('agent-dead'), { session: 's-dead', subagent: true, live: false, writes: ['c:/fake/dead.ts'], windows: [] });
+  check('a finished subagent\'s shell call that never returned ends where its transcript ends, not now', texts.get('agent-cut-off')?.windows, [{ start: Date.parse('2026-10-01T00:00:01.000Z'), end: now - 60 * 60 * 1000 }]);
+  check('liveAgentWrites EXCLUDES a finished subagent past the horizon', texts.has('agent-ancient'), false);
+  check('liveAgentWrites EXCLUDES a stopped MAIN transcript: the horizon is for workers only', texts.has('main-dead'), false);
+  check('the finished subagent window is exactly six hours', FINISHED_HORIZON_MS, 6 * 60 * 60 * 1000);
   check('liveOwnerOf finds the live agent for its own path', liveOwnerOf('C:\\fake\\live.ts', texts), 'agent-live');
-  check('liveOwnerOf finds nothing for the dead agent\'s path (its transcript is not even in the map)', liveOwnerOf('C:\\fake\\dead.ts', texts), undefined);
+  check('liveOwnerOf now also finds a finished subagent within the horizon for its path', liveOwnerOf('C:\\fake\\dead.ts', texts), 'agent-dead');
   check('liveOwnerOf is case-insensitive (Windows paths)', liveOwnerOf('c:\\FAKE\\LIVE.TS', texts), 'agent-live');
   check('liveOwnerOf: no match in an unrelated path no live agent mentions', liveOwnerOf('C:\\somewhere-else\\x.ts', texts), undefined);
   // An unparseable dirty path (empty, or all separators) yields an EMPTY needle — without a guard,

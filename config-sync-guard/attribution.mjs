@@ -84,31 +84,58 @@ export function agentRecords(root = path.join(homedir(), '.claude', 'projects'))
   return records;
 }
 
-/** Whether `record`'s transcript was written to within `ACTIVE_WINDOW_MS` of `now`. @es Si el transcript de `record` se escribió dentro de la ventana activa. */
-export function isLive(record, now = Date.now()) {
+/**
+ * How long a FINISHED subagent's transcript is still read (6 hours). A finished worker's output belongs to
+ * its parent session until committed, so it must stay attributable after the worker stops; but every
+ * transcript read costs time in a Stop hook. MEASURED 2026-10-01 over 663 subagent transcripts: 30 min
+ * (live only) 14 transcripts / 71 MB, 6 h 38 / 160 MB, 24 h 87 / 377 MB, 72 h 152 / 633 MB. Six hours
+ * covers the working session that delegated the worker (the parent that must commit it is the one ending
+ * turns now) at about twice the live cost; beyond it the output is stale and stays unexplained (a note and
+ * a ledger entry, `pending-ledger.mjs`).
+ * @es Cuánto tiempo se lee aún el transcript de un subagente TERMINADO (6 horas). Su salida es de la sesión
+ * padre hasta que se commitee, así que debe seguir atribuible; pero cada transcript leído cuesta tiempo
+ * en un hook Stop. MEDIDO sobre 663 transcripts: 30 min 14 / 71 MB, 6 h 38 / 160 MB, 24 h 87 / 377 MB,
+ * 72 h 152 / 633 MB. Seis horas cubren la sesión que lo delegó, a unas dos veces el coste de lo vivo; más
+ * allá la salida es vieja y queda sin explicar (nota y registro).
+ */
+export const FINISHED_HORIZON_MS = 6 * 60 * 60 * 1000;
+
+/** Milliseconds since `record`'s transcript was last written, or `Infinity` when it cannot be read. @es Milisegundos desde la última escritura del transcript, o `Infinity`. */
+function ageOf(record, now) {
   try {
-    return now - statSync(record.transcript).mtimeMs < ACTIVE_WINDOW_MS;
+    return now - statSync(record.transcript).mtimeMs;
   } catch {
-    return false;
+    return Infinity;
   }
 }
 
+/** Whether `record`'s transcript was written to within `ACTIVE_WINDOW_MS` of `now`. @es Si el transcript de `record` se escribió dentro de la ventana activa. */
+export function isLive(record, now = Date.now()) {
+  return ageOf(record, now) < ACTIVE_WINDOW_MS;
+}
+
 /**
- * `Map<id, { session, subagent, writes, windows }>` for every currently-LIVE transcript, `writes` being
- * what it wrote through structured calls and `windows` its shell calls (`shell-windows.mjs`). `records`
- * and `now` are injectable so a selftest never touches the real `~/.claude/projects`.
- * @es `Map<id, { session, subagent, writes, windows }>` para cada transcript VIVO. Inyectables.
+ * `Map<id, { session, subagent, live, writes, windows }>` for every transcript still worth reading: each
+ * LIVE one, and each FINISHED subagent's within `FINISHED_HORIZON_MS` (`live: false`, its unclosed last
+ * shell call ending where the transcript ends). `writes` is what it wrote through structured calls and
+ * `windows` its shell calls (`shell-windows.mjs`). `records` and `now` are injectable so a selftest never
+ * touches the real `~/.claude/projects`.
+ * @es `Map<id, { session, subagent, live, writes, windows }>` para cada transcript que vale la pena leer:
+ * los VIVOS y los subagentes TERMINADOS dentro del horizonte. Inyectables.
  */
 export function liveAgentWrites(now = Date.now(), records = agentRecords()) {
   const byAgent = new Map();
 
   for (const record of records) {
-    if (!isLive(record, now)) continue;
+    const age = ageOf(record, now);
+    const live = age < ACTIVE_WINDOW_MS;
+
+    if (!live && !(record.subagent && age < FINISHED_HORIZON_MS)) continue;
 
     try {
       const text = readFileSync(record.transcript, 'utf8');
 
-      byAgent.set(record.id, { session: record.session, subagent: record.subagent, writes: writtenPathsIn(text), windows: shellWindowsIn(text, now) });
+      byAgent.set(record.id, { session: record.session, subagent: record.subagent, live, writes: writtenPathsIn(text), windows: shellWindowsIn(text, live ? now : now - age) });
     } catch {
       continue;
     }
@@ -147,7 +174,7 @@ function writtenMatches(written, needle) {
 export function writersOf(dirtyPath, liveAgents) {
   const needle = withoutTrailingSeparators(normalizedPath(dirtyPath));
 
-  return [...liveAgents].filter(([, agent]) => agent.writes.some((written) => writtenMatches(written, needle))).map(([id, agent]) => ({ id, session: agent.session, subagent: agent.subagent }));
+  return [...liveAgents].filter(([, agent]) => agent.writes.some((written) => writtenMatches(written, needle))).map(([id, agent]) => ({ id, session: agent.session, subagent: agent.subagent, live: agent.live }));
 }
 
 /** The id of a live agent that wrote `dirtyPath`, or `undefined`. @es El id de un agente vivo que escribió `dirtyPath`, o `undefined`. */

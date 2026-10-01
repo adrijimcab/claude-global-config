@@ -156,6 +156,34 @@ try {
   check('and again on the next turn', again.output?.systemMessage?.includes('notes.md'), true);
   check('the ledger holds the path exactly once, however many turns noted it', readFileSync(ledger, 'utf8').split('\n').filter((line) => line.includes('notes.md')).length, 1);
 
+  // A FINISHED worker (its transcript is hours old) wrote report.md for THIRD_SESSION; another, long past
+  // the horizon, wrote old.md. The first is its parent's to review and commit; the second is only noted.
+  const backdate = (id, hours) => {
+    const at = new Date(Date.now() - hours * 3_600_000);
+
+    utimesSync(path.join(projects, 'some-project', THIRD_SESSION, 'subagents', `${id}.jsonl`), at, at);
+  };
+
+  writeFileSync(path.join(worktree, 'report.md'), 'finished work\n', 'utf8');
+  writeFileSync(path.join(worktree, 'old.md'), 'stale work\n', 'utf8');
+  writeAgent(THIRD_SESSION, 'agent-done', toolCall('Write', { file_path: path.join(worktree, 'report.md') }));
+  writeAgent(THIRD_SESSION, 'agent-old', toolCall('Write', { file_path: path.join(worktree, 'old.md') }));
+  backdate('agent-done', 2);
+  backdate('agent-old', 7);
+  utimesSync(path.join(worktree, 'old.md'), longAgo, longAgo); // hours old, outside every shell window, as real stale work is
+
+  const parent = await stopThrough(THIRD_SESSION);
+  const context = parent.output?.hookSpecificOutput?.additionalContext ?? '';
+
+  check('a finished worker\'s output: the dispatcher blocks the session that delegated it', parent.output?.decision, 'block');
+  check('the block says it is the output of its finished worker, by id, and what to do', context.includes('report.md is the output of your finished worker agent-done: review it, then commit it with a pathspec or discard it deliberately.'), true);
+  check('a worker past the horizon is not named', context.includes('old.md'), false);
+
+  const stranger = await stopThrough('session-fourth');
+
+  check('the SAME output seen from an unrelated session: the dispatcher lets that turn end', stranger.output?.decision, undefined);
+  check('it says nothing of the finished worker\'s file, and notes the one past the horizon', [stranger.output?.systemMessage?.includes('report.md'), stranger.output?.systemMessage?.includes('old.md')], [false, true]);
+
   const bounded = await stopThrough(THIS_SESSION, { stop_hook_active: true });
 
   check('stop_hook_active: the dispatcher lets the retry through', bounded.output, undefined);

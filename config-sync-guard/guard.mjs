@@ -48,8 +48,11 @@ function journal(record) {
   }
 }
 
+/** `absolutePath` relative to `repo`'s worktree with forward slashes: how git names it. @es La ruta relativa al worktree con `/`, como la nombra git. */
+const relativeTo = (repo, absolutePath) => path.relative(repo.worktree, absolutePath).replaceAll('\\', '/');
+
 /** One repo's finding, formatted for the block message. @es El hallazgo de un repo, formateado para el mensaje de bloqueo. */
-function repoFindingText({ repo, unownedAhead, unownedCommits, ownPaths }) {
+function repoFindingText({ repo, unownedAhead, unownedCommits, ownPaths, workerOutput }) {
   const lines = [`  ${repo.name} (${repo.worktree}):`];
 
   if (unownedAhead > 0) {
@@ -62,7 +65,8 @@ function repoFindingText({ repo, unownedAhead, unownedCommits, ownPaths }) {
     lines.push(`    - ${String(ownPaths.length)} uncommitted path(s) this session made (written by it, or changed during one of its shell calls):`);
     for (const absolutePath of ownPaths.slice(0, 20)) lines.push(`        ${absolutePath}`);
     if (ownPaths.length > 20) lines.push(`        … and ${String(ownPaths.length - 20)} more`);
-    lines.push(`      COMMIT: ${pathspecCommitCommand(repo.gitPrefix, ownPaths.map((absolutePath) => path.relative(repo.worktree, absolutePath).replaceAll('\\', '/')))}`);
+    for (const output of workerOutput) lines.push(`      ${relativeTo(repo, output.path)} is the output of your finished worker ${output.workers.join(', ')}: review it, then commit it with a pathspec or discard it deliberately.`);
+    lines.push(`      COMMIT: ${pathspecCommitCommand(repo.gitPrefix, ownPaths.map((absolutePath) => relativeTo(repo, absolutePath)))}`);
   }
 
   return lines.join('\n');
@@ -79,8 +83,8 @@ function blockOutput(dirtyRepos, sessionId) {
     '',
     ...dirtyRepos.map(repoFindingText),
     '',
-    'Only what THIS session made is listed: paths it wrote, or that changed during one of its shell calls',
-    '(path-ownership.mjs). Other sessions\' work never blocks you. A path attributed here by timing may',
+    'Only what THIS session made is listed: paths it wrote, that changed during one of its shell calls, or',
+    'that its finished workers wrote (path-ownership.mjs). Other sessions\' work never blocks you. A path attributed here by timing may',
     'still be a coincidence — verify it before committing. Do exactly ONE of these, then stop again:',
     '',
     '  A) COMMIT AND PUSH WHAT IS YOURS (default) — the exact commands are listed above per repo; the',

@@ -53,7 +53,7 @@
 import { liveAgentWrites } from './attribution.mjs';
 import { readDismissals } from './dismiss.mjs';
 import { measureFingerprint } from './fingerprint.mjs';
-import { claimsOn, ownershipVerdict } from './path-ownership.mjs';
+import { claimsOn, finishedWorkersOf, ownershipVerdict } from './path-ownership.mjs';
 import { latestChangeMs } from './path-mtime.mjs';
 import { declaredRepos, repoExists } from './repos.mjs';
 import { parseStatusPorcelain } from './status.mjs';
@@ -112,8 +112,9 @@ function pathsText(paths, shown = 8) {
 function judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf }) {
   return dirtyPaths.map((relativePath) => {
     const absolute = path.join(repo.worktree, relativePath);
+    const claims = claimsOn(absolute, mtimeOf(absolute), liveAgents);
 
-    return { absolute, verdict: ownershipVerdict(claimsOn(absolute, mtimeOf(absolute), liveAgents), sessionId) };
+    return { absolute, verdict: ownershipVerdict(claims, sessionId), workers: finishedWorkersOf(claims, sessionId) };
   });
 }
 
@@ -122,8 +123,9 @@ function judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf }) {
  * `'noted'` (nothing this session must commit or push, but other sessions' commits are ahead and/or paths
  * no live transcript explains: allowed with a note), `'dismissed'` or `'dirty'`. The last three carry
  * `aheadCount`, `unownedAhead` (commits ahead that no other session's live agent owns), `unownedCommits`,
- * `foreignCommits`, `ownPaths` (dirty paths this session made) and `unexplained` (dirty paths nobody live
- * made); `'dismissed'` also carries `dismissal`, the matching record.
+ * `foreignCommits`, `ownPaths` (dirty paths this session made, or its finished workers did),
+ * `workerOutput` (those of `ownPaths` that finished workers made: `[{ path, workers }]`) and `unexplained`
+ * (dirty paths nobody live made); `'dismissed'` also carries `dismissal`, the matching record.
  * @es Clasificación de un repo: `state` es `'missing'`, `'unmeasurable'`, `'clean'`, `'noted'` (nada que
  * esta sesión deba commitear ni subir, pero hay commits de otras sesiones y/o rutas que ningún transcript
  * vivo explica: se permite con nota), `'dismissed'` o `'dirty'`.
@@ -138,10 +140,11 @@ function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, 
   const { aheadCount, dirtyPaths } = parseStatusPorcelain(status.stdout);
   const judged = judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf });
   const ownPaths = judged.filter((entry) => entry.verdict === 'maker').map((entry) => entry.absolute);
+  const workerOutput = judged.filter((entry) => entry.verdict === 'maker' && entry.workers.length > 0).map((entry) => ({ path: entry.absolute, workers: entry.workers }));
   const unexplained = judged.filter((entry) => entry.verdict === 'unexplained').map((entry) => entry.absolute);
   const { foreign, unowned } = classifyCommits(aheadCount > 0 ? readAheadCommits(repo) : [], liveAgents, sessionId);
   const unownedAhead = Math.max(0, aheadCount - foreign.length);
-  const finding = { repo, aheadCount, unownedAhead, unownedCommits: unowned, foreignCommits: foreign, ownPaths, unexplained };
+  const finding = { repo, aheadCount, unownedAhead, unownedCommits: unowned, foreignCommits: foreign, ownPaths, workerOutput, unexplained };
 
   if (unownedAhead === 0 && ownPaths.length === 0) return foreign.length === 0 && unexplained.length === 0 ? { repo, state: 'clean' } : { ...finding, state: 'noted' };
 
