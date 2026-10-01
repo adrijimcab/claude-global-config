@@ -144,6 +144,18 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
   sin atribución de IA.
 - Registro neutro y profesional en todo artefacto: la voz Gentleman es solo para la conversación.
 
+## Ningún trabajo se pierde (directiva del dueño 2026-10-01)
+
+Dueño, literal: «NO QUIERO PERDER NADA DE TRABAJO».
+
+- Un worker commitea en su propia rama A MEDIDA que avanza: cada unidad terminada se commitea en el
+  momento, y lo que esté a medias va a un commit propio, que el siguiente commit arregla. Nunca se deja
+  trabajo solo en disco esperando una corrida larga.
+- El orquestador sube como respaldo, con `-o ci.skip`, las ramas de trabajo de nombre neutro (la tanda y
+  las ramas de feature) en cada punto de control. Nunca sube una rama con nombre de agente.
+- El tooling (`~/.claude`, `.claude/`) se commitea y se sube igual que siempre; el trabajo de un actor
+  vivo lo commitea ese actor, y el orquestador se lo pide en vez de esperar a que termine.
+
 ## Solo los gates necesarios; la cadena completa, UNA vez y al final (directiva del dueño 2026-10-01)
 
 Dueño, literal: «QUE SE CORRAN SOLO LOS GATES NECESARIOS, NO HORAS DE GATES, Y SI SE HACEN AL FINAL,
