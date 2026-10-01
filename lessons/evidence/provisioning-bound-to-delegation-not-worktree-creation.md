@@ -23,3 +23,18 @@ Texto literal movido desde `~/.claude/CLAUDE.md` (sección «Promoted rules») e
 ## Ledger line archived 2026-10-01 (condensed)
 
 - [promoted] 2026-09-22 — provisioning-bound-to-delegation-not-worktree-creation: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism .claude/fleet-env/worktree-created.mjs (selftest run, exit 0); full incident history in .claude/failure-capture/state/incidents.jsonl <!--fc:provisioning-bound-to-delegation-not-worktree-creation#2-->
+
+## Loaded text archived 2026-10-01 (tiered)
+
+Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the tiering of 2026-10-01; it is archived byte for byte, and the loaded file keeps only its binding text. @es Cada bloque de abajo se cargaba desde `~/.claude/rules/promoted-rules.md` hasta el escalonado del 2026-10-01; se archiva byte a byte, y el fichero cargado conserva solo su texto vinculante.
+
+````markdown
+- **`provisioning-bound-to-delegation-not-worktree-creation`** — A worktree you create YOURSELF
+  arrives with no `node_modules`, because the provisioner is bound to DELEGATION (a `PreToolUse` hook
+  on `Task|Agent`), never to worktree creation. **RULE: after any `git worktree add` you performed
+  yourself, give the new worktree its dependencies BEFORE running a single gate there** — and never
+  read a gate failure in a fresh worktree as a verdict about the code until `node_modules` is confirmed
+  present. The first failure in a new worktree is almost always the missing install, and it will
+  masquerade as anything: a type error, a broken import, a red gate unrelated to your change.
+  Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/provisioning-bound-to-delegation-not-worktree-creation.md`.
+````
