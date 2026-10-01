@@ -12,6 +12,7 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const P = 'failure-capture/project.mjs';
 const C = 'failure-capture/capture.mjs';
+const L = 'failure-capture/loop-context.mjs';
 
 const MUTANTS = [
   ['the user home counts as a project, so every folder under it belongs to ~/.claude/CLAUDE.md', P, '    if (homes.some((home) => sameFolder(candidate, home))) return undefined;\n', ''],
@@ -31,7 +32,19 @@ const MUTANTS = [
   ['a zero or negative project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', 'Number.isInteger(config.loadedSetCeiling)'],
   ['a zero project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling >= 0'],
   ['a text project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', '(config.loadedSetCeiling > 0)'],
-  ['the project ceiling is not surfaced', P, '    loadedSetCeiling: config.loadedSetCeiling\n', '']
+  ['the project ceiling is not surfaced', P, '    loadedSetCeiling: config.loadedSetCeiling\n', ''],
+  ['an injected home is ignored, so only the process home stops the walk', P, 'const root = projectRootOf(directory, homes);', 'const root = projectRootOf(directory);'],
+  ['no home stops the walk by default', P, 'export function projectRootOf(directory, homes = userHomes()) {', 'export function projectRootOf(directory, homes = []) {'],
+  ['no command binds the project, so every project command runs without one', C, 'if (PROJECT_COMMANDS.has(command)) {', 'if (false) {'],
+  ['dismiss reads the project, so an invalid config stops it', C, "'condense', 'status']);", "'condense', 'status', 'dismiss']);"],
+  ['status does not bind the project', C, "'promote', 'condense', 'status']);", "'promote', 'condense']);"],
+  ['an invalid project config exits 1 like any other refusal', C, 'No se cambió nada.`);\n\n      return 2;', 'No se cambió nada.`);\n\n      return 1;'],
+  ['the invalid-config refusal loses its Spanish half', C, ' @es ${command} RECHAZADO: no se puede leer la configuración del proyecto: ${defect}. No se cambió nada.', ''],
+  ['the init refusal outside a project loses its Spanish half', C, ' @es init RECHAZADO:', ' init RECHAZADO:'],
+  ['the loop context ignores the project scope', L, 'scopes: project === undefined ? [GLOBAL_SCOPE] : [GLOBAL_SCOPE, project.scope]', 'scopes: [GLOBAL_SCOPE]'],
+  ['the loop context drops the project ledger', L, 'ledgers: ledgerFiles({ project, home }),', 'ledgers: ledgerFiles({ project: undefined, home }),'],
+  ['the loop context drops the worker contract', L, 'workerContracts: project?.workerContracts ?? [],', 'workerContracts: [],'],
+  ['the loop context drops the parity gate', L, 'parityGate: project?.parityGate,', 'parityGate: undefined,']
 ];
 
 const survivors = runMutants({

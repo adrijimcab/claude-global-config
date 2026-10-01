@@ -49,16 +49,21 @@ import { describeOutcome, newRunId, runCondense } from './condense.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { loadedSet } from './loaded-set.mjs';
 import { promotedStub } from './promotion.mjs';
-import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
+import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { withLock } from './ledger-lock.mjs';
+import { resolveLoopContext } from './loop-context.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
 import { captureTextProblems, newLessonLine } from './tiered-capture.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The PROJECT this command runs in (`project.mjs`), never the folder this code sits in: the loop is
-// global since 2026-09-30, so `HERE/../..` would name the user's home, not a repository.
-// @es El PROYECTO donde corre el comando, nunca la carpeta del código: el bucle es global.
-const PROJECT = projectOf(process.cwd());
+// global since 2026-09-30, so `HERE/../..` would name the user's home, not a repository. It, and the five
+// values derived from it below, are bound by `bindLoopContext` for the commands that read the project, never
+// when this file loads: an invalid project configuration must fail only those commands.
+// @es El PROYECTO donde corre el comando, nunca la carpeta del código: el bucle es global. Él y los cinco
+// valores derivados de él, abajo, los fija `bindLoopContext` para los comandos que leen el proyecto, nunca al
+// cargar este fichero: una configuración inválida debe fallar solo a esos comandos.
+let PROJECT;
 const STATE_DIR = path.join(HERE, 'state');
 const SPOOL_DIR = path.join(STATE_DIR, 'spool');
 const LOCK_FILE = path.join(STATE_DIR, 'ledger.lock');
@@ -71,7 +76,7 @@ const PROMOTED = path.join(STATE_DIR, 'promoted.md');
 
 // One ledger per scope (`ledgers.mjs`): a project's lessons never travel to every other project.
 // @es Un ledger por alcance: las lecciones de un proyecto no viajan a los demás.
-const LEDGERS = ledgerFiles({ project: PROJECT, home: homedir() });
+let LEDGERS;
 // El contrato del ORQUESTADOR ya no está en CLAUDE.md: las reglas promovidas viven en un archivo de
 // `~/.claude/rules/`, que Claude Code carga en todo proyecto y que `gentle-ai sync` no toca (sync
 // reescribe las regiones gestionadas de CLAUDE.md). El destino conserva el nombre histórico
@@ -81,7 +86,7 @@ const ORCHESTRATOR_RULES = path.join(homedir(), '.claude', 'rules', 'promoted-ru
 // or `.claude/CLAUDE.md`, which every subagent of the project loads. The first file is the one whose
 // token count the text-growth check reads.
 // @es El contrato de worker de ESTE proyecto: sus ficheros configurados, o `.claude/CLAUDE.md`.
-const WORKER_CONTRACTS = PROJECT?.workerContracts ?? [];
+let WORKER_CONTRACTS;
 // The parity gate LEFT the repository (owner directive: nothing AI-related lives inside the lib).
 // This constant pointed at the removed `scripts/` path afterwards, which silently killed the loop's
 // escalation arm: `promote` verifies the anchor on disk, the file was absent, so EVERY promotion
@@ -94,10 +99,18 @@ const WORKER_CONTRACTS = PROJECT?.workerContracts ?? [];
 // Since the loop went global the gate is per project, and optional: only a project whose contract lives in
 // several files declares one (`parityGate` in `.claude/failure-capture.json`).
 // @es Desde que el bucle es global, el gate es por proyecto y opcional.
-const PARITY_GATE = PROJECT?.parityGate;
+let PARITY_GATE;
 
 /** The scopes a capture from here may declare. @es Los alcances que puede declarar una captura desde aquí. */
-const SCOPES = PROJECT === undefined ? [GLOBAL_SCOPE] : [GLOBAL_SCOPE, PROJECT.scope];
+let SCOPES;
+
+/** The commands that read the project: every one except `dismiss`, `budget` (which resolves its own) and the usage text. @es Los comandos que leen el proyecto: todos salvo `dismiss`, `budget` (que resuelve el suyo) y el texto de uso. */
+const PROJECT_COMMANDS = new Set(['init', 'keys', 'capture', 'promote', 'condense', 'status']);
+
+/** Resolves the project of the current directory and binds what derives from it. @es Resuelve el proyecto del directorio actual y fija lo que se deriva de él. */
+function bindLoopContext() {
+  ({ project: PROJECT, ledgers: LEDGERS, workerContracts: WORKER_CONTRACTS, parityGate: PARITY_GATE, scopes: SCOPES } = resolveLoopContext({ directory: process.cwd(), home: homedir() }));
+}
 
 /** Recurrences needed before a lesson stops being an incident and becomes a rule. @es Recurrencias necesarias para que una lección deje de ser incidente y pase a regla. */
 const PROMOTION_THRESHOLD = 2;
@@ -789,7 +802,7 @@ const LEDGER_IMPORT = '@lessons-ledger.md';
  */
 function commandInit() {
   if (PROJECT === undefined) {
-    console.error('init REFUSED — no project holds this directory (no .claude/CLAUDE.md above it).');
+    console.error('init REFUSED — no project holds this directory (no .claude/CLAUDE.md above it, short of the home: the home\'s own .claude is global configuration, never a project). @es init RECHAZADO: ningún proyecto contiene este directorio (no hay .claude/CLAUDE.md por encima, sin llegar al home: el .claude del home es configuración global, nunca un proyecto).');
 
     return 1;
   }
@@ -908,6 +921,9 @@ const USAGE = `failure-capture — record a correction as a durable lesson.
   condense  [--keys <file>] [--write]   shorten ledger lines whose text is kept in evidence (dry run without --write)
   budget   [--project <dir>]            measure the always-loaded instruction set against its ceiling (exit 0 within, 1 over, 2 not measured)
   status   counts, ledger token cost, and which lessons are due for promotion
+
+  Exit 2 when the project's .claude/failure-capture.json is invalid (only the commands that read the project fail).
+  @es Salida 2 si el .claude/failure-capture.json del proyecto es inválido (solo fallan los comandos que leen el proyecto).
 `;
 
 /**
@@ -935,6 +951,18 @@ function main() {
   const [command, ...rest] = process.argv.slice(2);
   const parsed = parseArgs(rest);
   const args = { ...parsed, session: sessionOf(parsed) };
+
+  if (PROJECT_COMMANDS.has(command)) {
+    try {
+      bindLoopContext();
+    } catch (error) {
+      const defect = error instanceof Error ? error.message : String(error);
+
+      console.error(`${command} REFUSED — the project configuration cannot be read: ${defect}. Nothing was changed. @es ${command} RECHAZADO: no se puede leer la configuración del proyecto: ${defect}. No se cambió nada.`);
+
+      return 2;
+    }
+  }
 
   switch (command) {
     case 'init':

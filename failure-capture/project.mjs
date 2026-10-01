@@ -95,13 +95,14 @@ function userHomes() {
 /**
  * The project root holding `.claude/CLAUDE.md` at or above `directory`, or `undefined`. The walk stops at
  * the user's HOME: `~/.claude/CLAUDE.md` is the user-level instructions file, not a project, and every
- * folder under the home would otherwise belong to it.
+ * folder under the home would otherwise belong to it. `homes` names the folders that count as a home
+ * (default: the process's own and the account's, see `userHomes`), so a caller can state which home it means.
  * @es La raíz del proyecto, o `undefined`. El recorrido se detiene en el HOME: `~/.claude/CLAUDE.md` son
- * las instrucciones de usuario, no un proyecto.
+ * las instrucciones de usuario, no un proyecto. `homes` nombra las carpetas que cuentan como home (por
+ * omisión, las del proceso y la cuenta), para que quien llama diga qué home entiende.
  */
-export function projectRootOf(directory) {
+export function projectRootOf(directory, homes = userHomes()) {
   let candidate = mainCheckoutPath(directory);
-  const homes = userHomes();
 
   for (;;) {
     if (homes.some((home) => sameFolder(candidate, home))) return undefined;
@@ -137,11 +138,12 @@ export function readProjectConfig(root) {
 
 /**
  * The project context of `directory`: `{ root, scope, ledgerFile, workerContracts, parityGate }`, or
- * `undefined` when no project holds it (global lessons only).
- * @es El contexto de proyecto de `directory`, o `undefined` si ningún proyecto lo contiene.
+ * `undefined` when no project holds it (global lessons only). `homes` is forwarded to `projectRootOf`.
+ * @es El contexto de proyecto de `directory`, o `undefined` si ningún proyecto lo contiene. `homes` se
+ * pasa a `projectRootOf`.
  */
-export function projectOf(directory) {
-  const root = projectRootOf(directory);
+export function projectOf(directory, { homes } = {}) {
+  const root = projectRootOf(directory, homes);
 
   if (root === undefined) return undefined;
 

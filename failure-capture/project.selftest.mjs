@@ -5,6 +5,8 @@
  *   - which project a directory belongs to: none, a top-level project, a subfolder project, a linked
  *     worktree mapped to its main checkout, and a sibling folder no project holds;
  *   - the scope: the folder name by default, the configured one when given, and a broken config refused;
+ *   - the home (any injected one) is global configuration, never a project; a broken config fails, with
+ *     exit 2 and a bilingual refusal, only the commands that read the project; `init` at the home is refused;
  *   - `init`: creates the ledger and the import once, and changes nothing the second time;
  *   - a capture from project A lands in A's ledger, and a spooled A entry folded by a process in project B
  *     still lands in A's ledger, never B's;
@@ -157,6 +159,53 @@ try {
   equal('a valid loadedSetCeiling is surfaced by the project context', projectOf(app)?.loadedSetCeiling, 140000);
   rmSync(path.join(app, '.claude', 'failure-capture.json'));
   equal('no loadedSetCeiling is absent by default', projectOf(app)?.loadedSetCeiling, undefined);
+
+  // --- the home is global configuration, never a project; and it is injectable --------------------------
+  // A home that is NOT the process's own, handed in by the caller: the property under test is "whatever the
+  // home is, its `.claude/CLAUDE.md` is user-level instructions", so it must hold for any home.
+  // @es Un home que NO es el del proceso, entregado por quien llama: la propiedad es «sea cual sea el home,
+  // su `.claude/CLAUDE.md` son instrucciones de usuario».
+  const claimed = path.join(scratch, 'injected', 'home');
+  const claimedApp = path.join(claimed, 'proj');
+  const claimedApi = path.join(claimed, 'mono', 'services', 'api');
+
+  write(claimed, { '.claude/CLAUDE.md': '# User\n', '.claude/failure-capture/x.txt': 'x\n' });
+  write(claimedApp, { '.claude/CLAUDE.md': '# Proj\n', 'src/x.txt': 'x\n' });
+  write(path.join(claimed, 'mono'), { '.claude/CLAUDE.md': '# Mono\n' });
+  write(claimedApi, { '.claude/CLAUDE.md': '# Api\n', 'src/x.txt': 'x\n' });
+  const under = (directory) => projectOf(directory, { homes: [claimed] })?.root;
+
+  equal('an injected home holding .claude/CLAUDE.md is not a project', under(claimed), undefined);
+  equal('...nor is its own .claude folder', under(path.join(claimed, '.claude')), undefined);
+  equal('...nor a folder inside that .claude folder', under(path.join(claimed, '.claude', 'failure-capture')), undefined);
+  equal('...but a project beneath it is one', under(path.join(claimedApp, 'src')), claimedApp);
+  equal('...and of nested projects the nearest wins', under(path.join(claimedApi, 'src')), claimedApi);
+
+  // --- a command fails only when IT needs the project, and fails as a refusal, never as a stack trace ---
+  const broken = path.join(projects, 'broken');
+  const stackTrace = '\n    at ';
+
+  write(broken, { '.claude/CLAUDE.md': '# Broken\n', '.claude/failure-capture.json': JSON.stringify({ scop: 'typo' }) });
+  for (const [label, ...argv] of [['init', 'init'], ['keys', 'keys'], ['status', 'status'], ['capture', 'capture', '--key', 'broken-config-lesson', '--scope', 'global', '--actor', 'orchestrator', '--lesson', LESSON('broken-config-lesson')], ['promote', 'promote', '--key', 'broken-config-lesson', '--no-mechanism', REASON], ['condense', 'condense']]) {
+    const refused = run(world, broken, ...argv);
+
+    check(`${label} in a project with an invalid config exits 2`, refused.status === 2, `${String(refused.status)} ${refused.out}`);
+    check(`...naming the defect in both languages, with no stack trace (${label})`, refused.out.includes('unknown key "scop"') && refused.out.includes('@es') && !refused.out.includes(stackTrace), refused.out);
+  }
+  check('dismiss needs no project, so an invalid config does not stop it', run(world, broken, 'dismiss', '--reason', REASON).status === 0);
+  check('the usage text needs no project either', run(world, broken).status === 0);
+
+  // --- the home itself: no project, the global ledger still works, init refuses ---------------------------
+  const userInstructions = path.join(world.home, '.claude', 'CLAUDE.md');
+
+  write(world.home, { '.claude/CLAUDE.md': '# User-level instructions\n' });
+  for (const [label, directory] of [['the home', world.home], ['the home\'s own .claude folder', path.join(world.home, '.claude')]]) {
+    const refused = run(world, directory, 'init');
+
+    check(`init in ${label} is refused, in both languages`, refused.status === 1 && refused.out.includes('init REFUSED') && refused.out.includes('@es'), `${String(refused.status)} ${refused.out}`);
+  }
+  check('...and the user-level instructions are untouched', read(userInstructions) === '# User-level instructions\n', read(userInstructions));
+  check('a global capture from the home is recorded in the global ledger', capture(world, world.home, 'global-from-home-lesson', 'global').status === 0 && read(path.join(world.home, '.claude', 'lessons-ledger.md')).includes('<!--fc:global-from-home-lesson#1-->'));
 
   // --- init ---------------------------------------------------------------------------------------------
   const first = run(world, api, 'init');
