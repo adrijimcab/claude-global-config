@@ -24,3 +24,9 @@ Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the t
   gitignored and lives only in the main checkout, so the worker could not self-verify. Every tooling
   command in a brief uses the main checkout's ABSOLUTE path. Mechanism: `~/.claude/brief-feasibility/`.
 ````
+
+## Ledger line archived 2026-10-02 (promoted)
+
+- [promoted] 2026-09-30 — instructed-a-worker-to-run-a-denied-command: mechanism C:/Users/adrian.jimenez/.claude/brief-feasibility/guard.mjs <!--fc:instructed-a-worker-to-run-a-denied-command#4-->
+
+Promoted 2026-10-02 to ~/.claude/rules/promoted-rules.md; closed by mechanism C:/Users/adrian.jimenez/.claude/brief-feasibility/guard.mjs (selftest run, exit 0)

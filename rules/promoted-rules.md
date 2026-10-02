@@ -242,6 +242,20 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   followed by a worker whose TENANCY names that worktree from launch.
   Every tooling
   command in a brief uses the main checkout's ABSOLUTE path. Mechanism: `~/.claude/brief-feasibility/`.
+  - **AN AUTHORISED OUTCOME WITH NO NAMED ROUTE (2026-10-02,
+    `instructed-a-worker-to-run-a-denied-command`).** A brief authorised an outcome a deny rule guards
+    (log in with a password kept in a file) and added a blanket "if denied, do not retry by another
+    route"; a worker opened the file with a search tool, was refused, and abandoned its whole runtime
+    pass. RULE: when a brief authorises an outcome that a deny rule guards, it names the exact working
+    route and the refused ones, and a "do not retry another way" clause is scoped to the action it
+    protects, never written as a blanket. This face is unmechanised: no guard can tell from prose
+    whether a named route is the one that works; in its place, the shared brief section states it.
+    @es Un brief autorizó un resultado protegido por una regla de denegación sin nombrar la vía que
+    funciona, y añadió un «si te lo niegan, no reintentes por otra vía» general; un worker abrió el
+    fichero con una herramienta de búsqueda, fue rechazado y abandonó toda su pasada de runtime.
+    REGLA: el brief nombra la vía exacta que funciona y las rechazadas, y la cláusula de no reintentar
+    se acota a la acción que protege. Cara sin mecanismo: ningún guard distingue en prosa si la vía
+    nombrada es la buena; en su lugar, la sección compartida del brief la enuncia.
 - **`integrated-a-range-without-running-its-cheap-gates`** — Every integration onto `develop` runs
   every gate that can READ the changed paths, never a gate list I chose. **A hand-picked gate set is a
   bounded search written down as coverage.** RULE: after a cherry-pick, run the gates derived from the
