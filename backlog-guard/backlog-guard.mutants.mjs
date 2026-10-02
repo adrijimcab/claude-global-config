@@ -48,7 +48,12 @@ const MUTANTS = [
   // --- the second live defect, found the day after the first fix shipped: a real transcript's own
   //     bytes escape the "result" marker and its internal newlines at DIFFERENT depths.
   ['the escaped "result" marker form is dropped, so a real (single-escaped) mem_get_observation result teaches nothing', 'master-save.mjs', "const RESULT_ID_MARKERS = ['\"result\":\"#', '\\\\\"result\\\\\":\\\\\"#'];", "const RESULT_ID_MARKERS = ['\"result\":\"#'];"],
-  ['the doubly-escaped newline form is dropped, so a real metadata footer\'s topic value keeps a trailing backslash and fails the -master check', 'master-save.mjs', "const doubleEscaped = text.indexOf('\\\\\\\\n', from);", 'const doubleEscaped = -1;']
+  ['the doubly-escaped newline form is dropped, so a real metadata footer\'s topic value keeps a trailing backslash and fails the -master check', 'master-save.mjs', "const doubleEscaped = text.indexOf('\\\\\\\\n', from);", 'const doubleEscaped = -1;'],
+  // --- the third live defect (2026-10-02): the footer search is bounded by the transcript RECORD, not
+  //     by a fixed character window (a 27 KB master backlog has its footer ~20000 characters in).
+  ['the fixed 8000-character window is back, so a large master record teaches nothing', 'master-save.mjs', 'const window = text.slice(idEnd, recordEndAfter(text, idEnd));', 'const window = text.slice(idEnd, idEnd + 8000);'],
+  ['the record bound is gone, so the NEXT record\'s Topic footer pairs with this record\'s id', 'master-save.mjs', 'const window = text.slice(idEnd, recordEndAfter(text, idEnd));', 'const window = text.slice(idEnd);'],
+  ['a record with no newline after it loses its end, so the last topic value is cut', 'master-save.mjs', 'return newlineAt === -1 ? text.length : newlineAt;', 'return newlineAt;']
 ];
 
 const survivors = runMutants({

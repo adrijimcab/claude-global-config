@@ -234,7 +234,37 @@ export function observedMasterIdPairings(text) {
  */
 const RESULT_ID_MARKERS = ['"result":"#', '\\"result\\":\\"#'];
 const TOPIC_LABEL_MARKER = 'Topic: ';
-const RESULT_METADATA_WINDOW = 8000;
+
+/**
+ * Where the transcript RECORD holding position `from` ends: the next real newline, or the end of the
+ * text. A transcript is JSONL, so one tool result is one line and every newline INSIDE a result is
+ * escaped; the first real newline is therefore the record's own boundary.
+ *
+ * THIRD LIVE DEFECT (2026-10-02): the footer was searched inside a fixed 8000-character window after
+ * the id. MEASURED on session `8b594f0d-857c-4354-8385-f31cf5b3d806`'s real transcript: observation
+ * 1129 (a 27 KB master backlog) has its `Topic: ` footer 18639 and 21878 characters after the marker,
+ * so two real `mem_get_observation` reads taught nothing and every later `mem_update` of that id was
+ * refused. The footer follows the WHOLE content, so its distance is the record's size, never a
+ * constant; the only bound that is true to the data is the record itself. That bound is also
+ * stricter than the window on short results, which could read on into the NEXT record's footer.
+ * The FIRST `Topic: ` in the record is taken: content that itself carries such a line makes the
+ * pairing unlearned (a refusal the caller can see), never a wrong id learned as a master.
+ * @es Dónde termina el REGISTRO del transcript que contiene `from`: el siguiente salto real, o el final
+ * del texto. El transcript es JSONL: un resultado es una línea y sus saltos internos van escapados.
+ * TERCER DEFECTO EN VIVO (2026-10-02): el pie se buscaba en una ventana fija de 8000 caracteres.
+ * MEDIDO en el transcript real de la sesión `8b594f0d-…`: la observación 1129 (backlog maestro de
+ * 27 KB) tiene su pie `Topic: ` a 18639 y 21878 caracteres del marcador, así que dos lecturas reales no
+ * enseñaron nada y cada `mem_update` posterior fue rechazado. El pie va detrás de TODO el contenido:
+ * su distancia es el tamaño del registro, nunca una constante. El límite fiel a los datos es el propio
+ * registro, que además es más estricto en resultados cortos (la ventana podía leer el pie del registro
+ * SIGUIENTE). Se toma el PRIMER `Topic: `: un contenido que lleve esa línea deja la pareja sin aprender
+ * (un rechazo visible), nunca un id ajeno aprendido como maestro.
+ */
+function recordEndAfter(text, from) {
+  const newlineAt = text.indexOf('\n', from);
+
+  return newlineAt === -1 ? text.length : newlineAt;
+}
 
 /**
  * The earliest of a literal newline, a JSON-escaped `\n`, or a DOUBLY-escaped `\\n` after `from`, or
@@ -280,7 +310,7 @@ function observedFromResultMetadataMarker(text, marker) {
 
     if (id === undefined) continue;
 
-    const window = text.slice(idEnd, idEnd + RESULT_METADATA_WINDOW);
+    const window = text.slice(idEnd, recordEndAfter(text, idEnd));
     const topicAt = window.indexOf(TOPIC_LABEL_MARKER);
 
     if (topicAt === -1) continue;

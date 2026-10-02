@@ -281,9 +281,31 @@ check(
   observedMasterIdPairings('"result":"#631 [decision] some note\\nTopic: backlog/1.0.0-item-7\\nDuplicates: 0"'),
   []
 );
+// --- THIRD LIVE DEFECT (2026-10-02): the footer was searched in a fixed 8000-character window, and a
+//     27 KB master backlog has it 18639-21878 characters after the id (measured on session 8b594f0d's
+//     real transcript). The bound is now the transcript RECORD (a JSONL line), so three states matter:
+//     a footer far inside the same record, a footer that belongs to the NEXT record, and a record that
+//     is the last thing in the text.
+// @es TERCER DEFECTO EN VIVO: el pie se buscaba en una ventana fija de 8000 caracteres y un backlog
+// maestro de 27 KB lo tiene a 18639-21878 del id. El límite pasa a ser el REGISTRO del transcript.
+{
+  const LARGE_CONTENT = 'item with measured detail. '.repeat(1000);
+
+  check('the fixture really puts the footer beyond the old fixed window', LARGE_CONTENT.length > 8000, true);
+  check(
+    'the metadata footer of a LARGE record (footer far past 8000 characters, same record) still teaches the pairing',
+    observedMasterIdPairings(`"result":"#1129 [manual] Master backlog\\n${LARGE_CONTENT}\\nTopic: backlog/discovery-migration-master\\nDuplicates: 1"}\n{"next":"record"}`),
+    [{ id: 1129, topicKey: 'backlog/discovery-migration-master' }]
+  );
+}
 check(
-  'the metadata-footer source works with a REAL (unescaped) newline too, not only the JSON-escaped \\\\n form',
-  observedMasterIdPairings('"result":"#972 [decision] x\nTopic: backlog/1.0.0-master\nDuplicates: 1"'),
+  'a "Topic: " footer in the NEXT transcript record (after a real newline) never pairs with this record\'s id',
+  observedMasterIdPairings('"result":"#631 [decision] a short result with no footer"}\n{"result":"Topic: backlog/1.0.0-master\\nDuplicates: 1"}'),
+  []
+);
+check(
+  'a footer that is the very last thing in the text (no newline after the record) keeps its whole topic value',
+  observedMasterIdPairings('"result":"#972 [decision] x\\nTopic: backlog/1.0.0-master'),
   [{ id: 972, topicKey: 'backlog/1.0.0-master' }]
 );
 check('the metadata-footer source is silent when there is no "Topic: " line at all', observedMasterIdPairings('"result":"#972 [decision] no metadata footer here"'), []);
