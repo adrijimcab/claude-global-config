@@ -256,6 +256,26 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     REGLA: el brief nombra la vía exacta que funciona y las rechazadas, y la cláusula de no reintentar
     se acota a la acción que protege. Cara sin mecanismo: ningún guard distingue en prosa si la vía
     nombrada es la buena; en su lugar, la sección compartida del brief la enuncia.
+- **`brief-had-workers-open-every-image`** — An image is the most expensive thing a worker can load,
+  and every image it opens is re-sent on each of its later steps: the cost is images times remaining
+  steps. Twice in one day (2026-10-02) a brief of mine made workers review a body of screenshots
+  inside a long run: first one by one (an 18 MB transcript, the usage window gone in 51 minutes), then
+  through contact sheets of six (6.5 MB in 20 minutes, one screen of six finished). RULE: a
+  long-running worker gets an IMAGE BUDGET stated in its brief — at most 4 contact sheets per run, its
+  own captures only, each first checked by a DOM assertion and the PNG size at capture time — and
+  reviewing a body of existing images is a separate short-lived unit whose only job is that review.
+  No mechanism is built yet; one is possible and designed: a delegation guard in the
+  `pretooluse-delegation` manifest that refuses a brief mentioning screenshots without an
+  `IMAGE BUDGET` line. Until it exists, the shared brief sections carry the rule and every launch
+  prompt repeats it.
+  @es Una imagen es lo más caro que un worker puede cargar, y cada imagen abierta se reenvía en cada
+  paso posterior: el coste es imágenes por pasos restantes. Dos veces en un día un brief mío hizo que
+  los workers revisaran capturas dentro de una corrida larga. REGLA: un worker de corrida larga recibe
+  un PRESUPUESTO DE IMÁGENES en su brief (como máximo 4 hojas de contactos por corrida, solo sus
+  propias capturas, comprobadas antes por una aserción del DOM y el tamaño del PNG), y revisar un
+  conjunto de imágenes existentes es una unidad aparte, corta, dedicada solo a eso. Todavía no hay
+  mecanismo; es posible y está diseñado: un guard de delegación que rechace un brief que mencione
+  capturas sin una línea `IMAGE BUDGET`.
 - **`integrated-a-range-without-running-its-cheap-gates`** — Every integration onto `develop` runs
   every gate that can READ the changed paths, never a gate list I chose. **A hand-picked gate set is a
   bounded search written down as coverage.** RULE: after a cherry-pick, run the gates derived from the
