@@ -143,3 +143,26 @@ Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the t
     produced it is still live and will produce the next number unexamined.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/audit-verdict-from-commit-subjects-not-from-reading.md`.
 ````
+
+## Archived 2026-10-04: the bilingual copy that sat in di_1700002_discovery_fe/.claude/CLAUDE.md
+
+Removed from that project file because 3 of 3 entries are covered by the global promoted rule (statement, "A FILE'S SHARE" face, "ENTRIES CALLED DUPLICATES" face). Kept here verbatim, with its Spanish halves.
+
+## Promoted lessons — Lecciones promovidas
+
+- **`audit-verdict-from-commit-subjects-not-from-reading`** — A search or a skim only locates
+  candidates; the verdict comes from reading each one.
+  @es Una búsqueda o una lectura por encima solo localiza candidatos; el veredicto sale de leer cada
+  uno.
+  - **A file's share judged from its loudest tokens** (`audit-verdict-from-commit-subjects-not-from-reading`,
+    2026-09-30): a claim about what share of a file, list or codebase belongs to a category is made
+    after classifying every entry, and it carries the count (N of M).
+    @es **La proporción de un archivo juzgada por sus términos más visibles**: una afirmación sobre
+    qué parte de un archivo, lista o código pertenece a una categoría se hace tras clasificar cada
+    entrada, y lleva el recuento (N de M).
+  - **Entries called duplicates from their shared label** (`audit-verdict-from-commit-subjects-not-from-reading`,
+    2026-09-30): "duplicate" is a share claim too — compare every entry against its supposed copy
+    before proposing to remove or unload the set, and state how many are fully covered (N of M).
+    @es **Entradas declaradas duplicadas por su etiqueta común**: «duplicado» también es una
+    afirmación de proporción — comparar cada entrada con su supuesta copia antes de proponer quitar o
+    descargar el conjunto, e indicar cuántas quedan totalmente cubiertas (N de M).
