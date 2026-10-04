@@ -22,6 +22,27 @@
  * every sibling Stop guard in this fleet holds (`turn-guard.mjs`, `claim-guard.mjs`,
  * `engram-persistence/guard.mjs`).
  *
+ * A `mem_update` carries no `topic_key`, so whether it touched the master record is asked of the engram
+ * store (`master-update.mjs`), never inferred from earlier reads. WHEN THE STORE CANNOT ANSWER (no
+ * database, no `node:sqlite`, a failed query) while the turn DID contain a `mem_update`, this guard fails
+ * OPEN and reports the degradation to its journal. Why open and not closed, unlike the PreToolUse
+ * `backlog-owner-guard` (which protects unrecoverable state and so fails closed): this Stop guard
+ * protects a REMINDER. Its trigger is already a heuristic phrase match, a false block here is exactly the
+ * defect being fixed ("nothing saved" after a real master write), a false allow costs one unflagged
+ * announcement that the journal records, and a guard able to wedge a turn end over its own dependency is
+ * the larger hazard — the bound every sibling Stop guard holds. When the turn holds NO `mem_update`
+ * there is nothing to fail open for, the store is not consulted, and the block stands.
+ *
+ * @es Un `mem_update` no lleva `topic_key`, así que si tocó el registro maestro se PREGUNTA al almacén de
+ * engram (`master-update.mjs`), nunca se infiere de lecturas anteriores. CUANDO EL ALMACÉN NO PUEDE
+ * RESPONDER (sin base de datos, sin `node:sqlite`, consulta fallida) y el turno SÍ tuvo un `mem_update`,
+ * esta guardia falla ABIERTO y anota la degradación en su journal. Abierto y no cerrado, a diferencia de
+ * `backlog-owner-guard` (que protege estado irrecuperable): esta guardia `Stop` protege un RECORDATORIO,
+ * su disparador ya es una heurística de frases, un bloqueo falso es justo el defecto que se corrige, un
+ * permiso falso cuesta un anuncio sin marcar que el journal registra, y una guardia capaz de trabar el
+ * fin de turno por su dependencia es el riesgo mayor. Sin `mem_update` en el turno no hay nada ante lo
+ * que fallar abierto: el almacén no se consulta y el bloqueo se mantiene.
+ *
  * @es LA DECISIÓN: ¿puede terminar este turno, o un hallazgo pendiente anunciado debe primero el
  * backlog maestro? Comprueba si el mensaje final de ESTE turno anuncia algo pendiente y si hubo un
  * guardado de backlog maestro DESDE la posición de transcript registrada al final del turno ANTERIOR —
@@ -29,9 +50,11 @@
  * aparece». FALLA ABIERTO ante cualquier caso no medible.
  */
 
+import { resolveTopicKeyById } from '../backlog-owner-guard/resolve-topic-key.mjs';
 import { findPendingMarker } from './markers.mjs';
-import { hasMasterBacklogSave, hasMasterBacklogUpdate, observedMasterIdPairings } from './master-save.mjs';
-import { readKnownMasterIds, readOffsetState, readTranscriptTail, recordKnownMasterIds, transcriptSize, writeOffsetState } from './state.mjs';
+import { judgeMasterUpdates } from './master-update.mjs';
+import { hasMasterBacklogSave } from './master-save.mjs';
+import { readOffsetState, readTranscriptTail, transcriptSize, writeOffsetState } from './state.mjs';
 
 /**
  * The decision over a parsed Stop payload, as `{ marker, sessionId, transcriptPath }` when the turn
@@ -47,8 +70,8 @@ export function decide(
     writeState = writeOffsetState,
     readTail = readTranscriptTail,
     sizeOf = transcriptSize,
-    readKnownIds = readKnownMasterIds,
-    recordKnownIds = recordKnownMasterIds
+    resolveTopicKey = resolveTopicKeyById,
+    reportDegraded = () => {}
   } = {}
 ) {
   // Already raised once this turn: the obligation has been stated. Never raise it twice.
@@ -70,16 +93,6 @@ export function decide(
   // content this turn already judged.
   writeState(sessionId, { offset: currentSize ?? offset });
 
-  // LEARN regardless of whether THIS turn even announces anything pending: a `mem_save`/`topic_key`
-  // pairing seen in a tail is a durable fact ("this id IS the master backlog"), not something scoped to
-  // a pending announcement. A plain housekeeping turn that happens to save the master backlog must
-  // still teach this mechanism the pairing, so a LATER turn's `mem_update` (which carries no
-  // `topic_key` of its own) can be recognised. `tail` may be `''` (nothing new) or `undefined` (an
-  // unreadable transcript) — `observedMasterIdPairings` already returns `[]` for both.
-  const pairingsSeenNow = observedMasterIdPairings(tail);
-
-  recordKnownIds(pairingsSeenNow);
-
   // No pending phrase at all: nothing owed this turn, regardless of what was just learned.
   if (marker === undefined) return undefined;
 
@@ -90,14 +103,19 @@ export function decide(
 
   if (hasMasterBacklogSave(tail)) return undefined;
 
-  // The known-id set for THIS check is the union of what was already durably known and what this exact
-  // tail just taught — so an `id`/`topic_key` pairing established EARLIER in the SAME turn still
-  // satisfies a `mem_update` of that id later in that same turn, without waiting for a second Stop.
-  const knownIds = readKnownIds();
+  // A `mem_update` has no topic_key of its own: ask the store what each updated observation IS.
+  // @es Un `mem_update` no tiene topic_key propio: se pregunta al almacén qué ES cada observación.
+  const { master, unresolved } = judgeMasterUpdates(tail, resolveTopicKey);
 
-  for (const { id } of pairingsSeenNow) knownIds.add(id);
+  if (master) return undefined;
 
-  if (hasMasterBacklogUpdate(tail, knownIds)) return undefined;
+  // A mem_update was in the turn but the store could not say what it targeted: fail open, on the record.
+  // @es Hubo un mem_update pero el almacén no pudo decir su objetivo: falla abierto, dejando constancia.
+  if (unresolved.length > 0) {
+    reportDegraded({ errors: unresolved });
+
+    return undefined;
+  }
 
   return { marker, sessionId, transcriptPath };
 }

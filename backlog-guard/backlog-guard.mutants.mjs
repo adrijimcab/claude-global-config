@@ -33,13 +33,23 @@ const MUTANTS = [
   ['the shim stops journaling its refusals, so no evidence survives the block', 'guard.mjs', 'journal({ at: new Date().toISOString(), session: finding.sessionId, marker: finding.marker, transcript: finding.transcriptPath });', ''],
   ['the standalone hook stops printing the block, so a decided refusal never reaches the harness', 'guard.mjs', 'if (output !== undefined) console.log(JSON.stringify(output));', ''],
   // --- the mem_update face (found in live use: mem_update carries no topic_key of its own)
-  ['a mem_update of a known master id no longer satisfies a pending announcement', 'decide.mjs', 'if (hasMasterBacklogUpdate(tail, knownIds)) return undefined;', ''],
-  ['this turn stops learning new id/topic_key pairings, so a same-turn mem_save+mem_update pair no longer satisfies', 'decide.mjs', 'const pairingsSeenNow = observedMasterIdPairings(tail);', 'const pairingsSeenNow = [];'],
-  ['durably-known ids from earlier turns are never consulted, only what THIS turn just learned', 'decide.mjs', 'const knownIds = readKnownIds();', 'const knownIds = new Set();'],
+  ['a mem_update the store says is a master record no longer satisfies a pending announcement', 'decide.mjs', 'if (master) return undefined;', ''],
+  ['the store failing to answer stops failing open: a mem_update with an unreadable store blocks the turn', 'decide.mjs', 'if (unresolved.length > 0) {', 'if (false) {'],
+  ['the fail-open is no longer reported, so a degraded store leaves no evidence', 'decide.mjs', 'reportDegraded({ errors: unresolved });', ''],
+  ['the production resolver is replaced by one that finds nothing, so the real store is never consulted', 'decide.mjs', 'resolveTopicKey = resolveTopicKeyById,', "resolveTopicKey = () => ({ error: 'not-found' }),"],
+  ['the shim stops journaling the fail-open, so a degraded store leaves no evidence on disk', 'guard.mjs', "reportDegraded: ({ errors }) => journal({ at: new Date().toISOString(), session: payload?.session_id, kind: 'store-unreadable-fail-open', errors, transcript: payload?.transcript_path })", 'reportDegraded: () => {}'],
+  ['a failed query stops counting as a store failure, so it blocks instead of failing open', 'master-update.mjs', "new Set(['store-unreadable', 'query-failed'])", "new Set(['store-unreadable'])"],
+  ['an unreadable store stops counting as a store failure, so it blocks instead of failing open', 'master-update.mjs', "new Set(['store-unreadable', 'query-failed'])", "new Set(['query-failed'])"],
+  ['not-found stops being an answer: an id the store does not hold fails open instead of blocking', 'master-update.mjs', 'if (STORE_FAILURES.has(resolution.error)) unresolved.push(resolution.error);', 'unresolved.push(resolution.error);'],
+  ['an error resolution is no longer recognised, so an unreadable store reads as a plain non-master', 'master-update.mjs', "if ('error' in resolution) {", 'if (false) {'],
+  ['the master-shape check on the resolved topic_key is gone: ANY existing observation satisfies the turn', 'master-update.mjs', 'if (isMasterBacklogTopicKey(resolution.topicKey)) return { master: true, unresolved: [] };', 'return { master: true, unresolved: [] };'],
+  ['a non-numeric id is asked about the store as if it were an observation id', 'master-update.mjs', 'Number.isInteger(node.input.id)', 'node.input.id !== undefined'],
+  ['any tool call with an input id counts as a mem_update, including a READ of the master record', 'master-update.mjs', 'node.name.endsWith(UPDATE_TOOL_SUFFIX)', 'node.name.length > 0'],
+  ['the transcript walk stops descending, so a real nested tool_use block is never found', 'master-update.mjs', 'for (const child of Object.values(value)) yield* objectsIn(child);', ''],
+  ['an id updated twice is returned twice, so the store is asked about it twice', 'master-update.mjs', 'return [...ids];', 'return [...ids, ...ids];'],
   ['the mem_update tool-name requirement is dropped: a bare known id anywhere in the tail now counts', 'master-save.mjs', 'if (!tail.includes(UPDATE_TOOL_MARKER)) return false;', ''],
   ['hasMasterBacklogUpdate stops checking membership, so ANY id satisfies once mem_update appears', 'master-save.mjs', 'for (const id of idsInTail) if (known.has(id)) return true;', 'return true;'],
   ['observedMasterIdPairings stops filtering by master shape, so ANY topic_key teaches an id as master', 'master-save.mjs', 'if (!isMasterBacklogTopicKey(topicKey)) continue;', ''],
-  ['learned id/topic_key pairings are no longer merged into the durable known-ids record', 'state.mjs', 'for (const { id } of pairings) known.add(id);', ''],
   // --- the mem_get_observation metadata-footer source (found missing in live use the day after the
   //     mem_update fix shipped: a READ's result footer teaches an id/topic_key pairing too)
   ['the metadata-footer source is never consulted, so a mem_get_observation result teaches nothing', 'master-save.mjs', 'return [...pairings, ...observedFromResultMetadata(text)];', 'return pairings;'],
@@ -56,11 +66,24 @@ const MUTANTS = [
   ['a record with no newline after it loses its end, so the last topic value is cut', 'master-save.mjs', 'return newlineAt === -1 ? text.length : newlineAt;', 'return newlineAt;']
 ];
 
+// The campaign runs from the fleet root because `decide.mjs` imports the shared store resolver from the
+// sibling `backlog-owner-guard/` directory: a sandbox holding only this directory could not load it.
+// Mutant files are written relative to this directory and prefixed here; `resolve-topic-key.mjs` is
+// mutated by `backlog-owner-guard/mutants.mjs`, which owns it.
+// @es La campaña corre desde la raíz de la flota porque `decide.mjs` importa el resolutor del almacén del
+// directorio hermano `backlog-owner-guard/`. Las rutas de los mutantes son relativas a este directorio y
+// se prefijan aquí; `resolve-topic-key.mjs` lo muta `backlog-owner-guard/mutants.mjs`, su dueño.
+const THIS_DIRECTORY = 'backlog-guard';
+const FLEET_ROOT = path.resolve(HERE, '..');
+
 const survivors = runMutants({
-  fleetRoot: HERE,
-  paths: ['decide.mjs', 'guard.mjs', 'markers.mjs', 'master-save.mjs', 'state.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json', 'fixtures'],
-  selftest: 'selftest.mjs',
-  mutants: MUTANTS
+  fleetRoot: FLEET_ROOT,
+  paths: [
+    ...['decide.mjs', 'guard.mjs', 'markers.mjs', 'master-save.mjs', 'master-update.mjs', 'state.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json', 'fixtures'].map((file) => `${THIS_DIRECTORY}/${file}`),
+    'backlog-owner-guard/resolve-topic-key.mjs'
+  ],
+  selftest: `${THIS_DIRECTORY}/selftest.mjs`,
+  mutants: MUTANTS.map(([label, file, original, replacement]) => [label, `${THIS_DIRECTORY}/${file}`, original, replacement])
 });
 
 process.exit(survivors === 0 ? 0 : 1);

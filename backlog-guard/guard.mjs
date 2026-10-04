@@ -72,9 +72,11 @@ function blockOutput({ marker, sessionId, transcriptPath }) {
     '       mem_save({ topic_key: "backlog/<milestone>-master", content: "<everything, old + new>", … })',
     '       mem_update({ id: <the master observation\'s own id>, content: "<everything, old + new>" })',
     '',
-    '     `mem_update` is recognised too, but ONLY once this guard has seen that id\'s `topic_key` at',
-    '     least once (from an earlier `mem_save`/`mem_get_observation` in this session) — it carries no',
-    '     `topic_key` of its own, so a FIRST-EVER write to a brand-new master record must be `mem_save`.',
+    '     `mem_update` is recognised too: this guard asks the engram store whether the updated id holds a',
+    '     `-master` topic_key. If the store cannot be read, the turn is let through and the degradation is',
+    '     journaled. @es `mem_update` también se reconoce: esta guardia pregunta al almacén de engram si',
+    '     el id actualizado tiene un topic_key `-master`; si el almacén no se puede leer, el turno pasa y',
+    '     la degradación queda en el journal.',
     '',
     '  B) DISMISS IT, with a reason that gets written down (not a silent escape — the dismissal log is',
     '     the only evidence that could ever justify narrowing the marker set):',
@@ -112,7 +114,9 @@ export function evaluate(raw) {
   let finding;
 
   try {
-    finding = decide(payload);
+    finding = decide(payload, {
+      reportDegraded: ({ errors }) => journal({ at: new Date().toISOString(), session: payload?.session_id, kind: 'store-unreadable-fail-open', errors, transcript: payload?.transcript_path })
+    });
   } catch {
     return undefined; // fail open: a malfunction here must never silence a turn ending
   }

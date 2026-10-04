@@ -18,6 +18,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
 import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs } from './dismiss.mjs';
@@ -60,27 +61,42 @@ function stopPayload(message, { sessionId = 's-1', transcriptPath = 'C:/fixture/
 
 /**
  * The verdict as `'allow'` / `'deny'`, from FULLY injected dependencies — no real transcript file and,
- * critically, no REAL known-master-ids store touched. Without isolating that store too, a fixture run
- * would read/write `state/known-master-ids.json` on disk, and a fact "learned" by one selftest run
- * would silently leak into the next — the exact `guard-that-cannot-go-red` shape (a fixture built on
- * live mutable state) this fleet's own promoted rule names.
- * @es El veredicto con TODAS las dependencias inyectadas — sin tocar ni el transcript real ni,
- * críticamente, el registro REAL de ids maestros conocidos.
+ * critically, no REAL engram store: `store` maps an observation id to its topic_key (an id absent from
+ * it is "not-found"), `storeErrors` maps an id to a store failure, and every id the decision asks about
+ * is recorded in `lookups`. Reading the developer's real store would make the verdict depend on live
+ * mutable state — the `guard-that-cannot-go-red` shape this fleet's own promoted rule names.
+ * @es El veredicto con TODAS las dependencias inyectadas — sin tocar ni el transcript real ni el
+ * almacén REAL de engram: `store` mapea un id de observación a su topic_key (un id ausente es
+ * «not-found»), `storeErrors` mapea un id a un fallo del almacén y cada id consultado queda en `lookups`.
  */
-function verdict(payload, { offset = 0, tail = '', size = undefined, knownIds = new Set() } = {}) {
+function verdict(payload, { offset = 0, tail = '', size = undefined, store = {}, storeErrors = {} } = {}) {
   const writes = [];
-  const learned = [];
+  const lookups = [];
+  const degraded = [];
   const decision = decide(payload, {
     readState: () => (offset === undefined ? undefined : { offset }),
     writeState: (sessionId, state) => writes.push({ sessionId, state }),
     readTail: () => tail,
     sizeOf: () => size,
-    readKnownIds: () => new Set(knownIds),
-    recordKnownIds: (pairings) => learned.push(...pairings)
+    resolveTopicKey: (id) => {
+      lookups.push(id);
+
+      if (Object.hasOwn(storeErrors, id)) return { error: storeErrors[id] };
+
+      return Object.hasOwn(store, id) ? { topicKey: store[id] } : { error: 'not-found' };
+    },
+    reportDegraded: (info) => degraded.push(info)
   });
 
-  return { result: decision === undefined ? 'allow' : 'deny', writes, learned };
+  return { result: decision === undefined ? 'allow' : 'deny', writes, lookups, degraded };
 }
+
+/** One transcript line holding an engram tool call, in the real nested shape. @es Una línea de transcript con una llamada de herramienta de engram, con la forma anidada real. */
+function toolUseLine(name, input) {
+  return JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_x', name, input }] } });
+}
+
+const UPDATE = 'mcp__plugin_engram_engram__mem_update';
 
 // ---------------------------------------------------------------------------------------------
 // STATE 1: pending phrase + no save -> block
@@ -111,47 +127,111 @@ check('pending phrase + no save -> block', verdict(stopPayload(PENDING_MESSAGE),
 }
 
 // ---------------------------------------------------------------------------------------------
-// THE mem_update FACE, found in live use (`mem_update` edits an existing observation by `id` alone —
-// no `topic_key` of its own): required states, from the owner's own bug report.
+// THE mem_update FACE (`mem_update` edits an existing observation by `id` alone — no `topic_key` of
+// its own). ONE QUESTION decides it: "is the observation this turn's `mem_update` targeted a master
+// backlog record?" — answered by ASKING THE ENGRAM STORE (`resolveTopicKey`), never by remembering what
+// an earlier turn happened to read. Live defect that replaced the transcript learning (2026-10-02,
+// id 1129): a `mem_update` of a master id whose read sat in an earlier turn was refused as
+// "nothing saved".
+// @es LA CARA mem_update: UNA pregunta la decide — «¿la observación que el `mem_update` de este turno
+// tocó es un registro de backlog maestro?» — respondida PREGUNTANDO AL ALMACÉN de engram, nunca
+// recordando lo que un turno anterior leyó. Defecto en vivo que reemplazó el aprendizaje del transcript.
 // ---------------------------------------------------------------------------------------------
-{
-  // mem_update of the master id, in-turn -> allow. `knownIds` models "this guard already learned,
-  // at some point, that observation 972 IS the master backlog" — exactly what an earlier `mem_save`
-  // teaches (`observedMasterIdPairings`, exercised separately below).
-  const tail = '{"name":"mcp__engram__mem_update","input":{"id":972,"content":"revisión actualizada"}}';
-  check('mem_update of the master id, in-turn -> allow', verdict(stopPayload(PENDING_MESSAGE), { tail, knownIds: new Set([972]) }).result, 'allow');
-}
-{
-  // mem_update of an UNRELATED id -> block. Same tail shape, an id this guard has never tied to any
-  // master topic_key.
-  const tail = '{"name":"mcp__engram__mem_update","input":{"id":631,"content":"a different, unrelated note"}}';
-  check('mem_update of an UNRELATED id -> block', verdict(stopPayload(PENDING_MESSAGE), { tail, knownIds: new Set([972]) }).result, 'deny');
-}
-{
-  // mem_update of the master id, but the id was learned in an EARLIER turn only, and the update
-  // itself sits in THIS turn's tail -> allow (the FACT "972 is master" is durable across turns; the
-  // WRITE must be in this turn, and it is).
-  const tail = '{"name":"mcp__engram__mem_update","input":{"id":972,"content":"turn 2 revision"}}';
-  check('mem_update of the master id, id known from an EARLIER turn, update happens THIS turn -> allow', verdict(stopPayload(PENDING_MESSAGE), { tail, knownIds: new Set([972]) }).result, 'allow');
-}
-{
-  // The counterpart the owner explicitly asked for: the UPDATE ITSELF happened in an earlier turn
-  // only (this turn's tail has nothing at all) -> block, same per-turn windowing as every other state.
-  check('mem_update of the master id in an EARLIER turn only (nothing in THIS turn\'s tail) -> block', verdict(stopPayload(PENDING_MESSAGE), { tail: '', knownIds: new Set([972]) }).result, 'deny');
-}
-{
-  // The id/topic_key pairing can be learned from THIS SAME turn's own tail (a mem_save followed
-  // later, in the same tail, by a mem_update of the id its own result just revealed) -- no
-  // pre-seeded `knownIds` needed at all.
-  const tail = [
-    '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"…"}}',
-    '{"tool_use_id":"toolu_1","content":[{"type":"text","text":"{\\"id\\":972,\\"result\\":\\"Memory saved\\"}"}]}',
-    '{"name":"mcp__engram__mem_update","input":{"id":972,"content":"same-turn follow-up"}}'
-  ].join('\n');
-  const { result, learned } = verdict(stopPayload(PENDING_MESSAGE), { tail });
+const MASTER_STORE = { 972: 'backlog/1.0.0-master', 1129: 'backlog/discovery-migration-master', 631: 'decision/unrelated-note', 700: 'backlog/1.0.0-master-plan', 701: null };
 
-  check('the id/topic_key pairing is learned from a mem_save earlier in the SAME turn, satisfying a later mem_update in that same turn', result, 'allow');
-  check('...and the learned pairing is exactly {972, backlog/1.0.0-master}', learned, [{ id: 972, topicKey: 'backlog/1.0.0-master' }]);
+{
+  const tail = toolUseLine(UPDATE, { id: 1129, content: 'revisión completa' });
+  const { result, lookups } = verdict(stopPayload(PENDING_MESSAGE), { tail, store: MASTER_STORE });
+
+  check('mem_update of a master id with NO read of it anywhere in the turn -> allow (the store says master)', result, 'allow');
+  check('...and the store was asked about exactly that id', lookups, [1129]);
+}
+{
+  const tail = toolUseLine(UPDATE, { id: 631, content: 'a different, unrelated note' });
+  const { result, lookups } = verdict(stopPayload(PENDING_MESSAGE), { tail, store: MASTER_STORE });
+
+  check('mem_update of a NON-master id -> block', result, 'deny');
+  check('...after asking the store about it', lookups, [631]);
+}
+check('mem_update of an id the store does not hold (not-found) -> block', verdict(stopPayload(PENDING_MESSAGE), { tail: toolUseLine(UPDATE, { id: 424242 }), store: MASTER_STORE }).result, 'deny');
+check('near miss: id whose topic_key only CONTAINS "master" (backlog/…-master-plan) -> block', verdict(stopPayload(PENDING_MESSAGE), { tail: toolUseLine(UPDATE, { id: 700 }), store: MASTER_STORE }).result, 'deny');
+check('id whose row has a null topic_key -> block', verdict(stopPayload(PENDING_MESSAGE), { tail: toolUseLine(UPDATE, { id: 701 }), store: MASTER_STORE }).result, 'deny');
+{
+  // The update happened in an EARLIER turn only: this turn's tail holds nothing, so the store is not
+  // even consulted and the per-turn windowing is unchanged.
+  // @es El update fue de un turno ANTERIOR: la cola de este turno está vacía; ni se consulta el almacén.
+  const { result, lookups } = verdict(stopPayload(PENDING_MESSAGE), { tail: '', store: MASTER_STORE });
+
+  check('mem_update of the master id in an EARLIER turn only -> block', result, 'deny');
+  check('...and the store is not consulted when the turn holds no mem_update', lookups, []);
+}
+{
+  // Only a mem_update TARGET counts: the master id appearing in a READ's result, beside an update of an
+  // unrelated id, must not satisfy the turn (the old scan took any known id anywhere in the tail).
+  // @es Solo cuenta el OBJETIVO de un mem_update: el id maestro en el resultado de una LECTURA, junto a
+  // un update de otro id, no satisface el turno (el escaneo antiguo tomaba cualquier id conocido).
+  const tail = [
+    toolUseLine('mcp__plugin_engram_engram__mem_get_observation', { id: 972 }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: [{ type: 'text', text: '{"id":972,"result":"#972 [decision] x\\nTopic: backlog/1.0.0-master"}' }] }] } }),
+    toolUseLine(UPDATE, { id: 631 })
+  ].join('\n');
+  const { result, lookups } = verdict(stopPayload(PENDING_MESSAGE), { tail, store: MASTER_STORE });
+
+  check('a master id that is only READ in the turn, beside a mem_update of a non-master id -> block', result, 'deny');
+  check('...and only the mem_update target was asked about', lookups, [631]);
+}
+check('both tool spellings are recognised: the bare mcp__engram__ mount allows too', verdict(stopPayload(PENDING_MESSAGE), { tail: toolUseLine('mcp__engram__mem_update', { id: 972 }), store: MASTER_STORE }).result, 'allow');
+check('a non-numeric id is never asked about and does not satisfy the turn', (() => {
+  const { result, lookups } = verdict(stopPayload(PENDING_MESSAGE), { tail: toolUseLine(UPDATE, { id: 'abc' }), store: MASTER_STORE });
+
+  return `${result}/${String(lookups.length)}`;
+})(), 'deny/0');
+check('a corrupt transcript line is skipped, the valid update after it still counts', verdict(stopPayload(PENDING_MESSAGE), { tail: `{"half a li\n${toolUseLine(UPDATE, { id: 972 })}`, store: MASTER_STORE }).result, 'allow');
+check('the bare tool name "mem_update" is recognised too', verdict(stopPayload(PENDING_MESSAGE), { tail: toolUseLine('mem_update', { id: 972 }), store: MASTER_STORE }).result, 'allow');
+check('the same id updated twice is asked about once', verdict(stopPayload(PENDING_MESSAGE), { tail: [toolUseLine(UPDATE, { id: 631 }), toolUseLine(UPDATE, { id: 631 })].join('\n'), store: MASTER_STORE }).lookups, [631]);
+check('first update non-master, second master -> allow', verdict(stopPayload(PENDING_MESSAGE), { tail: [toolUseLine(UPDATE, { id: 631 }), toolUseLine(UPDATE, { id: 972 })].join('\n'), store: MASTER_STORE }).result, 'allow');
+
+// --- THE STORE CANNOT BE READ: decided and justified in `decide.mjs`' header. A `mem_update` is in the
+//     turn but nothing proves what it targeted -> FAIL OPEN and say so (a false block is the defect this
+//     replaces; a false allow is bounded by the heuristic announcement and is journalled).
+// @es EL ALMACÉN NO SE PUEDE LEER: un `mem_update` está en el turno pero nada prueba su objetivo -> FALLA
+//     ABIERTO y lo dice (un bloqueo falso es el defecto que esto reemplaza; un permiso falso queda
+//     acotado por el anuncio heurístico y se anota en el journal).
+{
+  const tail = toolUseLine(UPDATE, { id: 631 });
+  const { result, degraded } = verdict(stopPayload(PENDING_MESSAGE), { tail, storeErrors: { 631: 'store-unreadable' } });
+
+  check('store unreadable + a mem_update in the turn -> allow (fail open)', result, 'allow');
+  check('...and the degradation is reported exactly once, naming the store failure', degraded, [{ errors: ['store-unreadable'] }]);
+}
+check('a failed query (query-failed) fails open the same way', verdict(stopPayload(PENDING_MESSAGE), { tail: toolUseLine(UPDATE, { id: 631 }), storeErrors: { 631: 'query-failed' } }).result, 'allow');
+{
+  const { result, lookups, degraded } = verdict(stopPayload(PENDING_MESSAGE), { tail: 'plain text, no tool calls at all', storeErrors: { 631: 'store-unreadable' } });
+
+  check('store unreadable but NO mem_update in the turn -> still block (nothing to fail open for)', result, 'deny');
+  check('...and no degradation is reported when the store was never needed', [lookups.length, degraded.length], [0, 0]);
+}
+{
+  const tail = [toolUseLine(UPDATE, { id: 631 }), toolUseLine(UPDATE, { id: 100 })].join('\n');
+  const { result } = verdict(stopPayload(PENDING_MESSAGE), { tail, store: MASTER_STORE, storeErrors: { 100: 'store-unreadable' } });
+
+  check('one update proven non-master and another unreadable -> allow (the unreadable one could be the master)', result, 'allow');
+}
+{
+  const tail = [toolUseLine(UPDATE, { id: 100 }), toolUseLine(UPDATE, { id: 972 })].join('\n');
+  const { result, degraded } = verdict(stopPayload(PENDING_MESSAGE), { tail, store: MASTER_STORE, storeErrors: { 100: 'store-unreadable' } });
+
+  check('a master proven by the store wins over an unreadable sibling update -> allow', result, 'allow');
+  check('...with no degradation reported, because the store DID answer the question', degraded, []);
+}
+{
+  // The save path is untouched: a master `mem_save` in the turn satisfies it without any store lookup.
+  // @es La vía de guardado no cambia: un `mem_save` maestro satisface el turno sin consultar el almacén.
+  const tail = '{"type":"tool_use","name":"mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"…"}}';
+  const { result, lookups } = verdict(stopPayload(PENDING_MESSAGE), { tail, store: MASTER_STORE });
+
+  check('a master mem_save still satisfies the turn', result, 'allow');
+  check('...without consulting the store', lookups, []);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -357,16 +437,36 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
   const transcriptPath = path.join(scratch, 'transcript.jsonl');
   const sessionId = `selftest-${String(process.pid)}-${String(Date.now())}`;
 
-  function runGuard(message) {
+  // A real, disposable engram store shaped like the real one (`observations(id, topic_key)`), reached
+  // through `ENGRAM_DATA_DIR` exactly as production reaches `~/.engram`. @es Un almacén de engram real y
+  // desechable con la forma del real, alcanzado por `ENGRAM_DATA_DIR` igual que producción alcanza `~/.engram`.
+  {
+    const seed = new DatabaseSync(path.join(scratch, 'engram.db'));
+
+    seed.exec('CREATE TABLE observations (id INTEGER PRIMARY KEY, topic_key TEXT)');
+    seed.prepare('INSERT INTO observations (id, topic_key) VALUES (?, ?)').run(1129, 'backlog/discovery-migration-master');
+    seed.prepare('INSERT INTO observations (id, topic_key) VALUES (?, ?)').run(631, 'decision/unrelated-note');
+    seed.close();
+  }
+
+  function runGuard(message, { dataDir = scratch } = {}) {
     const input = JSON.stringify(stopPayload(message, { sessionId, transcriptPath }));
+    const env = { ...process.env, ENGRAM_DATA_DIR: dataDir };
 
     try {
-      const out = execFileSync(process.execPath, [GUARD_CLI], { input, encoding: 'utf8' });
+      const out = execFileSync(process.execPath, [GUARD_CLI], { input, encoding: 'utf8', env });
       return { code: 0, out };
     } catch (error) {
       return { code: typeof error?.status === 'number' ? error.status : 'did-not-run', out: `${error?.stdout ?? ''}` };
     }
   }
+
+  const verdictOf = (run) => `${String(run.code)}/${run.out.includes('"decision":"block"') ? 'deny' : 'allow'}`;
+  const degradedJournalledFor = () => {
+    const journalFile = path.join(HERE, 'state', 'refusals.jsonl');
+
+    return existsSync(journalFile) ? readFileSync(journalFile, 'utf8').split('\n').filter((line) => line.includes(sessionId) && line.includes('"store-unreadable"')).length : 0;
+  };
 
   // Turn 1: nothing saved yet, no pending phrase -> allow, and the offset gets recorded.
   writeFileSync(transcriptPath, '{"type":"assistant","text":"turn 1, exploring, nothing pending yet"}\n', 'utf8');
@@ -399,77 +499,33 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
   const turn3 = runGuard(PENDING_MESSAGE);
   check('END TO END turn 3 (pending phrase, save genuinely IN this turn): allowed', `${String(turn3.code)}/${turn3.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
 
-  // Turn 4: a REAL mem_save+topic_key(master)+id pairing, teaching the durable known-ids record for
-  // real (on disk, via `state.mjs`'s own `recordKnownMasterIds`) — not injected. No pending phrase, so
-  // this turn is a plain housekeeping save.
-  const masterId = 90210;
-  appendToFile(
-    transcriptPath,
-    `{"name":"mcp__engram__mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"…"}}\n{"content":[{"type":"text","text":"{\\"id\\":${String(masterId)},\\"result\\":\\"Memory saved\\"}"}]}\n`
-  );
-  const turn4 = runGuard(CLEAN_MESSAGE);
-  check('END TO END turn 4 (real mem_save+id pairing, no pending phrase): allowed', `${String(turn4.code)}/${turn4.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+  // Turns 4-7: the mem_update face against a REAL (constructed, disposable) engram sqlite store reached
+  // through `ENGRAM_DATA_DIR`, in REAL separate processes. No earlier read of the master id exists
+  // anywhere in the transcript — the exact shape of the 2026-10-02 live defect (id 1129): the verdict can
+  // only come from the store.
+  // @es Turnos 4-7: la cara mem_update contra un almacén sqlite de engram REAL (construido y desechable)
+  // alcanzado por `ENGRAM_DATA_DIR`, en procesos separados REALES. No hay lectura previa del id maestro
+  // en el transcript — la forma exacta del defecto en vivo del 2026-10-02 (id 1129).
+  const turn4Line = toolUseLine(UPDATE, { id: 1129, content: 'revised master, never read in any turn' });
 
-  // Turn 5: a FRESH process (a distinct `execFileSync` call, no injected dependencies at all) sees a
-  // pending phrase and a `mem_update` of that SAME id — this can only ALLOW if turn 4's learning
-  // actually persisted to the REAL `state/known-master-ids.json` on disk and turn 5's fresh process
-  // actually read it back. This is what proves `state.mjs`'s real read/write path, not just the
-  // injected `decide()` fixtures above.
-  appendToFile(transcriptPath, `{"name":"mcp__engram__mem_update","input":{"id":${String(masterId)},"content":"revised"}}\n`);
+  appendToFile(transcriptPath, `${turn4Line}\n`);
+  const turn4 = runGuard(PENDING_MESSAGE);
+  check('END TO END turn 4 (mem_update of a master id that was NEVER read in the transcript): allowed', verdictOf(turn4), '0/allow');
+
+  appendToFile(transcriptPath, `${toolUseLine(UPDATE, { id: 631, content: 'unrelated note' })}\n`);
   const turn5 = runGuard(PENDING_MESSAGE);
-  check('END TO END turn 5 (mem_update of an id LEARNED for real in an earlier, separate process): allowed', `${String(turn5.code)}/${turn5.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+  check('END TO END turn 5 (mem_update of a NON-master id): blocked', verdictOf(turn5), '0/deny');
 
-  // Cleanup: turn 4 taught the REAL, durable known-ids record a fixture id — remove it, since that
-  // record is shared, real, ongoing state for this deployed mechanism, not this proof's to keep.
-  {
-    const knownIdsFile = path.join(HERE, 'state', 'known-master-ids.json');
+  const degradedBefore = degradedJournalledFor();
 
-    if (existsSync(knownIdsFile)) {
-      try {
-        const known = JSON.parse(readFileSync(knownIdsFile, 'utf8'));
+  appendToFile(transcriptPath, `${toolUseLine(UPDATE, { id: 631, content: 'unrelated note, store gone' })}\n`);
+  const turn6 = runGuard(PENDING_MESSAGE, { dataDir: path.join(scratch, 'no-engram-here') });
+  check('END TO END turn 6 (mem_update, engram store missing): fails open, allowed', verdictOf(turn6), '0/allow');
+  check('END TO END turn 6: the fail-open is journaled as evidence, naming the store failure', degradedJournalledFor() - degradedBefore, 1);
 
-        writeFileSync(knownIdsFile, JSON.stringify(known.filter((id) => id !== masterId)), 'utf8');
-      } catch {
-        /* best-effort cleanup; a proof may not crash over housekeeping */
-      }
-    }
-  }
-
-  // Turns 6/7: REPLAY of the second live defect, structurally — `mem_get_observation`'s metadata-footer
-  // pairing (NOT the mem_save topic_key pairing turn 4/5 already proved) learned in an EARLIER, separate
-  // process, then a `mem_update` of that SAME id in a LATER turn with a pending phrase. MEASURED
-  // sequence this replays (this session, in order): a `mem_get_observation({id:972})` result carried
-  // `Topic: backlog/1.0.0-master` in the turn BEFORE the one that tripped; a `mem_update({id:972,...})`
-  // ran in the tripping turn; the guard still blocked, because at the time this ran the metadata-footer
-  // source did not exist yet (turn 4/5 above only ever exercises the mem_save-input `topic_key` source).
-  // A fresh id (never 972, never 90210) keeps this replay independent of both real production state and
-  // the earlier fixture's cleanup.
-  const metadataLearnedId = 55501;
-  appendToFile(
-    transcriptPath,
-    `{"name":"mcp__engram__mem_get_observation","input":{"id":${String(metadataLearnedId)}}}\n{"result":"#${String(metadataLearnedId)} [decision] BACKLOG MAESTRO\\nTopic: backlog/1.0.0-master\\nDuplicates: 1"}\n`
-  );
-  const turn6 = runGuard(CLEAN_MESSAGE);
-  check('END TO END turn 6 (mem_get_observation metadata footer, no pending phrase): allowed', `${String(turn6.code)}/${turn6.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
-
-  appendToFile(transcriptPath, `{"name":"mcp__engram__mem_update","input":{"id":${String(metadataLearnedId)},"content":"revised, real cross-turn metadata-footer replay"}}\n`);
+  appendToFile(transcriptPath, `${toolUseLine(UPDATE, { id: 1129, content: 'revised again' })}\n`);
   const turn7 = runGuard(PENDING_MESSAGE);
-  check('END TO END turn 7 (mem_update of an id LEARNED ONLY from an earlier turn\'s mem_get_observation metadata footer): allowed', `${String(turn7.code)}/${turn7.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
-
-  // Cleanup: turn 6 taught the real, durable known-ids record this fixture's id too.
-  {
-    const knownIdsFile = path.join(HERE, 'state', 'known-master-ids.json');
-
-    if (existsSync(knownIdsFile)) {
-      try {
-        const known = JSON.parse(readFileSync(knownIdsFile, 'utf8'));
-
-        writeFileSync(knownIdsFile, JSON.stringify(known.filter((id) => id !== metadataLearnedId)), 'utf8');
-      } catch {
-        /* best-effort cleanup; a proof may not crash over housekeeping */
-      }
-    }
-  }
+  check('END TO END turn 7 (store readable again, master id): allowed, and no new degradation journaled', `${verdictOf(turn7)}/${String(degradedJournalledFor() - degradedBefore)}`, '0/allow/1');
 
   // stop_hook_active always allows, real process included.
   const bypassed = execFileSync(process.execPath, [GUARD_CLI], {
