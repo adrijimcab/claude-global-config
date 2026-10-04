@@ -272,14 +272,17 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   (2026-10-04, claude-global-config 76c1241): `~/.claude/eval-guard/` refuses eaten escapes and broken
   quote shapes in the script arguments of sed, sd, awk, gawk, perl, ruby, python and python3 (kind
   `text-edit`), selftest 101/101, mutation campaign 23/23 killed, a real-shaped payload refused through
-  the dispatcher. Known gap, stated: the shared tokenizer does not understand heredocs, so a heredoc
-  body line that starts with a watched program is refused (a false positive, never a miss); its repair
-  is queued as its own unit.
+  the dispatcher. Heredoc bodies are data since 6258636 (the false positive on a body line that starts
+  with a watched program is gone; the scan resumes after the terminator; `<<<` here-strings are
+  inspected as arguments; selftest 122/122, mutants 30/30). Remaining gap, stated: the tokenizer is
+  shared with the PowerShell tool, where `<<` has no heredoc meaning, so a `<<` in a PowerShell command
+  would open a body — not measured.
   @es Una edición de texto escrita como one-liner de shell pasa por un shell que colapsa las barras
   invertidas dobles y se come la barra antes de `"`, `$` o el acento grave: el patrón no coincide con
   nada, el programa sale con 0 y el fichero queda igual. REGLA: esas ediciones van por la herramienta
   Edit o por un `.mjs`, y tras cualquier edición por script se cuenta el marcador esperado. Lo impide
-  `~/.claude/eval-guard/` desde 76c1241; hueco declarado: los heredocs (falso positivo, nunca un fallo).
+  `~/.claude/eval-guard/` desde 76c1241; los cuerpos de heredoc son datos desde 6258636; hueco
+  declarado: `<<` en comandos de PowerShell, sin medir.
 - **`brief-had-workers-open-every-image`** — An image is the most expensive thing a worker can load,
   and every image it opens is re-sent on each of its later steps: the cost is images times remaining
   steps. Twice in one day (2026-10-02) a brief of mine made workers review a body of screenshots
