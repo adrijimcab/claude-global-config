@@ -15,6 +15,9 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/** A latency run set longer than this is killed and not measured (milliseconds). @es Un conjunto de corridas más largo que esto se mata y no se mide. */
+export const LATENCY_TIMEOUT_MS = 900_000;
+
 const REAL_MACHINE = { home: homedir(), tmp: tmpdir(), fleet: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..') };
 
 /** The options of one record run from the parsed command-line `values`. @es Las opciones de una corrida a partir de los `values` de la línea de comandos. */
@@ -27,7 +30,7 @@ export function optionsFrom(values, machine = REAL_MACHINE) {
   if (!Number.isInteger(runs) || runs < 1) throw new Error(`--runs must be a positive integer, got ${values.runs}`);
 
   return {
-    home, fleet, projectsRoot, runs, tmp: machine.tmp,
+    home, fleet, projectsRoot, runs, tmp: machine.tmp, latencyTimeoutMs: LATENCY_TIMEOUT_MS,
     b100: values.b100 ?? path.join(projectsRoot, 'b100-am-ui'),
     discovery: values.discovery ?? path.join(projectsRoot, 'di_1700002_discovery_fe'),
     backupGitDir: values['backup-git-dir'] ?? path.join(machine.home, '.claude-backups', 'b100-am-ui-claude-tooling.git'),

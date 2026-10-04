@@ -28,6 +28,8 @@ const MUTANTS = [
   ['the fleet default is the Claude home', O, 'values.fleet ?? machine.fleet', 'values.fleet ?? home'],
   ['the projects root is Desktop only', O, "path.join(machine.home, 'Desktop', 'Projects')", "path.join(machine.home, 'Desktop')"],
   ['the projects root is Projects under the home', O, "path.join(machine.home, 'Desktop', 'Projects')", "path.join(machine.home, 'Projects')"],
+  ['the latency timeout is in seconds', O, 'LATENCY_TIMEOUT_MS = 900_000', 'LATENCY_TIMEOUT_MS = 900'],
+  ['the latency timeout is not carried into the options', O, 'latencyTimeoutMs: LATENCY_TIMEOUT_MS', 'latencyTimeoutMs: undefined'],
   ['the default run count is 2', O, "values.runs ?? '20'", "values.runs ?? '2'"],
   ['the default b100 is another project', O, "path.join(projectsRoot, 'b100-am-ui')", "path.join(projectsRoot, 'b100')"],
   ['the default b100 is not under the projects root', O, "path.join(projectsRoot, 'b100-am-ui')", "path.join(machine.home, 'b100-am-ui')"],

@@ -17,7 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { optionsFrom } from './options.mjs';
+import { LATENCY_TIMEOUT_MS, optionsFrom } from './options.mjs';
 
 let passed = 0;
 const failures = [];
@@ -53,6 +53,7 @@ check('defaults: the backup git dir of the b100 tooling', defaults.backupGitDir,
 check('defaults: the budget script is capture.mjs of the Claude home', defaults.capture, path.join('U', 'user', '.claude', 'failure-capture', 'capture.mjs'));
 check('defaults: the replay script is the fleet\'s', defaults.replay, path.join('F', 'fleet', 'hook-dispatch', 'replay.mjs'));
 check('defaults: 20 runs and the machine temp directory', [defaults.runs, defaults.tmp], [20, path.join('T', 'tmp')]);
+check('defaults: a latency run set is killed after fifteen minutes, in milliseconds', [defaults.latencyTimeoutMs, LATENCY_TIMEOUT_MS], [900000, 900000]);
 check('defaults: the clock is a real ISO time', /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(now()), true);
 
 const real = outcome(() => optionsFrom({}));
