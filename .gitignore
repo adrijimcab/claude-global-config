@@ -114,6 +114,8 @@
 !/backlog-content-guard/
 !/backlog-content-guard/**
 /backlog-content-guard/state/
+!/journal-backup/
+!/journal-backup/**
 !/hook-caller/
 !/hook-caller/**
 /hook-caller/state/
