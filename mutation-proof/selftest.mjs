@@ -48,13 +48,16 @@ check(thrown.kind === 'crash', 'an uncaught throw is a CRASH kill');
 check(thrown.firstLine === 'ReferenceError: missing is not defined', 'and the crash names the thrown error, not the source excerpt above it');
 check(JSON.stringify(thrown.frames) === JSON.stringify(['decide (file:///x/target.mjs:3:10)']), 'and it carries the frames of its trace, with the first one naming where it threw');
 const longTrace = 'Error: x\n    at one (a.mjs:1:1)\n    at node:internal/modules/run_main:1:1\n    at two (b.mjs:2:2)\n    at three (c.mjs:3:3)\n    at four (d.mjs:4:4)\n';
-check(classifyKill(run('', longTrace)).frames?.join('|') === 'one (a.mjs:1:1)|two (b.mjs:2:2)|three (c.mjs:3:3)', 'at most three frames are kept and the ones that are the runtime internals are skipped');
+check(classifyKill(run('', `${longTrace}${FATAL_TAIL}`)).frames?.join('|') === 'one (a.mjs:1:1)|two (b.mjs:2:2)|three (c.mjs:3:3)', 'at most three frames are kept and the ones that are the runtime internals are skipped');
 
 const nearMiss = classifyKill(run('PASS a\n', `AssertionError [ERR_ASSERTION]: the decision is wrong\n    at file:///x/selftest.mjs:9:1${FATAL_TAIL}`));
 check(nearMiss.kind === 'assertion', 'an uncaught AssertionError is an ASSERTION kill: node:assert IS the check');
 
 const traceOnly = classifyKill(run('PASS a\nFAIL b\n', 'TypeError: handled\n    at somewhere (file:///x/y.mjs:1:1)\n'));
-check(traceOnly.kind === 'crash' && traceOnly.firstLine === 'TypeError: handled', 'a stack trace on stderr without the fatal trailer is still a CRASH, with its first line');
+check(traceOnly.kind === 'assertion', 'a stack trace on stderr WITHOUT the fatal trailer is an ASSERTION kill: the selftest printed it itself, inside a failure report');
+
+const reportWithTrace = classifyKill(run('', 'FAIL no test command: exit 2, got 1: RED [verification-red]\n    at TracingChannel.traceSync (node:diagnostics_channel:328:14)\n'));
+check(reportWithTrace.kind === 'assertion', 'a failed check that embeds the trace of the code it observed (a report quoting a child) is an ASSERTION kill');
 
 const thrownString = classifyKill(run('PASS a\n', `/x/target.mjs:3\nthrow 'boom';\n^\nboom\n(Use node --trace-uncaught to show where the exception was thrown)${FATAL_TAIL}`));
 check(thrownString.kind === 'crash', 'an uncaught throw of a non-Error carries the fatal trailer and no stack frame: still a CRASH');

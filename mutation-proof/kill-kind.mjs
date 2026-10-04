@@ -6,15 +6,20 @@
  * evidence and the runner reports them apart. The signals, each measured on Node 22:
  * - an UNCAUGHT throw ends the process with a `Node.js v<version>` trailer on stderr, which a selftest that
  *   catches and reports a failure never prints;
- * - a stack-frame line (`    at ...`) on stderr is a trace even without the trailer;
+ * - a stack-frame line (`    at ...`) WITHOUT that trailer is NOT a crash: a selftest that reports a failed
+ *   check often quotes the trace of the code it observed (a landing report quoting a child process), and
+ *   the process still ended by its own decision. MEASURED: reading it as a crash flagged exactly such a
+ *   kill in the worktree-landing campaign. The residual gap, stated: a top-level handler that prints a trace
+ *   and exits 1 reads as a report;
  * - a non-zero exit that printed nothing reported no check at all;
  * - an uncaught `AssertionError` is the exception: `node:assert` IS the check, so it stays an ASSERTION.
  *
  * @es Decide CÓMO se puso rojo un selftest: porque un check reportó una decisión errónea (ASERCIÓN), o
  * porque el código mutado lanzó y el selftest nunca llegó a comprobar nada (CRASH). Un crash prueba que se
  * alcanzó la línea, no que un check la decida; por eso se informan aparte. Señales: el pie `Node.js v<versión>`
- * de un throw sin capturar, una línea de traza `    at ...` en stderr, y una salida no cero sin ninguna
- * salida. Un `AssertionError` sin capturar sigue siendo ASERCIÓN: `node:assert` ES el check.
+ * de un throw sin capturar y una salida no cero sin ninguna salida. Una traza `    at ...` SIN ese pie no es
+ * un crash: un selftest que informa un check fallido suele citar la traza del código que observó. Un
+ * `AssertionError` sin capturar sigue siendo ASERCIÓN: `node:assert` ES el check.
  */
 
 const FATAL_TRAILER = /^Node\.js v\d/m;
@@ -38,7 +43,7 @@ export function classifyKill(run) {
 
   if (stdout.trim().length === 0 && stderr.trim().length === 0) return { kind: 'crash', firstLine: 'no output: the selftest reported no check before exiting @es sin salida: el selftest no reportó ningún check' };
   if (ASSERTION_ERROR.test(stderr)) return { kind: 'assertion' };
-  if (!FATAL_TRAILER.test(stderr) && !STACK_FRAME.test(stderr)) return { kind: 'assertion' };
+  if (!FATAL_TRAILER.test(stderr)) return { kind: 'assertion' };
 
   return { kind: 'crash', firstLine: thrownLineOf(stderr), frames: framesOf(stderr) };
 }

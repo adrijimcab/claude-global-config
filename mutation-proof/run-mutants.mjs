@@ -45,7 +45,7 @@
  * selftest refused to pass. What separates it from a syntax error is that the mutated code EXECUTED, and
  * that is decidable statically. What it does NOT prove is that a check decides the named decision: the
  * selftest died before checking. `kill-kind.mjs` therefore classifies every kill as ASSERTION (the selftest
- * reported a failed check) or CRASH (uncaught throw, stack trace, or no report at all; an uncaught
+ * reported a failed check) or CRASH (uncaught throw, or no report at all; an uncaught
  * `AssertionError` is still an assertion), and a crash prints as `CRASHED` with the first line of its error.
  * DECISION: `crashKills` is 'report' by default (the verdict is unchanged, a WEAK PROOF notice is printed) and
  * 'fail' counts each crash as a survivor. The default stays 'report' only while campaigns still hold crash

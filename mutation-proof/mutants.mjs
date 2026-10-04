@@ -23,9 +23,10 @@ const MUTANTS = [
   ['a silent non-zero exit is read as an assertion', KIND, 'if (stdout.trim().length === 0 && stderr.trim().length === 0) return {', 'if (false) return {'],
   ['a failure reported only on stderr is read as silent', KIND, 'stdout.trim().length === 0 && stderr.trim().length === 0', 'stdout.trim().length === 0 || stderr.trim().length === 0'],
   ['an uncaught AssertionError is read as a crash', KIND, "  if (ASSERTION_ERROR.test(stderr)) return { kind: 'assertion' };\n", ''],
-  ['the fatal trailer alone no longer makes a crash', KIND, '!FATAL_TRAILER.test(stderr) && !STACK_FRAME.test(stderr)', '!STACK_FRAME.test(stderr)'],
-  ['a stack trace without the trailer no longer makes a crash', KIND, '!FATAL_TRAILER.test(stderr) && !STACK_FRAME.test(stderr)', '!FATAL_TRAILER.test(stderr)'],
-  ['a crash needs both signals instead of either', KIND, '!FATAL_TRAILER.test(stderr) && !STACK_FRAME.test(stderr)', '!FATAL_TRAILER.test(stderr) || !STACK_FRAME.test(stderr)'],
+  ['the fatal trailer no longer makes a crash: no red is one', KIND, "if (!FATAL_TRAILER.test(stderr)) return { kind: 'assertion' };", "if (true) return { kind: 'assertion' };"],
+  ['the fatal trailer is not required: every red with output is a crash', KIND, "if (!FATAL_TRAILER.test(stderr)) return { kind: 'assertion' };", ''],
+  ['a stack trace alone makes a crash', KIND, '!FATAL_TRAILER.test(stderr)', '!FATAL_TRAILER.test(stderr) && !STACK_FRAME.test(stderr)'],
+  ['the trailer test is inverted', KIND, '!FATAL_TRAILER.test(stderr)', 'FATAL_TRAILER.test(stderr)'],
   ['the crash line is the source excerpt instead of the named error', KIND, 'if (named !== null) return named[0].trimEnd();', 'if (false) return named[0].trimEnd();'],
   ['a crash with no named error reports nothing', KIND, "return stderr.split('\\n').find((line) => line.trim().length > 0)?.trimEnd() ?? '';", "return '';"],
 
