@@ -87,7 +87,7 @@ const MUTANTS = [
   ['the lesson is not checked for newlines or marker openers', CAPTURE, "typeof lesson === 'string' ? oneLineProblems('--lesson', lesson) : []", '[]'],
   ['a --rule flag with no value is treated as a rule', CAPTURE, "typeof rule !== 'string') return", 'false) return'],
   ['the rule never reaches the spool, so capture always writes the legacy line', COMMAND, '...(rule === undefined ? {} : { rule })', '...{}'],
-  ['the fallback to the full line is not announced', COMMAND, 'if (mine.fallback !== undefined) console.log(', 'if (false) console.log('],
+  ['the fallback to the full line is not announced', COMMAND, 'if (mine.fallback !== undefined) speaker.data(', 'if (false) speaker.data('],
   ['the legacy lesson no longer has to state its RULE', COMMAND, "if (rule === undefined && typeof lesson === 'string' && !lesson.includes('RULE'))", 'if (false)'],
   ['the Spanish half of a message repeats the English parts', LINE, "halves.map(([english, spanish = english]) => spanish).join(' ')", "halves.map(([english]) => english).join(' ')"],
   ['every part of a message carries its own @es', LINE, "halves.map(([english]) => english).join(' ')} @es", "halves.map(([english, spanish]) => `${english} @es ${spanish}`).join(' ')} @es"],

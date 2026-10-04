@@ -42,9 +42,9 @@ const MUTANTS = [
   // --- the command
   ['an over-size set exits 0', C, EXIT, '0'],
   ['a within set exits 1', C, EXIT, '1'],
-  ['an unmeasurable set exits 1', C, '    return 2;\n  }\n}\n\nconst USAGE', '    return 1;\n  }\n}\n\nconst USAGE'],
-  ['an unmeasurable set exits 0', C, '    return 2;\n  }\n}\n\nconst USAGE', '    return 0;\n  }\n}\n\nconst USAGE'],
-  ['the cause of an unmeasurable set goes to stdout', C, 'console.error(renderUnmeasured(', 'console.log(renderUnmeasured('],
+  ['an unmeasurable set exits 1', C, 'speaker.dataError(renderUnmeasured(error instanceof Error ? error.message : String(error)));\n\n    return 2;', 'speaker.dataError(renderUnmeasured(error instanceof Error ? error.message : String(error)));\n\n    return 1;'],
+  ['an unmeasurable set exits 0', C, 'speaker.dataError(renderUnmeasured(error instanceof Error ? error.message : String(error)));\n\n    return 2;', 'speaker.dataError(renderUnmeasured(error instanceof Error ? error.message : String(error)));\n\n    return 0;'],
+  ['the cause of an unmeasurable set goes to stdout', C, 'speaker.dataError(renderUnmeasured(', 'speaker.data(renderUnmeasured('],
   ['a project directory that does not exist is measured anyway', C, 'if (!existsSync(directory)) throw', 'if (false) throw'],
   ['--project is ignored', C, "typeof args.project === 'string' ? path.resolve(args.project) : process.cwd()", 'process.cwd()'],
   ['the project ceiling is ignored', C, 'projectCeiling: project?.loadedSetCeiling', 'projectCeiling: undefined'],

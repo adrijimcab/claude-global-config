@@ -50,7 +50,7 @@ const MUTANTS = [
   ['the fold takes some other lock, so a held ledger lock is ignored', COMMAND, 'const outcome = withLock(LOCK_FILE, () => {', "const outcome = withLock(path.join(STATE_DIR, 'other.lock'), () => {"],
   ['a refused fold reports no waiting entries', COMMAND, ': { folded: [], deferred: pending.length };', ': { folded: [], deferred: 0 };'],
   ['a refused fold is reported as a fold that found nothing', COMMAND, 'return outcome.held ? { folded: outcome.value, deferred: 0 } : { folded: [], deferred: pending.length };', 'return { folded: outcome.value ?? [], deferred: 0 };'],
-  ['the refusal to fold loses its Spanish half', COMMAND, 'Nothing is lost. @es El ledger', 'Nothing is lost. El ledger'],
+  ['the refusal to fold loses its Spanish half', COMMAND, "speaker.say('capture.deferred', { count: deferred });", "console.log('RECORDED (spooled) — the ledger is locked by another writer; ' + String(deferred) + ' entr(y/ies) will fold on the next capture. Nothing is lost.');"],
 ];
 
 const survivors = runMutants({

@@ -49,7 +49,7 @@ const MUTANTS = [
   ['the project ceiling is ignored by the advisory', C, 'measureLoadedSet({ project: PROJECT, directory: process.cwd(), ceiling: args.ceiling }).verdict', 'measureLoadedSet({ project: undefined, directory: process.cwd(), ceiling: args.ceiling }).verdict'],
   ['the advisory walks past the ceiling', C, 'directory: process.cwd(), ceiling: args.ceiling }).verdict', 'directory: process.cwd(), ceiling: undefined }).verdict'],
   ['the condense report is not printed', C, 'condense: () => describeOutcome(condenseLedgers(', 'condense: () => (condenseLedgers('],
-  ['the advisory prints nowhere', C, 'print: (line) => console.log(line)', 'print: () => undefined']
+  ['the advisory prints nowhere', C, 'print: (line) => speaker.data(line)', 'print: () => undefined']
 ];
 
 const survivors = runMutants({

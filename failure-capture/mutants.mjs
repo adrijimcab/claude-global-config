@@ -48,7 +48,7 @@ const MUTANTS = [
   ['promote does not notice that the lock was refused, and reports a closure that never happened', 'failure-capture/capture.mjs', 'if (!collapsed.held) {', 'if (false) {'],
   ['promote reads the ledger before it holds the lock, so it writes back a stale copy', 'failure-capture/capture.mjs', 'const collapsed = withLock(LOCK_FILE, () => {\n    const found = locateKey(readLedgers(LEDGERS), key, readMarker);', 'const early = locateKey(readLedgers(LEDGERS), key, readMarker);\n  const collapsed = withLock(LOCK_FILE, () => {\n    const found = early;'],
   ['the stub of a promoted lesson loses its recurrence counter', 'failure-capture/promotion.mjs', 'marker: original.slice(marker.open, marker.close) })', 'marker: `<!--fc:${marker.key}#1-->` })'],
-  ['the refusal to promote loses its Spanish half', 'failure-capture/capture.mjs', 'Nothing was changed. @es promote:', 'Nothing was changed. promote:'],
+  ['the refusal to promote loses its Spanish half', 'failure-capture/capture.mjs', "speaker.complain('promote.locked');", "console.error('promote: the ledger is locked by another writer — re-run in a moment. Nothing was changed.');"],
 
   // --- alcance: cada lección en el ledger de su alcance (ledgers.mjs, 2026-09-28)
   ['una lección nueva ignora su alcance y cae siempre en el home', 'failure-capture/capture.mjs', 'const ledger = ledgerForScope(ledgers, entry.scope);', "const ledger = ledgerForScope(ledgers, 'global');"],

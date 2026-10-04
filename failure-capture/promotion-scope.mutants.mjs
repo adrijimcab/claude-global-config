@@ -31,7 +31,7 @@ const MUTANTS = [
   ['growth is read from a missing baseline as zero faces', GROWTH, 'if (last === undefined) continue;', 'if (last === undefined) { stale.push({ file, now: 0, then: 0, date: \'\' }); continue; }'],
   ['the baseline is measured on whatever file was recorded last', CLOSURE, "typeof entry.faces?.[id] === 'number'", "typeof entry.faces === 'object'"],
   ['the closure record carries no scope', CLOSURE, 'target, scope, faces, date:', 'target, faces, date:'],
-  ['the record is stamped with the global scope whatever the lesson', COMMAND, 'scope: ledger.scope,', "scope: 'global',"],
+  ['the record is stamped with the global scope whatever the lesson', COMMAND, 'closureRecord({ key, closure, verification, target, scope: ledger.scope,', "closureRecord({ key, closure, verification, target, scope: 'global',"],
   ['only the first file is measured into the closure record', COMMAND, 'faces: facesByFile({ files: contractFilesOf(target),', 'faces: facesByFile({ files: contractFilesOf(target).slice(0, 1),']
 ];
 
