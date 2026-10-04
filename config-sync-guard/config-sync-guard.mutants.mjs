@@ -116,7 +116,8 @@ const survivors = runMutants({
   fleetRoot: HERE,
   paths: ['decide.mjs', 'guard.mjs', 'status.mjs', 'attribution.mjs', 'transcript-writes.mjs', 'shell-windows.mjs', 'path-ownership.mjs', 'path-mtime.mjs', 'pending-ledger.mjs', 'unpushed-commits.mjs', 'commit-advice.mjs', 'repos.mjs', 'dismiss.mjs', 'fingerprint.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'],
   selftest: 'selftest.mjs',
-  mutants: MUTANTS
+  mutants: MUTANTS,
+  crashKills: 'fail'
 });
 
 process.exit(survivors === 0 ? 0 : 1);

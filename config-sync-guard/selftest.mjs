@@ -25,12 +25,12 @@ import { latestChangeMs } from './path-mtime.mjs';
 import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs, readDismissals } from './dismiss.mjs';
 import { decide } from './decide.mjs';
 import { measureFingerprint } from './fingerprint.mjs';
-import { evaluate } from './guard.mjs';
+import { evaluate as evaluateGuard } from './guard.mjs';
 import { recordUnexplained } from './pending-ledger.mjs';
 import { CLOCK_TOLERANCE_MS, shellWindowsIn, withinWindow } from './shell-windows.mjs';
 import { parseStatusPorcelain } from './status.mjs';
 import { parseAheadLog } from './unpushed-commits.mjs';
-import { writtenPathsIn } from './transcript-writes.mjs';
+import { writtenPathsIn as writtenPathsOf } from './transcript-writes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD_CLI = path.join(HERE, 'guard.mjs');
@@ -39,6 +39,36 @@ const here = (...segments) => path.join(HERE, ...segments);
 
 let passed = 0;
 const failures = [];
+
+/**
+ * The guard's entry point and the transcript reader, each answering with an EMPTY result and a recorded
+ * failure when it throws: a throw inside the mechanism is a verdict about it, reported as a failed check
+ * naming the cause, never an uncaught crash that hides which decision broke.
+ * @es El punto de entrada de la guardia y el lector de transcripts: si lanzan, responden vacío y registran
+ * un fallo. Un throw del mecanismo es un veredicto, nunca un crash sin capturar que oculta qué se rompió.
+ */
+function evaluate(...args) {
+  try {
+    return evaluateGuard(...args);
+  } catch (error) {
+    failures.push(`evaluate() THREW ${error.message} @es evaluate() LANZÓ`);
+
+    return undefined;
+  }
+}
+
+function writtenPathsIn(...args) {
+  try {
+    return writtenPathsOf(...args);
+  } catch (error) {
+    failures.push(`writtenPathsIn() THREW ${error.message} @es writtenPathsIn() LANZÓ`);
+
+    return [];
+  }
+}
+
+/** A file's text, or '' when it was never written, so a missing ledger is a failed check and not a crash. @es El texto de un fichero, o '' si nunca se escribió. */
+const slurp = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
 
 function check(name, actual, expected) {
   const actualText = JSON.stringify(actual);
@@ -462,7 +492,7 @@ check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
   const orphan = evaluate(raw, { repos: [orphanRepo], liveAgents: new Map() }, { ledger });
 
   check('evaluate() with a path no live session made notes it and does not block', orphan?.decision === undefined && orphan?.systemMessage?.includes('foo.txt'), true);
-  check('evaluate() records that path in the ledger under this session', readFileSync(ledger, 'utf8').includes(`"session":"${session}"`) && readFileSync(ledger, 'utf8').includes('foo.txt'), true);
+  check('evaluate() records that path in the ledger under this session', slurp(ledger).includes(`"session":"${session}"`) && slurp(ledger).includes('foo.txt'), true);
   rmSync(ledgerDir, { recursive: true, force: true });
 }
 
@@ -538,7 +568,7 @@ check(
   const ledger = path.join(root, 'state', 'pending.jsonl');
   const io = { ledger, now: () => new Date('2026-10-01T10:00:00.000Z') };
   const entry = (repo, file) => ({ repo, path: file });
-  const lines = () => readFileSync(ledger, 'utf8').split('\n').filter((line) => line.length > 0).map((line) => JSON.parse(line));
+  const lines = () => slurp(ledger).split('\n').filter((line) => line.length > 0).map((line) => JSON.parse(line));
 
   check('a path seen for the first time is recorded with the time and the session', recordUnexplained([entry('r', '/a')], 's-9', io), [entry('r', '/a')]);
   check('the record carries when, who saw it, which repo and which path', lines(), [{ at: '2026-10-01T10:00:00.000Z', session: 's-9', repo: 'r', path: '/a' }]);
