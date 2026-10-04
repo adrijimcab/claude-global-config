@@ -478,3 +478,35 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   tono Gentleman; el inglés solo aparece citado, en bloque de código o como término técnico. Ningún hook
   ve el texto antes de mostrarse; en su lugar, `~/.claude/owner-language-guard/guard.mjs` (guard `Stop`)
   rechaza el turno y obliga a reescribirlo entero en español en el mismo turno.
+
+- **`root-cause-stated-before-measured`** — A cause or defect inferred by READING (a code path, a log, a
+  mutant's behaviour) was stated as fact, and both times the reproduction refuted it. The shared root:
+  an inference was written down without the run that would have checked it, so nothing separated it
+  from a measurement. RULE: a claim about what code DOES — a root cause, a defect, a hang, a crash — is
+  stated as fact only after the behaviour is reproduced on constructed state in the same turn; until
+  then it is written as a hypothesis in the same sentence, to the owner and to a worker alike.
+  - **A CAUSE RELAYED TO THE OWNER FROM A READ CODE PATH (2026-10-01).** The owner was told a resolver
+    treated the home as a project, from reading the code that writes the section; the worker measured
+    the opposite on constructed and real homes.
+  - **A MUTANT'S HANG WRITTEN INTO A BRIEF AS A PRODUCT DEFECT (2026-10-04).** A worker reported that
+    one mutant of `hook-state/jsonl-tail.mjs` never ended; the orchestrator's resume brief stated, as a
+    fact outside any `MEASURED:`/`HYPOTHESIS:` line, that the product code could loop forever on a
+    truncated file. The worker showed the unmutated reader already stops on a 0-byte read. RULE, this
+    face: a mutant's behaviour is evidence about the mutant only; a brief's free prose carries no claim
+    about product behaviour — such a claim goes on a `MEASURED:` line with the command that reproduced
+    it, or on a `HYPOTHESIS:` line.
+  No mechanism closes it: whether a prose sentence asserts a behaviour, and whether that behaviour was
+  reproduced, cannot be decided from the text (the same measured class as `brief-tenancy`). In its
+  place: the brief skeleton (`MEASURED:` lines carry their command, everything else is `HYPOTHESIS:`),
+  and a candidate brief-lint rule that flags behaviour claims outside marker lines, to be built only if
+  task 2.7b proves it discriminates on real briefs.
+  @es Una causa o un defecto deducido LEYENDO (una ruta de código, un log, el comportamiento de un
+  mutante) se afirmó como hecho, y las dos veces la reproducción lo refutó. REGLA: una afirmación sobre
+  lo que HACE el código —causa raíz, defecto, cuelgue, crash— se da como hecho solo tras reproducir el
+  comportamiento sobre estado construido en el mismo turno; si no, se escribe como hipótesis en la misma
+  frase, al dueño y a un worker por igual. Cara 2026-10-04: el cuelgue de un mutante se escribió en un
+  brief como defecto del producto; el comportamiento de un mutante solo prueba algo sobre el mutante, y
+  la prosa libre de un brief no lleva afirmaciones de comportamiento (van en `MEASURED:` con su comando,
+  o en `HYPOTHESIS:`). Sin mecanismo: el texto no permite decidir si una frase afirma un comportamiento
+  ni si se reprodujo; en su lugar, el esqueleto del brief y una regla candidata de brief-lint que solo
+  se construye si la tarea 2.7b prueba que discrimina sobre briefs reales.
