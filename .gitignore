@@ -120,6 +120,10 @@
 !/baseline-record/**
 !/hook-state/
 !/hook-state/**
+!/process-control/
+!/process-control/**
+!/selftest-fixtures/
+!/selftest-fixtures/**
 !/hook-caller/
 !/hook-caller/**
 /hook-caller/state/
