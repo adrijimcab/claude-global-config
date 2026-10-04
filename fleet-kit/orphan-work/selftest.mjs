@@ -11,7 +11,7 @@ import { rmSync, utimesSync } from 'node:fs';
 import path from 'node:path';
 
 import { baseConfig, cleanup, commitFiles, git, makeRepository, suite, tempDir, writeConfig, writeFile } from '../testing/fixtures.mjs';
-import { evaluate, lastWorkedMs, parkedWork } from './guard.mjs';
+import { absolutePathsIn, delegationTouches, evaluate, lastWorkedMs, parkedWork } from './guard.mjs';
 
 const { check, finish } = suite();
 const root = tempDir('orphan');
@@ -62,6 +62,16 @@ try {
 
   rmSync(worktreeOf('agent-dirty'), { recursive: true, force: true });
   check('a registered worktree whose folder is gone holds nothing on disk', parkedNames(), ['agent-committed']);
+
+  // The delegation's target repository decides, not the session's. @es Decide el repositorio destino de la delegación, no el de la sesión.
+  const briefed = (prompt) => parkedWork({ tool_name: 'Agent', cwd: repository, tool_input: { prompt } }, { records: [], lastWorked: () => 0 }).map(({ worktree }) => path.basename(worktree.path));
+  const elsewhere = path.join(root, 'another-repo').replaceAll('\\', '/');
+
+  check('a brief working only in another repository is not judged here', briefed(`Work only in ${elsewhere}/tool and commit there.`), []);
+  check('a brief naming a path inside this repository is judged', briefed(`Read ${repository}\\src\\a.ts and also ${elsewhere}`), ['agent-committed']);
+  check('a brief naming no absolute path is judged (nothing says where it works)', briefed('Fix the failing test.'), ['agent-committed']);
+  check('a path is read up to whitespace, quote, backtick or bracket, normalised', absolutePathsIn('see `C:\\A\\B c` and "d:/x/y" (E:/z) noC:/no'), ['c:/a/b', 'd:/x/y', 'e:/z']);
+  check('a near miss of the repository root is another repository', delegationTouches({ tool_input: { prompt: `${repository}-copy/x` } }, repository), false);
 
   writeConfig(repository, baseConfig({ integrationBranches: ['no-such-branch'] }));
   check('every unmeasurable worktree is refused, never read as clean', parkedWork({ tool_name: 'Agent', cwd: repository }, { records: [], lastWorked: () => 0 }).filter(({ work }) => work.unmeasurable !== undefined).length, 3);

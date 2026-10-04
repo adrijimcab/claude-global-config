@@ -19,5 +19,11 @@ runCampaign('orphan-work/selftest.mjs', [
   ['dirty entries are not timed', G, 'times.push(statSync(path.join(worktree.path, relative)).mtimeMs);', ''],
   ['the HEAD author time is ignored', G, 'if (head.status === 0 && head.stdout.trim().length > 0) times.push(', 'if (false) times.push('],
   ['a rename is timed by its source', G, "named.includes(' -> ') ? named.slice(named.indexOf(' -> ') + 4) : named", 'named'],
-  ['the oldest time wins', G, 'Math.max(...times)', 'Math.min(...times)']
+  ['the oldest time wins', G, 'Math.max(...times)', 'Math.min(...times)'],
+  ['the delegation target is ignored', G, ' || !delegationTouches(payload, governed.repository.mainCheckout)', ''],
+  ['a brief with no path is not judged', G, 'named.length === 0 || named.some(', 'named.length !== 0 && named.some('],
+  ['a sibling folder counts as this repository', G, 'named.some((named_) => `${named_}/`.startsWith(root))', 'named.some((named_) => named_.startsWith(root.slice(0, -1)))'],
+  ['backslash paths are not normalised', G, "paths.push(text.slice(at, end).replaceAll('\\\\', '/').toLowerCase());", 'paths.push(text.slice(at, end).toLowerCase());'],
+  ['a path runs past its closing quote', G, "const stops = ' \\t\\r\\n\"\\'`)]>';", "const stops = ' \\t\\r\\n';"],
+  ['a drive letter glued to a word starts a path', G, ' && (at === 0 || !/[A-Za-z0-9]/.test(text[at - 1]))', '']
 ]);

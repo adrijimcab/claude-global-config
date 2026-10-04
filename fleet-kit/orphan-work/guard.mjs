@@ -115,6 +115,63 @@ export function lastWorkedMs(worktree) {
   return times.length === 0 ? 0 : Math.max(...times);
 }
 
+/** A drive-letter absolute path start: `C:\` or `C:/`. @es El inicio de una ruta absoluta con letra de unidad. */
+function startsAbsolutePath(text, at) {
+  const letter = text[at];
+  const isLetter = letter !== undefined && letter.toLowerCase() !== letter.toUpperCase();
+  const separator = text[at + 2];
+
+  return isLetter && text[at + 1] === ':' && (separator === '\\' || separator === '/') && (at === 0 || !/[A-Za-z0-9]/.test(text[at - 1]));
+}
+
+/**
+ * Every absolute drive path a brief names, normalised to forward slashes and lower case. A path ends at
+ * whitespace, a quote, a backtick or a closing bracket.
+ * @es Cada ruta absoluta con unidad que nombra un brief, normalizada a barras y minúsculas.
+ */
+export function absolutePathsIn(text) {
+  const paths = [];
+  const stops = ' \t\r\n"\'`)]>';
+
+  for (let at = 0; at < text.length; at += 1) {
+    if (!startsAbsolutePath(text, at)) continue;
+
+    let end = at;
+
+    while (end < text.length && !stops.includes(text[end])) end += 1;
+
+    paths.push(text.slice(at, end).replaceAll('\\', '/').toLowerCase());
+    at = end;
+  }
+
+  return paths;
+}
+
+/**
+ * Whether a delegation can touch the governed repository: true when its brief names no absolute path
+ * (nothing says where it works, so the session's repository is assumed), or names at least one path
+ * inside that repository's main checkout; false when every path it names lies elsewhere.
+ *
+ * WHY (2026-10-04): MEASURED by the guard audit (engram #1141) and live twice in one session — a
+ * delegation whose brief worked only in `C:/Users/adrian.jimenez/.claude` was refused because the
+ * SESSION's project (`di_1700002_discovery_fe`) held another session's unintegrated study branch. The
+ * question this guard decides — "may this new agent redo parked work?" — is about the repository the
+ * agent will work in, never about the repository the session happens to sit in.
+ * @es Si una delegación puede tocar el repositorio gobernado: sí cuando su brief no nombra ninguna ruta
+ * absoluta (nada dice dónde trabaja y se asume el de la sesión) o nombra al menos una dentro de ese
+ * repositorio; no cuando todas las rutas que nombra están en otro sitio. POR QUÉ (2026-10-04): medido por
+ * la auditoría de guards (#1141) y dos veces en vivo en una sesión — una delegación que solo trabajaba en
+ * `~/.claude` se rechazó porque el proyecto de la SESIÓN tenía una rama de estudio de otra sesión.
+ */
+export function delegationTouches(payload, repositoryRoot) {
+  const input = payload?.tool_input ?? {};
+  const brief = [input.prompt, input.message, input.description].filter((part) => typeof part === 'string').join('\n');
+  const named = absolutePathsIn(brief);
+  const root = `${repositoryRoot.replaceAll('\\', '/').toLowerCase().replace(/\/$/, '')}/`;
+
+  return named.length === 0 || named.some((named_) => `${named_}/`.startsWith(root));
+}
+
 /**
  * The parked worktrees visible from `payload`'s repository, as `[{ worktree, work }]`.
  * @es Los worktrees aparcados visibles desde el repositorio del payload.
@@ -124,7 +181,7 @@ export function parkedWork(payload, { records = agentRecords(), now = Date.now()
 
   const governed = findConfig(payload.cwd);
 
-  if (governed === undefined) return [];
+  if (governed === undefined || !delegationTouches(payload, governed.repository.mainCheckout)) return [];
 
   const integrationBranch = governed.config.integrationBranches[0];
 
