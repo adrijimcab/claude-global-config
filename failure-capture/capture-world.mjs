@@ -9,11 +9,9 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+import { provisionLoop } from './fixture-loop.mjs';
 
 /** The lesson text every driven capture carries (40+ characters, states its RULE). @es El texto de lección de cada captura. */
 export const lessonFor = (key) => `what went wrong for ${key} -> root cause -> RULE: do it right every time`;
@@ -45,9 +43,7 @@ export function makeCaptureWorld({ scratch, name, config = { scope: 'demo' }, fi
 
   mkdirSync(path.join(loop, 'state'), { recursive: true });
 
-  for (const file of readdirSync(HERE)) {
-    if (file.endsWith('.mjs') && !file.includes('selftest') && !file.includes('mutants')) copyFileSync(path.join(HERE, file), path.join(loop, file));
-  }
+  provisionLoop(loop, (file) => !file.includes('selftest') && !file.includes('mutants'));
 
   writeFiles(root, { 'repo/.claude/CLAUDE.md': '# Project instructions\n', 'repo/.claude/failure-capture.json': JSON.stringify(config), 'home/.claude/rules/promoted-rules.md': '# Contract\n', ...files });
 

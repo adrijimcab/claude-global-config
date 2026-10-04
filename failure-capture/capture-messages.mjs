@@ -1,6 +1,6 @@
 /**
  * What `capture.mjs` says when it records, lists, dismisses, inits or reports status — every sentence in
- * the house bilingual form (`message.mjs`): English first, the Spanish half marked `@es`, never one without
+ * the house bilingual form (`bilingual-output/message.mjs`): English first, the Spanish half marked `@es`, never one without
  * the other. Each message names its data as `{name}` placeholders; `messageProblems` proves the halves carry
  * the same data. A listing row that holds only data (`key (3x)`) has no prose to translate and is printed
  * as data, not as a message.

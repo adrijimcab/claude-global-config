@@ -16,12 +16,13 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { projectOf } from './project.mjs';
+import { provisionLoop } from './fixture-loop.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The REAL path: Windows hands out the 8.3 spelling of the temp dir, and the loop reports real paths.
@@ -61,7 +62,7 @@ function makeHome(name) {
   const loop = path.join(home, '.claude', 'failure-capture');
 
   mkdirSync(path.join(loop, 'state'), { recursive: true });
-  for (const file of readdirSync(HERE)) if (file.endsWith('.mjs') && !file.includes('selftest') && !file.includes('mutants')) copyFileSync(path.join(HERE, file), path.join(loop, file));
+  provisionLoop(loop, (file) => !file.includes('selftest') && !file.includes('mutants'));
   write(home, { '.claude/lessons-ledger.md': '# Lessons Ledger — global\n\n---\n', '.claude/rules/promoted-rules.md': '# Contract\n' });
 
   return { home, cli: path.join(loop, 'capture.mjs'), incidents: path.join(loop, 'state', 'incidents.jsonl') };

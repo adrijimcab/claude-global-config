@@ -16,12 +16,12 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { releaseLock, takeLock, withLock } from './ledger-lock.mjs';
+import { provisionLoop } from './fixture-loop.mjs';
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'ledger-lock-selftest-'));
 let passed = 0;
@@ -144,7 +144,6 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
 }
 
 // --- capture.mjs, end to end in a constructed repository and home --------------------------------------
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LESSON = 'I asserted a number from memory and it was wrong, root cause: I never measured it -> RULE: measure it before stating it';
 
 /** A fresh project holding a copy of the loop, and a fresh home. @es Un proyecto con copia del loop y un home nuevos. */
@@ -155,7 +154,7 @@ function world(name) {
 
   mkdirSync(path.join(loop, 'state'), { recursive: true });
   mkdirSync(path.join(home, '.claude'), { recursive: true });
-  for (const file of readdirSync(HERE)) if (file.endsWith('.mjs')) copyFileSync(path.join(HERE, file), path.join(loop, file));
+  provisionLoop(loop);
   writeFileSync(path.join(repo, '.claude', 'CLAUDE.md'), '# Project\n', 'utf8');
 
   return { repo, home, loop, ledger: path.join(home, '.claude', 'lessons-ledger.md'), lock: path.join(loop, 'state', 'ledger.lock'), spool: path.join(loop, 'state', 'spool') };

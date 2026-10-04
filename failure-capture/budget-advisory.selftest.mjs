@@ -18,17 +18,16 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { adviseOnBudget } from './budget-advisory.mjs';
 import { KEYED, SHORT_KEYED } from './condense-fixtures.mjs';
 import { holdsWholeLine } from './conservation.mjs';
 import { HEADER } from './ledgers.mjs';
+import { provisionLoop } from './fixture-loop.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'budget-advisory-selftest-')));
 let passed = 0;
 let worlds = 0;
@@ -52,7 +51,7 @@ function world({ config } = {}) {
 
   mkdirSync(path.join(loop, 'state'), { recursive: true });
   mkdirSync(path.join(home, '.claude'), { recursive: true });
-  for (const file of readdirSync(HERE)) if (file.endsWith('.mjs')) copyFileSync(path.join(HERE, file), path.join(loop, file));
+  provisionLoop(loop);
   writeFileSync(path.join(repo, '.claude', 'CLAUDE.md'), '# Project\n');
   writeFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'h'.repeat(600));
   mkdirSync(path.join(home, '.claude', 'rules'), { recursive: true });

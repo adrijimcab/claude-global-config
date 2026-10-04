@@ -77,7 +77,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'mutation-proof'],
+  paths: ['failure-capture', 'bilingual-output', 'mutation-proof'],
   selftest: 'failure-capture/promote-messages.selftest.mjs',
   mutants: MUTANTS
 });

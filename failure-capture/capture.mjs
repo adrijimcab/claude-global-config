@@ -59,11 +59,11 @@ import { resolveLoopContext } from './loop-context.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
 import { captureTextProblems, newLessonLine } from './tiered-capture.mjs';
 import { CAPTURE_MESSAGES } from './capture-messages.mjs';
-import { makeSpeaker } from './speaker.mjs';
+import { makeSpeaker } from '../bilingual-output/speaker.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-/** Everything this command prints goes through here, in the house bilingual form (`speaker.mjs`). @es Todo lo que este comando imprime pasa por aquí, en la forma bilingüe de la casa. */
+/** Everything this command prints goes through here, in the house bilingual form (`bilingual-output/speaker.mjs`). @es Todo lo que este comando imprime pasa por aquí, en la forma bilingüe de la casa. */
 const speaker = makeSpeaker({ ...CAPTURE_MESSAGES, ...PROMOTE_MESSAGES });
 // The PROJECT this command runs in (`project.mjs`), never the folder this code sits in: the loop is
 // global since 2026-09-30, so `HERE/../..` would name the user's home, not a repository. It, and the five

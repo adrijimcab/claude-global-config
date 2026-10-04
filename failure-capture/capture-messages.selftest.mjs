@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 
 import { CAPTURE_MESSAGES } from './capture-messages.mjs';
 import { lessonFor, makeCaptureWorld, monolingualRuns, readOrEmpty } from './capture-world.mjs';
-import { messageProblems, render } from './message.mjs';
+import { messageProblems, render } from '../bilingual-output/message.mjs';
 
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-capture-messages-')));
 const KEY = 'message-lesson-key';

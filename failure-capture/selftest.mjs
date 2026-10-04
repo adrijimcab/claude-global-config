@@ -31,15 +31,14 @@
  */
 
 import { execFileSync, spawn } from 'node:child_process';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { contractFileId } from './closure.mjs';
 import { holdsWholeLine } from './conservation.mjs';
+import { provisionLoop } from './fixture-loop.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 const KEY = 'lesson-under-test';
 const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'failure-capture-selftest-'));
@@ -87,9 +86,7 @@ function world(name, { ruleLanded = true, incidents, mentions = 1, inLedger = tr
 
   mkdirSync(path.join(loop, 'state'), { recursive: true });
 
-  for (const file of readdirSync(HERE)) {
-    if (file.endsWith('.mjs') && file !== 'selftest.mjs') copyFileSync(path.join(HERE, file), path.join(loop, file));
-  }
+  provisionLoop(loop, (file) => file !== 'selftest.mjs');
 
   write(repo, {
     // The repository is a PROJECT (`project.mjs`): it holds `.claude/CLAUDE.md`, and its config names the

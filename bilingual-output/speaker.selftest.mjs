@@ -17,6 +17,7 @@ const failures = [];
 const equal = (name, actual, expected) => (JSON.stringify(actual) === JSON.stringify(expected) ? (passed += 1) : failures.push(`${name} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
 
 const TABLE = { hello: { en: 'Hello {who}.', es: 'Hola {who}.' } };
+const attempt = (fn) => { try { return fn(); } catch (error) { return `threw: ${error instanceof Error ? error.message : String(error)}`; } };
 const sink = () => {
   const printed = { log: [], error: [] };
 
@@ -27,14 +28,14 @@ const sink = () => {
   const out = sink();
   const speaker = makeSpeaker(TABLE, out);
 
-  speaker.say('hello', { who: 'you' });
+  attempt(() => speaker.say('hello', { who: 'you' }));
   equal('say prints the rendered message on the output', out.printed, { log: ['Hello you. @es Hola you.'], error: [] });
 }
 
 {
   const out = sink();
 
-  makeSpeaker(TABLE, out).complain('hello', { who: 'me' });
+  attempt(() => makeSpeaker(TABLE, out).complain('hello', { who: 'me' }));
   equal('complain prints the rendered message on the error stream', out.printed, { log: [], error: ['Hello me. @es Hola me.'] });
 }
 
@@ -42,7 +43,7 @@ const sink = () => {
   const out = sink();
   const speaker = makeSpeaker(TABLE, out);
 
-  speaker.data('  key (3x)');
+  attempt(() => speaker.data('  key (3x)'));
   speaker.dataError('  bilingual text from a module @es texto bilingüe de un módulo');
   speaker.blank();
   equal('data, dataError and blank print as they are, each on its own stream', out.printed, { log: ['  key (3x)', ''], error: ['  bilingual text from a module @es texto bilingüe de un módulo'] });
@@ -58,7 +59,7 @@ const sink = () => {
   equal('...and on complain', thrownFor(() => speaker.complain('nope')), refusalFor('nope'));
   equal('...and nothing was printed', out.printed, { log: [], error: [] });
   equal('an id named like an object property is not a message', thrownFor(() => speaker.say('toString')), refusalFor('toString'));
-  equal('line returns the rendered text without printing', speaker.line('hello', { who: 'x' }), 'Hello x. @es Hola x.');
+  equal('line returns the rendered text without printing', attempt(() => speaker.line('hello', { who: 'x' })), 'Hello x. @es Hola x.');
 }
 
 console.log(`speaker selftest: ${String(passed)} passed, ${String(failures.length)} failed`);

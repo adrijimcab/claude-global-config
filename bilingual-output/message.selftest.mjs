@@ -15,6 +15,7 @@ import { messageProblems, placeholdersOf, render } from './message.mjs';
 let passed = 0;
 const failures = [];
 const equal = (name, actual, expected) => (JSON.stringify(actual) === JSON.stringify(expected) ? (passed += 1) : failures.push(`${name} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
+const attempt = (fn) => { try { return fn(); } catch (error) { return `threw: ${error instanceof Error ? error.message : String(error)}`; } };
 const throws = (fn) => { try { fn(); return false; } catch { return true; } };
 
 equal('a one-line message is English, @es, Spanish', render({ en: 'Hello.', es: 'Hola.' }), 'Hello. @es Hola.');
@@ -24,7 +25,7 @@ equal('placeholders are filled in both halves', render({ en: 'Key {key} in {file
 equal('a placeholder repeated in a line is filled everywhere', render({ en: '{n} and {n}', es: '{n} y {n}' }, { n: 3 }), '3 and 3 @es 3 y 3');
 equal('a placeholder with no parameter throws instead of printing braces', throws(() => render({ en: 'Key {key}.', es: 'Clave {key}.' }, {})), true);
 equal('a parameter value that looks like a placeholder is printed as it is, not filled again', render({ en: 'x {a}', es: 'x {a}' }, { a: '{b}', b: 'no' }), 'x {b} @es x {b}');
-equal('literal braces that are not a plain name survive', render({ en: 'Use {"keys":[1]}.', es: 'Usa {"keys":[1]}.' }), 'Use {"keys":[1]}. @es Usa {"keys":[1]}.');
+equal('literal braces that are not a plain name survive', attempt(() => render({ en: 'Use {"keys":[1]}.', es: 'Usa {"keys":[1]}.' })), 'Use {"keys":[1]}. @es Usa {"keys":[1]}.');
 equal('placeholders are listed in order, literal braces excluded', placeholdersOf('a {x} {"k":1} {y} {}'), ['x', 'y']);
 
 const CLEAN = { greet: { en: 'Hello {who}.', es: 'Hola {who}.' }, bye: { en: ['Bye.', 'See you.'], es: ['Adiós.', 'Hasta luego.'] } };

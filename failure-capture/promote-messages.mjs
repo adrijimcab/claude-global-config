@@ -1,7 +1,7 @@
 /**
  * What `capture.mjs` says about a PROMOTION — the instructions a recurring lesson owes, every refusal of
  * `promote`, the growth refusal and the report of a closed promotion — every sentence in the house
- * bilingual form (`message.mjs`): English first, the Spanish half marked `@es`, never one without the
+ * bilingual form (`bilingual-output/message.mjs`): English first, the Spanish half marked `@es`, never one without the
  * other. Data (paths, keys, the closure reason) travels as `{name}` placeholders; commands the reader
  * copies are printed as data, untranslated.
  *

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
-const MESSAGE = 'failure-capture/message.mjs';
+const MESSAGE = 'bilingual-output/message.mjs';
 
 const MUTANTS = [
   ['the Spanish half is never rendered', MESSAGE, 'return `${english[0]} @es ${spanish[0]}`;', 'return english[0];'],
@@ -29,9 +29,10 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'mutation-proof'],
-  selftest: 'failure-capture/message.selftest.mjs',
-  mutants: MUTANTS
+  paths: ['bilingual-output', 'mutation-proof'],
+  selftest: 'bilingual-output/message.selftest.mjs',
+  mutants: MUTANTS,
+  crashKills: 'fail'
 });
 
 process.exit(survivors === 0 ? 0 : 1);

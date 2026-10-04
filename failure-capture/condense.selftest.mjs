@@ -11,10 +11,9 @@
  */
 
 import { execFileSync, spawn } from 'node:child_process';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { runCondense } from './condense.mjs';
 import { holdsWholeLine } from './conservation.mjs';
@@ -22,6 +21,7 @@ import { appendEvidence } from './evidence.mjs';
 import { HEADER } from './ledgers.mjs';
 import { FAT_MECHANISM, FAT_NONE, HOOKS_KEY, KEYED, MARKERLESS, PROJECT_LINE, SHORT_KEYED, SHORT_MARKERLESS, STUB_MECHANISM, STUB_NONE, TIERED_BARE, TWO_LABELS } from './condense-fixtures.mjs';
 import { readMarker } from './ledger-line.mjs';
+import { provisionLoop } from './fixture-loop.mjs';
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'condense-selftest-'));
 let passed = 0;
@@ -34,7 +34,6 @@ function check(name, condition, detail) {
 
 const OTHERS = ['---', PROJECT_LINE, TIERED_BARE];
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SENTINEL = '# promoted rules, hand-written\n';
 const markersOf = (text) => text.split('\n').map((line) => readMarker(line)).filter((found) => found !== undefined).map((found) => `${found.key}#${String(found.count)}`);
 const readOr = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
@@ -49,7 +48,7 @@ function world(name, lines) {
 
   mkdirSync(path.join(loop, 'state'), { recursive: true });
   mkdirSync(path.join(home, '.claude', 'rules'), { recursive: true });
-  for (const file of readdirSync(HERE)) if (file.endsWith('.mjs')) copyFileSync(path.join(HERE, file), path.join(loop, file));
+  provisionLoop(loop);
   writeFileSync(path.join(repo, '.claude', 'CLAUDE.md'), '# Project\n', 'utf8');
   writeFileSync(path.join(home, '.claude', 'rules', 'promoted-rules.md'), SENTINEL, 'utf8');
   writeFileSync(ledger, `${HEADER('global', '`x`')}${lines.join('\n')}\n`, 'utf8');

@@ -69,7 +69,7 @@ const COMMAND_MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'mutation-proof'], selftest, mutants });
+const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'bilingual-output', 'mutation-proof'], selftest, mutants });
 const survivors = campaign('failure-capture/promotion.selftest.mjs', MODULE_MUTANTS) + campaign('failure-capture/selftest.mjs', COMMAND_MUTANTS);
 
 process.exit(survivors === 0 ? 0 : 1);

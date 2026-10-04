@@ -12,14 +12,14 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { holdsWholeLine, proveConservation } from './conservation.mjs';
 import { appendEvidence, evidenceFile, readEvidence } from './evidence.mjs';
 import { evidenceKeyOf, isTiered, isValidKey, minimalStub, parseEntry, parseStub, readMarker, splitRule, tieredLine } from './ledger-line.mjs';
+import { provisionLoop } from './fixture-loop.mjs';
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'tiering-selftest-'));
 let passed = 0;
@@ -182,7 +182,6 @@ const unreadable = deficitsOf(proves('not an entry\n', SHORT.line, 'not an entry
 check('an unreadable original carries its reason in BOTH languages', unreadable.split(' @es ')[1]?.includes('no es una línea de entrada') === true, unreadable);
 
 // --- `capture --rule`, end to end in a constructed repository and home --------------------------------
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NARRATIVE = 'I asserted a number from memory and it was wrong, root cause: I never measured it, so the claim was a guess';
 const SAID = 'always measure a number before you state it';
 
@@ -194,7 +193,7 @@ function world(name) {
 
   mkdirSync(path.join(loop, 'state'), { recursive: true });
   mkdirSync(path.join(home, '.claude'), { recursive: true });
-  for (const file of readdirSync(HERE)) if (file.endsWith('.mjs')) copyFileSync(path.join(HERE, file), path.join(loop, file));
+  provisionLoop(loop);
   writeFileSync(path.join(repo, '.claude', 'CLAUDE.md'), '# Project\n', 'utf8');
   writeFileSync(path.join(repo, '.claude', 'failure-capture.json'), JSON.stringify({ scope: 'b100-am-ui' }), 'utf8');
 

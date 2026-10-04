@@ -20,7 +20,7 @@ import path from 'node:path';
 
 import { contractFileId, readClosure, verifyMechanism } from './closure.mjs';
 import { makeCaptureWorld, monolingualRuns } from './capture-world.mjs';
-import { messageProblems, render } from './message.mjs';
+import { messageProblems, render } from '../bilingual-output/message.mjs';
 import { PROMOTE_MESSAGES } from './promote-messages.mjs';
 
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-capture-promote-messages-')));
