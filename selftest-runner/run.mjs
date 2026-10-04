@@ -7,9 +7,15 @@
  *
  * Usage: node run.mjs [--root <dir>]
  *
+ * Each selftest's GREEN or RED line (and, for a RED one, its output) is printed the moment that selftest
+ * ends, so a long run is watchable; the summary line comes last. Streaming changes WHEN lines appear, never
+ * which lines, their order, or the exit code.
+ *
  * @es Ejecuta todos los selftests del repositorio y da UN veredicto: 0 todo verde, 1 alguno rojo, 2 no
- * medido. Cada selftest corre en su propio proceso y con su directorio como cwd. No hay opción de filtro,
- * salto ni corte al primer fallo, a propósito: un subconjunto elegido no es un veredicto del repositorio, y
+ * medido. La línea GREEN o RED de cada selftest (y, si es RED, su salida) se imprime en cuanto ese selftest
+ * termina, para poder seguir una corrida larga; el resumen va al final. El flujo cambia CUÁNDO aparecen las
+ * líneas, nunca cuáles, su orden ni el código de salida. Cada selftest corre en su propio proceso y con su
+ * directorio como cwd. No hay opción de filtro, salto ni corte al primer fallo, a propósito: un subconjunto elegido no es un veredicto del repositorio, y
  * un selftest rojo de partida se informa ROJO, nunca se omite. Para uno solo, se invoca con node.
  */
 
@@ -19,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { DiscoveryError, discoverSelftests } from './discovery.mjs';
+import { writeLineSync } from './stream.mjs';
 
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 const EXIT_GREEN = 0;
@@ -69,11 +76,15 @@ function indent(text) {
  * verdict; it defaults to `spawnSync`.
  * @es `spawn` es inyectable para poder alimentar al veredicto un resultado que ningún host produce a
  * demanda (muerte por señal POSIX); por defecto es `spawnSync`.
- * @param {{ root: string, timeoutMs?: number, spawn?: typeof spawnSync }} options
+ * `onLine` receives each report line as it is produced, before the next selftest starts; the returned
+ * `report` is the same lines, so a caller that ignores the hook sees the old behaviour.
+ * @es `onLine` recibe cada línea del informe al producirse, antes de que empiece el siguiente selftest; el
+ * `report` devuelto son las mismas líneas, así que quien ignore el gancho ve el comportamiento de siempre.
+ * @param {{ root: string, timeoutMs?: number, spawn?: typeof spawnSync, onLine?: (line: string) => void }} options
  * @returns {{ exitCode: number, report: string[] }}
  * @es Devuelve el código de salida y las líneas del informe.
  */
-export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spawnSync }) {
+export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spawnSync, onLine = () => {} }) {
   let discovered;
   try {
     discovered = discoverSelftests(root);
@@ -89,20 +100,26 @@ export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spa
   }
 
   const report = [];
+  const emit = (...lines) => {
+    for (const line of lines) {
+      report.push(line);
+      onLine(line);
+    }
+  };
   let green = 0;
   for (const entry of discovered.entries) {
     const label = entry.untracked ? ' UNTRACKED' : '';
     const failure = runOne({ root: discovered.root, entry, timeoutMs, spawn });
     if (failure === null) {
       green += 1;
-      report.push(`GREEN  ${entry.path} (exit 0)${label}`);
+      emit(`GREEN  ${entry.path} (exit 0)${label}`);
       continue;
     }
-    report.push(`RED    ${entry.path} (exit ${failure.exit})${label}`);
-    if (failure.reason !== '') report.push(`    ${failure.reason}`);
-    report.push(...indent(failure.output));
+    emit(`RED    ${entry.path} (exit ${failure.exit})${label}`);
+    if (failure.reason !== '') emit(`    ${failure.reason}`);
+    emit(...indent(failure.output));
   }
-  report.push(`${green}/${discovered.entries.length} green`);
+  emit(`${green}/${discovered.entries.length} green`);
   return { exitCode: green === discovered.entries.length ? EXIT_GREEN : EXIT_RED, report };
 }
 
@@ -130,9 +147,10 @@ function main() {
     console.error(parsed.error);
     return EXIT_NOT_MEASURED;
   }
-  const { exitCode, report } = runSelftests({ root: parsed.root });
-  const sink = exitCode === EXIT_NOT_MEASURED ? console.error : console.log;
-  sink(report.join('\n'));
+  const { exitCode, report } = runSelftests({ root: parsed.root, onLine: writeLineSync });
+  // A run that measured nothing streamed nothing: its explanation goes to stderr, whole.
+  // @es Una corrida que no midió nada no emitió nada: su explicación va entera a stderr.
+  if (exitCode === EXIT_NOT_MEASURED) console.error(report.join('\n'));
   return exitCode;
 }
 

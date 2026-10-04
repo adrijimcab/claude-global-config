@@ -12,6 +12,10 @@
  *   - HOW ONE ENDS: green; non-zero exit; killed by a signal; timeout; a listed file missing. Each red
  *     one must leave the later selftests running, and the exit status must be 1.
  *   - WHAT THE OPERATOR CAN CHOOSE: nothing. An option that would filter or skip is refused.
+ *   - WHEN A LINE APPEARS: each selftest's GREEN or RED line is delivered the moment that selftest ends,
+ *     before the next one starts, in process (the `onLine` hook) and through the real command line (a
+ *     handshake: the second selftest only passes once the parent has SEEN the first one's line).
+ *   - HOW A LINE IS WRITTEN: whole, with its newline, across partial writes and a pipe that is momentarily full.
  *
  * @es Auto-test del runner de selftests de todo el repositorio, contra repos git CONSTRUIDOS aquí. Estados:
  * qué ficheros son selftests (patrones, casi-aciertos, sin seguir, ignorados directos o a profundidad 3),
@@ -19,7 +23,7 @@
  * no cero, señal, timeout, fichero ausente) y qué puede elegir el operador (nada: se rechaza todo filtro).
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -27,6 +31,7 @@ import { fileURLToPath } from 'node:url';
 
 import { discoverSelftests } from './discovery.mjs';
 import { runSelftests } from './run.mjs';
+import { writeLineSync } from './stream.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RUN = path.join(HERE, 'run.mjs');
@@ -156,6 +161,7 @@ check(red.stdout.includes('1/2 green'), `the summary counts green over total: ${
 const allGreen = repo({ tracked: { 'a/selftest.mjs': GREEN, 'b/selftest.mjs': GREEN } });
 const green = cli(allGreen, '--root', allGreen);
 check(green.status === 0 && green.stdout.includes('2/2 green'), `all green exits 0: ${green.status}`);
+check(green.stderr === '' && red.stderr === '', `a measured run prints nothing on stderr: ${green.stderr}${red.stderr}`);
 
 const inOwnDir = "import path from 'node:path';\nprocess.exit(path.basename(process.cwd()) === 'a' ? 0 : 1);\n";
 const cwdCase = repo({ tracked: { 'a/selftest.mjs': inOwnDir } });
@@ -182,6 +188,120 @@ rmSync(path.join(missing, 'a', 'selftest.mjs'));
 const gone = cli(missing, '--root', missing);
 check(gone.status === 1 && /RED\s+a\/selftest\.mjs/.test(gone.stdout), 'a tracked selftest deleted from disk is RED, not omitted');
 check(gone.stdout.includes('file missing on disk'), 'a deleted selftest is reported as missing, not run and failed by accident');
+
+// ── Streaming: a line is delivered when its selftest ends, not when the whole run ends ─────────────
+const streamed = repo({ tracked: { 'a/selftest.mjs': GREEN, 'b/selftest.mjs': RED, 'c/selftest.mjs': GREEN } });
+const lines = [];
+const linesSeenAtSpawn = [];
+const watched = runSelftests({
+  root: streamed,
+  onLine: (line) => lines.push(line),
+  spawn: (...args) => {
+    linesSeenAtSpawn.push(lines.length);
+
+    return spawnSync(...args);
+  },
+});
+check(JSON.stringify(lines) === JSON.stringify(watched.report), 'the lines delivered one by one are exactly the returned report: none lost, none repeated');
+check(linesSeenAtSpawn.length === 3 && linesSeenAtSpawn[0] === 0 && linesSeenAtSpawn[1] === 1, `the first selftest's line is delivered BEFORE the second one starts: ${linesSeenAtSpawn}`);
+check(linesSeenAtSpawn[2] > linesSeenAtSpawn[1] && /^RED\s+b\/selftest\.mjs/.test(lines[1]), `a red selftest's line and its output are delivered before the third starts: ${linesSeenAtSpawn}`);
+check(lines.at(-1) === '2/3 green' && watched.exitCode === 1, 'the summary line stays last and the exit status stays 1');
+
+const quiet = runSelftests({ root: streamed });
+check(quiet.report.join('\n') === watched.report.join('\n'), 'without a hook the report is the same, so existing callers are unaffected');
+
+// The same through the real command line. The second selftest only passes once the PARENT has seen the
+// first one's GREEN line on stdout; a runner that prints at the end would never let it pass.
+// @es Lo mismo por la línea de órdenes real. El segundo selftest solo pasa cuando el PADRE ya vio la línea
+// GREEN del primero; un runner que imprime al final no lo dejaría pasar nunca.
+const handshake = repo({
+  tracked: {
+    'a/selftest.mjs': GREEN,
+    'b/selftest.mjs': "import { existsSync } from 'node:fs';\nconst deadline = Date.now() + 8000;\nwhile (!existsSync('release') && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));\nprocess.exit(existsSync('release') ? 0 : 1);\n",
+  },
+});
+const live = await new Promise((resolve) => {
+  const child = spawn(process.execPath, [RUN, '--root', handshake], { cwd: handshake });
+  let stdout = '';
+  let released = false;
+  const guard = setTimeout(() => child.kill(), 30_000);
+
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk;
+    if (!released && stdout.includes('GREEN  a/selftest.mjs')) {
+      released = true;
+      writeFileSync(path.join(handshake, 'b', 'release'), 'seen');
+    }
+  });
+  child.on('close', (code) => {
+    clearTimeout(guard);
+    resolve({ code, stdout, released });
+  });
+});
+check(live.released && live.code === 0 && live.stdout.includes('GREEN  b/selftest.mjs') && live.stdout.includes('2/2 green'), `the command line prints the first line while the second selftest is still running: exit ${live.code}, released ${live.released}`);
+
+// ── Writing one line ──────────────────────────────────────────────────────────────────────────────
+const written = (writeStep, line, options) => {
+  const chunks = [];
+  const outcome = (() => {
+    try {
+      writeLineSync(line, { write: (fd, bytes, offset, length) => writeStep(chunks, fd, bytes, offset, length), ...options });
+
+      return undefined;
+    } catch (error) {
+      return error;
+    }
+  })();
+
+  return { text: Buffer.concat(chunks).toString('utf8'), error: outcome };
+};
+const takeAll = (chunks, fd, bytes, offset, length) => {
+  chunks.push(Buffer.from(bytes.subarray(offset, offset + length)));
+
+  return length;
+};
+const onlyFirstByte = (chunks, fd, bytes, offset) => {
+  chunks.push(Buffer.from(bytes.subarray(offset, offset + 1)));
+
+  return 1;
+};
+
+check(written(takeAll, 'GREEN  a/selftest.mjs (exit 0)').text === 'GREEN  a/selftest.mjs (exit 0)\n', 'a line is written whole, with its newline');
+check(written(takeAll, 'señal ✓ verde').text === 'señal ✓ verde\n', 'a multi-byte line is written byte for byte');
+check(written(onlyFirstByte, 'abc é').text === 'abc é\n', 'a write that takes one byte at a time still delivers the whole line, in order');
+
+let refusals = 0;
+const fullOnce = (chunks, fd, bytes, offset, length) => {
+  if (refusals < 2) {
+    refusals += 1;
+    throw Object.assign(new Error('pipe full'), { code: 'EAGAIN' });
+  }
+
+  return takeAll(chunks, fd, bytes, offset, length);
+};
+const afterBusyPipe = written(fullOnce, 'after a busy pipe');
+check(afterBusyPipe.error === undefined && afterBusyPipe.text === 'after a busy pipe\n' && refusals === 2, 'a pipe that is momentarily full (EAGAIN) is retried until the line goes through, once');
+
+let broken = 0;
+const brokenOnce = (chunks, fd, bytes, offset, length) => {
+  if (broken === 0) {
+    broken += 1;
+    throw Object.assign(new Error('broken pipe'), { code: 'EPIPE' });
+  }
+
+  return takeAll(chunks, fd, bytes, offset, length);
+};
+const afterBrokenPipe = written(brokenOnce, 'closed reader');
+check(afterBrokenPipe.error?.code === 'EPIPE' && broken === 1, 'any error other than EAGAIN is raised at once, never retried');
+
+let attempts = 0;
+const alwaysFull = () => {
+  attempts += 1;
+  if (attempts > 50) throw new Error('UNBOUNDED retry');
+  throw Object.assign(new Error('pipe full'), { code: 'EAGAIN' });
+};
+const gaveUp = written((chunks, fd, bytes, offset, length) => alwaysFull(chunks, fd, bytes, offset, length), 'never accepted', { retries: 3 });
+check(gaveUp.error?.code === 'EAGAIN' && attempts === 4, `a pipe that never drains is given up on after the bounded retries, raising EAGAIN: attempts ${attempts}`);
 
 // ── Nothing to filter with ───────────────────────────────────────────────────────────────────────
 const filtered = cli(allGreen, '--root', allGreen, '--only', 'a/selftest.mjs');

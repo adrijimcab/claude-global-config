@@ -16,6 +16,7 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const DISCOVERY = 'selftest-runner/discovery.mjs';
 const RUN = 'selftest-runner/run.mjs';
+const STREAM = 'selftest-runner/stream.mjs';
 
 const MUTANTS = [
   // Which files are selftests / Qué ficheros son selftests
@@ -39,8 +40,8 @@ const MUTANTS = [
   ['a git failure is not refused, so a non-repository reads as an empty listing', DISCOVERY, 'if (result.error || result.status !== 0) {', 'if (false) {'],
   // The verdict / El veredicto
   ['the verdict is green whatever ran', RUN, 'exitCode: green === discovered.entries.length ? EXIT_GREEN : EXIT_RED', 'exitCode: EXIT_GREEN'],
-  ['a red selftest stops the run (fail-fast), so later selftests never run', RUN, 'report.push(...indent(failure.output));', 'report.push(...indent(failure.output));\n    break;'],
-  ['a red selftest no longer prints its output', RUN, 'report.push(...indent(failure.output));', ''],
+  ['a red selftest stops the run (fail-fast), so later selftests never run', RUN, 'emit(...indent(failure.output));', 'emit(...indent(failure.output));\n    break;'],
+  ['a red selftest no longer prints its output', RUN, 'emit(...indent(failure.output));', ''],
   ['the summary counts every selftest as green', RUN, '`${green}/${discovered.entries.length} green`', '`${discovered.entries.length}/${discovered.entries.length} green`'],
   ['zero discovered selftests is a green run', RUN, 'if (discovered.entries.length === 0) {', 'if (false) {'],
   ['a discovery failure exits like a red selftest instead of not-measured', RUN, 'return { exitCode: EXIT_NOT_MEASURED, report: [error.message] };', 'return { exitCode: EXIT_RED, report: [error.message] };'],
@@ -50,6 +51,23 @@ const MUTANTS = [
   ['a selftest missing from disk is run instead of reported missing', RUN, '    statSync(file);', '    void file;'],
   ['each selftest runs in the root instead of its own directory', RUN, 'cwd: path.dirname(file),', 'cwd: root,'],
   ['the UNTRACKED label is dropped from the report', RUN, "const label = entry.untracked ? ' UNTRACKED' : '';", "const label = '';"],
+  // When a line appears / Cuándo aparece una línea
+  ['no line is delivered through the hook, so nothing is seen before the end', RUN, '      onLine(line);\n', ''],
+  ['only the summary line is delivered through the hook, so selftest lines wait for the end', RUN, '      onLine(line);', "      if (line.endsWith(' green')) onLine(line);"],
+  ['the returned report loses the lines it delivered', RUN, '      report.push(line);\n', ''],
+  ['the command line passes no hook, so it streams nothing', RUN, '{ root: parsed.root, onLine: writeLineSync }', '{ root: parsed.root, onLine: undefined }'],
+  ['a run that measured nothing explains itself on stdout', RUN, 'if (exitCode === EXIT_NOT_MEASURED) console.error(', 'if (exitCode === EXIT_NOT_MEASURED) console.log('],
+  ['a measured run prints its report a second time on stderr', RUN, 'if (exitCode === EXIT_NOT_MEASURED) console.error(', 'if (true) console.error('],
+  // How a line is written / Cómo se escribe una línea
+  ['the line is written without its newline', STREAM, "Buffer.from(`${line}\\n`, 'utf8')", "Buffer.from(`${line}`, 'utf8')"],
+  ['a short write is taken as complete', STREAM, 'offset += write(fd, bytes, offset, bytes.length - offset);', 'write(fd, bytes, offset, bytes.length - offset);\n      offset = bytes.length;'],
+  ['after a short write the line is written again from its start', STREAM, 'write(fd, bytes, offset, bytes.length - offset)', 'write(fd, bytes, 0, bytes.length)'],
+  ['any error is retried, not only a full pipe', STREAM, "error?.code !== 'EAGAIN' || refusals > retries", 'refusals > retries'],
+  ['a full pipe is raised at once instead of retried', STREAM, "error?.code !== 'EAGAIN' || refusals > retries", 'true'],
+  ['a pipe that never drains is retried forever', STREAM, 'refusals > retries', 'false'],
+  ['the retry bound is off by one', STREAM, 'refusals > retries', 'refusals >= retries'],
+  ['the line goes to stderr instead of stdout', STREAM, 'fd = 1,', 'fd = 2,'],
+
   // What the operator can choose / Lo que puede elegir el operador
   ['an option after `--root <dir>` is accepted, so a filter can be passed', RUN, "if (argv.length === 2 && argv[0] === '--root') return { root: argv[1] };", "if (argv[0] === '--root') return { root: argv[1] };"],
 ];
@@ -59,6 +77,7 @@ const survivors = runMutants({
   paths: ['selftest-runner', 'mutation-proof'],
   selftest: 'selftest-runner/selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);
