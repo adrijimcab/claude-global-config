@@ -21,10 +21,33 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { claimsIn, contractDocs, inspectContracts } from './check.mjs';
+import * as checker from './check.mjs';
 
 let passed = 0;
 const failures = [];
+
+/**
+ * The checker's three functions, each answering with an EMPTY result and a recorded failure when it throws:
+ * a throw inside the mechanism is a verdict about it, reported as a failed check naming the cause, never an
+ * uncaught crash that hides which decision broke.
+ * @es Las tres funciones del comprobador: si lanzan, responden vacío y registran un fallo. Un throw del
+ * mecanismo es un veredicto, nunca un crash sin capturar que oculta qué decisión se rompió.
+ */
+function guarded(name, empty) {
+  return (...args) => {
+    try {
+      return checker[name](...args);
+    } catch (error) {
+      failures.push(`${name} THREW ${error.message} @es ${name} LANZÓ`);
+
+      return empty;
+    }
+  };
+}
+
+const claimsIn = guarded('claimsIn', []);
+const contractDocs = guarded('contractDocs', []);
+const inspectContracts = guarded('inspectContracts', { unresolved: [], inspected: 0 });
 
 /** Records one assertion. @es Registra una aserción. */
 function check(label, condition) {

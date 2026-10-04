@@ -42,6 +42,6 @@ const MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const survivors = runMutants({ fleetRoot, paths: ['contract-path-check', 'mutation-proof', 'rules', 'CLAUDE.md', 'sdd-mandate.md', 'verification-contract.md'], selftest: 'contract-path-check/selftest.mjs', mutants: MUTANTS });
+const survivors = runMutants({ fleetRoot, paths: ['contract-path-check', 'mutation-proof', 'rules', 'CLAUDE.md', 'sdd-mandate.md', 'verification-contract.md'], selftest: 'contract-path-check/selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
 
 process.exit(survivors === 0 ? 0 : 1);
