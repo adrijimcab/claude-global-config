@@ -67,8 +67,8 @@ const sink = () => {
 {
   const loadingFor = (table) => attempt(() => makeSpeaker(table, sink()));
 
-  equal('a table whose message has no Spanish half is refused at load, naming the id', loadingFor({ ...TABLE, bare: { en: 'Only English.' } }), 'threw: message table is not bilingual: bare: a half is missing or empty. @es la tabla de mensajes no es bilingüe: bare: a half is missing or empty.');
-  equal('a table whose Spanish half copies the English one is refused at load', loadingFor({ ...TABLE, same: { en: 'Same.', es: 'Same.' } }), 'threw: message table is not bilingual: same: the Spanish half is a copy of the English one. @es la tabla de mensajes no es bilingüe: same: the Spanish half is a copy of the English one.');
+  equal('a table whose message has no Spanish half is refused at load, naming the id', loadingFor({ ...TABLE, bare: { en: 'Only English.' } }), 'threw: message table is not bilingual. @es la tabla de mensajes no es bilingüe.\n  - bare: a half is missing or empty. @es bare: falta una mitad o está vacía.');
+  equal('a table whose Spanish half copies the English one is refused at load', loadingFor({ ...TABLE, same: { en: 'Same.', es: 'Same.' } }), 'threw: message table is not bilingual. @es la tabla de mensajes no es bilingüe.\n  - same: the Spanish half is a copy of the English one. @es same: la mitad española es una copia de la inglesa.');
   equal('a clean table loads', typeof loadingFor(TABLE).say, 'function');
 }
 

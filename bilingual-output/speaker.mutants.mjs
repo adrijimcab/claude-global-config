@@ -24,7 +24,9 @@ const MUTANTS = [
   ['blank prints nothing', SPEAKER, "blank: () => sink.log(''),", 'blank: () => undefined,'],
   ['the message is printed without its parameters', SPEAKER, 'return render(table[id], params);', 'return render(table[id]);'],
   ['a table that is not bilingual is loaded', SPEAKER, 'if (problems.length > 0) throw', 'if (false) throw'],
-  ['the table is not checked at load', SPEAKER, 'const problems = messageProblems(table);', 'const problems = [];']
+  ['the table is not checked at load', SPEAKER, 'const problems = messageProblems(table);', 'const problems = [];'],
+  ['the load error loses its Spanish header', SPEAKER, "'message table is not bilingual. @es la tabla de mensajes no es bilingüe.'", "'message table is not bilingual.'"],
+  ['the load error does not name the problems', SPEAKER, '...problems.map((problem) => `  - ${problem}`)', '...[]']
 ];
 
 const survivors = runMutants({

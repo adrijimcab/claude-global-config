@@ -31,7 +31,9 @@ equal('placeholders are listed in order, literal braces excluded', placeholdersO
 const CLEAN = { greet: { en: 'Hello {who}.', es: 'Hola {who}.' }, bye: { en: ['Bye.', 'See you.'], es: ['Adiós.', 'Hasta luego.'] } };
 
 equal('a clean table reports nothing', messageProblems(CLEAN), []);
-equal('a message with no Spanish half is flagged', messageProblems({ ...CLEAN, bad: { en: 'Only English.' } }).length, 1);
+equal('a message with no Spanish half is flagged, in both languages', messageProblems({ ...CLEAN, bad: { en: 'Only English.' } }), ['bad: a half is missing or empty. @es bad: falta una mitad o está vacía.']);
+equal('a Spanish copy is flagged, in both languages', messageProblems({ ...CLEAN, bad: { en: 'Same.', es: 'Same.' } }), ['bad: the Spanish half is a copy of the English one. @es bad: la mitad española es una copia de la inglesa.']);
+equal('different placeholders are flagged, in both languages', messageProblems({ ...CLEAN, bad: { en: 'Key {key}.', es: 'Clave.' } }), ['bad: the halves name different placeholders. @es bad: las mitades nombran marcadores distintos.']);
 equal('a message with an empty Spanish half is flagged', messageProblems({ ...CLEAN, bad: { en: 'Hi.', es: ['  '] } }).length, 1);
 equal('a Spanish half that copies the English one is flagged', messageProblems({ ...CLEAN, bad: { en: 'Same.', es: 'Same.' } }).length, 1);
 equal('a Spanish half that drops a placeholder is flagged', messageProblems({ ...CLEAN, bad: { en: 'Key {key}.', es: 'Clave.' } }).length, 1);

@@ -98,12 +98,12 @@ export function messageProblems(table) {
     const spanish = linesOf(message?.es ?? []).join('\n');
 
     if (!hasText(message?.en) || !hasText(message?.es)) {
-      problems.push(`${id}: a half is missing or empty`);
+      problems.push(`${id}: a half is missing or empty. @es ${id}: falta una mitad o está vacía.`);
       continue;
     }
 
-    if (english === spanish) problems.push(`${id}: the Spanish half is a copy of the English one`);
-    if ([...new Set(placeholdersOf(english))].sort().join() !== [...new Set(placeholdersOf(spanish))].sort().join()) problems.push(`${id}: the halves name different placeholders`);
+    if (english === spanish) problems.push(`${id}: the Spanish half is a copy of the English one. @es ${id}: la mitad española es una copia de la inglesa.`);
+    if ([...new Set(placeholdersOf(english))].sort().join() !== [...new Set(placeholdersOf(spanish))].sort().join()) problems.push(`${id}: the halves name different placeholders. @es ${id}: las mitades nombran marcadores distintos.`);
   }
 
   return problems;

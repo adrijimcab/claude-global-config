@@ -23,7 +23,7 @@ import { messageProblems, render } from './message.mjs';
 export function makeSpeaker(table, sink = console) {
   const problems = messageProblems(table);
 
-  if (problems.length > 0) throw new Error(`message table is not bilingual: ${problems.join('; ')}. @es la tabla de mensajes no es bilingüe: ${problems.join('; ')}.`);
+  if (problems.length > 0) throw new Error(['message table is not bilingual. @es la tabla de mensajes no es bilingüe.', ...problems.map((problem) => `  - ${problem}`)].join('\n'));
 
   const line = (id, params) => {
     if (!Object.hasOwn(table, id)) throw new Error(`no message "${id}" in the table. @es el mensaje "${id}" no está en la tabla.`);

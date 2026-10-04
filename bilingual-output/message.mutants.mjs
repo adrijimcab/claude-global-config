@@ -27,7 +27,10 @@ const MUTANTS = [
   ['placeholders are compared in order, so a reordered translation is flagged', MESSAGE, '[...new Set(placeholdersOf(english))].sort().join() !==', '[...new Set(placeholdersOf(english))].join() !=='],
   ['a message with no Spanish half is rendered anyway', MESSAGE, 'if (!hasText(en) || !hasText(es)) throw', 'if (false) throw'],
   ['a missing English half is not refused when rendered', MESSAGE, 'if (!hasText(en) || !hasText(es)) throw', 'if (!hasText(es)) throw'],
-  ['a half of blanks counts as text', MESSAGE, "linesOf(half ?? []).join('\\n').trim().length > 0", "linesOf(half ?? []).join('\\n').length > 0"]
+  ['a half of blanks counts as text', MESSAGE, "linesOf(half ?? []).join('\\n').trim().length > 0", "linesOf(half ?? []).join('\\n').length > 0"],
+  ['the missing-half problem loses its Spanish text', MESSAGE, ' @es ${id}: falta una mitad o está vacía.`', '`'],
+  ['the copy problem loses its Spanish text', MESSAGE, ' @es ${id}: la mitad española es una copia de la inglesa.`', '`'],
+  ['the placeholder problem loses its Spanish text', MESSAGE, ' @es ${id}: las mitades nombran marcadores distintos.`', '`']
 ];
 
 const survivors = runMutants({
