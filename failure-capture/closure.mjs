@@ -55,8 +55,16 @@ export const NO_MECHANISM_FLAG = '--no-mechanism';
 /** The shortest reason accepted — the same floor `dismiss` applies, for the same reason. @es El motivo más corto aceptado. */
 export const MINIMUM_REASON_LENGTH = 25;
 
-/** How long a mechanism's selftest may run before the attempt is abandoned as unmeasured. @es Cuánto puede tardar el selftest. */
-const SELFTEST_TIMEOUT_MS = 600_000;
+/**
+ * How long a mechanism's selftest may run before the attempt is abandoned as unmeasured. MEASURED 2026-10-04: a
+ * selftest that drives the REAL repository gate over real worktrees (`registry-growth.selftest.mjs`, 66 checks)
+ * takes 1053 s, and the former 600 s cap killed it, which `promote` read as no verdict; the cap is now 1800 s,
+ * about 1.7 times that run, so a proof that exercises the real thing fits while a hung one is still abandoned.
+ * @es Cuánto puede tardar el selftest antes de abandonar el intento como no medido. MEDIDO el 2026-10-04: un
+ * selftest que ejecuta el gate REAL del repositorio sobre worktrees reales tarda 1053 s y el tope anterior de
+ * 600 s lo mataba; ahora es de 1800 s, unas 1,7 veces esa corrida: cabe una prueba contra lo real y un cuelgue se sigue abandonando.
+ */
+const SELFTEST_TIMEOUT_MS = 1_800_000;
 
 /** The proof file every fleet guard keeps beside itself. @es El fichero de prueba que cada guard guarda a su lado. */
 const SELFTEST_NAME = 'selftest.mjs';
