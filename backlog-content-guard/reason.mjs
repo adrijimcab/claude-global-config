@@ -26,6 +26,23 @@ function droppedBlock(dropped) {
 const MARKER_EN = `To retire an item on purpose, add a line to the new content that contains a closure word (${[...CLOSURE_WORDS].join(', ')}, case-insensitive) AND the first ${ANCHOR_TOKENS} words of that item copied verbatim, for example "CLOSED: <first ${ANCHOR_TOKENS} words of the item> — evidence". A closure word anywhere else excuses nothing.`;
 const MARKER_ES = `Para retirar un item a propósito, añade al nuevo contenido una línea con una palabra de cierre (${[...CLOSURE_WORDS].join(', ')}, sin distinguir mayúsculas) Y las ${ANCHOR_TOKENS} primeras palabras de ese item copiadas literalmente, por ejemplo "CERRADO: <primeras ${ANCHOR_TOKENS} palabras del item> — evidencia". Una palabra de cierre en otro sitio no excusa nada.`;
 
+const ARCHIVE_EN = 'To shrink a record without losing detail, first mem_save the old sections VERBATIM into an archive record (same project, topic_key starting with "<topic_key>-archive"), then add a line "ARCHIVED: #<archive id>" to the new content.';
+const ARCHIVE_ES = 'Para encoger un registro sin perder detalle, guarda primero (mem_save) las secciones viejas LITERALES en un registro archivo (mismo proyecto, topic_key que empiece por "<topic_key>-archive") y añade al contenido nuevo una línea "ARCHIVED: #<id del archivo>".';
+
+function archiveText(refusal) {
+  const problems = refusal.problems.map((problem) => `  - ${problem}`).join('\n');
+
+  return [
+    `backlog-content-guard: this ${refusal.toolName} drops ${refusal.dropped.length} item(s) of ${refusal.topicKey} and cites archive record(s) that cannot be used. Fails CLOSED:`,
+    problems,
+    `A cited "ARCHIVED: #<id>" must be a readable, live record of the SAME project whose topic_key starts with "${refusal.topicKey}-archive".`,
+    ARCHIVE_EN,
+    `@es Este ${refusal.toolName} elimina ${refusal.dropped.length} item(s) de ${refusal.topicKey} y cita archivo(s) inutilizables (problemas arriba). Falla CERRADO.`,
+    `Un "ARCHIVED: #<id>" citado debe ser un registro legible y vivo del MISMO proyecto cuyo topic_key empiece por "${refusal.topicKey}-archive".`,
+    ARCHIVE_ES
+  ].join('\n');
+}
+
 function lossText(refusal) {
   const target = refusal.id === undefined ? refusal.topicKey : `observation #${refusal.id} (${refusal.topicKey ?? 'no topic_key'})`;
 
@@ -34,9 +51,11 @@ function lossText(refusal) {
     droppedBlock(refusal.dropped),
     'Read the current revision (mem_get_observation), then resend the WHOLE content: the old items plus your additions. Reordering, reflowing and pure additions are always allowed.',
     MARKER_EN,
+    ARCHIVE_EN,
     `@es Este ${refusal.toolName} REEMPLAZARÍA ${target} y PERDERÍA ${refusal.dropped.length} item(s) de la revisión actual (guardar sobre un topic_key existente es un upsert completo, no un añadido). Items perdidos arriba.`,
     'Lee la revisión actual (mem_get_observation) y reenvía el contenido COMPLETO: los items antiguos más tus añadidos. Reordenar, reflujar y añadir siempre está permitido.',
-    MARKER_ES
+    MARKER_ES,
+    ARCHIVE_ES
   ].join('\n');
 }
 
@@ -51,5 +70,7 @@ function unverifiableText(refusal) {
 
 /** The deny reason for one refusal descriptor. @es El motivo de denegación para un descriptor de rechazo. */
 export function reason(refusal) {
-  return refusal.kind === 'content-loss' ? lossText(refusal) : unverifiableText(refusal);
+  if (refusal.kind === 'content-loss') return lossText(refusal);
+
+  return refusal.kind === 'archive-invalid' ? archiveText(refusal) : unverifiableText(refusal);
 }

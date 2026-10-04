@@ -17,6 +17,9 @@
  *   save or update, nothing dropped (addition, reorder, reflow)    -> ALLOW
  *   save or update, items dropped but each retired by a closure line -> ALLOW
  *   save or update, items dropped and not retired                  -> DENY, naming the dropped items
+ *   dropped items all present verbatim in cited `ARCHIVED: #id` archives -> ALLOW (see `archive.mjs`)
+ *   dropped item absent from the cited archives                    -> DENY, naming it
+ *   cited archive unreadable / other topic_key / other project     -> DENY, fail CLOSED
  *   save, store unreadable, key master-shaped (`backlog/*-master`) -> DENY, fail CLOSED
  *   save, store unreadable, ordinary key                           -> ALLOW, fail OPEN
  *   save, several rows match and project cannot narrow it, master  -> DENY, fail CLOSED (ambiguous)
@@ -40,6 +43,7 @@
  */
 
 import { isMasterBacklogTopicKey } from '../backlog-guard/master-save.mjs';
+import { resolveArchives } from './archive.mjs';
 import { droppedItems } from './loss.mjs';
 
 export const SAVE_TOOLS = new Set(['mcp__engram__mem_save', 'mcp__plugin_engram_engram__mem_save']);
@@ -57,11 +61,23 @@ function directoryName(directory) {
   return typeof directory === 'string' ? directory.split('\\').join('/').split('/').filter((part) => part !== '').at(-1) : undefined;
 }
 
-/** Refusal descriptor when `current` content would lose items in `next`, else `undefined`. @es Descriptor de rechazo si `next` pierde items de `current`. */
-function lossRefusal(base, current, next) {
-  const dropped = droppedItems(current, next);
+/**
+ * Refusal descriptor when `row.content` would lose items in `next`, else `undefined`. Items cited as
+ * archived (see `archive.mjs`) count as retained; an unusable citation is refused, fail CLOSED.
+ * @es Descriptor de rechazo si `next` pierde items de `row.content`. Los items archivados (ver `archive.mjs`) cuentan como conservados; una citación inutilizable se rechaza, CERRADO.
+ */
+function lossRefusal(base, row, next, readers) {
+  const dropped = droppedItems(row.content, next);
 
-  return dropped.length === 0 ? undefined : { ...base, kind: 'content-loss', dropped };
+  if (dropped.length === 0) return undefined;
+
+  const { problems, haystack } = resolveArchives(next, { topicKey: base.topicKey, project: row.project }, readers);
+
+  if (problems.length > 0) return { ...base, kind: 'archive-invalid', dropped, problems };
+
+  const unarchived = dropped.filter((item) => !haystack.includes(item));
+
+  return unarchived.length === 0 ? undefined : { ...base, kind: 'content-loss', dropped: unarchived };
 }
 
 /** The unique live row a save targets, `{ row }`, `{ absent: true }` or `{ ambiguous: true }`. @es La fila única a la que apunta un guardado. */
@@ -92,7 +108,7 @@ function decideSave(payload, toolName, toolInput, readers) {
   if (target.ambiguous) return isMaster ? { ...base, kind: 'ambiguous-master', detail: `${read.rows.length} rows` } : undefined;
   if (target.absent) return undefined;
 
-  return lossRefusal({ ...base, id: target.row.id }, target.row.content, content);
+  return lossRefusal({ ...base, id: target.row.id }, target.row, content, readers);
 }
 
 function decideUpdate(toolName, toolInput, readers) {
@@ -106,7 +122,7 @@ function decideUpdate(toolName, toolInput, readers) {
 
   const [row] = read.rows;
 
-  return lossRefusal({ toolName, id, topicKey: row.topic_key }, row.content, content);
+  return lossRefusal({ toolName, id, topicKey: row.topic_key }, row, content, readers);
 }
 
 /**

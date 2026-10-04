@@ -21,6 +21,8 @@ const L = 'backlog-content-guard/loss.mjs';
 const I = 'backlog-content-guard/items.mjs';
 const R = 'backlog-content-guard/current-revision.mjs';
 const G = 'backlog-content-guard/guard.mjs';
+const A = 'backlog-content-guard/archive.mjs';
+const R2 = 'backlog-content-guard/reason.mjs';
 
 const MUTANTS = [
   // --- loss.mjs: preserved / retired ---
@@ -63,7 +65,26 @@ const MUTANTS = [
   ['the working directory hint is ignored', D, 'const hint = isText(toolInput.project) ? toolInput.project : directoryName(payload?.cwd);', 'const hint = toolInput.project;'],
   ['an update without content is judged as an empty write', D, "if (typeof content !== 'string') return undefined;\n\n  const read = readers.byId(id);", "const read = readers.byId(id);"],
   ['an unreadable id is refused', D, "if ('error' in read || read.rows.length === 0) return undefined;", "if ('error' in read || read.rows.length === 0) return { toolName, id, kind: 'content-loss', dropped: ['x'] };"],
-  ['a loss is never turned into a refusal', D, "return dropped.length === 0 ? undefined : { ...base, kind: 'content-loss', dropped };", 'return undefined;'],
+  ['a loss is never turned into a refusal', D, "return unarchived.length === 0 ? undefined : { ...base, kind: 'content-loss', dropped: unarchived };", 'return undefined;'],
+  ['a loss with no archive is excused by the early return', D, 'if (dropped.length === 0) return undefined;\n\n  const { problems', 'return undefined;\n\n  const { problems'],
+
+  // --- archive.mjs + decide.mjs: archive acceptance ---
+  ['a cited archive is never consulted', D, 'const { problems, haystack } = resolveArchives(next, { topicKey: base.topicKey, project: row.project }, readers);', "const { problems, haystack } = { problems: [], haystack: '' };"],
+  ['every cited archive excuses every dropped item', D, 'const unarchived = dropped.filter((item) => !haystack.includes(item));', 'const unarchived = [];'],
+  ['an item absent from the archive is excused', D, 'const unarchived = dropped.filter((item) => !haystack.includes(item));', 'const unarchived = haystack === \'\' ? dropped : [];'],
+  ['an unusable citation is ignored instead of refused', D, "if (problems.length > 0) return { ...base, kind: 'archive-invalid', dropped, problems };", ''],
+  ['the archive is looked up for the wrong topic_key (project key ignored)', A, 'const prefix = `${target.topicKey}${ARCHIVE_SUFFIX}`.toLowerCase();', "const prefix = '';"],
+  ['an archive of another topic_key is accepted', A, "if (typeof row.topic_key !== 'string' || !row.topic_key.toLowerCase().startsWith(prefix))", "if (typeof row.topic_key !== 'string')"],
+  ['the archive topic_key match becomes case-sensitive', A, 'row.topic_key.toLowerCase().startsWith(prefix)', 'row.topic_key.startsWith(prefix)'],
+  ['an archive of another project is accepted', A, 'if (row.project !== target.project)', 'if (false)'],
+  ['an unreadable archive is treated as empty, not refused', A, "if ('error' in read) {\n      problems.push(`#${id} cannot be read (${read.error})`);", "if ('error' in read) {\n      texts.push('');"],
+  ['an absent or deleted archive is accepted', A, 'else if (read.rows.length === 0) {\n      problems.push(`#${id} does not exist or is deleted`);', 'else if (read.rows.length === 0) {\n      texts.push(\'\');'],
+  ['the ARCHIVED label may appear anywhere in a line', A, 'if (!line.toLowerCase().startsWith(ARCHIVED_LABEL)) continue;', 'if (!line.toLowerCase().includes(ARCHIVED_LABEL)) continue;'],
+  ['the ARCHIVED label is case-sensitive', A, 'if (!line.toLowerCase().startsWith(ARCHIVED_LABEL)) continue;', 'if (!line.startsWith(ARCHIVED_LABEL)) continue;'],
+  ['a non-numeric id is accepted as a citation', A, "[...digits].every((character) => DIGITS.includes(character))", 'true'],
+  ['only the first cited id is read', A, 'for (const id of citedArchiveIds(nextText)) {', 'for (const id of citedArchiveIds(nextText).slice(0, 1)) {'],
+  ['archive items are compared without normalisation', A, 'texts.push(extractItems(read.rows[0].content).join(\' \'))', 'texts.push(read.rows[0].content)'],
+  ['an archive refusal is reported as a plain loss (wrong text)', R2, "refusal.kind === 'archive-invalid' ? archiveText(refusal)", 'false ? archiveText(refusal)'],
 
   // --- current-revision.mjs: the store reads ---
   ['soft-deleted rows are treated as live', R, 'WHERE id = ? AND deleted_at IS NULL', 'WHERE id = ?'],

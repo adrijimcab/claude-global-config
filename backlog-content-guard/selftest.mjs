@@ -20,6 +20,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { citedArchiveIds } from './archive.mjs';
+import { readRevisionById, readRevisionsByTopicKey } from './current-revision.mjs';
 import { decide } from './decide.mjs';
 import { evaluate } from './guard.mjs';
 import { extractItems } from './items.mjs';
@@ -72,6 +74,16 @@ insert.run('other-project', 'project', 'notes/twin', DETAIL, null); // id 7
 insert.run('b100-am-ui', 'project', 'backlog/9.9.9-master', DETAIL, null); // id 8
 insert.run('other-project', 'project', 'backlog/9.9.9-master', DETAIL, null); // id 9
 insert.run('b100-am-ui', 'personal', 'notes/ordinary', 'A personal-scope record with its own enough words.', null); // id 10
+const TWO_BULLETS = '- #36 table editor: error state is not announced to screen readers under the zoneless scheduler.\n- #37 date-range: endpoint inputs ignore parent control events when disabled.';
+
+insert.run('b100-am-ui', 'project', 'backlog/1.0.0-master-archive-1', DETAIL, null); // id 11: archive holding everything
+insert.run('b100-am-ui', 'project', 'backlog/1.0.0-master-archive-2', TWO_BULLETS, null); // id 12: archive holding only #36 and #37
+insert.run('b100-am-ui', 'project', 'notes/other-archive-1', DETAIL, null); // id 13: an archive of ANOTHER topic_key
+insert.run('other-project', 'project', 'backlog/1.0.0-master-archive-3', DETAIL, null); // id 14: right topic_key, ANOTHER project
+insert.run('b100-am-ui', 'project', 'backlog/1.0.0-master-archive-4', DETAIL, '2026-01-01'); // id 15: soft-deleted archive
+insert.run('b100-am-ui', 'project', 'notes/ordinary-archive-1', DETAIL, null); // id 16: archive of the ordinary record
+insert.run('b100-am-ui', 'project', 'backlog/1.0.0-master-archive-5', '- #36 table editor: error state is not announced to screen readers under the zoneless scheduler.', null); // id 17: holds only #36
+insert.run('b100-am-ui', 'project', 'BACKLOG/1.0.0-MASTER-ARCHIVE-6', DETAIL, null); // id 18: archive whose key differs only in case
 db.close();
 
 const OPTIONS = { databasePath };
@@ -213,6 +225,49 @@ const INCIDENT = {
 };
 
 check('the real incident payload shape is denied end to end', verdict(INCIDENT), 'deny');
+
+// ── archive acceptance (`ARCHIVED: #<id>`) ───────────────────────────────────────────────────────────
+const MASTER = 'backlog/1.0.0-master';
+const SHRUNK = '- #38 a brand new finding with its own measured detail.';
+const archived = (...ids) => `${SHRUNK}\nARCHIVED: ${ids.map((id) => `#${id}`).join(', ')}`;
+const archiveDecision = (input, tool) => evaluate(JSON.stringify(tool === 'update' ? update(input) : save(input)), OPTIONS)?.hookSpecificOutput?.permissionDecisionReason ?? '';
+
+check('no ARCHIVED line: a shrinking master is still DENIED', verdict(save({ topic_key: MASTER, content: SHRUNK })), 'deny');
+check('items verbatim in a cited archive: master save allowed', verdict(save({ topic_key: MASTER, content: archived(11) })), 'allow');
+check('items verbatim in a cited archive: update by id allowed', verdict(update({ id: 2, content: archived(11) })), 'allow');
+check('two archives that together hold every item are allowed', verdict(save({ topic_key: MASTER, content: `${SHRUNK}\nARCHIVED: #12\nARCHIVED: #17\n- Remaining detail kept here: the rollout plan keeps every gate green before landing and never batches fixes into a single large diff, because batched fixes hide regressions.\n- #35 forms finding: file src/forms/form.ts, spy evidence in form.spec.ts, markForCheck sites at three places.\n## Open findings\n1. Regenerate the goldens deliberately with api:update.\n2. Run the full unit suite before every fast-forward.` })), 'allow');
+check('an ARCHIVED line with a bullet and lowercase label is parsed', verdict(save({ topic_key: MASTER, content: `${SHRUNK}\n- archived: #11` })), 'allow');
+check('an item missing from the cited archive is DENIED', verdict(save({ topic_key: MASTER, content: archived(17) })), 'deny');
+
+const missingText = archiveDecision({ topic_key: MASTER, content: archived(17) });
+
+check('the refusal names the item the archive lacks', missingText.includes('#37 date-range'), true);
+check('the refusal does not name an item the archive holds', missingText.includes('#36 table editor'), false);
+check('the archive guidance is bilingual', missingText.includes('ARCHIVED: #<archive id>') && missingText.includes('registro archivo'), true);
+check('an unreadable archive id is DENIED', verdict(save({ topic_key: MASTER, content: archived(9999) })), 'deny');
+check('a soft-deleted archive is DENIED', verdict(save({ topic_key: MASTER, content: archived(15) })), 'deny');
+check('an archive of ANOTHER topic_key is DENIED', verdict(save({ topic_key: MASTER, content: archived(13) })), 'deny');
+check('the target itself is not an archive of itself', verdict(save({ topic_key: MASTER, content: archived(2) })), 'deny');
+check('an archive with the right topic_key in ANOTHER project is DENIED', verdict(save({ topic_key: MASTER, content: archived(14) })), 'deny');
+check('one valid archive does not excuse a second, invalid citation', verdict(save({ topic_key: MASTER, content: archived(11, 13) })), 'deny');
+check('an unusable archive is refused even when the store is fine otherwise', archiveDecision({ topic_key: MASTER, content: archived(13) }).includes('not an archive of backlog/1.0.0-master'), true);
+check('the archive label must START the line: a mention elsewhere cites nothing', verdict(save({ topic_key: MASTER, content: `${SHRUNK}\nsee ARCHIVED: #11 for the rest` })), 'deny');
+check('a non-numeric id cites nothing', verdict(save({ topic_key: MASTER, content: `${SHRUNK}\nARCHIVED: #eleven` })), 'deny');
+check('an unreadable store with an ARCHIVED line still fails CLOSED for the master', verdict(save({ topic_key: MASTER, content: archived(11) }), MISSING), 'deny');
+check('an ordinary record uses its own archive', verdict(update({ id: 3, content: `${SHRUNK}\nARCHIVED: #16` })), 'allow');
+check('an ordinary record may not cite the master archive', verdict(update({ id: 3, content: `${SHRUNK}\nARCHIVED: #11` })), 'deny');
+const realReaders = { byId: (id) => readRevisionById(id, OPTIONS), byTopicKey: (topicKey, filters) => readRevisionsByTopicKey(topicKey, filters, OPTIONS) };
+const unreadableArchive = { ...realReaders, byId: (id) => (id === 11 ? { error: 'query-failed', detail: 'boom' } : readRevisionById(id, OPTIONS)) };
+const absentArchive = { ...realReaders, byId: (id) => (id === 11 ? { rows: [] } : readRevisionById(id, OPTIONS)) };
+
+check('nothing dropped: a bad citation is not even resolved', decide({}, `${MCP}mem_save`, { topic_key: KEY, content: `${DETAIL}\nARCHIVED: #9999` }, { ...realReaders, byId: (id) => (id === 9999 ? { error: 'resolved' } : realReaders.byId(id)) }), undefined);
+check('a cited archive whose read errors is an archive-invalid refusal', decide({}, `${MCP}mem_save`, { topic_key: MASTER, project: 'b100-am-ui', content: archived(11) }, unreadableArchive)?.kind, 'archive-invalid');
+check('a cited archive that reads as absent is an archive-invalid refusal', decide({}, `${MCP}mem_save`, { topic_key: MASTER, project: 'b100-am-ui', content: archived(11) }, absentArchive)?.kind, 'archive-invalid');
+check('an unreadable citation beside a valid one is DENIED', verdict(save({ topic_key: MASTER, content: archived(9999, 11) })), 'deny');
+check('a soft-deleted citation beside a valid one is DENIED', verdict(save({ topic_key: MASTER, content: archived(15, 11) })), 'deny');
+check('the archive topic_key prefix match ignores case', verdict(save({ topic_key: MASTER, content: archived(18) })), 'allow');
+check('a junk token beside a valid id is ignored, the valid id still counts', verdict(save({ topic_key: MASTER, content: `${SHRUNK}\nARCHIVED: #11, #eleven` })), 'allow');
+check('citedArchiveIds reads several ids and ignores repeats', citedArchiveIds('ARCHIVED: #3, #4 #3\n- ARCHIVED: (#5)').join(','), '3,4,5');
 
 rmSync(scratch, { recursive: true, force: true });
 

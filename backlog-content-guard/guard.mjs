@@ -9,8 +9,21 @@
  * `items.mjs`, the store reads in `current-revision.mjs`, the wording in `reason.mjs`. This file is the
  * thin shim: stdin -> `evaluate()` -> stdout, plus a journal so a real refusal is auditable.
  *
+ * ARCHIVE ACCEPTANCE (`archive.mjs`): an item dropped from a record is retained when its text is verbatim in a
+ * cited archive, so a record near engram's 50,000-byte cap can shrink without losing detail. Procedure:
+ * (1) `mem_save` the old sections verbatim into a record with topic_key "<target topic_key>-archive<suffix>",
+ * same project; (2) rewrite the target without them plus a line `ARCHIVED: #<archive id>`; an unreadable,
+ * foreign-topic or foreign-project archive is refused (fail CLOSED), an item absent from the archive is named.
+ *
  * FAILS OPEN on this guard's OWN malfunctions (unreadable stdin, bad JSON, a throw in the decision),
  * and CLOSED only for the master backlog when its current revision cannot be read (see `decide.mjs`).
+ *
+ * @es ACEPTACIÓN POR ARCHIVO (`archive.mjs`): un item eliminado de un registro cuenta como conservado si su texto
+ * está literal en un archivo citado; así un registro cerca del tope de 50.000 bytes de engram puede encoger sin
+ * perder detalle. Procedimiento: (1) `mem_save` de las secciones viejas literales en un registro con topic_key
+ * "<topic_key del destino>-archive<sufijo>", mismo proyecto; (2) reescribir el destino sin ellas, con una línea
+ * `ARCHIVED: #<id del archivo>`; un archivo ilegible, de otro topic_key o de otro proyecto se rechaza (CERRADO)
+ * y un item ausente del archivo se nombra.
  *
  * @es Guardia `PreToolUse`, global (todo proyecto, todo llamante): un `mem_save`/`mem_update` de engram
  * no puede perder en silencio contenido que el registro ya tiene. Mecanismo de

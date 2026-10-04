@@ -414,6 +414,16 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     lines are ONE item), reads as that item deleted. RULE: an existing item is resent byte-identical; new
     facts go in their own paragraph or bullet; changing an item means a closure line for the old one plus
     the new one. The guard refused all three such writes, so the mechanism held; this face names the shape.
+  - **A RECORD AT ENGRAM'S 50,000-BYTE CAP CANNOT GROW (2026-10-04, master backlog at 49,253 bytes).**
+    Retiring old items by closure lines makes the record bigger, so shrinking needs an ARCHIVE. RULE:
+    (1) `mem_save` the old sections VERBATIM into a new record in the same project whose `topic_key` is the
+    target's `topic_key` + `-archive` + a suffix (`backlog/1.0.0-master-archive-1`); (2) read the archive
+    back (`mem_get_observation`) to get its id; (3) resend the target WITHOUT those sections, plus one line
+    `ARCHIVED: #<archive id>` (several ids per line, comma-separated). The guard accepts a dropped item only
+    when its normalised text is verbatim in a cited archive; an unreadable, soft-deleted, other-topic or
+    other-project archive refuses (fail CLOSED), and an item missing from the archive is named. Archives are
+    guarded like any record (they cannot lose content later). The orchestrator writes both records; a
+    worker never touches a master. Mechanism: `~/.claude/backlog-content-guard/archive.mjs`.
   @es Un registro de memoria se guarda EDITANDO su revisión anterior, nunca re-resumiéndola: `mem_save`
   sobre un `topic_key` existente es un upsert completo que REEMPLAZA el contenido. Dos caras: cada
   reescritura completa hecha desde un resumen (2026-09-30) y un «añadido» que era un upsert
@@ -421,7 +431,12 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   retirar un item a propósito, una línea con palabra de cierre (`CLOSED`, `CERRADO`, `SUPERSEDED`,
   `SUPERSEDIDO`) Y las 6 primeras palabras del item literales. Lo impide
   `~/.claude/backlog-content-guard/guard.mjs` (cierra CERRADO para `backlog/*-master` si no puede leer
-  el almacén; ABIERTO para registros ordinarios).
+  el almacén; ABIERTO para registros ordinarios). REGISTRO EN EL TOPE DE 50.000 BYTES (2026-10-04): para
+  encoger sin perder detalle, (1) `mem_save` de las secciones viejas LITERALES en un registro nuevo del mismo
+  proyecto con `topic_key` = el del destino + `-archive` + sufijo; (2) leer su id; (3) reenviar el destino SIN
+  esas secciones más una línea `ARCHIVED: #<id>` por archivo. La guardia acepta un item eliminado solo si su
+  texto normalizado está literal en un archivo citado; un archivo ilegible, borrado, de otro `topic_key` o de
+  otro proyecto rechaza (CERRADO) y un item ausente del archivo se nombra. Lo escribe el orquestador.
 
 - **`contract-doc-names-a-mechanism-nobody-verifies`** — A path, script name, hook or wiring quoted from a
   memory or contract document is a HYPOTHESIS until the filesystem confirms it; confirm it before quoting
