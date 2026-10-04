@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const DETECT = 'eval-guard/detect.mjs';
+const GUARD = 'eval-guard/guard.mjs';
 
 const MUTANTS = [
   // --- noisy: the script's own arguments are read as node's ---
@@ -33,6 +34,20 @@ const MUTANTS = [
   ['--input-type is missing from the value-taking options', DETECT, "  '--input-type',\n", ''],
   ['the payload word is not skipped, so it ends the walk and a later evaluate switch hides', DETECT, '      if (!inline) index += 1;\n', ''],
   ['the walk ends on any option, not only on a non-option', DETECT, '!token.raw.startsWith(\'-\') || token.raw === \'-\'', "token.raw.startsWith('--') || !token.raw.startsWith('-') || token.raw === '-'"],
+  // --- text-edit programs: the program list, the word filter, the shape checks, the rendering ---
+  ['sed, sd, awk and gawk are no longer examined', DETECT, 'if (Object.hasOwn(LEADING_SCRIPT_WORDS, name)) {', 'if (false) {'],
+  ['perl, ruby and python are no longer examined', DETECT, 'if (Object.hasOwn(INTERPRETER_VALUE_OPTIONS, name)) {', 'if (false) {'],
+  ['sd is missing from the examined programs', DETECT, ' sd: 2,', ''],
+  ['options are no longer told apart from words, so option values shift the script positions', DETECT, 'if (!optionsEnded && isOptionWord(token)) {', 'if (false) {'],
+  ['a quoted word that starts with a dash is read as an option', DETECT, 'return !token.quoted && token.raw.length > 1 && token.raw[0] === \'-\';', "return token.raw.length > 1 && token.raw[0] === '-';"],
+  ['the value word of a value-taking option is not consumed', DETECT, '        if (SCRIPT_FILE_OPTIONS.has(token.raw)) scriptsLeft = 0;\n        index += 1;\n', '        if (SCRIPT_FILE_OPTIONS.has(token.raw)) scriptsLeft = 0;\n'],
+  ['a script file option no longer clears the leading script words', DETECT, '        if (SCRIPT_FILE_OPTIONS.has(token.raw)) scriptsLeft = 0;\n', ''],
+  ['the -e value no longer clears the leading script words', DETECT, '        scriptsLeft = 0;\n        index += 1;\n      } else if', '        index += 1;\n      } else if'],
+  ['the partly-quoted shape check is skipped', DETECT, 'if (checkShape && token.quoted && token.bare)', 'if (false)'],
+  ['the unterminated-quote check is skipped', DETECT, '  if (token.unterminated)\n    return [{ offset: 0, code: 0x27, kind: \'unterminated quote: the shell ends this payload somewhere you did not\' }];', ''],
+  ['the eaten-escape characters are no longer reported', DETECT, 'return findings.length > 0 ? findings : undefined;', 'return undefined;'],
+  ['the script path no longer ends the interpreter options', DETECT, " || token.raw[0] !== '-') break;", ') break;'],
+  ['the text-edit kind is not rendered by the guard', GUARD, "  if (refusal.kind === 'text-edit') return textEditReason(refusal);\n", ''],
 ];
 
 const survivors = runMutants({

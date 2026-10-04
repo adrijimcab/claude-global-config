@@ -32,14 +32,18 @@ const GUARD = path.join(HERE, 'guard.mjs');
 function run(input) {
   const result = spawnSync(process.execPath, [GUARD], { input, encoding: 'utf8' });
   let decision;
+  let reason = '';
 
   try {
-    decision = JSON.parse(result.stdout).hookSpecificOutput.permissionDecision;
+    const output = JSON.parse(result.stdout).hookSpecificOutput;
+
+    decision = output.permissionDecision;
+    reason = output.permissionDecisionReason ?? '';
   } catch {
     decision = undefined;
   }
 
-  return { status: result.status, decision };
+  return { status: result.status, decision, reason };
 }
 
 const payload = (command, tool = 'Bash') =>
@@ -121,6 +125,59 @@ const cases = [
   ['deny', payload(String.raw`node -e "ok" -p "console.log('\\b')"`), 'a SECOND evaluate switch after a clean first one is still node\'s'],
   ['deny', payload(String.raw`node -pe "'\\d'" script.mjs`), 'the evaluate cluster before a trailing script word'],
 
+  // --- TEXT-EDIT programs (sed, sd, awk, gawk, perl, ruby, python): the same decision over a new set of
+  // programs. The 4th element is a fragment the refusal text must carry, so the refusal is proven to NAME
+  // the finding and to render the text-edit kind, not merely to deny.
+  // @es Programas de edición de texto: la misma decisión sobre programas nuevos. El 4º elemento es un
+  // fragmento que el texto del rechazo debe llevar: se prueba que NOMBRA el hallazgo y que renderiza el tipo.
+  // REFUSED / RECHAZADAS
+  ['deny', payload(String.raw`sd -F "a\\\\b" "c" file.txt`), 'THE INCIDENT: doubled backslashes in a double-quoted sd pattern', 'backslash the shell eats'],
+  ['deny', payload(String.raw`sd -F "\${x}" "y" file.txt`), 'THE INCIDENT: a backslash before $ in a double-quoted template marker', 'before "$"'],
+  ['deny', payload(String.raw`sed "s/a\\b/c/" f`), 'sed with a doubled backslash', 'Edit tool'],
+  ['deny', payload(String.raw`awk "{print \"x\"}" f`), 'awk with an escaped quote in double quotes', 'before "\\""'],
+  ['deny', payload(String.raw`gawk '{gsub(/a\\b/,"c")}1' f`), 'gawk, doubled backslash even in single quotes', 'backslash the shell eats'],
+  ['deny', payload(String.raw`sed -e 's/a/b/' -e "s/c\\d/e/" f`), 'the value of a second -e is a script', 'backslash the shell eats'],
+  ['deny', payload(String.raw`sd foo "bar\\n" f`, 'PowerShell'), 'second sd word (the replacement), via PowerShell', 'backslash the shell eats'],
+  ['deny', payload(String.raw`perl -pe "s/a\\b/c/" f`), 'perl -pe with a doubled backslash', 'backslash the shell eats'],
+  ['deny', payload(String.raw`ruby -e "puts '\\n'"`), 'ruby -e with a doubled backslash', 'backslash the shell eats'],
+  ['deny', payload(String.raw`python -c "print('\\n')"`), 'python -c with a doubled backslash', 'backslash the shell eats'],
+  ['deny', payload(String.raw`python3 -c "print('\$x')"`), 'python3 -c with a backslash before $', 'backslash the shell eats'],
+  ['deny', payload(String.raw`FOO=1 /usr/bin/sed "s/a\\b/c/" f && echo ok`), 'env prefix, absolute program path, operator after', 'backslash the shell eats'],
+  // Near misses, each with its own refusal fragment / casi-aciertos, cada uno con su fragmento
+  ['deny', payload(`sed 's/a/b\\' f`), 'NEAR MISS: a trailing backslash inside single quotes', 'trailing backslash'],
+  ['deny', payload(`sd foo bar\\`), 'NEAR MISS: a trailing backslash at the end of the command', 'trailing backslash'],
+  ['deny', payload(`sed 's/a/b/ file`), 'NEAR MISS: an unterminated quote', 'unterminated quote'],
+  ['deny', payload(`sd 'foo bar f`), 'NEAR MISS: an unterminated quote on sd', 'unterminated quote'],
+  ['deny', payload(`sed 's/a/b/'x f`), 'NEAR MISS: a script partly quoted and partly bare', 'partly quoted and partly bare'],
+  ['deny', payload(`awk '{print 1}'x f`), 'NEAR MISS: awk script partly quoted and partly bare', 'partly quoted and partly bare'],
+  ['deny', payload(`python -c 'print(1)'x`), 'NEAR MISS: python code partly quoted and partly bare', 'partly quoted and partly bare'],
+  ['deny', payload(String.raw`sed 's/a/b/' "dir\\file.txt"`), 'a doubled backslash in a FILE argument is eaten too', 'backslash the shell eats'],
+  ['deny', payload(String.raw`sd "-a\\b" c f`), 'a QUOTED word that starts with a dash is a pattern, not an option', 'backslash the shell eats'],
+  ['deny', payload(`sd -n 2 foo bar"x y" f`), 'the value of sd -n is consumed, so the replacement is the second script word', 'partly quoted and partly bare'],
+  // ALLOWED / PERMITIDAS
+  ['allow', payload(`awk -f prog.awk data"x y"`), 'with -f no leading word is an inline script, so a part-quoted file is fine'],
+  ['allow', payload(`sed -e 's/a/b/' x"y z"`), 'after -e the leading words are files, so a part-quoted file is fine'],
+  ['allow', payload(`sed 's/a/b/' f`), 'plain sed'],
+  ['allow', payload(`sd foo bar f`), 'plain sd'],
+  ['allow', payload(`awk '{print $1}' f`), 'awk with a $ field inside single quotes'],
+  ['allow', payload(String.raw`sed 's/\n/ /' f`), 'a lone \\n inside single quotes arrives intact'],
+  ['allow', payload(String.raw`sed "s/\d/x/" f`), 'NEAR MISS: a single backslash before a letter in double quotes arrives intact'],
+  ['allow', payload(String.raw`sed -i 's/a/b/' "C:\Users\me\file.txt"`), 'a Windows path argument'],
+  ['allow', payload(`sd 'café' 'cafe' f`), 'an accented string'],
+  ['allow', payload(`sed -n '1,5p' f`), 'sed with an option that takes no value'],
+  ['allow', payload(`sed -i.bak -e 's/a/b/' f`), 'sed -e with a clean script'],
+  ['allow', payload(`sd -n 2 foo bar f`), 'the value of sd -n is not a script'],
+  ['allow', payload(`awk -F: -v x=1 '{print $1}' f`), 'awk options with their values'],
+  ['allow', payload(`sd foo bar ~/"My Files"/x`), 'a part-quoted FILE path is not a script shape'],
+  ['allow', payload(`perl -pe 's/a/b/' f`), 'plain perl -pe'],
+  ['allow', payload(`ruby -e "puts 1"`), 'plain ruby -e'],
+  ['allow', payload(`python -c "print(1)"`), 'plain python -c'],
+  ['allow', payload(`python3 script.py -c "print('\\\\n')"`), 'python script argument -c belongs to the script'],
+  ['allow', payload(`python -m pytest -c "x\\\\y"`), 'python -m ends the interpreter options'],
+  ['allow', payload(`perl script.pl -e "x\\\\y"`), 'perl script argument -e belongs to the script'],
+  ['allow', payload(`rg "sed \\\\b" src`), 'the phrase inside another tool argument'],
+  ['allow', payload(`git commit -m "use sed \\\\ carefully"`), 'the phrase inside a commit message'],
+
   // --- FAIL OPEN: every corruption of the hook's own input / FALLAR ABIERTO
   ['allow', 'this is not json at all', 'unparseable stdin'],
   ['allow', '', 'empty stdin'],
@@ -136,10 +193,13 @@ const cases = [
 
 let failures = 0;
 
-for (const [expected, input, label] of cases) {
+for (const [expected, input, label, fragment] of cases) {
   const result = run(input);
   const actual = result.decision === 'deny' ? 'deny' : 'allow';
-  const ok = actual === expected && result.status === 0;
+  const fragmentOk = fragment === undefined || result.reason.includes(fragment);
+  const ok = actual === expected && result.status === 0 && fragmentOk;
+
+  if (!fragmentOk) console.log(`      refusal text lacks the fragment ${JSON.stringify(fragment)}`);
 
   if (!ok) failures += 1;
 

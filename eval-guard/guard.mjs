@@ -83,8 +83,62 @@ function switchReason(refusal) {
   ].join('\n');
 }
 
+/** Formats the findings of a refusal as offset and code point lines. @es Da formato de líneas con offset y code point a los hallazgos. */
+function evidenceLines(refusal) {
+  const evidence = refusal.findings
+    .slice(0, MAX_REPORTED_FINDINGS)
+    .map((finding) => `  - ${finding.kind} at offset ${finding.offset} (U+${finding.code.toString(16).toUpperCase().padStart(4, '0')})`)
+    .join('\n');
+  const more = refusal.findings.length > MAX_REPORTED_FINDINGS ? `\n  - ...and ${refusal.findings.length - MAX_REPORTED_FINDINGS} more` : '';
+
+  return evidence + more;
+}
+
+/**
+ * The text-edit refusal (sed, sd, awk, gawk, perl, ruby, python). The failure is silent by nature: the
+ * shell re-parses the command, collapses or eats the escape, the edit matches nothing and the program
+ * still exits 0, so only a later count reveals it. The remedy is the Edit tool or a `.mjs` file.
+ * @es Rechazo de edición de texto. El fallo es silencioso: el shell re-parsea el comando, colapsa o se
+ * come el escape, la edición no casa con nada y el programa sale con 0; solo un recuento posterior lo
+ * delata. El remedio es la herramienta Edit o un fichero `.mjs`.
+ */
+function textEditReason(refusal) {
+  const scaffold = path.join(os.tmpdir(), 'claude-eval-guard', `edit-${Date.now()}.mjs`);
+
+  return [
+    `EVAL-GUARD REFUSED this command: it runs \`${refusal.flag}\` with a pattern or script this harness was MEASURED to mangle.`,
+    '@es EVAL-GUARD RECHAZÓ este comando: ejecuta `' + refusal.flag + '` con un patrón o script que este harness DESTROZA (medido).',
+    '',
+    'Found in the payload:',
+    '@es Hallado en el payload:',
+    evidenceLines(refusal),
+    '',
+    'Why. The shell re-parses the command before the program sees it, so it collapses or eats the escape:',
+    'the pattern that arrives is not the one you wrote, matches nothing, and the program still exits 0.',
+    'Nothing fails; the file is simply unchanged, and only a later count shows it (measured twice:',
+    '2026-09-30 and 2026-10-04). Re-quoting does not help, no quoting choice is a defence.',
+    '@es Por qué. El shell re-parsea el comando antes de que el programa lo vea y colapsa o se come el',
+    '@es escape: el patrón que llega no es el escrito, no casa con nada y el programa sale con 0. Nada',
+    '@es falla; el fichero queda igual y solo un recuento posterior lo delata. Re-entrecomillar no sirve.',
+    '',
+    'What works instead:',
+    '@es Lo que sí funciona:',
+    '  1. The Edit tool for the replacement itself (it never goes through a shell), or',
+    `  2. a script file: Write tool -> ${scaffold}, then run: node "${scaffold}"`,
+    '@es   1. La herramienta Edit para el reemplazo (no pasa por ningún shell), o',
+    '@es   2. un fichero de script escrito con Write y ejecutado con node.',
+    '',
+    'The guard is narrow on purpose: it fires only on a backslash before \\ " $ ` or a newline, a trailing',
+    'backslash, a raw control character, or a script whose own quoting does not cover it. A lone \\n,',
+    'non-ASCII text and Windows paths are delivered intact and are never touched.',
+    '@es El guard es estrecho a propósito: solo salta ante un backslash antes de \\ " $ ` o salto de línea,',
+    '@es un backslash final, un carácter de control o un script cuyo entrecomillado no lo cubre.'
+  ].join('\n');
+}
+
 function reason(refusal) {
   if (refusal.kind === 'msys-switch') return switchReason(refusal);
+  if (refusal.kind === 'text-edit') return textEditReason(refusal);
 
   const scaffold = path.join(os.tmpdir(), 'claude-eval-guard', `eval-${Date.now()}.mjs`);
   const evidence = refusal.findings

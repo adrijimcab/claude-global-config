@@ -355,6 +355,175 @@ export function dangerousCharacters(payload) {
 }
 
 /**
+ * Text-editing programs whose first non-option words are a SCRIPT or pattern, and how many leading
+ * words that is (`sed 's/a/b/' f` has one, `sd PATTERN REPLACEMENT f` has two). Words past that count
+ * are file names: they are checked for eaten escapes but not for quoting shape, because a path such as
+ * `~/"My Files"/x` is legitimately part quoted and part bare.
+ * @es Programas de edición de texto cuyas primeras palabras no-opción son un SCRIPT o patrón, y cuántas
+ * son (`sed` una, `sd` dos). Las demás son ficheros: se les busca escapes comidos, pero no la forma del
+ * entrecomillado, porque una ruta como `~/"My Files"/x` es legítimamente mixta.
+ */
+const LEADING_SCRIPT_WORDS = { sed: 1, sd: 2, awk: 1, gawk: 1 };
+
+/** Options whose value is the NEXT word and is itself a script (`sed -e SCRIPT`). @es Opciones cuyo valor es la palabra siguiente y es un script. */
+const SCRIPT_VALUE_OPTIONS = { sed: new Set(['-e', '--expression']), sd: new Set(), awk: new Set(), gawk: new Set(['-e', '--source']) };
+
+/** Options whose value is the NEXT word and is NOT a script (a file, a separator, a count). @es Opciones cuyo valor es la palabra siguiente y NO es script. */
+const OTHER_VALUE_OPTIONS = {
+  sed: new Set(['-f', '--file', '-l', '--line-length']),
+  sd: new Set(['-n', '--max-replacements']),
+  awk: new Set(['-F', '-v', '-f', '--file', '--field-separator', '--assign']),
+  gawk: new Set(['-F', '-v', '-f', '--file', '--field-separator', '--assign'])
+};
+
+/** Options that name a script FILE, so no leading word is an inline script. @es Opciones que nombran un FICHERO de script: ninguna palabra inicial es script inline. */
+const SCRIPT_FILE_OPTIONS = new Set(['-f', '--file']);
+
+/** Interpreters whose one-liner flag carries code, and their value-taking options. @es Intérpretes cuyo flag de one-liner lleva código, y sus opciones con valor. */
+const INTERPRETER_VALUE_OPTIONS = { perl: new Set(['-I']), ruby: new Set(['-r', '-I']), python: new Set(['-W', '-X']), python3: new Set(['-W', '-X']) };
+
+/** Whether a word is an unquoted option (`-x`, `--long`), as opposed to an argument. @es Si una palabra es una opción sin comillas, y no un argumento. */
+function isOptionWord(token) {
+  return !token.quoted && token.raw.length > 1 && token.raw[0] === '-';
+}
+
+/**
+ * Whether an interpreter option carries inline code: perl and ruby `-e`/`-E` and the clusters ending in
+ * them (`-pe`, `-ne`, `-lne`), python `-c`.
+ * @es Si una opción de intérprete lleva código inline: `-e`/`-E` de perl y ruby y los clusters que
+ * acaban en ellos, y `-c` de python.
+ */
+function isInlineCodeFlag(name, raw) {
+  if (name === 'python' || name === 'python3') return raw === '-c';
+
+  if (raw.length < 2 || raw[0] !== '-' || raw[1] === '-') return false;
+
+  const letters = [...raw.slice(1)];
+  const last = letters.pop();
+
+  return (last === 'e' || last === 'E') && letters.every((letter) => 'pnlaiw'.includes(letter));
+}
+
+/**
+ * Judges ONE payload word of a text-editing command: the unterminated and partly-quoted shapes (when
+ * `checkShape`), then the eaten-escape characters. Returns the findings, or `undefined` when clean.
+ * @es Juzga UNA palabra-payload de un comando de edición: las formas sin cerrar y mixta (si `checkShape`)
+ * y luego los caracteres de escape comidos. Devuelve los hallazgos, o `undefined` si está limpia.
+ */
+function textEditFindings(token, checkShape) {
+  if (token.unterminated)
+    return [{ offset: 0, code: 0x27, kind: 'unterminated quote: the shell ends this payload somewhere you did not' }];
+
+  if (checkShape && token.quoted && token.bare)
+    return [{ offset: 0, code: 0x27, kind: 'payload is partly quoted and partly bare: a quote character inside it closed the run early' }];
+
+  const findings = dangerousCharacters(token.raw);
+
+  return findings.length > 0 ? findings : undefined;
+}
+
+/**
+ * The words of a sed/sd/awk/gawk invocation that are scripts, patterns or file arguments, each tagged with
+ * whether it is a script position. Options are skipped (their value words consumed), `--` ends option parsing.
+ * @es Las palabras de una invocación sed/sd/awk/gawk que son scripts, patrones o ficheros, cada una con
+ * marca de si es posición de script. Se saltan las opciones (consumiendo su valor); `--` termina las opciones.
+ */
+function scriptEditorWords(name, words) {
+  const candidates = [];
+  let scriptsLeft = LEADING_SCRIPT_WORDS[name];
+  let optionsEnded = false;
+
+  for (let index = 0; index < words.length; index += 1) {
+    const token = words[index];
+
+    if (!optionsEnded && !token.quoted && token.raw === '--') {
+      optionsEnded = true;
+      continue;
+    }
+
+    if (!optionsEnded && isOptionWord(token)) {
+      if (SCRIPT_VALUE_OPTIONS[name].has(token.raw) && index + 1 < words.length) {
+        candidates.push({ token: words[index + 1], script: true });
+        scriptsLeft = 0;
+        index += 1;
+      } else if (OTHER_VALUE_OPTIONS[name].has(token.raw)) {
+        if (SCRIPT_FILE_OPTIONS.has(token.raw)) scriptsLeft = 0;
+        index += 1;
+      }
+
+      continue;
+    }
+
+    candidates.push({ token, script: scriptsLeft > 0 });
+    if (scriptsLeft > 0) scriptsLeft -= 1;
+  }
+
+  return candidates;
+}
+
+/** The refusal object for the text-edit kind. @es El objeto de rechazo del tipo text-edit. */
+function textEditRefusal(program, name, token, findings) {
+  return { kind: 'text-edit', program: program.raw, flag: name, payload: token.raw, findings };
+}
+
+/**
+ * Refusal for sed/sd/awk/gawk: every non-option word is checked for eaten escapes, script words also for
+ * quoting shape. @es Rechazo para sed/sd/awk/gawk: toda palabra no-opción se revisa por escapes comidos;
+ * las de script además por la forma del entrecomillado.
+ */
+function inspectScriptEditor(program, name, words) {
+  for (const { token, script } of scriptEditorWords(name, words)) {
+    const findings = textEditFindings(token, script);
+
+    if (findings !== undefined) return textEditRefusal(program, name, token, findings);
+  }
+
+  return undefined;
+}
+
+/**
+ * Refusal for perl/ruby/python one-liners: the code argument of `-e`/`-pe`/`-ne`/`-c` is checked like a
+ * node evaluate payload. The walk ends at the script path (or the module name after python `-m`) or a
+ * bare `--`, so the arguments of a script are never mistaken for the interpreter's own.
+ * @es Rechazo para one-liners de perl/ruby/python: el argumento de código de `-e`/`-pe`/`-ne`/`-c` se
+ * revisa como un payload de evaluación de node. El recorrido termina en la ruta del script (o el nombre
+ * del módulo tras `-m` de python) o un `--` suelto, así los argumentos de un script no se confunden.
+ */
+function inspectInterpreter(program, name, words) {
+  const valueOptions = INTERPRETER_VALUE_OPTIONS[name];
+
+  for (let index = 0; index < words.length; index += 1) {
+    const token = words[index];
+
+    if (token.quoted || token.raw === '--' || token.raw === '-' || token.raw[0] !== '-') break;
+
+    if (valueOptions.has(token.raw)) {
+      index += 1;
+      continue;
+    }
+
+    if (!isInlineCodeFlag(name, token.raw)) continue;
+
+    const payloadTokens = [];
+
+    if (index + 1 < words.length) {
+      payloadTokens.push(words[index + 1]);
+      if (!words[index + 1].quoted) payloadTokens.push(...words.slice(index + 2));
+    }
+
+    for (const payloadToken of payloadTokens) {
+      const findings = textEditFindings(payloadToken, true);
+
+      if (findings !== undefined) return textEditRefusal(program, name, payloadToken, findings);
+    }
+
+    index += 1;
+  }
+
+  return undefined;
+}
+
+/**
  * The decision. Returns `undefined` when the command may run, or a refusal describing exactly what was
  * found and where — an offset and a code point, so the refusal is checkable rather than an assertion.
  *
@@ -416,6 +585,28 @@ export function inspectCommand(command, { toolName } = {}) {
           findings: [{ offset: 0, code: raw.charCodeAt(0), kind: `single-slash switch \`${raw}\` is rewritten to a path before cmd sees it` }]
         };
       }
+    }
+
+    // Text-editing programs: the SAME failure family as a mangled node payload. A pattern or script that
+    // holds a backslash the shell eats (`sd -F "a\\\\b"`, `"\${x}"`) reaches the program altered, matches
+    // nothing, and exits 0 — measured twice (2026-09-30, 2026-10-04). Same detector, new programs.
+    // @es Programas de edición de texto: la MISMA familia que un payload de node destrozado. Un patrón con
+    // un backslash que el shell se come llega alterado, no casa con nada y sale con 0 — medido dos veces.
+    // El mismo detector, programas nuevos.
+    if (Object.hasOwn(LEADING_SCRIPT_WORDS, name)) {
+      const editorRefusal = inspectScriptEditor(program, name, invocation.slice(position + 1));
+
+      if (editorRefusal !== undefined) return editorRefusal;
+
+      continue;
+    }
+
+    if (Object.hasOwn(INTERPRETER_VALUE_OPTIONS, name)) {
+      const interpreterRefusal = inspectInterpreter(program, name, invocation.slice(position + 1));
+
+      if (interpreterRefusal !== undefined) return interpreterRefusal;
+
+      continue;
     }
 
     if (name !== 'node' && name !== 'nodejs') continue;
