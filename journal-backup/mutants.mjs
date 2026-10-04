@@ -24,7 +24,10 @@ const MUTANTS = [
   // --- population ---
   ['only incidents.jsonl is backed up (a hand list in disguise)', B, "entry.isFile() && entry.name.endsWith('.jsonl')", "entry.isFile() && entry.name === 'incidents.jsonl'"],
   ['every file of a state directory is backed up, not only journals', B, "entry.isFile() && entry.name.endsWith('.jsonl')", 'entry.isFile()'],
-  ['only the failure-capture directory is searched for state', B, 'entry.isDirectory() && existsSync(', "entry.name === 'failure-capture' && existsSync("],
+  ['only the failure-capture directory is searched for state', B, 'entry.isDirectory() && lstatSync(', "entry.name === 'failure-capture' && lstatSync("],
+  ['journals below a subdirectory of state/ are not found (depth rule)', B, 'if (entry.isDirectory()) return journalsUnder(entryPath);', 'if (entry.isDirectory()) return [];'],
+  ['the walk follows a link or junction inside state/ (link rule)', B, 'if (entry.isDirectory()) return journalsUnder(entryPath);', 'if (entry.isDirectory() || entry.isSymbolicLink()) return journalsUnder(entryPath);'],
+  ['a state/ directory that is itself a link is followed (state link rule)', B, "{ throwIfNoEntry: false })?.isDirectory() === true", '{ throwIfNoEntry: false }) !== undefined'],
   ['the population comes out in reverse order', B, "path.relative(home, file).split(path.sep).join('/'))\n    .sort();", "path.relative(home, file).split(path.sep).join('/'))\n    .sort().reverse();"],
 
   // --- the copy ---

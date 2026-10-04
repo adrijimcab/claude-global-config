@@ -16,7 +16,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,6 +91,27 @@ const grown = makeHome({ ...FILES, 'brand-new-guard/state/events.jsonl': '{"n":1
 
 check('population: a journal added to the tree is found without editing the code', discoverJournals(grown.home), ['backlog-guard/state/decisions.jsonl', 'brand-new-guard/state/events.jsonl', ...EXPECTED.slice(1)]);
 check('population: incidents.jsonl is always among them', discoverJournals(base.home).includes('failure-capture/state/incidents.jsonl'), true);
+
+// --- depth and links ---
+const deep = makeHome({ ...FILES, 'fleet-kit/state/landing-guard/notices.jsonl': '{"n":1}\n', 'fleet-kit/state/a/b/c/deep.jsonl': '{"n":2}\n', 'fleet-kit/state/a/b/readme.txt': 'no\n' });
+
+check('depth: a journal below a subdirectory of state/ is found, at any depth', discoverJournals(deep.home), ['backlog-guard/state/decisions.jsonl', 'failure-capture/state/dismissals.jsonl', 'failure-capture/state/incidents.jsonl', 'fleet-kit/state/a/b/c/deep.jsonl', 'fleet-kit/state/landing-guard/notices.jsonl']);
+check('depth: a nested journal is copied at its relative path', attempt(deep).exit === 0 && existsSync(path.join(deep.backupRoot, 'journals-2026-10-04', 'fleet-kit/state/landing-guard/notices.jsonl')), true);
+
+const linked = makeHome({ ...FILES, 'fleet-kit/state/own.jsonl': '{"o":1}\n' });
+const outside = path.join(path.dirname(linked.home), 'outside');
+const elsewhere = path.join(path.dirname(linked.home), 'elsewhere');
+
+mkdirSync(outside, { recursive: true });
+writeFileSync(path.join(outside, 'linked.jsonl'), '{"x":1}\n');
+symlinkSync(outside, path.join(linked.home, 'fleet-kit', 'state', 'via-link'), 'junction');
+mkdirSync(elsewhere, { recursive: true });
+writeFileSync(path.join(elsewhere, 'beyond.jsonl'), '{"y":1}\n');
+mkdirSync(path.join(linked.home, 'linked-guard'));
+symlinkSync(elsewhere, path.join(linked.home, 'linked-guard', 'state'), 'junction');
+
+check('links: a junction inside state/ and a junction state/ itself are not followed', discoverJournals(linked.home), ['backlog-guard/state/decisions.jsonl', 'failure-capture/state/dismissals.jsonl', 'failure-capture/state/incidents.jsonl', 'fleet-kit/state/own.jsonl']);
+check('links: the backup holds nothing reached through a link', attempt(linked).exit === 0 && !existsSync(path.join(linked.backupRoot, 'journals-2026-10-04', 'fleet-kit/state/via-link')), true);
 
 // --- the copy ---
 const sourceShas = Object.fromEntries(EXPECTED.map((relative) => [relative, sha(FILES[relative])]));

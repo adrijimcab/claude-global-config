@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Copies every guard journal under a Claude home (`failure-capture/state/incidents.jsonl` and every
- * `<guard>/state/*.jsonl`) into `<backup-root>/journals-<date>/`, keeping relative paths, then proves each
+ * `<guard>/state/**\/*.jsonl` at any depth, never through a link) into `<backup-root>/journals-<date>/`, keeping relative paths, then proves each
  * copy equal to its source by line count and sha256 before saying so.
  *
  * The population is read from the directory tree, never from a list, so a journal a new guard adds is
@@ -13,7 +13,7 @@
  * overwritten). Only the lexical position of the target is judged, not links it may cross.
  *
  * @es Copia cada journal de guardia bajo un home de Claude (`failure-capture/state/incidents.jsonl` y cada
- * `<guardia>/state/*.jsonl`) a `<raíz-de-copia>/journals-<fecha>/`, conservando rutas relativas, y prueba
+ * `<guardia>/state/**\/*.jsonl` a cualquier profundidad, sin cruzar enlaces) a `<raíz-de-copia>/journals-<fecha>/`, conservando rutas relativas, y prueba
  * cada copia igual a su origen por número de líneas y sha256 antes de decirlo. La población sale del árbol
  * de directorios, nunca de una lista. Salidas: 0 copiado y verificado; 1 una copia difiere de su origen;
  * 2 rechazado o mal usado, nada medido. Rechaza un destino dentro de cualquier `<guardia>/state` y un
@@ -22,7 +22,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -51,14 +51,30 @@ function say(out, id, params = {}) {
 /** The `<guard>/state` directories of a home, absolute. @es Los directorios `<guardia>/state` de un home. */
 function stateTrees(home) {
   return readdirSync(home, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && existsSync(path.join(home, entry.name, 'state')))
+    .filter((entry) => entry.isDirectory() && lstatSync(path.join(home, entry.name, 'state'), { throwIfNoEntry: false })?.isDirectory() === true)
     .map((entry) => path.join(home, entry.name, 'state'));
+}
+
+/**
+ * Every `.jsonl` at any depth under a directory. A directory entry that is a link or junction reports
+ * neither as directory nor as file, so it is skipped and never followed.
+ * @es Cada `.jsonl` a cualquier profundidad bajo un directorio. Un enlace o junction no es ni directorio ni
+ * fichero para la entrada, así que se omite y nunca se sigue.
+ */
+function journalsUnder(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+
+    if (entry.isDirectory()) return journalsUnder(entryPath);
+
+    return entry.isFile() && entry.name.endsWith('.jsonl') ? [entryPath] : [];
+  });
 }
 
 /** Every journal of the home, relative with `/`, sorted. @es Cada journal del home, relativo con `/`, ordenado. */
 export function discoverJournals(home) {
   return stateTrees(home)
-    .flatMap((state) => readdirSync(state, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl')).map((entry) => path.join(state, entry.name)))
+    .flatMap(journalsUnder)
     .map((file) => path.relative(home, file).split(path.sep).join('/'))
     .sort();
 }
