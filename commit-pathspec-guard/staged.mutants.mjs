@@ -58,6 +58,7 @@ const survivors = runMutants({
   paths: ['commit-pathspec-guard', 'config-sync-guard', 'mutation-proof'],
   selftest: 'commit-pathspec-guard/staged.selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);

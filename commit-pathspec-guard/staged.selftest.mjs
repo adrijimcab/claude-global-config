@@ -96,11 +96,11 @@ console.log('1. the pure decisions');
 
 check('1.1 a path is normalized: backslashes and a leading ./', normalizeRepoPath('.\\sub\\d.txt') === 'sub/d.txt' && normalizeRepoPath('./a.txt') === 'a.txt');
 check('1.2 equal sets compare ok, order and repeats irrelevant', compareStagedSet(['b', 'a', 'a'], ['a', 'b']).ok === true);
-check('1.3 an undeclared staged path is refused and named', (() => { const result = compareStagedSet(['a', 'other'], ['a']); return result.ok === false && result.unexpected.join() === 'other' && result.reason.includes('other'); })());
+check('1.3 an undeclared staged path is refused and named', (() => { const result = compareStagedSet(['a', 'other'], ['a']); return result.ok === false && result.unexpected.join() === 'other' && result.reason?.includes('other'); })());
 check('1.4 a declared path that is not staged is refused and named', (() => { const result = compareStagedSet(['a'], ['a', 'gone']); return result.ok === false && result.missing.join() === 'gone'; })());
-check('1.5 an EMPTY index is refused (nothing to commit), for its own reason', (() => { const result = compareStagedSet([], ['a']); return result.ok === false && result.reason.includes('nothing is staged'); })());
-check('1.6 a FAILED listing is not an empty index', (() => { const result = compareStagedSet(undefined, ['a']); return result.ok === false && result.reason.includes('could not be measured'); })());
-check('1.7 every refusal carries both languages', [compareStagedSet(['a', 'x'], ['a']), compareStagedSet([], ['a']), compareStagedSet(undefined, ['a'])].every((result) => result.reason.includes('@es')));
+check('1.5 an EMPTY index is refused (nothing to commit), for its own reason', (() => { const result = compareStagedSet([], ['a']); return result.ok === false && result.reason?.includes('nothing is staged'); })());
+check('1.6 a FAILED listing is not an empty index', (() => { const result = compareStagedSet(undefined, ['a']); return result.ok === false && result.reason?.includes('could not be measured'); })());
+check('1.7 every refusal carries both languages', [compareStagedSet(['a', 'x'], ['a']), compareStagedSet([], ['a']), compareStagedSet(undefined, ['a'])].every((result) => result.reason?.includes('@es')));
 
 check('1.8 argv: --repo plus --expect paths and the commit arguments after --', (() => { const parsed = parseCommitStagedArguments(['--repo', 'r', '--expect', 'a', '--expect', './b', '--', '-m', 'msg']); return parsed.repoName === 'r' && parsed.expected.join() === 'a,b' && parsed.commitArguments.join() === '-m,msg'; })());
 check('1.9 argv: nothing declared is refused (it is the bare commit)', parseCommitStagedArguments(['--repo', 'r', '--', '-m', 'msg']).problem !== undefined);
@@ -154,7 +154,7 @@ gitOut(larger.directory, 'add', 'a.txt', 'b.txt');
 const refusedLarger = commitStaged({ repo: larger.repo, expected: ['a.txt'], commitArguments: MESSAGE });
 
 check('2.6 staged LARGER than declared -> refused, nothing committed', refusedLarger.status === 1 && refusedLarger.committed === false && commitCount(larger.directory) === 1);
-check('2.7 the refusal names the undeclared path and is bilingual', refusedLarger.message.includes('b.txt') && refusedLarger.message.includes('@es'));
+check('2.7 the refusal names the undeclared path and is bilingual', refusedLarger.message?.includes('b.txt') && refusedLarger.message?.includes('@es'));
 check('2.8 the index is untouched by the refusal (both paths still staged)', stagedNames(larger.directory).join() === 'a.txt,b.txt');
 
 // A declared path that is not staged.
@@ -166,7 +166,7 @@ gitOut(smaller.directory, 'add', 'a.txt');
 const refusedSmaller = commitStaged({ repo: smaller.repo, expected: ['a.txt', 'b.txt'], commitArguments: MESSAGE });
 
 check('2.9 staged SMALLER than declared -> refused, nothing committed', refusedSmaller.status === 1 && refusedSmaller.committed === false && commitCount(smaller.directory) === 1);
-check('2.10 the refusal names the missing path', refusedSmaller.message.includes('b.txt'));
+check('2.10 the refusal names the missing path', refusedSmaller.message?.includes('b.txt'));
 
 const empty = buildRepository('empty');
 const refusedEmpty = commitStaged({ repo: empty.repo, expected: ['a.txt'], commitArguments: MESSAGE });
@@ -197,7 +197,7 @@ check('2.13 `-a` is refused even though the declaration matches the index, and t
 // Measurement failure: a failed index listing must not read as an empty (or clean) index.
 const unmeasured = commitStaged({ repo: { name: 'broken', run: () => ({ ok: false, stdout: '', stderr: 'fatal' }) }, expected: ['a.txt'], commitArguments: MESSAGE });
 
-check('2.14 a FAILED index listing refuses as unmeasured and commits nothing', unmeasured.status === 1 && unmeasured.committed === false && unmeasured.message.includes('could not be measured'));
+check('2.14 a FAILED index listing refuses as unmeasured and commits nothing', unmeasured.status === 1 && unmeasured.committed === false && unmeasured.message?.includes('could not be measured'));
 
 // git itself refusing the commit.
 const failing = buildRepository('failing');
@@ -230,8 +230,8 @@ const racingRepo = {
 };
 const racedResult = commitStaged({ repo: racingRepo, expected: ['a.txt'], commitArguments: MESSAGE });
 
-check('2.16 the RACE: the commit exists but the tool exits non-zero and says so', racedResult.status === 1 && racedResult.committed === true && racedResult.message.includes('DOES NOT HOLD EXACTLY'));
-check('2.17 the race message names the extra path and says nothing was pushed, in both languages', racedResult.message.includes('b.txt') && racedResult.message.includes('Nothing was pushed') && racedResult.message.includes('No se hizo push'));
+check('2.16 the RACE: the commit exists but the tool exits non-zero and says so', racedResult.status === 1 && racedResult.committed === true && racedResult.message?.includes('DOES NOT HOLD EXACTLY'));
+check('2.17 the race message names the extra path and says nothing was pushed, in both languages', racedResult.message?.includes('b.txt') && racedResult.message?.includes('Nothing was pushed') && racedResult.message?.includes('No se hizo push'));
 check('2.18 the race really did sweep the extra path (so the post-check is not vacuous)', committedNames(racing.directory).includes('b.txt'));
 
 console.log('3. the CLI');
