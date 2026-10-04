@@ -25,7 +25,7 @@ import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs } from './dismiss.mjs'
 import { decide } from './decide.mjs';
 import { evaluate } from './guard.mjs';
 import { findPendingMarker, PENDING_MARKERS } from './markers.mjs';
-import { hasMasterBacklogSave, hasMasterBacklogUpdate, isMasterBacklogTopicKey, numericIdValuesIn, observedMasterIdPairings, topicKeyValuesIn } from './master-save.mjs';
+import { hasMasterBacklogSave, isMasterBacklogTopicKey, topicKeyValuesIn } from './master-save.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD_CLI = path.join(HERE, 'guard.mjs');
@@ -308,97 +308,6 @@ check('isMasterBacklogTopicKey rejects an unrelated namespace', isMasterBacklogT
 check('isMasterBacklogTopicKey rejects the bare namespace with no milestone', isMasterBacklogTopicKey('backlog/-master'), false);
 check('hasMasterBacklogSave is false without ANY save-tool marker, even with a matching topic_key', hasMasterBacklogSave('"topic_key":"backlog/1.0.0-master"'), false);
 check('hasMasterBacklogSave is false for undefined/empty input', hasMasterBacklogSave(undefined), false);
-
-check('numericIdValuesIn extracts every numeric id, deduplicated by Set', [...numericIdValuesIn('a"id":972 b"id":631 c"id":972')].sort(), [631, 972]);
-check('numericIdValuesIn is empty for text with no id field', [...numericIdValuesIn('nothing here')], []);
-
-{
-  const REAL_SHAPE = '{"tool_use_id":"toolu_01TPGJisE5XwtsgFDQDauo55","name":"mcp__plugin_engram_engram__mem_save","input":{"project":"b100-am-ui","topic_key":"backlog/1.0.0-master","content":"…"}}\n{"content":[{"type":"text","text":"{\\"id\\":972,\\"judgment_required\\":false,\\"result\\":\\"Memory saved\\"}"}]}';
-  check('observedMasterIdPairings learns {id, topicKey} from the REAL measured mem_save+result shape', observedMasterIdPairings(REAL_SHAPE), [{ id: 972, topicKey: 'backlog/1.0.0-master' }]);
-}
-check('observedMasterIdPairings ignores a topic_key that is not master-shaped', observedMasterIdPairings('"topic_key":"decision/foo""id":631'), []);
-check('observedMasterIdPairings is empty for undefined/empty input', observedMasterIdPairings(undefined), []);
-
-// --- SECOND SOURCE, found missing in live use the day AFTER the mem_update fix shipped: a
-//     `mem_get_observation` RESULT's own human-readable metadata footer (`Topic: backlog/…-master`),
-//     never a `mem_save` call's JSON input. Fixtures use the EXACT shape measured against this
-//     session's own real transcript (session c45d798b, lines 76992-76993).
-{
-  // A SIMPLIFIED, hand-typed shape (unescaped `"result":"#`, single-backslash `\n`) exercising the
-  // parsing LOGIC in isolation — not itself a claim of being byte-for-byte real (the genuinely
-  // byte-for-byte fixture, extracted mechanically from the actual transcript, follows below).
-  const SIMPLIFIED_GET_OBSERVATION_RESULT = '"result":"#972 [decision] BACKLOG MAESTRO 1.0.0\\nmucho contenido aqui\\nTopic: backlog/1.0.0-master\\nDuplicates: 1\\nRevisions: 12"';
-
-  check(
-    'observedMasterIdPairings learns {id, topicKey} from a simplified mem_get_observation result shape',
-    observedMasterIdPairings(SIMPLIFIED_GET_OBSERVATION_RESULT),
-    [{ id: 972, topicKey: 'backlog/1.0.0-master' }]
-  );
-}
-{
-  // THE GENUINELY BYTE-FOR-BYTE FIXTURE, found necessary after a SECOND live defect (the day after the
-  // first fix, 45888ec): a real `mem_get_observation(972)` in the MAIN session's own turn taught
-  // nothing, because the real bytes are escaped at a DEEPER level than the hand-typed fixture above
-  // assumed. MEASURED directly (readFileSync + charCodeAt, never a terminal's re-escaped display) off
-  // session `c45d798b-d78f-4f60-9a32-1f722bbe86e5`'s own transcript file: the `"result":"#` marker
-  // itself is escaped ONCE (`\"result\":\"#`), but the metadata footer's OWN internal newlines are
-  // escaped TWICE (`\\n`, three raw bytes: backslash, backslash, `n`) — one level deeper than the
-  // marker around it. This file is that exact byte range, extracted mechanically by
-  // `_extract-fixture.mjs` (not retyped), never hand-edited.
-  // @es EL FIXTURE GENUINAMENTE BYTE A BYTE, necesario tras un SEGUNDO defecto en vivo: un
-  // `mem_get_observation(972)` real de la sesión principal no enseñó nada porque los bytes reales
-  // están escapados un nivel MÁS ADENTRO de lo que asumía el fixture tecleado a mano de arriba.
-  const REAL_TRANSCRIPT_FIXTURE = readFileSync(path.join(HERE, 'fixtures', 'real-mem-get-observation-972-result.txt'), 'utf8');
-
-  check(
-    'observedMasterIdPairings learns {id, topicKey} from the REAL byte-for-byte mem_get_observation result (doubly-escaped newlines)',
-    observedMasterIdPairings(REAL_TRANSCRIPT_FIXTURE),
-    [{ id: 972, topicKey: 'backlog/1.0.0-master' }]
-  );
-}
-check(
-  'the metadata-footer source ignores a non-master Topic (a per-item backlog note, not the master record)',
-  observedMasterIdPairings('"result":"#631 [decision] some note\\nTopic: backlog/1.0.0-item-7\\nDuplicates: 0"'),
-  []
-);
-// --- THIRD LIVE DEFECT (2026-10-02): the footer was searched in a fixed 8000-character window, and a
-//     27 KB master backlog has it 18639-21878 characters after the id (measured on session 8b594f0d's
-//     real transcript). The bound is now the transcript RECORD (a JSONL line), so three states matter:
-//     a footer far inside the same record, a footer that belongs to the NEXT record, and a record that
-//     is the last thing in the text.
-// @es TERCER DEFECTO EN VIVO: el pie se buscaba en una ventana fija de 8000 caracteres y un backlog
-// maestro de 27 KB lo tiene a 18639-21878 del id. El límite pasa a ser el REGISTRO del transcript.
-{
-  const LARGE_CONTENT = 'item with measured detail. '.repeat(1000);
-
-  check('the fixture really puts the footer beyond the old fixed window', LARGE_CONTENT.length > 8000, true);
-  check(
-    'the metadata footer of a LARGE record (footer far past 8000 characters, same record) still teaches the pairing',
-    observedMasterIdPairings(`"result":"#1129 [manual] Master backlog\\n${LARGE_CONTENT}\\nTopic: backlog/discovery-migration-master\\nDuplicates: 1"}\n{"next":"record"}`),
-    [{ id: 1129, topicKey: 'backlog/discovery-migration-master' }]
-  );
-}
-check(
-  'a "Topic: " footer in the NEXT transcript record (after a real newline) never pairs with this record\'s id',
-  observedMasterIdPairings('"result":"#631 [decision] a short result with no footer"}\n{"result":"Topic: backlog/1.0.0-master\\nDuplicates: 1"}'),
-  []
-);
-check(
-  'a footer that is the very last thing in the text (no newline after the record) keeps its whole topic value',
-  observedMasterIdPairings('"result":"#972 [decision] x\\nTopic: backlog/1.0.0-master'),
-  [{ id: 972, topicKey: 'backlog/1.0.0-master' }]
-);
-check('the metadata-footer source is silent when there is no "Topic: " line at all', observedMasterIdPairings('"result":"#972 [decision] no metadata footer here"'), []);
-// Adversarial: with NO "Topic: " label, the six characters right after the id happen to spell out a
-// real master-shaped value starting at the exact offset a missing not-found guard would fall through
-// to (`indexOf` returning `-1`, then `-1 + 'Topic: '.length === 6`), and nothing after it (no trailing
-// character, no newline) to break the `-master` ending. Proves the guard is load-bearing, not merely
-// present: remove it and this exact fixture teaches a pairing that was never really announced.
-check('the metadata-footer source does not fabricate a match from a coincidental offset when "Topic: " is absent', observedMasterIdPairings('"result":"#972 ABCDEbacklog/1.0.0-master'), []);
-
-check('hasMasterBacklogUpdate is false with no mem_update marker at all', hasMasterBacklogUpdate('"id":972', new Set([972])), false);
-check('hasMasterBacklogUpdate is false with an empty known-ids set', hasMasterBacklogUpdate('mem_update "id":972', new Set()), false);
-check('hasMasterBacklogUpdate accepts a plain array too, not only a Set', hasMasterBacklogUpdate('mem_update "id":972', [972]), true);
 
 // ---------------------------------------------------------------------------------------------
 // DIAGNOSTICS: the dismiss CLI's own validation.

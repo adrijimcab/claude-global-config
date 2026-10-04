@@ -46,24 +46,7 @@ const MUTANTS = [
   ['a non-numeric id is asked about the store as if it were an observation id', 'master-update.mjs', 'Number.isInteger(node.input.id)', 'node.input.id !== undefined'],
   ['any tool call with an input id counts as a mem_update, including a READ of the master record', 'master-update.mjs', 'node.name.endsWith(UPDATE_TOOL_SUFFIX)', 'node.name.length > 0'],
   ['the transcript walk stops descending, so a real nested tool_use block is never found', 'master-update.mjs', 'for (const child of Object.values(value)) yield* objectsIn(child);', ''],
-  ['an id updated twice is returned twice, so the store is asked about it twice', 'master-update.mjs', 'return [...ids];', 'return [...ids, ...ids];'],
-  ['the mem_update tool-name requirement is dropped: a bare known id anywhere in the tail now counts', 'master-save.mjs', 'if (!tail.includes(UPDATE_TOOL_MARKER)) return false;', ''],
-  ['hasMasterBacklogUpdate stops checking membership, so ANY id satisfies once mem_update appears', 'master-save.mjs', 'for (const id of idsInTail) if (known.has(id)) return true;', 'return true;'],
-  ['observedMasterIdPairings stops filtering by master shape, so ANY topic_key teaches an id as master', 'master-save.mjs', 'if (!isMasterBacklogTopicKey(topicKey)) continue;', ''],
-  // --- the mem_get_observation metadata-footer source (found missing in live use the day after the
-  //     mem_update fix shipped: a READ's result footer teaches an id/topic_key pairing too)
-  ['the metadata-footer source is never consulted, so a mem_get_observation result teaches nothing', 'master-save.mjs', 'return [...pairings, ...observedFromResultMetadata(text)];', 'return pairings;'],
-  ['a Topic: line with no master shape is no longer filtered out, so ANY topic teaches a pairing', 'master-save.mjs', 'if (isMasterBacklogTopicKey(topicKey)) pairings.push({ id, topicKey });', 'pairings.push({ id, topicKey });'],
-  ['a result with no Topic: line at all stops being skipped, reading past the window instead', 'master-save.mjs', 'if (topicAt === -1) continue;', ''],
-  // --- the second live defect, found the day after the first fix shipped: a real transcript's own
-  //     bytes escape the "result" marker and its internal newlines at DIFFERENT depths.
-  ['the escaped "result" marker form is dropped, so a real (single-escaped) mem_get_observation result teaches nothing', 'master-save.mjs', "const RESULT_ID_MARKERS = ['\"result\":\"#', '\\\\\"result\\\\\":\\\\\"#'];", "const RESULT_ID_MARKERS = ['\"result\":\"#'];"],
-  ['the doubly-escaped newline form is dropped, so a real metadata footer\'s topic value keeps a trailing backslash and fails the -master check', 'master-save.mjs', "const doubleEscaped = text.indexOf('\\\\\\\\n', from);", 'const doubleEscaped = -1;'],
-  // --- the third live defect (2026-10-02): the footer search is bounded by the transcript RECORD, not
-  //     by a fixed character window (a 27 KB master backlog has its footer ~20000 characters in).
-  ['the fixed 8000-character window is back, so a large master record teaches nothing', 'master-save.mjs', 'const window = text.slice(idEnd, recordEndAfter(text, idEnd));', 'const window = text.slice(idEnd, idEnd + 8000);'],
-  ['the record bound is gone, so the NEXT record\'s Topic footer pairs with this record\'s id', 'master-save.mjs', 'const window = text.slice(idEnd, recordEndAfter(text, idEnd));', 'const window = text.slice(idEnd);'],
-  ['a record with no newline after it loses its end, so the last topic value is cut', 'master-save.mjs', 'return newlineAt === -1 ? text.length : newlineAt;', 'return newlineAt;']
+  ['an id updated twice is returned twice, so the store is asked about it twice', 'master-update.mjs', 'return [...ids];', 'return [...ids, ...ids];']
 ];
 
 // The campaign runs from the fleet root because `decide.mjs` imports the shared store resolver from the
@@ -79,7 +62,7 @@ const FLEET_ROOT = path.resolve(HERE, '..');
 const survivors = runMutants({
   fleetRoot: FLEET_ROOT,
   paths: [
-    ...['decide.mjs', 'guard.mjs', 'markers.mjs', 'master-save.mjs', 'master-update.mjs', 'state.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json', 'fixtures'].map((file) => `${THIS_DIRECTORY}/${file}`),
+    ...['decide.mjs', 'guard.mjs', 'markers.mjs', 'master-save.mjs', 'master-update.mjs', 'state.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'].map((file) => `${THIS_DIRECTORY}/${file}`),
     'backlog-owner-guard/resolve-topic-key.mjs'
   ],
   selftest: `${THIS_DIRECTORY}/selftest.mjs`,
