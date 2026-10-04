@@ -19,7 +19,9 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const RUNNER = 'C:/Users/adrian.jimenez/Desktop/Projects/b100-am-ui/.claude/mutation-proof/run-mutants.mjs';
+// The global runner beside this fleet, never a project checkout (it carries the assertion/crash classification).
+// @es El corredor global de esta flota, nunca el checkout de un proyecto (lleva la clasificación aserción/crash).
+const RUNNER = path.resolve(import.meta.dirname, '..', 'mutation-proof', 'run-mutants.mjs');
 const EXIT_NOT_MEASURED = 2;
 
 const G = 'owner-language-guard';
@@ -80,6 +82,7 @@ const survivors = runMutants({
   paths: [G],
   selftest: `${G}/selftest.mjs`,
   mutants: MUTANTS,
+  crashKills: 'fail',
   timeoutMs: 120_000
 });
 

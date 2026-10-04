@@ -20,7 +20,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -32,6 +32,9 @@ const HERE = import.meta.dirname;
 const STOP_PAYLOAD = JSON.parse(readFileSync(path.join(HERE, 'fixtures', 'stop-payload.constructed.json'), 'utf8')).payload;
 
 const results = [];
+
+/** A file's text, or '' when it was never written, so a missing journal is a failed check and not a crash. @es El texto de un fichero, o '' si nunca se escribió. */
+const slurp = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
 
 function check(name, actual, expected) {
   const ok = actual === expected;
@@ -191,12 +194,12 @@ try {
   const broken = run('{esto no es json');
   check('cli: payload roto sale con 0', broken.status, 0);
   check('cli: payload roto no bloquea', broken.stdout, '');
-  check('cli: payload roto deja una línea en el log', readFileSync(path.join(copy, 'state', 'guard.log'), 'utf8').includes('payload ilegible'), true);
+  check('cli: payload roto deja una línea en el log', slurp(path.join(copy, 'state', 'guard.log')).includes('payload ilegible'), true);
 
   const english = run(JSON.stringify(payload({ last_assistant_message: ENGLISH })));
   check('cli: inglés sale con 0', english.status, 0);
   check('cli: inglés emite decision block', JSON.parse(english.stdout || '{}').decision, 'block');
-  check('cli: inglés queda en el diario de rechazos de la copia', readFileSync(path.join(copy, 'state', 'refusals.jsonl'), 'utf8').includes('The agent that protects'), true);
+  check('cli: inglés queda en el diario de rechazos de la copia', slurp(path.join(copy, 'state', 'refusals.jsonl')).includes('The agent that protects'), true);
 
   const spanish = run(`\ufeff${JSON.stringify(payload({}))}`);
   check('cli: español con BOM sale con 0', spanish.status, 0);

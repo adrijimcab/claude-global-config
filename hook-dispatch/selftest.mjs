@@ -15,7 +15,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +27,21 @@ import { mergeOutputs } from './merge.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let passed = 0;
 const failures = [];
+
+/**
+ * COMPLETION SENTINEL. A guard that calls `process.exit` inside the dispatcher's process would end THIS
+ * process half way, with no summary and an exit code nobody chose. A run that exits before printing its
+ * summary is reported as a failed check here, so the cause is named instead of read off a bare exit code.
+ * @es CENTINELA DE FINALIZACIÓN. Una guardia que llama a `process.exit` dentro del proceso del dispatcher
+ * terminaría ESTE proceso a medias, sin resumen. Una salida antes del resumen se informa como check fallido.
+ */
+let summarised = false;
+process.on('exit', () => {
+  if (summarised) return;
+
+  writeSync(1, 'FAIL the selftest exited before printing its summary @es FALLO el selftest salió antes de imprimir su resumen\n');
+  process.exitCode = 1;
+});
 
 function check(name, condition, detail = '') {
   if (condition) passed++;
@@ -170,4 +185,5 @@ const total = passed + failures.length;
 
 for (const failure of failures) console.log(`FAIL ${failure}`);
 console.log(`${passed}/${total} passed`);
+summarised = true;
 process.exitCode = failures.length === 0 ? 0 : 1;

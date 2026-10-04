@@ -9,7 +9,9 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const RUNNER = 'C:/Users/adrian.jimenez/Desktop/Projects/b100-am-ui/.claude/mutation-proof/run-mutants.mjs';
+// The global runner beside this fleet, never a project checkout (it carries the assertion/crash classification).
+// @es El corredor global de esta flota, nunca el checkout de un proyecto (lleva la clasificación aserción/crash).
+const RUNNER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'mutation-proof', 'run-mutants.mjs');
 const { runMutants } = await import(pathToFileURL(RUNNER).href);
 
 const MUTANTS = [
@@ -33,6 +35,7 @@ const survivors = runMutants({
   paths: ['hook-dispatch'],
   selftest: 'hook-dispatch/selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);

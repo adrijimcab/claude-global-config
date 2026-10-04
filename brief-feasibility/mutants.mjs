@@ -13,7 +13,9 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const RUNNER = 'C:/Users/adrian.jimenez/Desktop/Projects/b100-am-ui/.claude/mutation-proof/run-mutants.mjs';
+// The global runner beside this fleet, never a project checkout (it carries the assertion/crash classification).
+// @es El corredor global de esta flota, nunca el checkout de un proyecto (lleva la clasificación aserción/crash).
+const RUNNER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'mutation-proof', 'run-mutants.mjs');
 const { runMutants } = await import(pathToFileURL(RUNNER).href);
 
 const I = 'brief-feasibility/instructions.mjs';
@@ -67,7 +69,7 @@ const PREFLIGHT_MUTANTS = [
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const paths = ['brief-feasibility', 'brief-provenance', 'hook-payloads', 'fleet-kit/vendor/shell-command', 'hook-dispatch'];
 const survivors =
-  runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/selftest.mjs', mutants: MUTANTS }) +
-  runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/preflight.selftest.mjs', mutants: PREFLIGHT_MUTANTS });
+  runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/selftest.mjs', mutants: MUTANTS, crashKills: 'fail' }) +
+  runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/preflight.selftest.mjs', mutants: PREFLIGHT_MUTANTS, crashKills: 'fail' });
 
 process.exit(survivors === 0 ? 0 : 1);
