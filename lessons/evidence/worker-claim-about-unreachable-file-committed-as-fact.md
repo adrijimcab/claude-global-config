@@ -169,3 +169,9 @@ Each block below was loaded from `~/.claude/rules/promoted-rules.md` until the t
     before relaying it, check newer records on the same subject for a contradiction.
   Evidencia completa de cada cara (incidentes medidos, literal): `~/.claude/lessons/evidence/worker-claim-about-unreachable-file-committed-as-fact.md`.
 ````
+
+## Ledger line archived 2026-10-04 (promoted)
+
+- [promoted] 2026-09-30 — worker-claim-about-unreachable-file-committed-as-fact: no mechanism <!--fc:worker-claim-about-unreachable-file-committed-as-fact#12-->
+
+Promoted 2026-10-04 to ~/.claude/rules/promoted-rules.md; no mechanism is possible: This recurrence is the face the promoted text already names ('a claim about someone else's artefact, relayed as an order': never relay a claim about the content of an artefact as an instruction without reading that artefact). No hook can judge whether a number in a brief was read from its source; the shared brief section now carries the value read from the code with every override layer named.
