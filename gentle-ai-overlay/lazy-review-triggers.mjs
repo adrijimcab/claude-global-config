@@ -11,13 +11,14 @@
  */
 import { dialectOfTool } from '../gentle-ai-sync-guard/decide.mjs';
 import { executedPrograms } from '../gentle-ai-sync-guard/executed-programs.mjs';
+import { subcommandWords } from '../gentle-ai-sync-guard/subcommand-words.mjs';
 import { syncInvocations } from '../gentle-ai-sync-guard/sync-invocations.mjs';
 
 const MODE_CHANGES = new Set(['enable', 'disable']);
 
 /** `gentle-ai review mode enable|disable`, read from the leading non-flag words. @es Leído de las primeras palabras que no son flags. */
 function changesReviewMode({ program, args }) {
-  const [group, noun, verb] = args.filter((arg) => !arg.startsWith('-'));
+  const [group, noun, verb] = subcommandWords(args);
   return program === 'gentle-ai' && group === 'review' && noun === 'mode' && MODE_CHANGES.has(verb);
 }
 

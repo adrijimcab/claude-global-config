@@ -43,7 +43,7 @@ const MUTANTS = [
   ['executed-programs.mjs', 'const nested = nesting < MAX_NESTING ? nestedScript(invocation.program, invocation.args) : null;', 'const nested = null;'],
   ['executed-programs.mjs', "const flag = args.findIndex((arg) => arg.length >= 2 && '-command'.startsWith(arg.toLowerCase()));", "const flag = args.findIndex((arg) => arg === '-c');"],
   ['executed-programs.mjs', "const flag = args.findIndex((arg) => CMD_SCRIPT_SWITCHES.has(arg.toLowerCase()));", 'const flag = -1;'],
-  ['sync-invocations.mjs', "args.find((arg) => !arg.startsWith('-')) === SUBCOMMAND", 'args.includes(SUBCOMMAND)'],
+  ['sync-invocations.mjs', "subcommandWords(args)[0] === SUBCOMMAND", 'args.includes(SUBCOMMAND)'],
   ['sync-invocations.mjs', "new Set(['--dry-run', '--dry-run=true'])", "new Set(['--dry-run', '--dry-run=true', '--dry-run=false'])"],
   ['decide.mjs', 'if (realSyncs.length === 0) return ALLOW;', ''],
   ['decide.mjs', "if (blocking.some((result) => result.status === 'unverifiable')) return deny(unverifiableReason(blocking));", ''],

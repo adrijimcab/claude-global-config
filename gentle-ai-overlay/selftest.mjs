@@ -617,6 +617,20 @@ const TRIGGERS = [
   ['Bash', 'gentle-ai review start --cwd .', null],
   ['Bash', 'gentle-ai review modes enable', null],
   ['Bash', 'other-tool review mode enable', null],
+  // A help flag before the subcommand asks for help, it changes nothing. @es Un flag de ayuda antes del subcomando pide ayuda, no cambia nada.
+  ['Bash', 'gentle-ai --help sync', null],
+  ['Bash', 'gentle-ai -h sync', null],
+  ['Bash', 'gentle-ai help sync', null],
+  ['Bash', 'gentle-ai --help review mode enable', null],
+  ['Bash', 'gentle-ai review --help mode enable', null],
+  ['Bash', 'gentle-ai review mode --help disable', null],
+  ['Bash', 'gentle-ai help review mode enable', null],
+  ['PowerShell', 'gentle-ai --help sync', null],
+  ['PowerShell', '& "C:\\go\\bin\\gentle-ai.exe" -h review mode enable', null],
+  ['PowerShell', 'gentle-ai help review mode disable', null],
+  ['Bash', 'gentle-ai --verbose sync', 'sync'],
+  ['Bash', 'gentle-ai --verbose review mode enable', 'review-mode'],
+  ['PowerShell', 'gentle-ai --verbose review mode enable', 'review-mode'],
 ];
 TRIGGERS.forEach(([tool, command, expected]) =>
   test(`trigger (${tool}): ${JSON.stringify(command)} -> ${expected}`, () => expect(lazyReviewTrigger(command, tool), expected, 'trigger')),
