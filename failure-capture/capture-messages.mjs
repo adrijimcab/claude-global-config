@@ -50,5 +50,39 @@ export const CAPTURE_MESSAGES = {
   'init.ledger.created': { en: 'project {scope}: ledger CREATED at {file}', es: 'proyecto {scope}: ledger CREADO en {file}' },
   'init.ledger.present': { en: 'project {scope}: ledger already present at {file}', es: 'proyecto {scope}: ledger ya presente en {file}' },
   'init.import.added': { en: 'project {scope}: import ADDED in {file}', es: 'proyecto {scope}: import AÑADIDO en {file}' },
-  'init.import.present': { en: 'project {scope}: import already present in {file}', es: 'proyecto {scope}: import ya presente en {file}' }
+  'init.import.present': { en: 'project {scope}: import already present in {file}', es: 'proyecto {scope}: import ya presente en {file}' },
+
+  'condense.keysInvalid': { en: 'condense REFUSED — --keys needs a JSON file of the form {"keys":[{"line":"...","key":"..."}]} ({detail}).', es: 'condense RECHAZADO: --keys necesita un fichero JSON de la forma {"keys":[{"line":"...","key":"..."}]} ({detail}).' },
+  'project.configUnreadable': { en: '{command} REFUSED — the project configuration cannot be read: {defect}. Nothing was changed.', es: '{command} RECHAZADO: no se puede leer la configuración del proyecto: {defect}. No se cambió nada.' },
+
+  usage: {
+    en: [
+      'failure-capture — record a correction as a durable lesson.',
+      '  init                 give this project its own ledger and import it from .claude/CLAUDE.md',
+      '  keys                 list existing lesson keys (reuse one when it is the SAME lesson)',
+      "  capture   --key <kebab-key> --scope <global|<this project's scope>> --actor <orchestrator|worker:<type>>",
+      '            --lesson "<what went wrong -> root cause -> RULE ...>" [--session <id>]',
+      '            or --lesson "<what went wrong -> root cause>" --rule "<the rule, one sentence>" (tiered ledger line)',
+      '  dismiss   --reason "<why this is not a correction>" [--marker <m>] [--session <id>]',
+      '  promote   --key <kebab-key> (--mechanism <guard path> | --no-mechanism "<why none is possible>")',
+      '  condense  [--keys <file>] [--write]   shorten ledger lines whose text is kept in evidence (dry run without --write)',
+      '  budget   [--project <dir>]            measure the always-loaded instruction set against its ceiling (exit 0 within, 1 over, 2 not measured)',
+      '  status   counts, ledger token cost, and which lessons are due for promotion',
+      "  Exit 2 when the project's .claude/failure-capture.json is invalid (only the commands that read the project fail)."
+    ],
+    es: [
+      'failure-capture — registra una corrección como lección durable.',
+      '  init: da a este proyecto su propio ledger y lo importa desde .claude/CLAUDE.md',
+      '  keys: lista las claves de lección existentes (reutiliza una cuando es la MISMA lección)',
+      "  capture: --key <clave-kebab> --scope <global|<alcance de este proyecto>> --actor <orchestrator|worker:<tipo>>",
+      '           --lesson "<qué falló -> causa raíz -> RULE ...>" [--session <id>]',
+      '           o --lesson "<qué falló -> causa raíz>" --rule "<la regla, una frase>" (línea de ledger por niveles)',
+      '  dismiss: --reason "<por qué esto no es una corrección>" [--marker <m>] [--session <id>]',
+      '  promote: --key <clave-kebab> (--mechanism <ruta del guard> | --no-mechanism "<por qué no cabe ninguno>")',
+      '  condense: [--keys <fichero>] [--write] acorta las líneas del ledger cuyo texto se conserva en evidencia (simulacro sin --write)',
+      '  budget: [--project <dir>] mide el conjunto de instrucciones siempre cargado frente a su techo (salida 0 dentro, 1 sobre el techo, 2 no medido)',
+      '  status: recuentos, coste en tokens del ledger y qué lecciones tocan promoción',
+      '  Salida 2 si el .claude/failure-capture.json del proyecto es inválido (solo fallan los comandos que leen el proyecto).'
+    ]
+  }
 };

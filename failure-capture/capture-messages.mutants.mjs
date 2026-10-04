@@ -48,6 +48,10 @@ const MUTANTS = [
   english('the init ledger line', "speaker.say(created ? 'init.ledger.created' : 'init.ledger.present', { scope: PROJECT.scope, file: PROJECT.ledgerFile });", 'console.log(`ledger ${PROJECT.ledgerFile}`);'),
   ['init says the ledger is created when it is already there', COMMAND, "speaker.say(created ? 'init.ledger.created' : 'init.ledger.present',", "speaker.say('init.ledger.created',"],
   ['init says the import is added when it is already there', COMMAND, "speaker.say(imported ? 'init.import.present' : 'init.import.added',", "speaker.say('init.import.added',"],
+  english('the usage', "speaker.say('usage');", "console.log('usage');"),
+  english('the condense refusal', "speaker.complain('condense.keysInvalid', { detail: error instanceof Error ? error.message : String(error) });", "console.error('condense REFUSED');"),
+  english('the unreadable-configuration refusal', "speaker.complain('project.configUnreadable', { command, defect });", "console.error('REFUSED');"),
+  ['an output bypasses the speaker, which only the scan for console calls can see', COMMAND, 'speaker.dataError(renderUnmeasured(error instanceof Error ? error.message : String(error)));', 'console.error(renderUnmeasured(error instanceof Error ? error.message : String(error)));'],
   ['a Spanish half drops a placeholder of its English half', TABLE, 'REINCIDENCIA: "{key}" ya se registró {count}x.', 'REINCIDENCIA: "{key}" ya se registró.'],
   ['a Spanish half is a copy of its English half', TABLE, "es: 'lecciones con clave: {count}'", "es: 'keyed lessons: {count}'"],
   ['a Spanish half is empty', TABLE, "es: 'DESCARTADA y registrada. El turno puede terminar.'", "es: ''"]

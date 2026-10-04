@@ -12,9 +12,10 @@
  * la prueba falla si una frase vuelve a solo inglés, pierde su mitad española o deja de llevar sus datos.
  */
 
-import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { CAPTURE_MESSAGES } from './capture-messages.mjs';
 import { lessonFor, makeCaptureWorld, monolingualRuns, readOrEmpty } from './capture-world.mjs';
@@ -170,6 +171,71 @@ const capture = (world, extra = [], { key = KEY, scope = 'global', actor = 'orch
 
   check('a rule that cannot be shortened says so in both languages', out.includes('the lesson was recorded as a full line, not shortened.') && out.includes(' @es la lección se registró como línea completa, sin acortar.'), out);
   check('...and nothing it printed is English only', monolingualRuns(out).length === 0, monolingualRuns(out).join(' | '));
+}
+
+{
+  const world = fresh('usage');
+  const none = world.run([]);
+  const unknown = world.run(['frobnicate']);
+
+  check('no command prints the usage and exits 0', none.status === 0, none.out);
+  says('no command', none.out, 'usage');
+  check('an unknown command prints the same usage and exits 1', unknown.status === 1 && unknown.out.includes(render(CAPTURE_MESSAGES.usage)), unknown.out);
+}
+
+{
+  // An invalid project configuration fails only the commands that read it, with exit 2, in both languages.
+  // @es Una configuración de proyecto inválida hace fallar solo a los comandos que la leen, con salida 2, en ambos idiomas.
+  const world = fresh('config-unreadable', GLOBAL_HEAD, { scope: 'global' });
+  const { status, out } = world.run(['status']);
+  const defect = `${path.join(world.repo, '.claude', 'failure-capture.json')} is invalid: "scope" must be a non-empty string other than "global"`;
+
+  check('an invalid project configuration exits 2', status === 2, out);
+  says('an invalid project configuration', out, 'project.configUnreadable', { command: 'status', defect });
+}
+
+{
+  const world = fresh('condense-keys');
+  const keys = path.join(scratch, 'condense-keys', 'keys.json');
+
+  writeFileSync(keys, '{}', 'utf8');
+
+  const { status, out } = world.run(['condense', '--keys', keys]);
+
+  check('a keys file with no "keys" array exits 1', status === 1, out);
+  says('a keys file with no "keys" array', out, 'condense.keysInvalid', { detail: 'the file has no "keys" array' });
+}
+
+{
+  // What the commands print through modules (condense, budget) is bilingual too.
+  // @es Lo que los comandos imprimen a través de módulos (condense, budget) también es bilingüe.
+  const world = fresh('module-output', `${GLOBAL_HEAD}${plain(1)}`);
+  const condense = world.run(['condense']);
+  const budget = world.run(['budget', '--project', world.repo, '--ceiling', scratch]);
+
+  check('condense prints nothing English only', condense.out.length > 0 && monolingualRuns(condense.out).length === 0, condense.out);
+  check('budget prints nothing English only', budget.out.length > 0 && monolingualRuns(budget.out).length === 0, budget.out);
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE COMMAND HOLDS NO PRINT OF ITS OWN: every output goes through the speaker, so no sentence can be English only
+// @es EL COMANDO NO TIENE NINGÚN PRINT PROPIO: toda salida pasa por el speaker, así que ninguna frase puede ser solo inglés
+// ---------------------------------------------------------------------------------------------
+
+/** The lines of `source` that call `console.*` outside a comment. @es Las líneas de `source` que llaman a `console.*` fuera de un comentario. */
+const consoleCalls = (source) => source.split('\n').filter((text) => {
+  const code = text.trimStart();
+
+  return code.includes('console.') && !code.startsWith('//') && !code.startsWith('*') && !code.startsWith('/*');
+});
+
+check('the scan flags a console call', consoleCalls("  console.log('x');").length === 1 && consoleCalls('foo(); console.error(1);').length === 1, 'not flagged');
+check('the scan ignores a comment that names console', consoleCalls('// console.log is not used\n * console.error neither\n/* console.warn */').length === 0, 'flagged a comment');
+
+{
+  const source = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'capture.mjs'), 'utf8');
+
+  check('capture.mjs holds no console call: every sentence it prints goes through the speaker', consoleCalls(source).length === 0, consoleCalls(source).join(' | '));
 }
 
 console.log(`capture-messages selftest: ${String(passed)} passed, ${String(failures.length)} failed`);

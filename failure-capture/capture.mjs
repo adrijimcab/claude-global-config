@@ -349,7 +349,7 @@ function commandCapture(args) {
     adviseOnBudget({
       measure: () => measureLoadedSet({ project: PROJECT, directory: process.cwd(), ceiling: args.ceiling }).verdict,
       condense: () => describeOutcome(condenseLedgers({ keyMap: [], write: true })),
-      print: (line) => console.log(line)
+      print: (line) => speaker.data(line)
     });
   }
 
@@ -785,7 +785,7 @@ function commandCondense(args) {
 
       if (!Array.isArray(keyMap)) throw new TypeError('the file has no "keys" array');
     } catch (error) {
-      console.error(`condense REFUSED — --keys needs a JSON file of the form {"keys":[{"line":"...","key":"..."}]} (${error instanceof Error ? error.message : String(error)}). @es condense RECHAZADO: --keys necesita un fichero JSON de la forma {"keys":[{"line":"...","key":"..."}]}.`);
+      speaker.complain('condense.keysInvalid', { detail: error instanceof Error ? error.message : String(error) });
 
       return 1;
     }
@@ -793,7 +793,7 @@ function commandCondense(args) {
 
   const outcome = condenseLedgers({ keyMap, write: args.write === true });
 
-  for (const line of describeOutcome(outcome)) console.log(line);
+  for (const line of describeOutcome(outcome)) speaker.data(line);
 
   return outcome.status;
 }
@@ -830,32 +830,15 @@ function commandBudget(args) {
 
     const { loaded, verdict } = measureLoadedSet({ project: projectOf(directory), directory, ceiling: args.ceiling });
 
-    for (const line of renderBudget({ verdict, missing: loaded.missing })) console.log(line);
+    for (const line of renderBudget({ verdict, missing: loaded.missing })) speaker.data(line);
 
     return verdict.status === 'within' ? 0 : 1;
   } catch (error) {
-    console.error(renderUnmeasured(error instanceof Error ? error.message : String(error)));
+    speaker.dataError(renderUnmeasured(error instanceof Error ? error.message : String(error)));
 
     return 2;
   }
 }
-
-const USAGE = `failure-capture — record a correction as a durable lesson.
-
-  init                 give this project its own ledger and import it from .claude/CLAUDE.md
-  keys                 list existing lesson keys (reuse one when it is the SAME lesson)
-  capture   --key <kebab-key> --scope <global|<this project's scope>> --actor <orchestrator|worker:<type>>
-            --lesson "<what went wrong -> root cause -> RULE ...>" [--session <id>]
-            or --lesson "<what went wrong -> root cause>" --rule "<the rule, one sentence>" (tiered ledger line)
-  dismiss   --reason "<why this is not a correction>" [--marker <m>] [--session <id>]
-  promote   --key <kebab-key> (--mechanism <guard path> | --no-mechanism "<why none is possible>")
-  condense  [--keys <file>] [--write]   shorten ledger lines whose text is kept in evidence (dry run without --write)
-  budget   [--project <dir>]            measure the always-loaded instruction set against its ceiling (exit 0 within, 1 over, 2 not measured)
-  status   counts, ledger token cost, and which lessons are due for promotion
-
-  Exit 2 when the project's .claude/failure-capture.json is invalid (only the commands that read the project fail).
-  @es Salida 2 si el .claude/failure-capture.json del proyecto es inválido (solo fallan los comandos que leen el proyecto).
-`;
 
 /**
  * The session a record belongs to: `--session` when given, else the harness's own session id.
@@ -889,7 +872,7 @@ function main() {
     } catch (error) {
       const defect = error instanceof Error ? error.message : String(error);
 
-      console.error(`${command} REFUSED — the project configuration cannot be read: ${defect}. Nothing was changed. @es ${command} RECHAZADO: no se puede leer la configuración del proyecto: ${defect}. No se cambió nada.`);
+      speaker.complain('project.configUnreadable', { command, defect });
 
       return 2;
     }
@@ -913,7 +896,7 @@ function main() {
     case 'status':
       return commandStatus();
     default:
-      console.log(USAGE);
+      speaker.say('usage');
 
       return command === undefined || command === '--help' ? 0 : 1;
   }
