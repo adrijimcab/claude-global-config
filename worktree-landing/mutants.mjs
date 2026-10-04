@@ -66,11 +66,16 @@ const MUTANTS = [
   ['the process exit ignores the outcome', LAND, '  return exitCode;\n}', '  return 0;\n}'],
 ];
 
+// Each mutant needs ONE failed assertion, so the selftest it runs may stop at the first (see the selftest).
+// @es Cada mutante necesita UNA aserción fallida, así que su selftest puede parar en la primera.
+process.env.WORKTREE_LANDING_SELFTEST_FAIL_FAST = '1';
+
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
   paths: ['worktree-landing', 'mutation-proof'],
   selftest: 'worktree-landing/selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);

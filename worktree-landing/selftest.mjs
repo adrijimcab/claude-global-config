@@ -29,7 +29,8 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,7 +40,7 @@ import { land } from './land.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LAND = path.join(HERE, 'land.mjs');
 const KEY = 'unverified-commit-published-by-another-sessions-sync';
-const HANG_TIMEOUT_MS = 3000;
+const HANG_TIMEOUT_MS = 1000;
 const CHILD_TIMEOUT_MS = 120_000;
 
 /** The fixture's test command: its verdict is the committed `verdict` file of the root it is given. @es La orden de pruebas del fixture. */
@@ -64,6 +65,20 @@ else {
 `;
 
 const scratchRoot = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'worktree-landing-')));
+process.on('exit', () => rmSync(scratchRoot, { recursive: true, force: true }));
+
+/**
+ * FAIL-FAST, for the mutation campaign only. A mutant is killed by ONE failed assertion, and this selftest
+ * takes about 40 s because every state builds real git repositories, so letting a killed mutant run the other
+ * assertions to the end is most of a campaign's time. `WORKTREE_LANDING_SELFTEST_FAIL_FAST=1`, set by
+ * `mutants.mjs`, ends the run at the first failure (exit 1, the failure printed first). A run with no such
+ * variable always completes, so a human or a gate still sees EVERY failure.
+ * @es FALLO RÁPIDO, solo para la campaña de mutantes. Un mutante muere con UNA aserción fallida, y este
+ * selftest tarda unos 40 s porque cada estado construye repositorios git reales; dejar que un mutante muerto
+ * ejecute las demás aserciones es la mayor parte del tiempo de una campaña. Con la variable fijada por
+ * `mutants.mjs` la corrida termina en el primer fallo; sin ella siempre se completa y se ven TODOS los fallos.
+ */
+const FAIL_FAST = process.env.WORKTREE_LANDING_SELFTEST_FAIL_FAST === '1';
 writeFileSync(path.join(scratchRoot, 'gitconfig'), '');
 process.env.GIT_CONFIG_GLOBAL = path.join(scratchRoot, 'gitconfig');
 process.env.GIT_CONFIG_NOSYSTEM = '1';
@@ -85,6 +100,7 @@ function check(ok, label) {
   if (!ok) {
     failures += 1;
     console.error(`FAIL ${label} @es FALLO ${label}`);
+    if (FAIL_FAST) process.exit(1);
   }
 }
 
@@ -107,17 +123,23 @@ function hook(remote, name, body) {
 }
 
 /**
- * Builds a bare remote, a main clone on `master` pushed to it, and a worktree on branch `work`. `work`
- * files are committed in the worktree; `forced` ones are committed with `add -f` (ignored in the main).
- * @es Construye un remoto bare, un clon principal en `master` empujado a él y un worktree en la rama `work`.
+ * The starting point every fixture shares: a bare remote and a main clone on `master`, one base commit,
+ * pushed. It is built ONCE with real git and COPIED per fixture, because building it per fixture cost ten
+ * git processes each and, on Windows, process creation is what a run is made of (MEASURED: building and
+ * measuring fixtures was half of this selftest's 55 s, and a mutation campaign repeats the whole selftest
+ * for every mutant). Only the main clone's recorded remote URL names a path, so the copy points it at its own remote.
+ * @es El punto de partida común de todos los fixtures: un remoto bare y un clon principal en `master`, con
+ * un commit base, empujado. Se construye UNA vez con git de verdad y se COPIA por fixture, porque
+ * construirlo cada vez costaba diez procesos git y, en Windows, crear procesos es de lo que está hecha una
+ * corrida (MEDIDO: construir y medir fixtures era la mitad de los 55 s, y una campaña repite el selftest
+ * entero por cada mutante). Solo la URL del remoto del clon principal nombra una ruta, y la copia la apunta a su propio remoto.
  */
-function layout({ work = {}, forced = {}, removed = [] } = {}) {
-  fixtures += 1;
-  const base = path.join(scratchRoot, `f${fixtures}`);
-  mkdirSync(base);
+const seed = (() => {
+  const base = path.join(scratchRoot, 'seed');
   const remote = path.join(base, 'remote.git');
   const main = path.join(base, 'main');
-  const worktree = path.join(base, 'work');
+
+  mkdirSync(base);
   must(base, 'init', '--bare', '-q', '-b', 'master', remote);
   must(base, 'init', '-q', '-b', 'master', main);
   put(main, 'selftest-runner/run.mjs', FAKE_RUNNER);
@@ -129,23 +151,70 @@ function layout({ work = {}, forced = {}, removed = [] } = {}) {
   must(main, 'commit', '-q', '-m', 'base');
   must(main, 'remote', 'add', 'origin', remote);
   must(main, 'push', '-q', 'origin', 'master');
+
+  return { base, remote, main };
+})();
+
+/**
+ * Copies the seed, then adds a worktree on branch `work`. `work` files are committed in the worktree;
+ * `forced` ones are committed with `add -f` (ignored in the main).
+ * @es Copia la semilla y le añade un worktree en la rama `work`. Los ficheros de `work` se commitean en el
+ * worktree; los `forced` con `add -f` (ignorados en el principal).
+ */
+function layout({ work = {}, forced = {}, removed = [] } = {}) {
+  fixtures += 1;
+  const base = path.join(scratchRoot, `f${fixtures}`);
+  mkdirSync(base);
+  const remote = path.join(base, 'remote.git');
+  const main = path.join(base, 'main');
+  const worktree = path.join(base, 'work');
+  cpSync(seed.remote, remote, { recursive: true });
+  cpSync(seed.main, main, { recursive: true });
+  must(main, 'remote', 'set-url', 'origin', remote);
   must(main, 'worktree', 'add', '-q', '-b', 'work', worktree, 'master');
   for (const [name, content] of Object.entries(work)) put(worktree, name, content);
   for (const [name, content] of Object.entries(forced)) put(worktree, name, content);
   for (const name of removed) must(worktree, 'rm', '-q', name);
-  must(worktree, 'add', '-A');
-  for (const name of Object.keys(forced)) must(worktree, 'add', '-f', name);
-  if (must(worktree, 'status', '--porcelain') !== '') must(worktree, 'commit', '-q', '-m', 'work');
+  if (Object.keys(work).length + Object.keys(forced).length + removed.length > 0) {
+    must(worktree, 'add', '-A');
+    for (const name of Object.keys(forced)) must(worktree, 'add', '-f', name);
+    must(worktree, 'commit', '-q', '-m', 'work');
+  }
   return { base, remote, main, worktree };
 }
 
-/** The shared branch tip, the remote tip, and the main checkout's status: what a refusal must not move. @es Lo que un rechazo no debe mover. */
+/**
+ * A branch tip read from the files git keeps (the loose ref, else `packed-refs`), not through a git process:
+ * the value is the same and a read costs microseconds where a `rev-parse` or an `ls-remote` (a transport
+ * round trip) cost 30 to 110 ms each. A ref that is nowhere crashes the selftest, like a broken fixture.
+ * @es Un extremo de rama leído de los ficheros de git (la ref suelta, o `packed-refs`), no con un proceso
+ * git: el valor es el mismo y una lectura cuesta microsegundos donde un `rev-parse` o un `ls-remote` cuestan
+ * de 30 a 110 ms. Una ref que no está en ningún sitio hace fallar el selftest, como un fixture roto.
+ */
+function refOf(gitDir, ref) {
+  const loose = path.join(gitDir, ...ref.split('/'));
+  if (existsSync(loose)) return readFileSync(loose, 'utf8').trim();
+  const packed = path.join(gitDir, 'packed-refs');
+  const line = existsSync(packed) ? readFileSync(packed, 'utf8').split('\n').find((entry) => entry.endsWith(` ${ref}`)) : undefined;
+  if (line === undefined) throw new Error(`ref ${ref} is neither loose nor packed in ${gitDir}`);
+  return line.split(' ')[0];
+}
+
+/** Every file under `directory` but `.git`, with its content hash: the whole working tree, ignored files included. @es Todos los ficheros salvo `.git`, con el hash de su contenido. */
+function treeDigest(directory, prefix = '') {
+  return readdirSync(path.join(directory, prefix), { withFileTypes: true })
+    .filter((entry) => entry.name !== '.git' || prefix !== '')
+    .flatMap((entry) => {
+      const relative = path.posix.join(prefix, entry.name);
+      return entry.isDirectory() ? treeDigest(directory, relative) : [`${relative}:${createHash('sha1').update(readFileSync(path.join(directory, relative))).digest('hex')}`];
+    })
+    .sort();
+}
+
+/** The shared branch tip, the remote tip, HEAD, and every file of the main checkout: what a refusal must not move. @es Lo que un rechazo no debe mover. */
 function snapshotOf(fixture) {
-  return JSON.stringify([
-    must(fixture.main, 'rev-parse', 'refs/heads/master'),
-    must(fixture.main, 'ls-remote', 'origin', 'refs/heads/master'),
-    must(fixture.main, 'status', '--porcelain', '--untracked-files=all', '--ignored'),
-  ]);
+  const gitDir = path.join(fixture.main, '.git');
+  return JSON.stringify([refOf(gitDir, 'refs/heads/master'), refOf(fixture.remote, 'refs/heads/master'), readFileSync(path.join(gitDir, 'HEAD'), 'utf8'), treeDigest(fixture.main)]);
 }
 
 /** Lands the fixture through the exported function. @es Aterriza el fixture con la función exportada. */
@@ -182,12 +251,12 @@ function expectRefused(name, fixture, { exitCode = 2, label = 'REFUSED', reason,
 
 /** Asserts a landing: exit 0, the range line, and both tips at the worktree HEAD. @es Comprueba un aterrizaje. */
 function expectLanded(name, fixture, result = landFixture(fixture)) {
-  const head = must(fixture.worktree, 'rev-parse', 'HEAD');
+  const head = refOf(path.join(fixture.main, '.git'), 'refs/heads/work');
   const report = result.lines.join('\n');
   check(result.exitCode === 0, `${name}: exit 0, got ${result.exitCode}: ${report}`);
   check(result.lines[0].startsWith('LANDED ') && result.lines[0].includes(`..${head} on master`), `${name}: the report names the landed range: ${report}`);
-  check(must(fixture.main, 'rev-parse', 'refs/heads/master') === head, `${name}: the shared branch is at the worktree HEAD`);
-  check(must(fixture.main, 'ls-remote', 'origin', 'refs/heads/master').startsWith(head), `${name}: the remote tip is the worktree HEAD`);
+  check(refOf(path.join(fixture.main, '.git'), 'refs/heads/master') === head, `${name}: the shared branch is at the worktree HEAD`);
+  check(refOf(fixture.remote, 'refs/heads/master') === head, `${name}: the remote tip is the worktree HEAD`);
   return report;
 }
 
@@ -288,7 +357,7 @@ try {
   check(redReport.includes('BOOM-MARK') && !redReport.includes('GREEN  other/selftest.mjs'), `verification red: the red lines are printed and the green ones are not: ${redReport}`);
 
   expectRefused('verification not measured', layout({ work: { verdict: '2\n' } }), { reason: 'verification-not-measured', text: 'ended with exit 2' });
-  expectRefused('verification timed out', layout({ work: { verdict: 'hang\n' } }), { reason: 'verification-timed-out', text: 'did not finish within 3s', extra: { verifyTimeoutMs: HANG_TIMEOUT_MS } });
+  expectRefused('verification timed out', layout({ work: { verdict: 'hang\n' } }), { reason: 'verification-timed-out', text: `did not finish within ${HANG_TIMEOUT_MS / 1000}s`, extra: { verifyTimeoutMs: HANG_TIMEOUT_MS } });
   expectRefused('no test command', layout({ work: { 'b.txt': 'b\n' }, removed: ['selftest-runner/run.mjs'] }), { reason: 'test-command-missing', text: 'has no test command' });
   expectRefused('the head moved while verifying', layout({ work: { verdict: 'commit\n' } }), { reason: 'moved-during-verification', text: 'what would land is not what was verified' });
   expectRefused('the verification left the worktree dirty', layout({ work: { verdict: 'dirty\n' } }), { reason: 'worktree-uncommitted', text: '    left-behind.txt' });
