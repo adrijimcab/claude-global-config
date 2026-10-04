@@ -17,7 +17,7 @@
  * `readFrom` y los bytes realmente leídos (medidos con `onRead`).
  */
 
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, readSync as realReadSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -152,6 +152,37 @@ try {
   check('growing file, first read: the torn tail waits', first, { records: [rec(1)], offset: l1 });
   appendFileSync(growing, `2}\n${lineOf(rec(3))}`);
   check('growing file, second read from the returned offset: only the new records, the torn one now whole', attempt(() => readFrom(growing, first.offset), {}), { records: [rec(2), rec(3)], offset: l1 + lineOf(rec(2)).length + lineOf(rec(3)).length });
+  // --- a file that changes under the reader: short reads, truncation, growth. The reader is injected, never timed ---
+  // @es Un fichero que cambia bajo el lector: lecturas cortas, truncado, crecimiento. El lector se inyecta, nunca se cronometra.
+  const calls = { count: 0 };
+  /** A `readSync` that returns at most `maxPerCall` bytes and sees only the first `visible` bytes; it throws if called endlessly. @es Un `readSync` que devuelve como mucho `maxPerCall` bytes y solo ve los primeros `visible`; lanza si se le llama sin fin. */
+  const readerOf = ({ maxPerCall = Infinity, visible = Infinity }) => {
+    calls.count = 0;
+
+    return (fd, buffer, offset, length, position) => {
+      calls.count += 1;
+      if (calls.count > 200) throw new Error('runaway reader: more than 200 reads');
+      const want = Math.max(0, Math.min(length, maxPerCall, visible - position));
+
+      return want === 0 ? 0 : realReadSync(fd, buffer, offset, want, position);
+    };
+  };
+  const pairs = fileWith('11\n22\n33\n44\n');
+  check('short reads (3 bytes per call): lastRecords still returns every record', attempt(() => lastRecords(pairs, 4, { chunkBytes: 8, readBytes: readerOf({ maxPerCall: 3 }) }), []), [11, 22, 33, 44]);
+  check('short reads (3 bytes per call): readFrom still returns every record and the full offset', attempt(() => readFrom(pairs, 0, { chunkBytes: 8, readBytes: readerOf({ maxPerCall: 3 }) }), {}), { records: [11, 22, 33, 44], offset: 12 });
+  check('short reads (3 bytes per call): readFrom re-aligns a mid-line offset', attempt(() => readFrom(pairs, 1, { chunkBytes: 8, readBytes: readerOf({ maxPerCall: 3 }) }), {}), { records: [22, 33, 44], offset: 12 });
+
+  const truncated = readerOf({ visible: 10 });
+  check('file truncated before the read (10 of 24 bytes visible): the complete records it had, the offset after them', attempt(() => readFrom(threeFile, 0, { chunkBytes: 10, readBytes: truncated }), {}), { records: [rec(1)], offset: 8 });
+  check('file truncated: the loop ends at the first empty read, after exactly 2 reads', calls.count, 2);
+  check('file emptied under readFrom: nothing, the offset does not move, no runaway', attempt(() => readFrom(threeFile, 0, { readBytes: readerOf({ visible: 0 }) }), {}), { records: [], offset: 0 });
+  check('file emptied under lastRecords: nothing, no runaway', attempt(() => lastRecords(threeFile, 3, { readBytes: readerOf({ visible: 0 }) }), ['unread']), []);
+
+  const grower = fileWith(three);
+  let grown = false;
+  const grew = attempt(() => readFrom(grower, 0, { chunkBytes: 10, onRead: () => { if (!grown) { grown = true; appendFileSync(grower, '5\n'); } } }), {});
+  check('file that grows during the read: only the bytes present on entry, the new line waits', grew, { records: [rec(1), rec(2), rec(3)], offset: three.length });
+  check('file that grew: the next call from the returned offset gets the new line', attempt(() => readFrom(grower, grew.offset), {}), { records: [5], offset: three.length + 2 });
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

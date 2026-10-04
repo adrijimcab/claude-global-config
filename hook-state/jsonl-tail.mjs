@@ -23,15 +23,24 @@ export const DEFAULT_CHUNK_BYTES = 64 * 1024;
 const NOTHING = () => undefined;
 
 /**
- * Reads up to `length` bytes at `start`, reporting the bytes actually read to `onRead`.
- * @es Lee hasta `length` bytes desde `start` e informa de los bytes realmente leídos a `onRead`.
+ * Reads `length` bytes at `start`, repeating after a short read and stopping at the first empty one, so a file
+ * truncated or replaced mid-read yields the bytes it still had, never padding and never an endless loop. Every
+ * read is reported to `io.onRead`.
+ * @es Lee `length` bytes desde `start`, repitiendo tras una lectura corta y parando en la primera vacía: un
+ * fichero truncado o reemplazado a mitad devuelve los bytes que aún tenía, sin relleno y sin bucle infinito.
+ * Cada lectura se informa a `io.onRead`.
  */
-function readChunk(fd, start, length, onRead) {
+function readChunk(fd, start, length, io) {
   const buffer = Buffer.alloc(length);
-  const got = readSync(fd, buffer, 0, length, start);
-  onRead(got);
+  let filled = 0;
+  while (filled < length) {
+    const got = io.readBytes(fd, buffer, filled, length - filled, start + filled);
+    if (got === 0) break;
+    io.onRead(got);
+    filled += got;
+  }
 
-  return buffer.subarray(0, got); // a read past the end is short, never padded @es una lectura pasado el final es corta, nunca rellena
+  return buffer.subarray(0, filled);
 }
 
 /** The lines of `bytes`, split on LF bytes. @es Las líneas de `bytes`, partidas en bytes LF. */
@@ -62,8 +71,10 @@ function parseLine(bytes) {
  * @es Los últimos `n` registros de `file`, el más antiguo primero, leyendo hacia atrás por trozos y parando en cuanto hay `n`.
  * @param options.chunkBytes Bytes per read. @es Bytes por lectura.
  * @param options.onRead Called with the bytes of every read. @es Se llama con los bytes de cada lectura.
+ * @param options.readBytes Replaces `fs.readSync` (a test seam for short reads). @es Sustituye a `fs.readSync` (punto de prueba para lecturas cortas).
  */
-export function lastRecords(file, n, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING } = {}) {
+export function lastRecords(file, n, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING, readBytes = readSync } = {}) {
+  const io = { onRead, readBytes };
   const fd = openSync(file, 'r');
   try {
     const found = [];
@@ -71,7 +82,7 @@ export function lastRecords(file, n, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead 
     let end = fstatSync(fd).size;
     while (end > 0 && found.length < n) {
       const start = Math.max(0, end - chunkBytes);
-      const lines = splitLines(Buffer.concat([readChunk(fd, start, end - start, onRead), carry]));
+      const lines = splitLines(Buffer.concat([readChunk(fd, start, end - start, io), carry]));
       carry = start > 0 ? lines.shift() : Buffer.alloc(0);
       for (let at = lines.length - 1; at >= 0 && found.length < n; at -= 1) {
         const parsed = parseLine(lines[at]);
@@ -92,25 +103,25 @@ export function lastRecords(file, n, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead 
  * are already aligned. An offset past the end means the file was replaced, so it is read from 0.
  * @es Los registros de cada línea completa (terminada en salto) desde `offset`, y el offset justo tras la última.
  * Un offset dentro de una línea se realinea al siguiente salto; 0 y un offset justo tras un salto ya están
- * alineados. Un offset pasado el final indica fichero reemplazado, y se lee desde 0.
+ * alineados. Un offset pasado el final indica fichero reemplazado, y se lee desde 0. Solo se lee hasta el
+ * tamaño medido al entrar: lo que otro escritor añada durante la lectura queda para la llamada siguiente.
+ * Reading stops at the size measured on entry: what a writer appends meanwhile waits for the next call.
  * @returns `{ records, offset }`. @es `{ records, offset }`.
  */
-export function readFrom(file, offset, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING } = {}) {
+export function readFrom(file, offset, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING, readBytes = readSync } = {}) {
+  const io = { onRead, readBytes };
   const fd = openSync(file, 'r');
   try {
     const size = fstatSync(fd).size;
     const from = offset > size ? 0 : offset;
-    let skipping = from > 0 && readChunk(fd, from - 1, 1, onRead)[0] !== NEWLINE;
+    let skipping = from > 0 && readChunk(fd, from - 1, 1, io)[0] !== NEWLINE;
     const records = [];
     let carry = Buffer.alloc(0);
     let position = from;
-    const next = () => {
-      const chunk = readChunk(fd, position, chunkBytes, onRead);
-      position += chunk.length;
-
-      return chunk;
-    };
-    for (let data = next(); data.length > 0; data = next()) {
+    while (position < size) {
+      let data = readChunk(fd, position, Math.min(chunkBytes, size - position), io);
+      if (data.length === 0) break;
+      position += data.length;
       if (skipping) {
         const at = data.indexOf(NEWLINE);
         if (at === -1) continue;
