@@ -27,6 +27,30 @@ export const MESSAGE_TABLE = {
   'fires-corrupt': {
     en: 'The fires counter {file} is not a valid counter and was left untouched.',
     es: 'El contador de disparos {file} no es un contador válido y se dejó intacto.'
+  },
+  dismissed: {
+    en: 'Block {blockId} of {mechanism} dismissed; it is lifted.',
+    es: 'Bloqueo {blockId} de {mechanism} descartado; queda levantado.'
+  },
+  'false-positive-recorded': {
+    en: 'False positive reported for block {blockId} of {mechanism}; the block stays in force.',
+    es: 'Falso positivo informado para el bloqueo {blockId} de {mechanism}; el bloqueo sigue vigente.'
+  },
+  'missing-argument': {
+    en: 'Option {option} is required and needs a non-empty value.',
+    es: 'La opción {option} es obligatoria y necesita un valor no vacío.'
+  },
+  'unknown-option': {
+    en: 'Unknown option or argument "{option}"; usage: dismiss.mjs --mechanism <name> --block <id> --reason <text> [--false-positive].',
+    es: 'Opción o argumento desconocido «{option}»; uso: dismiss.mjs --mechanism <nombre> --block <id> --reason <texto> [--false-positive].'
+  },
+  'already-dismissed': {
+    en: 'Block {blockId} of {mechanism} is already dismissed; a dismissal is recorded once.',
+    es: 'El bloqueo {blockId} de {mechanism} ya está descartado; un descarte se registra una sola vez.'
+  },
+  'write-failed': {
+    en: 'The entry could not be recorded: {detail}.',
+    es: 'No se pudo registrar la entrada: {detail}.'
   }
 };
 

@@ -28,6 +28,10 @@ const MUTANTS = [
   ['the Spanish quotes of a message become ASCII', T, 'desconocido «{kind}»', 'desconocido "{kind}"'],
 
   // --- the table and its consumption ---
+  ['the Spanish text of a dismiss message loses its accent', T, 'La opción {option}', 'La opcion {option}'],
+  ['a dismiss message says the block is lifted when it is a report', T, 'the block stays in force.', 'the block is lifted.'],
+  ['the already-dismissed message loses its once-only half', T, '; a dismissal is recorded once.', '.'],
+  ['a dismiss message id is renamed', T, "'already-dismissed': {", "'already-dismissed-x': {"],
   ['a message id is renamed', T, "'bad-mechanism': {", "'bad-mechanisms': {"],
   ['the table is consumed by printing instead of by rendering a line', T, 'line: bilingual', 'say: bilingual']
 ];
