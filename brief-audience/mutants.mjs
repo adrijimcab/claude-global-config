@@ -60,6 +60,7 @@ const survivors = runMutants({
   paths: ['brief-audience', 'hook-payloads', 'mutation-proof'],
   selftest: 'brief-audience/selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);

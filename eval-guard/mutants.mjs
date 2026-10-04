@@ -63,6 +63,7 @@ const survivors = runMutants({
   paths: ['eval-guard', 'mutation-proof'],
   selftest: 'eval-guard/selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);

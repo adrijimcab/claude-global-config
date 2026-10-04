@@ -43,7 +43,8 @@ const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
   paths: ['collision-guard', 'cherry-pick-guard', 'shell-command', 'mutation-proof'],
   selftest: 'collision-guard/selftest.mjs',
-  mutants: MUTANTS
+  mutants: MUTANTS,
+  crashKills: 'fail'
 });
 
 process.exit(survivors === 0 ? 0 : 1);

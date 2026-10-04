@@ -25,7 +25,8 @@ const survivors = runMutants({
   fleetRoot: path.join(import.meta.dirname, '..'),
   paths: ['hook-caller', 'hook-payloads'],
   selftest: 'hook-caller/selftest.mjs',
-  mutants: MUTANTS
+  mutants: MUTANTS,
+  crashKills: 'fail'
 });
 
 process.exit(survivors === 0 ? 0 : 1);

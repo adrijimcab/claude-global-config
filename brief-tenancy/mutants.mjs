@@ -65,7 +65,8 @@ const survivors = runMutants({
   fleetRoot: FLEET,
   paths: ['brief-tenancy', 'toolchain-guard', 'shell-command', 'cherry-pick-guard', 'hook-payloads', 'brief-provenance'],
   selftest: 'brief-tenancy/selftest.mjs',
-  mutants: MUTANTS
+  mutants: MUTANTS,
+  crashKills: 'fail'
 });
 
 process.exit(survivors === 0 ? 0 : 1);
