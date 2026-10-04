@@ -20,6 +20,8 @@
 const FATAL_TRAILER = /^Node\.js v\d/m;
 const STACK_FRAME = /^\s+at \S/m;
 const ASSERTION_ERROR = /^AssertionError\b/m;
+const NODE_INTERNAL_FRAME = /^\s+at .*node:internal/;
+const FRAMES_REPORTED = 3;
 const THROWN_ERROR_LINE = /^(?:[A-Z][A-Za-z]*)?Error\b.*$/m;
 
 /**
@@ -38,7 +40,16 @@ export function classifyKill(run) {
   if (ASSERTION_ERROR.test(stderr)) return { kind: 'assertion' };
   if (!FATAL_TRAILER.test(stderr) && !STACK_FRAME.test(stderr)) return { kind: 'assertion' };
 
-  return { kind: 'crash', firstLine: thrownLineOf(stderr) };
+  return { kind: 'crash', firstLine: thrownLineOf(stderr), frames: framesOf(stderr) };
+}
+
+/** The first frames of the trace that are not Node's own, so the place that threw can be found. @es Los primeros frames que no son de Node, para encontrar dónde lanzó. */
+function framesOf(stderr) {
+  return stderr
+    .split('\n')
+    .filter((line) => STACK_FRAME.test(line) && !NODE_INTERNAL_FRAME.test(line))
+    .slice(0, FRAMES_REPORTED)
+    .map((line) => line.trim().replace(/^at /, ''));
 }
 
 /** The line that names the error, not the source excerpt Node prints above it. @es La línea que nombra el error. */

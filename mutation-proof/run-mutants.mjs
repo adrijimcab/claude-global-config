@@ -237,6 +237,11 @@ function requireGreenBaseline(sandboxes, selftest, timeoutMs) {
   console.log(`BASELINE ${selftest} is green (${tallyOf(run)})`);
 }
 
+/** Where the crash was thrown, as the first frames of its trace. @es Dónde se lanzó el crash. */
+function framesNote(frames) {
+  return frames === undefined || frames.length === 0 ? '' : ` [at ${frames.join(' < ')}]`;
+}
+
 /**
  * Said once per campaign that holds a crash kill: the decision of whether it fails the run lives in
  * `crashKills`, and the notice states which one applied.
@@ -277,7 +282,7 @@ function runMutant({ label, file, original, replacement }, sandboxes, selftest, 
   const kill = killed ? classifyKill(verdict.run) : { kind: 'none' };
 
   if (kill.kind === 'crash') {
-    console.log(`CRASHED  ${label} — ${kill.firstLine} (${outcomeOf(verdict.run)})`);
+    console.log(`CRASHED  ${label} — ${kill.firstLine}${framesNote(kill.frames)} (${outcomeOf(verdict.run)})`);
 
     return 'crash';
   }

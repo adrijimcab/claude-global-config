@@ -46,6 +46,9 @@ check(reportedOnStderr.kind === 'assertion', 'a failure reported only on stderr 
 const thrown = classifyKill(run('PASS a\n', `/x/target.mjs:3\n  return missing.x;\n         ^\n\nReferenceError: missing is not defined\n    at decide (file:///x/target.mjs:3:10)${FATAL_TAIL}`));
 check(thrown.kind === 'crash', 'an uncaught throw is a CRASH kill');
 check(thrown.firstLine === 'ReferenceError: missing is not defined', 'and the crash names the thrown error, not the source excerpt above it');
+check(JSON.stringify(thrown.frames) === JSON.stringify(['decide (file:///x/target.mjs:3:10)']), 'and it carries the frames of its trace, with the first one naming where it threw');
+const longTrace = 'Error: x\n    at one (a.mjs:1:1)\n    at node:internal/modules/run_main:1:1\n    at two (b.mjs:2:2)\n    at three (c.mjs:3:3)\n    at four (d.mjs:4:4)\n';
+check(classifyKill(run('', longTrace)).frames?.join('|') === 'one (a.mjs:1:1)|two (b.mjs:2:2)|three (c.mjs:3:3)', 'at most three frames are kept and the ones that are the runtime internals are skipped');
 
 const nearMiss = classifyKill(run('PASS a\n', `AssertionError [ERR_ASSERTION]: the decision is wrong\n    at file:///x/selftest.mjs:9:1${FATAL_TAIL}`));
 check(nearMiss.kind === 'assertion', 'an uncaught AssertionError is an ASSERTION kill: node:assert IS the check');
@@ -126,6 +129,7 @@ try {
   check(mixed.status === 0, `a campaign whose crash kill is only reported exits 0 by default (exit ${mixed.status})`);
   check(/^KILLED   the comparison admits zero/m.test(mixed.stdout), 'an assertion kill is printed as KILLED');
   check(/^CRASHED  the decision reads a name that does not exist .*ReferenceError: missing is not defined/m.test(mixed.stdout), 'a crash kill is printed as CRASHED with the first line of its stderr');
+check(/^CRASHED  .* \[at .*target\.mjs:\d+:\d+/m.test(mixed.stdout), 'and with the frame that threw, so the place to harden is known');
   check(mixed.stdout.includes('2/2 mutants killed (1 by assertion, 1 by crash)'), 'the tally separates assertion kills from crash kills');
   check(mixed.stdout.includes('WEAK PROOF'), 'a campaign holding a crash kill says so in its closing lines');
 
