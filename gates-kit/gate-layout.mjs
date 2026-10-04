@@ -1,0 +1,83 @@
+/**
+ * Owns the SHAPE of a gate directory: which gates exist under the kit and whether each holds every part.
+ * A gate is `gates-kit/<stack>/<gate>/` with `config.*` (one or more), a non-empty `pass/` and `fail/`, a
+ * non-empty `SOURCE.md`, and `gate.json`, the structured declaration of its command:
+ * `{ "command": ["node", "check.mjs", "{target}"], "timeoutMs": 300000 }`. `command` is an argv array run
+ * without a shell from the gate directory; `{target}` becomes the absolute path of `pass/` or `fail/`;
+ * `timeoutMs` is optional (default 300000). Any other key is refused. The `templates` folder holds
+ * contract templates, not gates, so it is never a stack.
+ *
+ * @es Responde por la FORMA de un directorio de gate: qué gates hay y si cada uno tiene todas sus partes.
+ * Un gate es `gates-kit/<stack>/<gate>/` con `config.*`, `pass/` y `fail/` no vacíos, `SOURCE.md` no vacío
+ * y `gate.json`, la declaración estructurada de su comando (argv sin shell, desde el directorio del gate;
+ * `{target}` se sustituye por la ruta de `pass/` o `fail/`). `templates` no es un stack.
+ */
+
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import path from 'node:path';
+
+/** Default per-run timeout. @es Tiempo máximo por defecto de cada corrida. */
+export const DEFAULT_TIMEOUT_MS = 300_000;
+
+/** Folders under the kit that are not stacks. @es Carpetas del kit que no son stacks. */
+const NOT_STACKS = new Set(['templates']);
+
+const DECLARATION_KEYS = new Set(['command', 'timeoutMs']);
+
+function subdirectories(dir) {
+  return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+}
+
+/** The gates under `root`, optionally of one stack. @es Los gates bajo `root`, opcionalmente de un stack. */
+export function discoverGates(root, stack) {
+  const stacks = subdirectories(root).filter((name) => !NOT_STACKS.has(name) && (stack === undefined || name === stack));
+
+  return stacks.flatMap((name) => subdirectories(path.join(root, name)).map((gate) => ({ stack: name, name: gate, dir: path.join(root, name, gate) })));
+}
+
+function hasContent(dir) {
+  return existsSync(dir) && statSync(dir).isDirectory() && readdirSync(dir).length > 0;
+}
+
+function declarationProblem(declaration) {
+  if (declaration === null || typeof declaration !== 'object' || Array.isArray(declaration)) return 'the declaration is not an object';
+  if (!Object.keys(declaration).every((key) => DECLARATION_KEYS.has(key))) return 'the declaration holds a key other than command and timeoutMs';
+  if (!Array.isArray(declaration.command) || declaration.command.length === 0 || !declaration.command.every((arg) => typeof arg === 'string' && arg !== '')) return 'command is not a non-empty array of non-empty strings';
+  if (declaration.timeoutMs !== undefined && !(Number.isInteger(declaration.timeoutMs) && declaration.timeoutMs > 0)) return 'timeoutMs is not a positive integer';
+
+  return undefined;
+}
+
+/**
+ * Inspects one gate directory: `{ problems: [{ id, detail? }], gate?, configs }`, where `gate` is the parsed
+ * declaration when it is valid and `configs` the config file paths.
+ * @es Inspecciona un gate: problemas, la declaración válida y las rutas de sus configs.
+ */
+export function inspectGate(dir) {
+  const problems = [];
+  const configs = readdirSync(dir).filter((name) => name.startsWith('config.') && statSync(path.join(dir, name)).isFile()).map((name) => path.join(dir, name));
+  const sourcePath = path.join(dir, 'SOURCE.md');
+  const declarationPath = path.join(dir, 'gate.json');
+  let gate;
+
+  if (configs.length === 0) problems.push({ id: 'missing-config' });
+  if (!hasContent(path.join(dir, 'pass'))) problems.push({ id: 'missing-pass' });
+  if (!hasContent(path.join(dir, 'fail'))) problems.push({ id: 'missing-fail' });
+  if (!existsSync(sourcePath) || readFileSync(sourcePath, 'utf8').trim() === '') problems.push({ id: 'missing-source' });
+
+  if (!existsSync(declarationPath)) {
+    problems.push({ id: 'missing-gate-json' });
+  } else {
+    try {
+      const declaration = JSON.parse(readFileSync(declarationPath, 'utf8'));
+      const detail = declarationProblem(declaration);
+
+      if (detail === undefined) gate = declaration;
+      else problems.push({ id: 'invalid-gate-json', detail });
+    } catch (error) {
+      problems.push({ id: 'invalid-gate-json', detail: error.message });
+    }
+  }
+
+  return { problems, gate, configs };
+}
