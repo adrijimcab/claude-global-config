@@ -65,7 +65,8 @@ const MUTANTS = [
   ['the project run stands in the caller directory', B, 'measureBudget({ capture, project, cwd: neutral })', 'measureBudget({ capture, project, cwd: process.cwd() })'],
   ['the project is measured on the empty directory', B, 'measureBudget({ capture, project, cwd: neutral })', 'measureBudget({ capture, project: neutral, cwd: neutral })'],
   ['the neutral directory is left behind', B, 'rmSync(neutral, { recursive: true, force: true });', ''],
-  ['the neutral directory is created outside the given temp root', B, "mkdtempSync(path.join(tmp, 'budget-neutral-'))", "mkdtempSync(path.join(path.dirname(tmp), 'budget-neutral-'))"]
+  ['the neutral directory is created outside the given temp root', B, "mkdtempSync(path.join(realpathSync.native(tmp), 'budget-neutral-'))", "mkdtempSync(path.join(path.dirname(realpathSync.native(tmp)), 'budget-neutral-'))"],
+  ['the neutral directory keeps the spelling of the temp root (a short name counts the home twice)', B, 'path.join(realpathSync.native(tmp), ', 'path.join(tmp, ']
 ];
 
 const survivors = runMutants({

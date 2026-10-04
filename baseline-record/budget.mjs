@@ -6,17 +6,23 @@
  *
  * The global set is measured with an EMPTY project in a neutral directory, so no project file is added to it
  * and the directory the caller stands in cannot contribute a `CLAUDE.md` of its own (a worktree of `~/.claude`
- * would count its copy of the global one twice).
+ * would count its copy of the global one twice). That directory sits under the REAL path of the temp root:
+ * the command counts a file once per spelling of its path, and under a Windows 8.3 short name (`ADRIAN~1.JIM`)
+ * the user's own `.claude` is reached as a second, different path and measured twice (213,356 raw instead of
+ * 118,092, measured 2026-10-04).
  *
  * @es El tamaño bruto de los conjuntos siempre cargados, leído del comando de medición del dueño
  * (`capture.mjs budget --project <dir>`): cada cifra lleva el comando y su código de salida. Salida 0 (dentro
  * del techo) y 1 (sobre él) son MEDICIONES; 2 o un informe sin cifras no, se imprima lo que se imprima. El
  * conjunto global se mide con un proyecto VACÍO en un directorio neutro, para que ningún fichero de proyecto
- * ni el directorio del que se llama se sumen a él.
+ * ni el directorio del que se llama se sumen a él. Ese directorio cuelga de la ruta REAL de la raíz temporal:
+ * el comando cuenta un fichero una vez por cada grafía de su ruta, y bajo un nombre corto 8.3 de Windows
+ * (`ADRIAN~1.JIM`) el `.claude` del usuario se alcanza por una segunda ruta distinta y se mide dos veces
+ * (213.356 brutos en lugar de 118.092, medido el 2026-10-04).
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 const FIGURES = /([\d,]+) raw characters \(harness-counted ([\d,]+)\) against ([\d,]+)/;
@@ -53,7 +59,7 @@ export function measureBudget({ capture, project, cwd }) {
 
 /** The global set (an empty project) and the project, each measured on its own. @es El conjunto global (un proyecto vacío) y el proyecto, cada uno medido por separado. */
 export function measureBudgets({ capture, project, tmp }) {
-  const neutral = mkdtempSync(path.join(tmp, 'budget-neutral-'));
+  const neutral = mkdtempSync(path.join(realpathSync.native(tmp), 'budget-neutral-'));
 
   try {
     return { global: measureBudget({ capture, project: neutral, cwd: neutral }), project: measureBudget({ capture, project, cwd: neutral }) };

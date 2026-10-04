@@ -17,7 +17,7 @@
  * directorio neutro, borrado después) y la parte propia del proyecto.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -125,13 +125,22 @@ function standIn(name, stdout, code) {
 
 // --- the two measurements together ---
 {
-  mkdirSync(path.join(scratch, 'neutral'), { recursive: true });
+  // The temp root is given as a JUNCTION: a file reached through two spellings of one directory (a Windows
+  // 8.3 short name and the long one) is counted twice by the budget command, so the empty project must sit
+  // under the REAL path of the temp root.
+  // @es La raíz temporal se da como JUNCTION: un fichero alcanzado por dos grafías de un mismo directorio
+  // (nombre corto 8.3 y largo en Windows) lo cuenta dos veces el comando, así que el proyecto vacío debe
+  // estar bajo la ruta REAL de la raíz temporal.
+  const realRoot = path.join(scratch, 'neutral-real');
+
+  mkdirSync(realRoot, { recursive: true });
+  symlinkSync(realRoot, path.join(scratch, 'neutral-link'), 'junction');
 
   const stand = standIn('both', report({ rows: ROWS }), 1);
-  const both = attempt(() => measureBudgets({ capture: stand.file, project: PROJECT, tmp: path.join(scratch, 'neutral') }));
+  const both = attempt(() => measureBudgets({ capture: stand.file, project: PROJECT, tmp: path.join(scratch, 'neutral-link') }));
   const [globalCall, projectCall] = stand.calls();
 
-  check('both: the global run asks for an empty project inside the neutral directory', [globalCall.args[1], path.dirname(globalCall.args[2] ?? '') === path.join(scratch, 'neutral')], ['--project', true]);
+  check('both: the global run asks for an empty project directly under the REAL path of the temp root', [globalCall.args[1], path.dirname(globalCall.args[2] ?? '')], ['--project', realpathSync.native(realRoot)]);
   check('both: the project run asks for the real project, after the global one', [projectCall?.args[2], stand.calls().length], [PROJECT, 2]);
   check('both: the global run runs from that same empty directory', globalCall.cwd, globalCall.args[2]);
   check('both: the project run also runs from it, never from the caller directory', projectCall?.cwd, globalCall.args[2]);
