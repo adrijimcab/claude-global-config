@@ -22,7 +22,7 @@ import path from 'node:path';
 
 import { payloadFor } from '../hook-payloads/payloads.mjs';
 import { alternativesOf } from '../hook-dispatch/manifest.mjs';
-import { evaluate } from './guard.mjs';
+import { evaluate as evaluateGuard } from './guard.mjs';
 import { REFUSAL_HEADLINE, reason } from './reason.mjs';
 
 const ROOT = path.join(import.meta.dirname, '..');
@@ -37,6 +37,22 @@ const failures = [];
 function check(name, actual, expected) {
   if (actual === expected) passed += 1;
   else failures.push(`${name} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+}
+
+/**
+ * The guard's entry point. A throw is a verdict about the guard: it is recorded as a FAILED check and
+ * answered with a marker that is neither an allow (`undefined`) nor a deny, so no case reads it as either.
+ * @es El punto de entrada de la guardia. Un throw es un veredicto: se registra como check FALLIDO y se
+ * responde con un marcador que no es ni allow (`undefined`) ni deny.
+ */
+function evaluate(raw) {
+  try {
+    return evaluateGuard(raw);
+  } catch (error) {
+    failures.push(`evaluate() THREW ${error.message} @es evaluate() LANZÓ`);
+
+    return { threw: error.message };
+  }
 }
 
 /** A recorded Agent payload re-addressed to `tool`, carrying `caller` fields. @es Un payload Agent grabado con los campos de `caller`. */

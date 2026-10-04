@@ -31,7 +31,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { decide, fingerprint } from './guard.mjs';
+import { decide as decideGuard, fingerprint } from './guard.mjs';
 import { parseSubject, stashInventory } from './stashes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -50,6 +50,22 @@ const GUARD = path.join(HERE, 'guard.mjs');
 const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, env: cleanEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }).trim();
+
+/**
+ * The guard's decision. A throw is a verdict about the guard: it is recorded as a FAILED check and answered
+ * with a marker that is neither an allow (`undefined`) nor a block, so no case reads it as either.
+ * @es La decisión de la guardia. Un throw es un veredicto: se registra como check FALLIDO y se responde con
+ * un marcador que no es ni allow (`undefined`) ni block.
+ */
+function decide(...args) {
+  try {
+    return decideGuard(...args);
+  } catch (error) {
+    check('decide() does not throw @es decide() no lanza', false, error.message);
+
+    return { threw: error.message };
+  }
+}
 
 const canonical = (p) => realpathSync.native(path.resolve(p));
 

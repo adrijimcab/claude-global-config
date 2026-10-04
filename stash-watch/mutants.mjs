@@ -32,6 +32,7 @@ const survivors = runMutants({
   paths: ['stash-watch', 'mutation-proof'],
   selftest: 'stash-watch/selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);
