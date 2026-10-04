@@ -15,7 +15,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 
-import { bilingual } from './messages.mjs';
+import { bilingual } from './message-table.mjs';
 
 /** One environment variable, read now. @es Una variable de entorno, leída ahora. */
 const readEnv = (name) => process.env[name];

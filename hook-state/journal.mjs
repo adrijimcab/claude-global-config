@@ -15,7 +15,7 @@ import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } fr
 import path from 'node:path';
 
 import { stateDir } from './locations.mjs';
-import { bilingual } from './messages.mjs';
+import { bilingual } from './message-table.mjs';
 
 /** The record kinds a journal accepts. @es Los tipos de registro que acepta un journal. */
 export const KINDS = new Set(['decision', 'dismissal', 'false-positive-report']);
