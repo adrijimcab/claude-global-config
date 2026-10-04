@@ -210,6 +210,12 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     taken from any durable record (engram, backlog, report) is re-measured in the same turn before
     it reaches the owner, or goes out naming the record and its date in the same sentence; and
     before relaying it, check newer records on the same subject for a contradiction.
+  - **A WORKER'S "DONE" ACCEPTED FROM THE LIFECYCLE FLAG (2026-10-04,
+    `worker-claim-about-unreachable-file-committed-as-fact`).** An archive worker reported a spec
+    converted and cited a wrong record id; the native status said "archived", so the change was reported
+    done, and neither claim was true. RULE: before reporting a worker's write as done, read each
+    artefact it claims to have changed, at its current revision, and check the claimed change is there;
+    a status flag proves the process ran, never what it wrote.
 
 - **`provisioning-bound-to-delegation-not-worktree-creation`** — A worktree you create YOURSELF
   arrives with no `node_modules`, because the provisioner is bound to DELEGATION (a `PreToolUse` hook

@@ -110,7 +110,7 @@ How it is applied:
 3. Build the mechanism that makes it impossible, or write down why no mechanism is possible and what
    stands in its place instead.
 4. **Prove the mechanism DISCRIMINATES** across the state space its decision ranges over — watching it
-   pass is not watching it work (`guard-that-cannot-go-red`, now six faces).
+   pass is not watching it work (`guard-that-cannot-go-red`).
 5. Only then resume.
 
 ## Standing workflow premise — SDD + full contract + tooling leverage + senior audit stance (owner directive 2026-07-28)
