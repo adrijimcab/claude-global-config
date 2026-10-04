@@ -118,6 +118,8 @@
 !/journal-backup/**
 !/baseline-record/
 !/baseline-record/**
+!/hook-state/
+!/hook-state/**
 !/hook-caller/
 !/hook-caller/**
 /hook-caller/state/
