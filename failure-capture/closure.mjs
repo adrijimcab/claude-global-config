@@ -69,13 +69,15 @@ const SELFTEST_TIMEOUT_MS = 1_800_000;
 /** The proof file every fleet guard keeps beside itself. @es El fichero de prueba que cada guard guarda a su lado. */
 const SELFTEST_NAME = 'selftest.mjs';
 
+/** One sentence in the house form: English, then the Spanish half marked `@es`. @es Una frase en la forma de la casa: inglés y luego la mitad española marcada `@es`. */
+const both = (english, spanish) => `${english} @es ${spanish}`;
+
 /** The refusal text naming both ways to close, used wherever a closure is missing or malformed. @es La negativa que nombra las dos formas de cerrar. */
 function bothOptions() {
   return [
-    `Close it with ONE of:`,
-    `  ${MECHANISM_FLAG} <path>        a guard/gate that makes the repeat impossible; its ${SELFTEST_NAME} is run and must pass,`,
-    '                                and the guard or its selftest must name the lesson key',
-    `  ${NO_MECHANISM_FLAG} "<reason>"  why no mechanism is possible (${MINIMUM_REASON_LENGTH}+ chars), recorded verbatim`,
+    both('Close it with ONE of:', 'Ciérrala con UNA de estas:'),
+    both(`  ${MECHANISM_FLAG} <path>        a guard/gate that makes the repeat impossible; its ${SELFTEST_NAME} is run and must pass, and the guard or its selftest must name the lesson key`, `un guard/gate que hace imposible la repetición; su ${SELFTEST_NAME} se ejecuta y debe pasar, y el guard o su selftest debe nombrar la clave de la lección`),
+    both(`  ${NO_MECHANISM_FLAG} "<reason>"  why no mechanism is possible (${MINIMUM_REASON_LENGTH}+ chars), recorded verbatim`, `por qué no cabe ningún mecanismo (${MINIMUM_REASON_LENGTH}+ caracteres), se registra literal`)
   ];
 }
 
@@ -89,28 +91,28 @@ export function readClosure(args) {
   const reason = args?.['no-mechanism'];
 
   if (mechanism === undefined && reason === undefined) {
-    return { kind: 'refused', problems: ['a recurring lesson cannot be closed on contract text alone (owner directive: STOP THE LINE ON THE SECOND OCCURRENCE)', ...bothOptions()] };
+    return { kind: 'refused', problems: [both('a recurring lesson cannot be closed on contract text alone (owner directive: STOP THE LINE ON THE SECOND OCCURRENCE)', 'una lección recurrente no se cierra solo con texto de contrato (directiva del dueño: PARAR LA LÍNEA EN LA SEGUNDA OCURRENCIA)'), ...bothOptions()] };
   }
 
   if (mechanism !== undefined && reason !== undefined) {
-    return { kind: 'refused', problems: [`give ${MECHANISM_FLAG} or ${NO_MECHANISM_FLAG}, not both: a lesson is closed by a mechanism OR by a reason none is possible`, ...bothOptions()] };
+    return { kind: 'refused', problems: [both(`give ${MECHANISM_FLAG} or ${NO_MECHANISM_FLAG}, not both: a lesson is closed by a mechanism OR by a reason none is possible`, `da ${MECHANISM_FLAG} o ${NO_MECHANISM_FLAG}, no ambos: una lección se cierra con un mecanismo O con un motivo de por qué no cabe ninguno`), ...bothOptions()] };
   }
 
   if (mechanism !== undefined) {
-    if (typeof mechanism !== 'string' || mechanism.trim().length === 0) return { kind: 'refused', problems: [`${MECHANISM_FLAG} needs a path`, ...bothOptions()] };
+    if (typeof mechanism !== 'string' || mechanism.trim().length === 0) return { kind: 'refused', problems: [both(`${MECHANISM_FLAG} needs a path`, `${MECHANISM_FLAG} necesita una ruta`), ...bothOptions()] };
 
     return { kind: 'mechanism', path: mechanism.trim() };
   }
 
   if (typeof reason !== 'string' || reason.trim().length < MINIMUM_REASON_LENGTH) {
-    return { kind: 'refused', problems: [`${NO_MECHANISM_FLAG} needs a reason of ${MINIMUM_REASON_LENGTH}+ characters saying WHY no mechanism is possible`, ...bothOptions()] };
+    return { kind: 'refused', problems: [both(`${NO_MECHANISM_FLAG} needs a reason of ${MINIMUM_REASON_LENGTH}+ characters saying WHY no mechanism is possible`, `${NO_MECHANISM_FLAG} necesita un motivo de ${MINIMUM_REASON_LENGTH}+ caracteres que diga POR QUÉ no cabe ningún mecanismo`), ...bothOptions()] };
   }
 
   // Verbatim means verbatim, so the reason is never reflowed — and a ledger entry is ONE line whose
   // trailing marker is how the loop finds it again, so a line break would orphan the lesson instead.
   // @es Literal es literal, así que el motivo no se reformatea; y una entrada del ledger es UNA línea cuyo
   // marcador final es como el loop la encuentra, así que un salto de línea la dejaría huérfana.
-  if (reason.includes('\n') || reason.includes('\r')) return { kind: 'refused', problems: [`${NO_MECHANISM_FLAG} must be one line: it is written verbatim into a one-line ledger entry`, ...bothOptions()] };
+  if (reason.includes('\n') || reason.includes('\r')) return { kind: 'refused', problems: [both(`${NO_MECHANISM_FLAG} must be one line: it is written verbatim into a one-line ledger entry`, `${NO_MECHANISM_FLAG} debe ser de una sola línea: se escribe literal en una entrada de ledger de una línea`), ...bothOptions()] };
 
   return { kind: 'no-mechanism', reason };
 }
@@ -136,18 +138,18 @@ function resolveMechanism(mechanismPath, { repoRoot, home }) {
 export function verifyMechanism({ mechanismPath, key, repoRoot, home }) {
   const absolute = resolveMechanism(mechanismPath, { repoRoot, home });
 
-  if (!existsSync(absolute)) return { ok: false, problem: `the mechanism ${mechanismPath} does not exist (resolved to ${absolute})` };
+  if (!existsSync(absolute)) return { ok: false, problem: both(`the mechanism ${mechanismPath} does not exist (resolved to ${absolute})`, `el mecanismo ${mechanismPath} no existe (resuelto a ${absolute})`) };
 
   const isDirectory = statSync(absolute).isDirectory();
   const directory = isDirectory ? absolute : path.dirname(absolute);
   const moduleNamed = isDirectory ? undefined : path.join(directory, `${path.basename(absolute, path.extname(absolute))}.${SELFTEST_NAME}`);
   const selftest = moduleNamed !== undefined && existsSync(moduleNamed) ? moduleNamed : path.join(directory, SELFTEST_NAME);
 
-  if (!existsSync(selftest)) return { ok: false, problem: `the mechanism ${mechanismPath} has no selftest beside it (${moduleNamed ?? path.join(directory, SELFTEST_NAME)} or ${path.join(directory, SELFTEST_NAME)}), so nothing shows it decides correctly` };
+  if (!existsSync(selftest)) return { ok: false, problem: both(`the mechanism ${mechanismPath} has no selftest beside it (${moduleNamed ?? path.join(directory, SELFTEST_NAME)} or ${path.join(directory, SELFTEST_NAME)}), so nothing shows it decides correctly`, `el mecanismo ${mechanismPath} no tiene selftest a su lado (${moduleNamed ?? path.join(directory, SELFTEST_NAME)} o ${path.join(directory, SELFTEST_NAME)}), así que nada muestra que decide bien`) };
 
   const named = [absolute, selftest].some((file) => statSync(file).isFile() && readFileSync(file, 'utf8').includes(key));
 
-  if (!named) return { ok: false, problem: `the mechanism ${mechanismPath} never names "${key}" in its source or its selftest, so nothing ties it to this lesson` };
+  if (!named) return { ok: false, problem: both(`the mechanism ${mechanismPath} never names "${key}" in its source or its selftest, so nothing ties it to this lesson`, `el mecanismo ${mechanismPath} nunca nombra "${key}" en su código ni en su selftest, así que nada lo ata a esta lección`) };
 
   try {
     execFileSync(process.execPath, [selftest], { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: SELFTEST_TIMEOUT_MS });
@@ -155,9 +157,9 @@ export function verifyMechanism({ mechanismPath, key, repoRoot, home }) {
     const status = typeof error?.status === 'number' ? error.status : undefined;
     const output = `${error?.stdout ?? ''}${error?.stderr ?? ''}`.trim().split('\n').slice(-5).join(' | ');
 
-    if (status === undefined) return { ok: false, problem: `the selftest of ${mechanismPath} did not finish (${error instanceof Error ? error.message : String(error)}) — a killed run is not a verdict, and not a pass` };
+    if (status === undefined) return { ok: false, problem: both(`the selftest of ${mechanismPath} did not finish (${error instanceof Error ? error.message : String(error)}) — a killed run is not a verdict, and not a pass`, `el selftest de ${mechanismPath} no terminó (${error instanceof Error ? error.message : String(error)}): una ejecución abortada no es un veredicto, y no es un pase`) };
 
-    return { ok: false, problem: `the selftest of ${mechanismPath} exited ${status}: ${output}` };
+    return { ok: false, problem: both(`the selftest of ${mechanismPath} exited ${status}: ${output}`, `el selftest de ${mechanismPath} salió con ${status}: ${output}`) };
   }
 
   return { ok: true, selftest, selftestExit: 0 };

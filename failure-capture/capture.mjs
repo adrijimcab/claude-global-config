@@ -41,7 +41,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { closureClause, closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
+import { closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
 import { adviseOnBudget } from './budget-advisory.mjs';
 import { budgetVerdict } from './budget-verdict.mjs';
 import { renderBudget, renderUnmeasured } from './budget-report.mjs';
@@ -50,7 +50,8 @@ import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs
 import { loadedSet } from './loaded-set.mjs';
 import { promotedStub } from './promotion.mjs';
 import { isPromotedStub, promotedRecurrenceLines } from './promoted-recurrence.mjs';
-import { promotionFiles, promotionTargetOf } from './promotion-target.mjs';
+import { GLOBAL_TARGET, PROJECT_TARGET, promotionFiles, promotionTargetOf } from './promotion-target.mjs';
+import { PROMOTE_MESSAGES } from './promote-messages.mjs';
 import { facesByFile, staleFiles } from './text-growth.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { withLock } from './ledger-lock.mjs';
@@ -63,7 +64,7 @@ import { makeSpeaker } from './speaker.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 /** Everything this command prints goes through here, in the house bilingual form (`speaker.mjs`). @es Todo lo que este comando imprime pasa por aquí, en la forma bilingüe de la casa. */
-const speaker = makeSpeaker({ ...CAPTURE_MESSAGES });
+const speaker = makeSpeaker({ ...CAPTURE_MESSAGES, ...PROMOTE_MESSAGES });
 // The PROJECT this command runs in (`project.mjs`), never the folder this code sits in: the loop is
 // global since 2026-09-30, so `HERE/../..` would name the user's home, not a repository. It, and the five
 // values derived from it below, are bound by `bindLoopContext` for the commands that read the project, never
@@ -447,39 +448,26 @@ const promotionTarget = (key) => promotionTargetOf(locateKey(readLedgers(LEDGERS
  * por qué no cabe— cierra el incidente.
  */
 function promotionInstructions(key, target) {
-  const closeStep = (number) => [
-    `  ${String(number)}. Close it with a MECHANISM that makes the repeat impossible, or say why none is possible:`,
+  const closeSteps = (number) => [
+    speaker.line('instructions.close', { number }),
     `       node "${path.join(HERE, 'capture.mjs')}" promote --key ${key} ${MECHANISM_FLAG} <guard path>`,
     `       node "${path.join(HERE, 'capture.mjs')}" promote --key ${key} ${NO_MECHANISM_FLAG} "<reason>"`,
-    '     The mechanism must name the key and its selftest.mjs is RUN and must pass; the reason is recorded verbatim.',
+    speaker.line('instructions.close.note')
   ];
 
-  if (target === 'claude-md') {
-    return [
-      'PROMOTION REQUIRED -> the GLOBAL promoted-rules file (a global lesson: every project and subagent loads it).',
-      `  1. Add the rule to ${ORCHESTRATOR_RULES}, and include the literal token "${key}" in it.`,
-      ...closeStep(2),
-      '     It refuses until the token is actually there. Do not hand-edit the ledger instead.',
-    ].join('\n');
-  }
+  if (target === GLOBAL_TARGET) return [speaker.line('instructions.global', { file: ORCHESTRATOR_RULES, key }), ...closeSteps(2), speaker.line('instructions.global.tail')].join('\n');
 
-  if (WORKER_CONTRACTS.length === 0) {
-    return [
-      'PROMOTION REQUIRED -> the DELEGATED-WORKER contract, but no project holds this directory, so there is',
-      'no worker contract to promote into. Re-run `promote` from inside the project the lesson belongs to.',
-    ].join('\n');
-  }
 
-  const contractSteps = WORKER_CONTRACTS.map((file, at) => `  ${String(at + 1)}. Add the rule to ${file}, including the literal token "${key}".`);
-  const paritySteps = PARITY_GATE === undefined ? [] : [`  ${String(contractSteps.length + 1)}. Add "${key}" to the ANCHORS array in ${PARITY_GATE}, so the parity gate enforces the files from now on.`];
+  const contractSteps = WORKER_CONTRACTS.map((file, at) => speaker.line('instructions.contract.step', { number: at + 1, file, key }));
+  const paritySteps = PARITY_GATE === undefined ? [] : [speaker.line('instructions.contract.parity', { number: contractSteps.length + 1, key, gate: PARITY_GATE })];
 
   return [
-    `PROMOTION REQUIRED -> the DELEGATED-WORKER contract of ${PROJECT.scope} (${String(WORKER_CONTRACTS.length)} file(s)${PARITY_GATE === undefined ? '' : ' and a parity gate'}).`,
-    ...(WORKER_CONTRACTS.length > 1 ? ['A rule added to one file only means workers on another runtime silently never receive it.'] : []),
+    speaker.line(PARITY_GATE === undefined ? 'instructions.contract' : 'instructions.contract.gate', { scope: PROJECT.scope, count: WORKER_CONTRACTS.length }),
+    ...(WORKER_CONTRACTS.length > 1 ? [speaker.line('instructions.contract.many')] : []),
     ...contractSteps,
     ...paritySteps,
-    ...closeStep(contractSteps.length + paritySteps.length + 1),
-    `     It verifies every step${PARITY_GATE === undefined ? '' : ' and runs the parity gate'}; it refuses while any step is missing.`,
+    ...closeSteps(contractSteps.length + paritySteps.length + 1),
+    speaker.line(PARITY_GATE === undefined ? 'instructions.contract.tail' : 'instructions.contract.tail.gate')
   ].join('\n');
 }
 
@@ -515,20 +503,7 @@ function textGrowthProblem(key, target) {
 
   if (stale.length === 0) return undefined;
 
-  return [
-    ...stale.flatMap(({ file, now, then, date }) => [
-      `"${key}" has recurred since it was last closed on ${date}, and the text that failed to prevent it has not grown:`,
-      `  ${file}`,
-      `  names ${String(now)} face(s) of "${key}"; it named ${String(then)} face(s) at that closure.`,
-      `  @es ${file} nombra ${String(now)} cara(s) de "${key}"; nombraba ${String(then)} en ese cierre, y el texto no ha crecido.`
-    ]),
-    '',
-    'A promoted rule prevents only the FACES ITS TEXT NAMES. Read the existing paragraph, decide whether',
-    'this recurrence is a face it already names, and when it is not, EXTEND it with the new face — in',
-    'every file that carries the rule — before promoting again.',
-    '@es Una regla promovida solo previene las CARAS QUE SU TEXTO NOMBRA: lee el párrafo, decide si esta',
-    '@es reincidencia es una cara que ya nombra y, si no lo es, EXTIÉNDELO con la cara nueva en cada fichero.'
-  ].join('\n');
+  return [...stale.map(({ file, now, then, date }) => speaker.line('growth.file', { key, date, file, now, then })), speaker.line('growth.advice')].join('\n');
 }
 
 /**
@@ -536,19 +511,17 @@ function textGrowthProblem(key, target) {
  * would be this tool committing the defect it exists to catch.
  * @es Lo que una promoción verificó de verdad, y nada más.
  */
-function proofOf(target) {
-  if (target !== 'contract') return 'token present in the file';
+function proofMessage(target) {
+  if (target !== PROJECT_TARGET) return ['promote.proof.token', {}];
 
-  const files = `token present in ${String(WORKER_CONTRACTS.length)} contract file(s)`;
-
-  return PARITY_GATE === undefined ? `${files}; this project declares no parity gate` : `${files} and in the ANCHORS array; parity gate ran and passed`;
+  return [PARITY_GATE === undefined ? 'promote.proof.contracts' : 'promote.proof.contractsGate', { count: WORKER_CONTRACTS.length }];
 }
 
 function commandPromote(args) {
   const { key } = args;
 
   if (!isValidKey(key)) {
-    console.error('promote REFUSED — --key must be a valid lesson key.');
+    speaker.complain('promote.keyInvalid');
 
     return 1;
   }
@@ -556,7 +529,7 @@ function commandPromote(args) {
   const keys = ledgerKeys();
 
   if (!keys.has(key)) {
-    console.error(`promote REFUSED — "${key}" is not a lesson in the ledger. Nothing to promote.`);
+    speaker.complain('promote.notALesson', { key });
 
     return 1;
   }
@@ -567,8 +540,8 @@ function commandPromote(args) {
   const closure = readClosure(args);
 
   if (closure.kind === 'refused') {
-    console.error('promote REFUSED — no valid closure:');
-    for (const problem of closure.problems) console.error(`  ${problem}`);
+    speaker.complain('promote.noClosure');
+    for (const problem of closure.problems) speaker.dataError(`  ${problem}`);
 
     return 1;
   }
@@ -576,19 +549,18 @@ function commandPromote(args) {
   const target = promotionTarget(key);
   const missing = [];
 
-  if (target === 'claude-md') {
-    if (!readFileOr(ORCHESTRATOR_RULES, '').includes(key)) missing.push(`the token "${key}" is absent from ${ORCHESTRATOR_RULES}`);
+  if (target === GLOBAL_TARGET) {
+    if (!readFileOr(ORCHESTRATOR_RULES, '').includes(key)) missing.push(speaker.line('promote.missing.token', { key, file: ORCHESTRATOR_RULES }));
   } else {
-    if (WORKER_CONTRACTS.length === 0) missing.push('no project holds this directory, so there is no worker contract to promote into');
-    for (const file of WORKER_CONTRACTS) if (!readFileOr(file, '').includes(key)) missing.push(`the token "${key}" is absent from ${file}`);
-    if (PARITY_GATE !== undefined && !readFileOr(PARITY_GATE, '').includes(`'${key}'`)) missing.push(`"${key}" is not in the ANCHORS array of ${PARITY_GATE}`);
+    for (const file of WORKER_CONTRACTS) if (!readFileOr(file, '').includes(key)) missing.push(speaker.line('promote.missing.token', { key, file }));
+    if (PARITY_GATE !== undefined && !readFileOr(PARITY_GATE, '').includes(`'${key}'`)) missing.push(speaker.line('promote.missing.anchor', { key, gate: PARITY_GATE }));
   }
 
   if (missing.length > 0) {
-    console.error('promote REFUSED — the rule has not actually landed:');
-    for (const problem of missing) console.error(`  - ${problem}`);
-    console.error('');
-    console.error(promotionInstructions(key, target));
+    speaker.complain('promote.notLanded');
+    for (const problem of missing) speaker.dataError(problem);
+    speaker.dataError('');
+    speaker.dataError(promotionInstructions(key, target));
 
     return 1;
   }
@@ -596,18 +568,18 @@ function commandPromote(args) {
   const stale = textGrowthProblem(key, target);
 
   if (stale !== undefined) {
-    console.error('promote REFUSED — the rule was already promoted and the lesson came back anyway:');
-    console.error(stale);
+    speaker.complain('promote.alreadyPromoted');
+    speaker.dataError(stale);
 
     return 1;
   }
 
-  if (target === 'contract' && PARITY_GATE !== undefined) {
+  if (target === PROJECT_TARGET && PARITY_GATE !== undefined) {
     try {
       execFileSync(process.execPath, [PARITY_GATE], { cwd: PROJECT.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     } catch (error) {
-      console.error('promote REFUSED — the contract parity gate is RED after your edit:');
-      console.error(String(error.stdout ?? '') + String(error.stderr ?? ''));
+      speaker.complain('promote.parityRed');
+      speaker.dataError(String(error.stdout ?? '') + String(error.stderr ?? ''));
 
       return 1;
     }
@@ -624,8 +596,8 @@ function commandPromote(args) {
     verification = verifyMechanism({ mechanismPath: closure.path, key, repoRoot: PROJECT?.root ?? homedir(), home: homedir() });
 
     if (!verification.ok) {
-      console.error('promote REFUSED — the mechanism does not close this lesson:');
-      console.error(`  - ${verification.problem}`);
+      speaker.complain('promote.mechanismFailed');
+      speaker.dataError(`  - ${verification.problem}`);
 
       return 1;
     }
@@ -642,7 +614,7 @@ function commandPromote(args) {
   // recibir el contrato en esta sesión; borrarla cambiaría impuesto de tokens por un agujero. La línea
   // entera y cómo cerró la promoción van antes al almacén de evidencia; ese almacén es el único sitio
   // del texto, así que `state/promoted.md` ya no se escribe.
-  const where = target === 'claude-md' ? '~/.claude/rules/promoted-rules.md' : `the delegated-worker contract (${WORKER_CONTRACTS.length > 1 ? `all ${String(WORKER_CONTRACTS.length)} files` : 'its file'})`;
+  const where = target === GLOBAL_TARGET ? '~/.claude/rules/promoted-rules.md' : `the delegated-worker contract (${WORKER_CONTRACTS.length > 1 ? `all ${String(WORKER_CONTRACTS.length)} files` : 'its file'})`;
   // The ledger is read only once the lock is held: a copy read before it would be written back over any
   // line another writer added while this one waited, and would carry an out-of-date recurrence counter.
   // @es El ledger se lee solo con el lock ya tomado: una copia leída antes se reescribiría encima de las
@@ -665,13 +637,14 @@ function commandPromote(args) {
   });
 
   if (!collapsed.held) {
-    console.error('promote: the ledger is locked by another writer — re-run in a moment. Nothing was changed. @es promote: el ledger está bloqueado por otro escritor; reintenta en un momento. No se cambió nada.');
+    speaker.complain('promote.locked');
 
     return 1;
   }
 
   if (collapsed.value?.ok !== true) {
-    console.error(`promote REFUSED — ${collapsed.value?.problem ?? 'the lesson is no longer in the ledger. @es la lección ya no está en el ledger.'}`);
+    if (collapsed.value?.problem === undefined) speaker.complain('promote.lessonGone');
+    else speaker.dataError(`promote REFUSED — ${collapsed.value.problem}`);
 
     return 1;
   }
@@ -680,10 +653,13 @@ function commandPromote(args) {
   // the parity gate is never run, would be this tool committing the exact defect it exists to catch.
   // @es Reportar solo lo comprobado: decir "parity gate verde" en el camino de CLAUDE.md, donde el
   // gate ni se ejecuta, sería esta herramienta cometiendo el fallo que existe para cazar.
-  const proof = proofOf(target);
+  
 
-  console.log(`PROMOTED "${key}" -> ${where}. Verified on disk (${proof}); ${closureClause(closure)}.`);
-  console.log('The ledger line is now a stub, so the lesson costs a fraction of the tokens it did.');
+  speaker.say('promote.done', { key });
+  speaker.say(target === GLOBAL_TARGET ? 'promote.landed.global' : 'promote.landed.contract', { count: WORKER_CONTRACTS.length, files: contractFilesOf(target).join(', ') });
+  speaker.say(...proofMessage(target));
+  speaker.say(closure.kind === 'mechanism' ? 'promote.closed.mechanism' : 'promote.closed.reason', closure.kind === 'mechanism' ? { path: closure.path } : { reason: closure.reason });
+  speaker.say('promote.stub');
 
   return 0;
 }
