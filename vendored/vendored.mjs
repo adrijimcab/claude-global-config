@@ -56,7 +56,7 @@ function sync() {
   });
 
   writeFileSync(PROVENANCE_FILE, `${JSON.stringify({ sourceRoot: SOURCE_ROOT, syncedAt: new Date().toISOString(), files }, null, 2)}\n`);
-  process.stdout.write(`vendored ${files.length} module(s) from ${SOURCE_ROOT}\n`);
+  process.stdout.write(`vendored ${files.length} module(s) from ${SOURCE_ROOT} @es ${files.length} módulo(s) vendorizado(s) desde ${SOURCE_ROOT}\n`);
 
   return 0;
 }
@@ -66,16 +66,21 @@ function check() {
   const { failures, notes } = provenanceFindings(record, { vendorRoot: TARGET_ROOT, sourceRoot: SOURCE_ROOT });
 
   for (const line of [...notes, ...failures]) process.stdout.write(`${line}\n`);
-  process.stdout.write(`provenance: ${record.files.length} vendored module(s), ${failures.length} failure(s)\n`);
+  process.stdout.write(`provenance: ${record.files.length} vendored module(s), ${failures.length} failure(s) @es procedencia: ${record.files.length} módulo(s) vendorizado(s), ${failures.length} fallo(s)\n`);
 
   return failures.length === 0 ? 0 : 1;
 }
 
-const command = process.argv[2];
+/** Runs one command and returns the exit code. @es Ejecuta una orden y devuelve el código de salida. */
+function main(command) {
+  if (command === 'sync') return sync();
+  if (command === 'check') return check();
 
-if (command === 'sync') process.exitCode = sync();
-else if (command === 'check') process.exitCode = check();
-else {
-  process.stdout.write('usage: vendored.mjs check | sync\n');
-  process.exitCode = 2;
+  process.stdout.write('usage: vendored.mjs check | sync @es uso: vendored.mjs check | sync\n');
+
+  return 2;
 }
+
+// Only as the main module: `VENDORED` is exported, so importing this file must not run a command.
+// @es Solo como módulo principal: `VENDORED` se exporta, así que importar este fichero no debe correr una orden.
+if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) process.exitCode = main(process.argv[2]);

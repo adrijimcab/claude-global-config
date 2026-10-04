@@ -37,11 +37,11 @@ export function provenanceFindings(record, { vendorRoot = VENDOR_ROOT, sourceRoo
     const vendored = path.join(vendorRoot, relative);
     const source = path.join(sourceRoot, relative);
 
-    if (!existsSync(vendored)) failures.push(`MISSING IN THE KIT  ${relative}`);
-    else if (sha256Of(vendored) !== sha256) failures.push(`EDITED IN THE KIT   ${relative}`);
+    if (!existsSync(vendored)) failures.push(`MISSING IN THE KIT  ${relative} @es FALTA EN EL KIT`);
+    else if (sha256Of(vendored) !== sha256) failures.push(`EDITED IN THE KIT   ${relative} @es EDITADO EN EL KIT`);
 
-    if (!existsSync(source)) notes.push(`source absent       ${relative}`);
-    else if (sha256Of(source) !== sha256) failures.push(`SOURCE MOVED ON     ${relative} — run vendor/sync.mjs, then selftest-all.mjs`);
+    if (!existsSync(source)) notes.push(`source absent       ${relative} @es fuente ausente`);
+    else if (sha256Of(source) !== sha256) failures.push(`SOURCE MOVED ON     ${relative} — run vendor/sync.mjs, then selftest-all.mjs @es la fuente avanzó: correr vendor/sync.mjs y luego selftest-all.mjs`);
   }
 
   return { failures, notes };
@@ -52,7 +52,7 @@ function main() {
   const { failures, notes } = provenanceFindings(record);
 
   for (const line of [...notes, ...failures]) process.stdout.write(`${line}\n`);
-  process.stdout.write(`provenance: ${record.files.length} vendored module(s), ${failures.length} failure(s)\n`);
+  process.stdout.write(`provenance: ${record.files.length} vendored module(s), ${failures.length} failure(s) @es procedencia: ${record.files.length} módulo(s) vendorizado(s), ${failures.length} fallo(s)\n`);
   process.exitCode = failures.length === 0 ? 0 : 1;
 }
 
