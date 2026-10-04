@@ -22,14 +22,16 @@
  * la misma forma que el almacén real de engram — nunca un resolutor simulado.
  */
 
-import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os, { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { decide } from './decide.mjs';
 import { evaluate, GUARDED_TOOLS } from './guard.mjs';
-import { defaultDatabasePath, resolveTopicKeyById } from './resolve-topic-key.mjs';
+import { defaultDatabasePath, resolveTopicKeyById, withSqliteWarningSilenced } from './resolve-topic-key.mjs';
 
 let passed = 0;
 const failures = [];
@@ -77,6 +79,76 @@ check('an id not in the store is "not-found"', resolveTopicKeyById(999999, { dat
 check('a non-finite id is "no-id"', resolveTopicKeyById(undefined, { databasePath: dbPath }).error, 'no-id');
 check('NaN id is "no-id"', resolveTopicKeyById(Number.NaN, { databasePath: dbPath }).error, 'no-id');
 check('a missing database file is "store-unreadable"', resolveTopicKeyById(972, { databasePath: path.join(scratch, 'does-not-exist.db') }).error, 'store-unreadable');
+// ── the node:sqlite dependency, MEASURED on Node 22.22.0: importing it prints an ExperimentalWarning on
+//    stderr, and a Node without it (< 22.5) would crash the whole importing guard at load. The resolver
+//    therefore loads it lazily, silences ONLY that one warning, and reports a missing module as an
+//    unreadable store instead of throwing past the caller.
+// @es La dependencia de node:sqlite, MEDIDA en Node 22.22.0: importarlo imprime un ExperimentalWarning y
+//    un Node sin él tumbaría la guardia entera al cargar. El resolutor lo carga perezosamente, silencia
+//    SOLO ese aviso y reporta un módulo ausente como almacén ilegible.
+check('a Node without node:sqlite reports "store-unreadable" instead of throwing', resolveTopicKeyById(972, { databasePath: dbPath, loadSqlite: () => undefined }).error, 'store-unreadable');
+check(
+  'a loader that throws is reported as "store-unreadable", never thrown past the caller',
+  resolveTopicKeyById(972, {
+    databasePath: dbPath,
+    loadSqlite: () => {
+      throw new Error('boom');
+    }
+  }).error,
+  'store-unreadable'
+);
+
+{
+  const probe = path.join(scratch, 'resolve-probe.mjs');
+  const resolverUrl = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'resolve-topic-key.mjs')).href;
+
+  writeFileSync(probe, `import { resolveTopicKeyById } from ${JSON.stringify(resolverUrl)};\nprocess.stdout.write(String(resolveTopicKeyById(972, { databasePath: ${JSON.stringify(dbPath)} }).topicKey));\n`, 'utf8');
+
+  const child = spawnSync(process.execPath, [probe], { encoding: 'utf8' });
+
+  check('a real resolution in a fresh process still resolves the master row', child.stdout, 'backlog/1.0.0-master');
+  check('...and prints NO ExperimentalWarning on stderr', child.stderr, '');
+  check('...and exits 0', child.status, 0);
+}
+
+{
+  // The silencer is scoped: it drops ONLY the SQLite experimental notice raised while the loader runs,
+  // lets any other warning through, and always restores `process.emitWarning`.
+  // @es El silenciador es acotado: descarta SOLO el aviso experimental de SQLite emitido mientras corre
+  // el cargador, deja pasar cualquier otro aviso y siempre restaura `process.emitWarning`.
+  const original = process.emitWarning;
+  const seen = [];
+  const listener = (warning) => seen.push(warning.message);
+
+  // Flush the notice this selftest's OWN fixture import (`node:sqlite` above) already queued, so it is not
+  // mistaken for one raised inside the silenced load. @es Vaciar el aviso que ya encoló el import de
+  // fixture de este selftest, para no confundirlo con uno emitido dentro de la carga silenciada.
+  await new Promise((resolve) => setImmediate(resolve));
+  process.on('warning', listener);
+  withSqliteWarningSilenced(() => {
+    process.emitWarning('SQLite is an experimental feature and might change at any time', 'ExperimentalWarning');
+    process.emitWarning('some other experimental feature', 'ExperimentalWarning');
+    process.emitWarning('SQLite is an experimental feature and might change at any time', 'DeprecationWarning');
+  });
+  check('emitWarning is restored after the load', process.emitWarning === original, true);
+
+  let thrown = false;
+
+  try {
+    withSqliteWarningSilenced(() => {
+      throw new Error('load failed');
+    });
+  } catch {
+    thrown = true;
+  }
+
+  check('a throwing loader still propagates, and emitWarning is restored', thrown && process.emitWarning === original, true);
+
+  await new Promise((resolve) => setImmediate(resolve));
+  process.off('warning', listener);
+  check('only the SQLite ExperimentalWarning was dropped: another experimental notice and a same-text DeprecationWarning pass', seen.join('|'), 'some other experimental feature|SQLite is an experimental feature and might change at any time');
+}
+
 check('defaultDatabasePath resolves to a non-empty path', typeof defaultDatabasePath() === 'string' && defaultDatabasePath().length > 0, true);
 
 {

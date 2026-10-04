@@ -46,6 +46,15 @@ const MUTANTS = [
   ['a resolved topic_key is always reported as null, regardless of the real value', 'backlog-owner-guard/resolve-topic-key.mjs', "return { topicKey: typeof topicKey === 'string' ? topicKey : null };", 'return { topicKey: null };'],
   ['ENGRAM_DATA_DIR is ignored, so a caller pointed at a different store is silently redirected to the default', 'backlog-owner-guard/resolve-topic-key.mjs', "const dataDir = typeof override === 'string' && override.trim().length > 0 ? override : path.join(os.homedir(), '.engram');", "const dataDir = path.join(os.homedir(), '.engram');"],
 
+  // --- resolve-topic-key.mjs: the lazy, silenced node:sqlite load (measured 2026-10-04) ---
+  ['a Node without node:sqlite stops being reported as store-unreadable: the absent module is no longer detected', 'backlog-owner-guard/resolve-topic-key.mjs', "if (sqlite === undefined) return { error: 'store-unreadable' };", 'if (false) return { error: \'store-unreadable\' };'],
+  ['a loader that throws stops being contained: it is read as a loaded module instead of an unreadable store', 'backlog-owner-guard/resolve-topic-key.mjs', 'return load();\n  } catch {\n    return undefined;', 'return load();\n  } catch {\n    return {};'],
+  ['the injected loader is ignored, so the real node:sqlite is always used', 'backlog-owner-guard/resolve-topic-key.mjs', 'loadedSqlite(options.loadSqlite ?? loadSqlite)', 'loadedSqlite(loadSqlite)'],
+  ['the SQLite notice is no longer dropped, so every hook process prints it on stderr', 'backlog-owner-guard/resolve-topic-key.mjs', 'if (isSqliteNotice) return;', 'if (false) return;'],
+  ['the silencer drops a same-text notice of ANY type, not only the ExperimentalWarning', 'backlog-owner-guard/resolve-topic-key.mjs', "const isSqliteNotice = type === 'ExperimentalWarning' && String(warning)", 'const isSqliteNotice = String(warning)'],
+  ['the silencer drops EVERY ExperimentalWarning, not only the SQLite one', 'backlog-owner-guard/resolve-topic-key.mjs', "type === 'ExperimentalWarning' && String(warning).includes(SQLITE_EXPERIMENTAL_NOTICE);", "type === 'ExperimentalWarning';"],
+  ['process.emitWarning is left patched after the load', 'backlog-owner-guard/resolve-topic-key.mjs', '  } finally {\n    process.emitWarning = original;\n  }', '  } finally {\n    // restore skipped\n  }'],
+
   // --- guard.mjs: the shim itself ---
   ['the allow/refuse branch is inverted: an allowed call is journalled and denied, a refused one is let through', 'backlog-owner-guard/guard.mjs', 'if (refusal === undefined) return undefined;', 'if (refusal !== undefined) return undefined;'],
   ['the hook decision is flipped from deny to allow', 'backlog-owner-guard/guard.mjs', "permissionDecision: 'deny',", "permissionDecision: 'allow',"]
