@@ -53,7 +53,7 @@ const MUTANTS = [
   ['decide.mjs', "if (!drift.results.some((result) => result.status !== 'held')) return deny(", 'if (false) return deny('],
   ['decide.mjs', 'drift.results.filter((result) => result.syncSafe !== true)', 'drift.results'],
   ['decide.mjs', 'return deny(brokenReason(blocking));', 'return deny(brokenReason(drift.results));'],
-  ['decide.mjs', '...(reapplicable ? [`  - Restore the reapplicable ones: ${APPLY_COMMAND}`] : []), ', ''],
+  ['decide.mjs', '    ...(reapplicable ? [`  - Restore the reapplicable ones: ${APPLY_COMMAND} @es Restaurar las reaplicables: ${APPLY_COMMAND}`] : []),\n', ''],
   ['decide.mjs', "(toolName === 'PowerShell' ? DIALECTS.POWERSHELL : DIALECTS.BASH)", '(DIALECTS.BASH)'],
   ['overlay-check.mjs', 'return { failure: `${checkScript} exited ${run.status} without its JSON report', 'return { exitCode: 0, results: [], f: `${checkScript} exited ${run.status} without its JSON report'],
   ['guard.mjs', 'raw.charCodeAt(0) === BYTE_ORDER_MARK ? raw.slice(1) : raw', 'raw'],

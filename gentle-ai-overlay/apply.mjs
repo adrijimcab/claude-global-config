@@ -20,9 +20,9 @@ const dryRun = argv.includes('--dry-run');
 const context = contextFromArgv(argv);
 const outcomes = dryRun ? planAll(CUSTOMIZATIONS, context) : applyAll(CUSTOMIZATIONS, context);
 outcomes.forEach((outcome) => console.log(`${outcome.outcome.toUpperCase().padEnd(9)} ${outcome.id} — ${outcome.detail}`));
-if (outcomes.length === 0) console.log('nothing reapplicable was broken');
+if (outcomes.length === 0) console.log('nothing reapplicable was broken @es nada reaplicable estaba roto');
 
-console.log(dryRun ? '--- current verdict (dry run, nothing written) @es veredicto actual (simulación, nada escrito) ---' : '--- verdict after apply ---');
+console.log(dryRun ? '--- current verdict (dry run, nothing written) @es veredicto actual (simulación, nada escrito) ---' : '--- verdict after apply @es veredicto tras aplicar ---');
 const results = evaluateAll(CUSTOMIZATIONS, context);
 results.forEach((result) => console.log(formatResult(result)));
 process.exitCode = exitCodeFor(results);

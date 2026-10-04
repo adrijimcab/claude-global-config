@@ -294,6 +294,39 @@ test('CLI: sibling modules missing -> exit 0 and says it malfunctioned', () => {
   expect(result.stdout.includes('malfunctioned'), true, 'stdout');
 });
 
+// ------------------------------------------------ mensajes bilingües
+// Every refusal line and failure message is English first, then its Spanish half marked `@es`.
+// @es Cada línea de rechazo y mensaje de falla va en inglés primero y luego su mitad en español.
+
+const withEs = (line) => line !== undefined && /@es \S/.test(line);
+const textLines = (text) => text.split('\n').filter((line) => line.trim() !== '');
+const REFUSALS = {
+  broken: () => decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: () => ({ exitCode: 1, results: [...BROKEN_RESULTS, ...UNVERIFIABLE_RESULTS] }) }).reason,
+  unverifiable: () => decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: DRIFT.unverifiable }).reason,
+  failure: () => decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: DRIFT.failing }).reason,
+};
+
+for (const [kind, reasonOf] of Object.entries(REFUSALS)) {
+  test(`bilingual: the ${kind} refusal carries its Spanish half on every line that is prose, not on the result lists`, () => {
+    const prose = textLines(reasonOf()).filter((line) => !line.startsWith('  - sdd-') && !line.startsWith('  - claude-md-') && !line.startsWith('  - Move the owner'));
+    expect(prose.length > 0, true, 'has prose');
+    prose.forEach((line) => expect(withEs(line), true, `line "${line.slice(0, 60)}"`));
+  });
+}
+
+test('bilingual: the guard malfunction message and every overlay-check failure carry both halves', () => {
+  expect(withEs(JSON.parse(runGuard('{not json').stdout).systemMessage), true, 'malfunction message');
+  const hanging = path.join(scratch(), 'check.mjs');
+  writeFileSync(hanging, 'setInterval(() => {}, 1000);\n');
+  expect(withEs(runOverlayCheck(hanging, { timeoutMs: 500 }).failure), true, 'timeout failure');
+  const noArray = path.join(scratch(), 'check.mjs');
+  writeFileSync(noArray, 'process.stdout.write("{}");\n');
+  expect(withEs(runOverlayCheck(noArray).failure), true, 'no results array');
+  const notJson = path.join(scratch(), 'check.mjs');
+  writeFileSync(notJson, 'process.stdout.write("nope");\n');
+  expect(withEs(runOverlayCheck(notJson).failure), true, 'not JSON');
+});
+
 // ------------------------------------------------ ejecución
 
 let failed = 0;

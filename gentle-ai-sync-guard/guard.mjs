@@ -54,7 +54,7 @@ function main() {
       const output = await evaluate(raw);
       if (output !== undefined) write(output);
     } catch (error) {
-      write({ systemMessage: `[gentle-ai-sync-guard] malfunctioned (${error?.message ?? error}); the command was allowed UNCHECKED.` });
+      write({ systemMessage: `[gentle-ai-sync-guard] malfunctioned (${error?.message ?? error}); the command was allowed UNCHECKED. @es falló; el comando se dejó pasar SIN COMPROBAR.` });
     }
     process.exitCode = 0;
   });

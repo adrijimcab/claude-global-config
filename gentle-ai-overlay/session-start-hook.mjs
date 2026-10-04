@@ -43,6 +43,6 @@ try {
   const message = joined([replaced.systemMessage, advisory]);
   if (message !== undefined) emit(message, joined([replaced.additionalContext, advisory]));
 } catch (error) {
-  emit(`[gentle-ai overlay] the drift check itself failed (${error.message}); customizations are UNVERIFIED. Run: ${CHECK_COMMAND}`);
+  emit(`[gentle-ai overlay] the drift check itself failed (${error.message}); customizations are UNVERIFIED. Run: ${CHECK_COMMAND} @es la comprobación de deriva falló; las personalizaciones están SIN VERIFICAR. Ejecutar: ${CHECK_COMMAND}`);
 }
 process.exitCode = 0;

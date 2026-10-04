@@ -851,6 +851,36 @@ test('hook: its own malfunction (its sibling modules are missing) -> still exit 
   expect(result.stdout.includes('the drift check itself failed'), true, `stdout (${result.stdout})`);
 });
 
+// ---------------------------------------------------------------- bilingual runtime messages
+// Every runtime message is English first, then its Spanish half marked `@es`. @es Todo mensaje de
+// ejecución va en inglés primero y luego su mitad en español marcada `@es`.
+
+const withEs = (line) => line !== undefined && /@es \S/.test(line);
+const lineWith = (text, needle) => text.split('\n').find((line) => line.includes(needle));
+
+test('bilingual: apply.mjs says in both languages that nothing was broken, and labels its verdict in both', () => {
+  const context = completeHome();
+  const { stdout } = run('apply.mjs', flags(context));
+  expect(withEs(lineWith(stdout, 'nothing reapplicable was broken')), true, `no-op line (${stdout})`);
+  expect(withEs(lineWith(stdout, 'verdict after apply')), true, 'verdict heading');
+});
+
+test('bilingual: the drift advisory carries both halves on its header, restore and re-check lines, and for a withheld tool', () => {
+  const context = completeHome();
+  put(context.home, '.claude/agents/sdd-design.md', agentFile({ tools: `Read, ${MCP}` }));
+  put(context.home, '.claude/agents/sdd-research.md', agentFile({ tools: 'WebFetch, Bash' }));
+  const message = JSON.parse(run('session-start-hook.mjs', flags(context)).stdout).hookSpecificOutput.additionalContext;
+  ['local customization(s)', 'Restore the reapplicable ones with:', 'A withheld tool was granted', 'Re-check with:'].forEach((needle) => expect(withEs(lineWith(message, needle)), true, `line "${needle}"`));
+});
+
+test('bilingual: the hook malfunction message carries both halves', () => {
+  const { home } = newRoot();
+  const lonelyHook = path.join(home, 'session-start-hook.mjs');
+  copyFileSync(path.join(HERE, 'session-start-hook.mjs'), lonelyHook);
+  const message = JSON.parse(spawnSync(process.execPath, [lonelyHook], { encoding: 'utf8' }).stdout).systemMessage;
+  expect(withEs(message), true, `message (${message})`);
+});
+
 // ---------------------------------------------------------------- run
 
 let failed = 0;

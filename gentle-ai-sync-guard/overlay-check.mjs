@@ -16,12 +16,12 @@ const DEFAULT_TIMEOUT_MS = 25_000;
 export function runOverlayCheck(checkScript = DEFAULT_CHECK_SCRIPT, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const run = spawnSync(process.execPath, [checkScript, '--json'], { encoding: 'utf8', timeout: timeoutMs, windowsHide: true });
   // Sin código de salida no hay veredicto: el proceso no arrancó o se lo mató (p. ej. por tiempo).
-  if (run.status === null) return { failure: `${checkScript} did not complete (${run.error?.message ?? `killed by ${run.signal}`})` };
+  if (run.status === null) return { failure: `${checkScript} did not complete (${run.error?.message ?? `killed by ${run.signal}`}) @es no terminó` };
   try {
     const report = JSON.parse(run.stdout);
-    if (!Array.isArray(report.results)) return { failure: `${checkScript} printed no results array` };
+    if (!Array.isArray(report.results)) return { failure: `${checkScript} printed no results array @es no imprimió un arreglo de resultados` };
     return { exitCode: run.status, results: report.results };
   } catch {
-    return { failure: `${checkScript} exited ${run.status} without its JSON report: ${`${run.stdout}${run.stderr}`.trim().slice(0, 200)}` };
+    return { failure: `${checkScript} exited ${run.status} without its JSON report: ${`${run.stdout}${run.stderr}`.trim().slice(0, 200)} @es salió sin su informe JSON` };
   }
 }

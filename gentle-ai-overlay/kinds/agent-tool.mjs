@@ -39,7 +39,7 @@ export const agentToolRequired = {
 };
 
 export const agentToolForbidden = {
-  remedy: 'A withheld tool was granted: remove it from that tools line by hand (apply never removes a grant).',
+  remedy: 'A withheld tool was granted: remove it from that tools line by hand (apply never removes a grant). @es Se concedió una herramienta que se retiene a propósito: quitarla a mano de esa línea tools (apply nunca quita una concesión).',
 
   evaluate(customization, context) {
     const { error, parsed } = readTools(customization, context);

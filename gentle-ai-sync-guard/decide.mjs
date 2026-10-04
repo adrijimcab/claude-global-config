@@ -28,6 +28,7 @@ const OVERLAY = '$HOME/.claude/gentle-ai-overlay';
 const APPLY_COMMAND = `node "${OVERLAY}/apply.mjs"`;
 const CHECK_COMMAND = `node "${OVERLAY}/check.mjs"`;
 const HEADER = 'GENTLE-AI-SYNC-GUARD REFUSED `gentle-ai sync`';
+const HEADER_ES = 'GENTLE-AI-SYNC-GUARD RECHAZÓ `gentle-ai sync`';
 
 const ALLOW = Object.freeze({ decision: 'allow' });
 
@@ -39,40 +40,45 @@ function fixes(results) {
   const broken = results.filter((result) => result.status === 'broken');
   const reapplicable = broken.some((result) => result.reapplicable);
   const remedies = [...new Set(broken.filter((result) => !result.reapplicable).map((result) => result.remedy).filter(Boolean))];
-  return [...(reapplicable ? [`  - Restore the reapplicable ones: ${APPLY_COMMAND}`] : []), ...remedies.map((remedy) => `  - ${remedy}`)];
+  return [
+    ...(reapplicable ? [`  - Restore the reapplicable ones: ${APPLY_COMMAND} @es Restaurar las reaplicables: ${APPLY_COMMAND}`] : []),
+    ...remedies.map((remedy) => `  - ${remedy}`),
+  ];
 }
+
+// Every refusal line is English first, then its Spanish half marked `@es` on the same line.
+// @es Cada línea del rechazo va en inglés primero y luego su mitad en español marcada `@es`, en la misma línea.
 
 function brokenReason(results) {
   return [
-    `${HEADER}: local customizations of gentle-ai-managed files are BROKEN, and sync would erase or overwrite them.`,
+    `${HEADER}: local customizations of gentle-ai-managed files are BROKEN, and sync would erase or overwrite them. @es ${HEADER_ES}: las personalizaciones locales de ficheros gestionados por gentle-ai están ROTAS, y sync las borraría o sobrescribiría.`,
     '',
-    'Broken:',
+    'Broken: @es Rotas:',
     ...listed(results, 'broken'),
-    ...(results.some((result) => result.status === 'unverifiable') ? ['', 'Also could not be verified:', ...listed(results, 'unverifiable')] : []),
+    ...(results.some((result) => result.status === 'unverifiable') ? ['', 'Also could not be verified: @es Tampoco se pudieron verificar:', ...listed(results, 'unverifiable')] : []),
     '',
-    'Fix first:',
+    'Fix first: @es Arreglar primero:',
     ...fixes(results),
     '',
-    `Then re-check (${CHECK_COMMAND}) and sync again. \`gentle-ai sync --dry-run\` is always allowed.`,
+    `Then re-check (${CHECK_COMMAND}) and sync again. \`gentle-ai sync --dry-run\` is always allowed. @es Después volver a comprobar (${CHECK_COMMAND}) y sincronizar de nuevo. \`gentle-ai sync --dry-run\` siempre se permite.`,
   ].join('\n');
 }
 
 function unverifiableReason(results) {
   return [
-    `${HEADER}: the overlay could NOT VERIFY some customizations, and an unverified state is refused like a broken one —`,
-    'sync would overwrite exactly what nobody was able to check.',
+    `${HEADER}: the overlay could NOT VERIFY some customizations, and an unverified state is refused like a broken one — sync would overwrite exactly what nobody was able to check. @es ${HEADER_ES}: el overlay NO PUDO VERIFICAR algunas personalizaciones, y un estado sin verificar se rechaza igual que uno roto: sync sobrescribiría justo lo que nadie pudo comprobar.`,
     '',
-    'Could not be verified:',
+    'Could not be verified: @es No se pudieron verificar:',
     ...listed(results, 'unverifiable'),
     '',
-    `Make the check able to answer (for instance, reinstall gentle-ai with \`go install\` so its source is in the Go module cache), re-run ${CHECK_COMMAND}, then sync. \`gentle-ai sync --dry-run\` is always allowed.`,
+    `Make the check able to answer (for instance, reinstall gentle-ai with \`go install\` so its source is in the Go module cache), re-run ${CHECK_COMMAND}, then sync. \`gentle-ai sync --dry-run\` is always allowed. @es Lograr que el check pueda responder (por ejemplo, reinstalar gentle-ai con \`go install\` para que su código esté en la caché de módulos de Go), volver a ejecutar ${CHECK_COMMAND} y luego sincronizar. \`gentle-ai sync --dry-run\` siempre se permite.`,
   ].join('\n');
 }
 
 const failureReason = (failure) =>
   [
-    `${HEADER}: the overlay check could not run (${failure}), so nothing proves the customizations are intact.`,
-    `Run ${CHECK_COMMAND} by hand and fix what stops it. \`gentle-ai sync --dry-run\` is always allowed.`,
+    `${HEADER}: the overlay check could not run (${failure}), so nothing proves the customizations are intact. @es ${HEADER_ES}: el check del overlay no pudo ejecutarse (${failure}), así que nada prueba que las personalizaciones estén intactas.`,
+    `Run ${CHECK_COMMAND} by hand and fix what stops it. \`gentle-ai sync --dry-run\` is always allowed. @es Ejecutar ${CHECK_COMMAND} a mano y arreglar lo que lo detiene. \`gentle-ai sync --dry-run\` siempre se permite.`,
   ].join('\n');
 
 const deny = (reason) => ({ decision: 'deny', reason });

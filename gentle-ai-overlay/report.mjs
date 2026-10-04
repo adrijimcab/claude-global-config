@@ -28,10 +28,10 @@ export function driftAdvisory(results) {
   const restorable = drifted.some((result) => result.status === 'broken' && result.reapplicable);
   const remedies = [...new Set(drifted.filter((result) => result.status === 'broken' && !result.reapplicable).map((result) => result.remedy))];
   return [
-    `[gentle-ai overlay] ${drifted.length} local customization(s) of what gentle-ai manages are not intact:`,
+    `[gentle-ai overlay] ${drifted.length} local customization(s) of what gentle-ai manages are not intact: @es ${drifted.length} personalización(es) local(es) de lo que gestiona gentle-ai no está(n) intacta(s):`,
     ...drifted.map((result) => `  ${formatResult(result)}`),
-    ...(restorable ? [`Restore the reapplicable ones with: ${APPLY_COMMAND}`] : []),
+    ...(restorable ? [`Restore the reapplicable ones with: ${APPLY_COMMAND} @es Restaurar las reaplicables con: ${APPLY_COMMAND}`] : []),
     ...remedies,
-    `Re-check with: ${CHECK_COMMAND}`,
+    `Re-check with: ${CHECK_COMMAND} @es Volver a comprobar con: ${CHECK_COMMAND}`,
   ].join('\n');
 }
