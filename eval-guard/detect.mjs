@@ -74,6 +74,99 @@ const TAB = 9;
 const LINE_FEED = 10;
 const CARRIAGE_RETURN = 13;
 
+const HEREDOC_OPERATOR = '<<';
+const HERE_STRING_LENGTH = 3;
+
+/** Whether `<<<` starts at `index`. @es Si en `index` empieza un `<<<`. */
+function startsHereString(command, index) {
+  return command.startsWith('<<<', index);
+}
+
+/**
+ * Whether a heredoc operator starts at `index`. The caller has already ruled out `<<<`, which is why a
+ * bare `<<` test is enough here. @es Si en `index` empieza un operador heredoc. El llamador ya descartó
+ * `<<<`, por eso basta aquí probar `<<`.
+ */
+function startsHeredoc(command, index) {
+  return command.startsWith(HEREDOC_OPERATOR, index);
+}
+
+/**
+ * Reads what follows `<<`: the optional `-` (tabs stripped from body lines), blanks, then the delimiter
+ * word with its quotes and backslashes removed (they only decide expansion, never where the body ends).
+ * Returns the delimiter, whether tabs are stripped, and where the command line resumes.
+ * @es Lee lo que sigue a `<<`: el `-` opcional (quita tabuladores de las líneas del cuerpo), blancos y la
+ * palabra delimitadora sin comillas ni backslashes (solo deciden la expansión, nunca dónde acaba el
+ * cuerpo). Devuelve el delimitador, si se quitan tabuladores y dónde sigue la línea de comando.
+ */
+function readHeredocDeclaration(command, start) {
+  let index = start;
+  const stripTabs = command[index] === '-';
+
+  if (stripTabs) index += 1;
+
+  while (index < command.length && BLANK_CHARACTERS.has(command[index])) index += 1;
+
+  let delimiter = '';
+
+  while (index < command.length && !BLANK_CHARACTERS.has(command[index]) && !OPERATOR_CHARACTERS.has(command[index])) {
+    const character = command[index];
+
+    if (character === "'" || character === '"') {
+      const close = command.indexOf(character, index + 1);
+      const end = close === -1 ? command.length : close;
+
+      delimiter += command.slice(index + 1, end);
+      index = close === -1 ? command.length : close + 1;
+      continue;
+    }
+
+    if (character === BACKSLASH && index + 1 < command.length) {
+      delimiter += command[index + 1];
+      index += 2;
+      continue;
+    }
+
+    delimiter += character;
+    index += 1;
+  }
+
+  return { delimiter, stripTabs, next: index };
+}
+
+/**
+ * Where tokenizing resumes after one heredoc body that starts at `start`: just past the terminator line
+ * (a line equal to the delimiter, tabs stripped for `<<-`, a trailing CR ignored), or the end of the
+ * command when it never terminates, so an unterminated body hides nothing that came BEFORE it.
+ * @es Dónde se reanuda el tokenizado tras un cuerpo de heredoc que empieza en `start`: justo después de
+ * la línea terminadora, o el final del comando si no termina, de modo que un cuerpo sin cerrar no oculta
+ * nada de lo que vino ANTES.
+ */
+function skipHeredocBody(command, start, heredoc) {
+  let lineStart = start;
+
+  while (lineStart < command.length) {
+    const lineEnd = command.indexOf('\n', lineStart);
+    const end = lineEnd === -1 ? command.length : lineEnd;
+    let line = command.slice(lineStart, end);
+
+    if (line.endsWith('\r')) line = line.slice(0, -1);
+
+    if (heredoc.stripTabs) {
+      let first = 0;
+
+      while (first < line.length && line[first] === '\t') first += 1;
+      line = line.slice(first);
+    }
+
+    if (line === heredoc.delimiter) return lineEnd === -1 ? command.length : lineEnd + 1;
+
+    lineStart = lineEnd === -1 ? command.length : lineEnd + 1;
+  }
+
+  return command.length;
+}
+
 /**
  * Splits a command line into words and operators by walking characters, honouring `'…'` and `"…"`
  * grouping. A word's `raw` is its text WITHOUT the grouping quotes but WITH every backslash exactly as
@@ -95,6 +188,7 @@ export function tokenize(command) {
   if (typeof command !== 'string') return [];
 
   const items = [];
+  const pendingHeredocs = [];
   let current;
   let index = 0;
 
@@ -118,10 +212,41 @@ export function tokenize(command) {
       continue;
     }
 
+    // `<<<` is a here-string, NOT a heredoc: the word after it is an ordinary argument of the command, so
+    // the three characters are consumed as a separator and tokenizing goes on.
+    // @es `<<<` es un here-string, NO un heredoc: la palabra siguiente es un argumento ordinario del
+    // comando, así que los tres caracteres se consumen como separador y se sigue tokenizando.
+    if (startsHereString(command, index)) {
+      flush();
+      index += HERE_STRING_LENGTH;
+      continue;
+    }
+
+    // `<<WORD`, `<<-WORD`, `<<'WORD'`, `<<"WORD"`: the lines up to the terminator are DATA. The command on
+    // this line keeps being tokenized; the body is skipped once the line ends.
+    // @es `<<WORD`, `<<-WORD`, `<<'WORD'`, `<<"WORD"`: las líneas hasta el terminador son DATOS. El comando
+    // de esta línea sigue tokenizándose; el cuerpo se salta al acabar la línea.
+    if (startsHeredoc(command, index)) {
+      flush();
+      items.push({ kind: 'operator', raw: HEREDOC_OPERATOR, start: index });
+
+      const declaration = readHeredocDeclaration(command, index + HEREDOC_OPERATOR.length);
+
+      pendingHeredocs.push(declaration);
+      index = declaration.next;
+      continue;
+    }
+
     if (OPERATOR_CHARACTERS.has(character)) {
       flush();
       items.push({ kind: 'operator', raw: character, start: index });
       index += 1;
+
+      if (character === '\n' && pendingHeredocs.length > 0) {
+        for (const heredoc of pendingHeredocs) index = skipHeredocBody(command, index, heredoc);
+        pendingHeredocs.length = 0;
+      }
+
       continue;
     }
 

@@ -178,6 +178,35 @@ const cases = [
   ['allow', payload(`rg "sed \\\\b" src`), 'the phrase inside another tool argument'],
   ['allow', payload(`git commit -m "use sed \\\\ carefully"`), 'the phrase inside a commit message'],
 
+  // --- HEREDOC bodies are DATA (guard-that-cannot-go-red, "the guard that forbids writing about itself"):
+  // the measured false positive was a body line starting with `sd -F "a\\\\b"`. The scan must skip the
+  // body AND resume after the terminator, so a dangerous command after it, or before the `<<`, is refused.
+  // @es Los cuerpos de heredoc son DATOS: el falso positivo medido fue una línea de cuerpo que empezaba
+  // con `sd -F "a\\\\b"`. Se salta el cuerpo y se REANUDA tras el terminador.
+  // ALLOWED / PERMITIDAS
+  ['allow', payload(`cat <<'EOF' > f.txt\n${String.raw`sd -F "a\\\\b" f`}\nEOF`), 'THE INCIDENT: a sd line in a quoted-delimiter heredoc body fed to cat'],
+  ['allow', payload(`node - <<EOF\n${String.raw`sd -F "a\\\\b" f`}\nEOF`), 'the same body fed to node through an unquoted delimiter'],
+  ['allow', payload(`node - <<EOF\n${String.raw`node -e "x\\\\y"`}\nEOF`), 'a node -e line in a heredoc body is data too'],
+  ['allow', payload(`cat <<"EOF"\n${String.raw`sed "s/a\\b/c/" f`}\nEOF`), 'a double-quoted delimiter'],
+  ['allow', payload(`cat <<-EOF\n\t${String.raw`sd -F "a\\\\b" f`}\n\tEOF`), '<<- with the terminator indented by tabs'],
+  ['allow', payload(`cat <<A <<B\n${String.raw`sd -F "a\\\\b" f`}\nA\n${String.raw`sd -F "a\\\\b" g`}\nB`), 'two heredocs on one line: both bodies are data'],
+  ['allow', payload(`cat <<A <<B\nx\nA\n${String.raw`sd -F "a\\\\b" f`}\nB`), 'the first terminator ends only the first body: the second body is still data'],
+  ['allow', payload(`cat <<EOF\n${String.raw`sd -F "a\\\\b" f`}`), 'an unterminated heredoc: the rest of the command is data'],
+  ['allow', payload(`cat <<EOF\nEOFX\n${String.raw`sd -F "a\\\\b" f`}\nEOF`), 'a line that only STARTS with the delimiter does not end the body'],
+  ['allow', payload(`cat <<EOF\n\tEOF\n${String.raw`sd -F "a\\\\b" f`}`), 'plain << does not strip tabs, so an indented EOF is still body'],
+  ['allow', payload(`cat <<< "hello"`), 'a here-string with a harmless payload'],
+  // REFUSED / RECHAZADAS
+  ['deny', payload(`cat <<'EOF'\nbody\nEOF\n${String.raw`sd -F "a\\\\b" c f`}`), 'a dangerous sd on the line AFTER the terminator: the scan resumed', 'backslash the shell eats'],
+  ['deny', payload(`cat <<EOF\nbody\nEOF\n${String.raw`node -e "console.log('\\b')"`}`), 'a dangerous node -e after an unquoted-delimiter heredoc', 'backslash the shell eats'],
+  ['deny', payload(`cat <<"EOF"\nbody\nEOF\n${String.raw`sed "s/a\\b/c/" f`}`), 'a dangerous sed after a double-quoted-delimiter heredoc', 'backslash the shell eats'],
+  ['deny', payload(`cat <<-EOF\n\tbody\n\tEOF\n${String.raw`sd -F "a\\\\b" c f`}`), 'a dangerous sd after a <<- heredoc whose terminator is tab-indented', 'backslash the shell eats'],
+  ['deny', payload(`cat <<A <<B\nx\nA\ny\nB\n${String.raw`sd -F "a\\\\b" c f`}`), 'a dangerous sd after two heredocs on one line', 'backslash the shell eats'],
+  ['deny', payload(`${String.raw`sd -F "a\\\\b" c f`} <<EOF\nbody\nEOF`), 'a dangerous sd BEFORE the << on the same line', 'backslash the shell eats'],
+  ['deny', payload(`${String.raw`node -e "console.log('\\b')"`} <<EOF\nbody\nEOF`), 'a dangerous node -e BEFORE the << on the same line', 'backslash the shell eats'],
+  ['deny', payload(`${String.raw`sd "a\\b" c f`} && cat <<EOF\nbody`), 'an unterminated heredoc keeps the earlier command inspected', 'backslash the shell eats'],
+  ['deny', payload(String.raw`sd foo bar <<< "a\\\\b"`), 'a here-string payload is an ordinary argument of sd, so it is judged', 'backslash the shell eats'],
+  ['deny', payload(String.raw`cat <<< "x" && sd -F "a\\\\b" c f`), 'after a here-string the next command is still inspected', 'backslash the shell eats'],
+
   // --- FAIL OPEN: every corruption of the hook's own input / FALLAR ABIERTO
   ['allow', 'this is not json at all', 'unparseable stdin'],
   ['allow', '', 'empty stdin'],

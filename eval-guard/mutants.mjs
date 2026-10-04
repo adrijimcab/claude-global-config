@@ -48,6 +48,14 @@ const MUTANTS = [
   ['the eaten-escape characters are no longer reported', DETECT, 'return findings.length > 0 ? findings : undefined;', 'return undefined;'],
   ['the script path no longer ends the interpreter options', DETECT, " || token.raw[0] !== '-') break;", ') break;'],
   ['the text-edit kind is not rendered by the guard', GUARD, "  if (refusal.kind === 'text-edit') return textEditReason(refusal);\n", ''],
+  // --- heredocs: the body is data, the scan resumes after the terminator ---
+  ['the heredoc body is not skipped, so its lines are inspected as commands', DETECT, '        for (const heredoc of pendingHeredocs) index = skipHeredocBody(command, index, heredoc);\n', ''],
+  ['the scan does not resume after the terminator, so a later dangerous command hides', DETECT, "if (line === heredoc.delimiter) return lineEnd === -1 ? command.length : lineEnd + 1;", 'if (line === heredoc.delimiter) return command.length;'],
+  ['an unterminated body is not treated as data', DETECT, '  return command.length;\n}\n\n/**\n * Splits', '  return start;\n}\n\n/**\n * Splits'],
+  ['<<- no longer strips the tabs of the terminator line', DETECT, '    if (heredoc.stripTabs) {', '    if (false) {'],
+  ['a quoted delimiter is not recognised, so the terminator never matches', DETECT, "    if (character === \"'\" || character === '\"') {\n      const close = command.indexOf", "    if (false) {\n      const close = command.indexOf"],
+  ['a line that merely starts with the delimiter ends the body', DETECT, 'if (line === heredoc.delimiter) return', 'if (line.startsWith(heredoc.delimiter)) return'],
+  ['a here-string is treated as a heredoc instead of an argument separator', DETECT, 'if (startsHereString(command, index)) {', 'if (false) {'],
 ];
 
 const survivors = runMutants({
