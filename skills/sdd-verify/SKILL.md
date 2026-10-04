@@ -34,7 +34,7 @@ The orchestrator should provide structured status from `skills/_shared/sdd-statu
 ## Hard Rules
 
 - Read all available status `contextFiles` before judging implementation. Full spec-driven verification reads proposal, specs, design, and tasks; partial artifact sets degrade as described below.
-- Run full verification only after all tasks are complete. If any task is pending, return `blocked` without running the full suite.
+- Run verification only after all tasks are complete; if any task is pending, return `blocked` without running any test. Run only the tests and gates that prove the change's requirements and read its touched paths, never the repository's full suite or full gate chain: the orchestrator runs that once, at integration, on the tree being integrated.
 - Execute relevant tests; static analysis alone is never verification.
 - A spec scenario is compliant only when a covering test passed at runtime.
 - Compare specs first, design second, task completion third.
