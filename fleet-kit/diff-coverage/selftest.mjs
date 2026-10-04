@@ -38,10 +38,10 @@ check('a complete successful run is trusted', trust(SUCCESS), { ok: true });
 check('no summary is not trusted', trust('Error: cannot find module').ok, false);
 check('zero specs is not trusted', trust('Executed 0 of 0 SUCCESS').reason, 'Karma found zero specs');
 check('a skipped or focused spec makes the run incomplete', trust('Executed 10 of 12 (skipped 2) SUCCESS').ok, false);
-check('a failed spec is not trusted', trust('Executed 12 of 12 (1 FAILED) (1 sec)').reason.startsWith('the run ended FAILED'), true);
-check('an error is not trusted', trust('Executed 12 of 12 ERROR (1 sec)').reason.startsWith('the run ended ERROR'), true);
-check('a disconnect is not trusted', trust('Executed 12 of 12 DISCONNECTED (1 sec)').reason.startsWith('the run ended DISCONNECTED'), true);
-check('a summary without SUCCESS is not trusted', trust('Executed 12 of 12 (1 sec)').reason.startsWith('the run did not report SUCCESS'), true);
+check('a failed spec is not trusted', trust('Executed 12 of 12 (1 FAILED) (1 sec)')?.reason?.startsWith('the run ended FAILED'), true);
+check('an error is not trusted', trust('Executed 12 of 12 ERROR (1 sec)')?.reason?.startsWith('the run ended ERROR'), true);
+check('a disconnect is not trusted', trust('Executed 12 of 12 DISCONNECTED (1 sec)')?.reason?.startsWith('the run ended DISCONNECTED'), true);
+check('a summary without SUCCESS is not trusted', trust('Executed 12 of 12 (1 sec)')?.reason?.startsWith('the run did not report SUCCESS'), true);
 check('a non-zero exit after SUCCESS is not trusted', trust(SUCCESS, 1).ok, false);
 check('a run without lcov is not trusted', trust(SUCCESS, 0, false).reason, 'no lcov.info was produced');
 
@@ -63,15 +63,15 @@ try {
   check('the built-in base is mirrored, not required from a file', karmaConfigSource({ workspaceDir, baseConfig: 'angular-builtin', coverageDir: 'c' }).includes("frameworks: ['jasmine', '@angular-devkit/build-angular']"), true);
 
   // --- preconditions ------------------------------------------------------------------------------
-  check('no devkit installed: the mirror cannot be used', builtinMirrorProblem(workspaceDir).startsWith('@angular-devkit/build-angular is not installed'), true);
+  check('no devkit installed: the mirror cannot be used', builtinMirrorProblem(workspaceDir)?.startsWith('@angular-devkit/build-angular is not installed'), true);
   writeFile(workspaceDir, 'node_modules/@angular-devkit/build-angular/package.json', JSON.stringify({ version: '20.0.1' }));
-  check('another Angular major: the mirror refuses', builtinMirrorProblem(workspaceDir).includes('re-derive the mirror'), true);
+  check('another Angular major: the mirror refuses', builtinMirrorProblem(workspaceDir)?.includes('re-derive the mirror'), true);
   writeFile(workspaceDir, 'node_modules/@angular-devkit/build-angular/package.json', JSON.stringify({ version: '19.2.22' }));
   check('the mirrored major: usable', builtinMirrorProblem(workspaceDir), undefined);
-  check('no ng CLI: toolchain missing', karmaRunProblem(workspaceDir, project.karma).startsWith('toolchain missing'), true);
+  check('no ng CLI: toolchain missing', karmaRunProblem(workspaceDir, project.karma)?.startsWith('toolchain missing'), true);
   writeFile(workspaceDir, 'node_modules/@angular/cli/bin/ng.js', '');
   check('ng CLI and the mirrored major present: runnable', karmaRunProblem(workspaceDir, project.karma), undefined);
-  check('a missing base config file is named', karmaRunProblem(workspaceDir, { ...project.karma, baseConfig: 'nope.cjs' }).includes('nope.cjs'), true);
+  check('a missing base config file is named', karmaRunProblem(workspaceDir, { ...project.karma, baseConfig: 'nope.cjs' })?.includes('nope.cjs'), true);
 
   // --- the whole decision on a constructed repository ----------------------------------------------
   const repository = makeRepository(root);

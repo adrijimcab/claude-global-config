@@ -46,28 +46,28 @@ try {
   const mainCheckout = repository;
   const green = gateRun(repository, { runSuite: passing, stateRoot });
 
-  check('clean tree, suite exits 0: green', [green.exitCode, green.verdict.state, green.verdict.tree], [EXIT.GREEN, STATES.GREEN, tree]);
+  check('clean tree, suite exits 0: green', [green.exitCode, green.verdict?.state, green.verdict?.tree], [EXIT.GREEN, STATES.GREEN, tree]);
   check('the green verdict is readable by tree and judged green', judge(readVerdict(mainCheckout, tree, stateRoot), unitSuite), { green: true });
   check('a verdict for another suite is not green', judge(readVerdict(mainCheckout, tree, stateRoot), { npmScript: 'test:all', cwd: '' }).green, false);
   check('no verdict for an unseen tree', judge(readVerdict(mainCheckout, '0'.repeat(40), stateRoot), unitSuite), { green: false, why: 'no unit-suite run was ever recorded for this tree' });
 
   const red = gateRun(repository, { runSuite: () => 1, stateRoot });
 
-  check('suite exits 1: red, and judged not green', [red.exitCode, red.verdict.state, judge(red.verdict, unitSuite).green], [EXIT.RED, STATES.RED, false]);
+  check('suite exits 1: red, and judged not green', [red.exitCode, red.verdict?.state, judge(red.verdict, unitSuite).green], [EXIT.RED, STATES.RED, false]);
 
   const dirtying = gateRun(repository, { runSuite: () => { writeFile(repository, 'generated.txt', 'x\n'); return 0; }, stateRoot });
 
-  check('a run that dirties the tree is an error even at exit 0', [dirtying.exitCode, dirtying.verdict.state], [EXIT.NO_VERDICT, STATES.ERROR]);
+  check('a run that dirties the tree is an error even at exit 0', [dirtying.exitCode, dirtying.verdict?.state], [EXIT.NO_VERDICT, STATES.ERROR]);
   check('an error verdict at exit 0 is not judged green', judge(dirtying.verdict, unitSuite).green, false);
   git(repository, 'clean', '-fdq');
 
   const moving = gateRun(repository, { runSuite: () => { commitFiles(repository, { 'moved.txt': 'x\n' }); return 0; }, stateRoot });
 
-  check('a run that moves HEAD is an error', [moving.exitCode, moving.verdict.reason.startsWith('HEAD moved')], [EXIT.NO_VERDICT, true]);
+  check('a run that moves HEAD is an error', [moving.exitCode, moving.verdict?.reason?.startsWith('HEAD moved')], [EXIT.NO_VERDICT, true]);
 
   const killed = gateRun(repository, { runSuite: () => null, stateRoot });
 
-  check('a killed suite is an error, never red or green', [killed.exitCode, killed.verdict.state], [EXIT.NO_VERDICT, STATES.ERROR]);
+  check('a killed suite is an error, never red or green', [killed.exitCode, killed.verdict?.state], [EXIT.NO_VERDICT, STATES.ERROR]);
 
   const lockFile = path.join(repositoryStateDir(mainCheckout, stateRoot), 'run.lock');
 
