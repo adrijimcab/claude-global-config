@@ -41,7 +41,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { baselineFor, closureClause, closureRecord, contractFileId, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
+import { closureClause, closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
 import { adviseOnBudget } from './budget-advisory.mjs';
 import { budgetVerdict } from './budget-verdict.mjs';
 import { renderBudget, renderUnmeasured } from './budget-report.mjs';
@@ -50,6 +50,8 @@ import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs
 import { loadedSet } from './loaded-set.mjs';
 import { promotedStub } from './promotion.mjs';
 import { isPromotedStub, promotedRecurrenceLines } from './promoted-recurrence.mjs';
+import { promotionFiles, promotionTargetOf } from './promotion-target.mjs';
+import { facesByFile, staleFiles } from './text-growth.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { withLock } from './ledger-lock.mjs';
 import { resolveLoopContext } from './loop-context.mjs';
@@ -426,35 +428,12 @@ function recordCapture(args) {
 }
 
 /**
- * Where a repeated lesson must be promoted to. The actor is DETERMINISTIC — the harness reports it —
- * so the target is derived, not guessed: a worker's repeated mistake belongs in the contract both
- * runtimes read; the orchestrator's belongs in the orchestrator's own standing instructions.
- * @es A dónde promociona una lección repetida. El actor es DETERMINISTA (lo reporta el harness), así
- * que el destino se DERIVA: el error repetido de un worker va al contrato de ambos runtimes; el del
- * orquestador, a sus propias instrucciones permanentes.
+ * Where a repeated lesson must be promoted to: decided by the lesson's OWN scope (the scope of the ledger
+ * that carries its line), never by who repeated it (`promotion-target.mjs`).
+ * @es A dónde promociona una lección repetida: lo decide el alcance PROPIO de la lección (el del ledger
+ * que lleva su línea), nunca quién la repitió.
  */
-function promotionTarget(key) {
-  const actors = new Set();
-
-  for (const line of readFileOr(INCIDENTS, '').split('\n')) {
-    if (line.length === 0) continue;
-
-    try {
-      const entry = JSON.parse(line);
-
-      // A closure record names no actor: it is how a lesson was closed, not who repeated it.
-      if (entry.kind === 'promotion') continue;
-
-      if (entry.key === key) actors.add(entry.actor.startsWith('worker') ? 'worker' : 'orchestrator');
-    } catch {
-      /* skip an unparseable incident line rather than failing the whole verdict */
-    }
-  }
-
-  if (actors.has('worker')) return 'contract';
-
-  return 'claude-md';
-}
+const promotionTarget = (key) => promotionTargetOf(locateKey(readLedgers(LEDGERS), key, readMarker)?.ledger.scope);
 
 /**
  * The steps a recurring lesson owes before it closes. The LAST step is the one the stop-the-line
@@ -474,7 +453,7 @@ function promotionInstructions(key, target) {
 
   if (target === 'claude-md') {
     return [
-      'PROMOTION REQUIRED -> the ORCHESTRATOR contract (every incident so far was the orchestrator).',
+      'PROMOTION REQUIRED -> the GLOBAL promoted-rules file (a global lesson: every project and subagent loads it).',
       `  1. Add the rule to ${ORCHESTRATOR_RULES}, and include the literal token "${key}" in it.`,
       ...closeStep(2),
       '     It refuses until the token is actually there. Do not hand-edit the ledger instead.',
@@ -501,15 +480,6 @@ function promotionInstructions(key, target) {
   ].join('\n');
 }
 
-/** How many times `token` occurs in `text`, counted without a regex. @es Cuántas veces aparece `token`. */
-function occurrencesOf(text, token) {
-  let count = 0;
-
-  for (let at = text.indexOf(token); at !== -1; at = text.indexOf(token, at + 1)) count += 1;
-
-  return count;
-}
-
 /** Every incident line for `key`, parsed, oldest first. @es Todas las líneas de incidente de `key`. */
 function incidentsFor(key) {
   const found = [];
@@ -529,62 +499,32 @@ function incidentsFor(key) {
   return found;
 }
 
-/**
- * THE TEXT MUST GROW WHEN THE LESSON RECURS, or the promotion is refused.
- *
- * This is the mechanism of `promotion-to-contract-read-as-prevention`, and it exists because that
- * lesson's own text says the rest: a promoted rule prevents only the FACES ITS TEXT NAMES, so a key
- * whose recurrence count climbs while its contract paragraph stands unchanged is telling you the TEXT
- * is the stale artifact. `measurement-failure-is-not-a-zero` recurred an EIGHTH time with its rule
- * already in both contracts and anchored in the parity gate, because the recurrence was a face the
- * paragraph never mentioned.
- *
- * WHAT IS CHECKED, and what deliberately is not. The count of the key's own token in the contract file
- * — which this project's convention puts beside every face it names, `(\`key\`, sixth occurrence)` — must
- * be HIGHER than it was at the last closure, but ONLY when a new incident has been recorded SINCE that
- * closure. So a first promotion is free; re-closing an old promotion with a mechanism is free; and the
- * one path that is refused is the one the lesson describes: the key recurred, and the text that failed
- * to prevent it is being re-promoted unchanged. Whether the new paragraph is GOOD is not decidable
- * here and is not claimed; what is decidable is that someone wrote one.
- *
- * @es EL TEXTO DEBE CRECER CUANDO LA LECCIÓN REINCIDE. Es el mecanismo de
- * `promotion-to-contract-read-as-prevention`: una regla promovida solo previene las CARAS QUE SU TEXTO
- * NOMBRA, así que una clave cuya cuenta sube con el párrafo intacto está diciendo que el TEXTO es el
- * artefacto rancio. Se exige más apariciones del token que en el cierre anterior, pero SOLO si hubo un
- * incidente nuevo desde entonces: la primera promoción es libre, y volver a cerrar una antigua con un
- * mecanismo también. Que el párrafo nuevo sea BUENO no es decidible aquí y no se afirma.
- */
 /** Every file whose text carries a promotion of `target`. @es Cada fichero cuyo texto lleva una promoción de `target`. */
-const contractFilesOf = (target) => (target === 'claude-md' ? [ORCHESTRATOR_RULES] : WORKER_CONTRACTS);
+const contractFilesOf = (target) => promotionFiles({ target, globalRules: ORCHESTRATOR_RULES, workerContracts: WORKER_CONTRACTS });
 
-/** The file whose token count measures a promotion's text: the orchestrator rules, or the project's first worker contract. @es El fichero cuyo recuento mide el texto. */
-const contractFileOf = (target) => (target === 'claude-md' ? ORCHESTRATOR_RULES : WORKER_CONTRACTS[0] ?? '');
-
+/**
+ * The refusal text when a lesson recurred and some promoted file has not grown a face (`text-growth.mjs`),
+ * or `undefined` when every file grew or nothing recurred.
+ * @es El texto de la negativa cuando la lección reincidió y algún fichero promovido no ha ganado una cara.
+ */
 function textGrowthProblem(key, target) {
-  const entries = incidentsFor(key);
-  const file = contractFileOf(target);
-  // Only a closure measured on THIS file is a baseline (`baselineFor`): counts of two files are not comparable.
-  // @es Solo un cierre medido sobre ESTE fichero es línea base: las cuentas de dos ficheros no se comparan.
-  const last = baselineFor(entries.filter((entry) => entry.kind === 'promotion'), file);
+  const stale = staleFiles({ entries: incidentsFor(key), files: contractFilesOf(target), key, read: (file) => readFileOr(file, '') });
 
-  if (last === undefined) return undefined;
-
-  const recurred = entries.some((entry) => entry.kind !== 'promotion' && typeof entry.at === 'string' && entry.at > last.at);
-
-  if (!recurred) return undefined;
-
-  const now = occurrencesOf(readFileOr(file, ''), key);
-
-  if (now > last.tokenCount) return undefined;
+  if (stale.length === 0) return undefined;
 
   return [
-    `"${key}" has recurred since it was last closed on ${last.date}, and the text that failed to prevent it has not grown:`,
-    `  ${file}`,
-    `  names "${key}" ${String(now)} time(s); it named it ${String(last.tokenCount)} time(s) at that closure.`,
+    ...stale.flatMap(({ file, now, then, date }) => [
+      `"${key}" has recurred since it was last closed on ${date}, and the text that failed to prevent it has not grown:`,
+      `  ${file}`,
+      `  names ${String(now)} face(s) of "${key}"; it named ${String(then)} face(s) at that closure.`,
+      `  @es ${file} nombra ${String(now)} cara(s) de "${key}"; nombraba ${String(then)} en ese cierre, y el texto no ha crecido.`
+    ]),
     '',
     'A promoted rule prevents only the FACES ITS TEXT NAMES. Read the existing paragraph, decide whether',
     'this recurrence is a face it already names, and when it is not, EXTEND it with the new face — in',
-    'every file that carries the rule — before promoting again.'
+    'every file that carries the rule — before promoting again.',
+    '@es Una regla promovida solo previene las CARAS QUE SU TEXTO NOMBRA: lee el párrafo, decide si esta',
+    '@es reincidencia es una cara que ya nombra y, si no lo es, EXTIÉNDELO con la cara nueva en cada fichero.'
   ].join('\n');
 }
 
@@ -716,7 +656,7 @@ function commandPromote(args) {
 
     ledger.lines[index] = stub.line;
     writeLedger(ledger);
-    appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, tokenCount: occurrencesOf(readFileOr(contractFileOf(target), ''), key), file: contractFileId(contractFileOf(target)) }))}\n`, 'utf8');
+    appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, scope: ledger.scope, faces: facesByFile({ files: contractFilesOf(target), key, read: (file) => readFileOr(file, '') }) }))}\n`, 'utf8');
 
     return stub;
   });

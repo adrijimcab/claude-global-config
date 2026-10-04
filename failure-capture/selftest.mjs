@@ -289,7 +289,7 @@ refused(
 // `file` is the contract file the count was measured on; by default the one the named world will compare.
 // @es `file` es el fichero sobre el que se midió la cuenta; por defecto, el que comparará el mundo nombrado.
 const contractOf = (name) => contractFileId(path.join(scratch, name, 'home', '.claude', 'rules', 'promoted-rules.md'));
-const promotedOn = (name, at, tokenCount, file = contractOf(name)) => ({ kind: 'promotion', key: KEY, target: 'claude-md', tokenCount, file, date: at.slice(0, 10), at });
+const promotedOn = (name, at, faces, file = contractOf(name)) => ({ kind: 'promotion', key: KEY, target: 'claude-md', faces: { [file]: faces }, date: at.slice(0, 10), at });
 const recurredOn = (at) => ({ key: KEY, actor: 'orchestrator', lesson: 'it came back', date: at.slice(0, 10), at });
 
 refused(
@@ -354,10 +354,10 @@ refused(
 
 {
   const name = 'file-without-count';
-  const pre = { kind: 'promotion', key: KEY, target: 'claude-md', file: contractOf(name), date: '2026-09-02', at: '2026-09-02T10:00:00.000Z' };
+  const pre = { kind: 'promotion', key: KEY, target: 'claude-md', date: '2026-09-02', at: '2026-09-02T10:00:00.000Z' };
   const run = promote(world(name, { incidents: [recurredOn('2026-09-01T10:00:00.000Z'), pre, recurredOn('2026-09-03T10:00:00.000Z')], mentions: 1 }), ['--mechanism', '.claude/good-guard/guard.mjs']);
 
-  check('NEAR MISS: a record with a file but no count has no baseline either', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
+  check('NEAR MISS: a record with no faces has no baseline either', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -380,8 +380,7 @@ refused(
   // Without this figure the NEXT promotion has no baseline to compare the contract text against, so the
   // growth check silently stops demanding anything. @es Sin esta cifra, la próxima promoción no tiene
   // línea base y la comprobación de crecimiento deja de exigir nada en silencio.
-  check('...and the FILE that count was measured on, in the one normalised spelling the comparison uses', run.incidents.includes(`"file":${JSON.stringify(contractOf('mechanism'))}`), run.incidents);
-  check('...and the token count of the contract text AT THIS CLOSURE, which the next promotion measures against', run.incidents.includes('"tokenCount":1'), run.incidents);
+  check('...and the FACES of the contract text AT THIS CLOSURE, keyed by the one normalised spelling of the file the comparison uses', run.incidents.includes(`"faces":{${JSON.stringify(contractOf('mechanism'))}:1}`), run.incidents);
 }
 
 {
@@ -491,7 +490,9 @@ refused(
 {
   const target = world('promote-in-project');
   write(target.repo, { '.claude/lessons-ledger.md': `# Lessons Ledger — b100-am-ui\n\n---\n- [b100-am-ui] 2026-09-20 — project lesson -> RULE: x <!--fc:project-promoted#2-->\n` });
-  write(target.home, { '.claude/rules/promoted-rules.md': '# Contract\n\n- project-promoted: written down.\n' });
+  // A project lesson is promoted into the PROJECT's contract, not the global rules file (`promotion-target.mjs`).
+  // @es Una lección de proyecto se promueve al contrato del PROYECTO, no al fichero global de reglas.
+  write(target.repo, { '.claude/CLAUDE.md': '# Project instructions\n\n- project-promoted: written down.\n' });
   const run = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'promote', '--key', 'project-promoted', '--no-mechanism', REASON], {
     cwd: target.repo,
     encoding: 'utf8',

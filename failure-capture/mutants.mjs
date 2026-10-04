@@ -32,15 +32,11 @@ const MUTANTS = [
 
   // --- the text must grow when the lesson comes back
   ['the growth check is never consulted: the same paragraph is re-promoted over a lesson it failed to prevent', 'failure-capture/capture.mjs', 'if (stale !== undefined) {', 'if (false) {'],
-  ['growth is demanded even with no recurrence, so re-closing an old promotion is blocked', 'failure-capture/capture.mjs', 'if (!recurred) return undefined;', ''],
-  ['the baseline ignores which file it was measured on, so counts of two files are compared', 'failure-capture/closure.mjs', "typeof entry.file === 'string' && entry.file === id", 'true'],
-  ['a closure with no file is read as a baseline for every file', 'failure-capture/closure.mjs', "typeof entry.file === 'string' && entry.file === id", '(entry.file === undefined || entry.file === id)'],
+  ['growth is demanded even with no recurrence, so re-closing an old promotion is blocked', 'failure-capture/text-growth.mjs', 'if (recurred && now <= then)', 'if (now <= then)'],
   ['the baseline is the OLDEST same-file closure instead of the newest', 'failure-capture/closure.mjs', 'entry.at > newest.at ? entry : newest', 'entry.at < newest.at ? entry : newest'],
-  ['the closure record does not carry its file', 'failure-capture/closure.mjs', 'tokenCount, file, date:', 'tokenCount, date:'],
-  ['the file is recorded in a raw spelling, not the one the comparison uses', 'failure-capture/capture.mjs', 'file: contractFileId(contractFileOf(target))', 'file: contractFileOf(target)'],
-  ['growth is satisfied by standing still', 'failure-capture/capture.mjs', 'if (now > last.tokenCount) return undefined;', 'if (now >= last.tokenCount) return undefined;'],
-  ['closures recorded before token counts existed are read as a baseline of zero', 'failure-capture/closure.mjs', "typeof entry.tokenCount === 'number' && ", ''],
-  ['the token count is not recorded, so the next promotion has no baseline at all', 'failure-capture/closure.mjs', 'const base = { kind: \'promotion\', key, target, tokenCount,', 'const base = { kind: \'promotion\', key, target,'],
+  ['the closure record does not carry its faces', 'failure-capture/closure.mjs', 'target, scope, faces, date:', 'target, scope, date:'],
+  ['the file is recorded in a raw spelling, not the one the comparison uses', 'failure-capture/text-growth.mjs', '[contractFileId(file), countFaces(read(file), key)]', '[file, countFaces(read(file), key)]'],
+  ['growth is satisfied by standing still', 'failure-capture/text-growth.mjs', 'if (recurred && now <= then)', 'if (recurred && now < then)'],
 
   // --- the checks that were already there
   ['the rule text no longer has to have landed', 'failure-capture/capture.mjs', "if (!readFileOr(ORCHESTRATOR_RULES, '').includes(key)) missing.push", 'if (false) missing.push'],
@@ -58,7 +54,7 @@ const MUTANTS = [
   ['una lección nueva ignora su alcance y cae siempre en el home', 'failure-capture/capture.mjs', 'const ledger = ledgerForScope(ledgers, entry.scope);', "const ledger = ledgerForScope(ledgers, 'global');"],
   ['una recurrencia no busca la clave: se duplica en el ledger del alcance nuevo', 'failure-capture/capture.mjs', 'const found = locateKey(ledgers, entry.key, readMarker);', 'const found = undefined;'],
   ['keys lee solo el primer ledger', 'failure-capture/capture.mjs', 'for (const ledger of readLedgers(LEDGERS)) {\n    for (const line of ledger.lines ?? []) {', 'for (const ledger of readLedgers(LEDGERS).slice(0, 1)) {\n    for (const line of ledger.lines ?? []) {'],
-  ['promote colapsa solo en el home, así la clave del proyecto nunca se cierra', 'failure-capture/capture.mjs', 'const found = locateKey(readLedgers(LEDGERS), key, readMarker);', 'const found = locateKey(readLedgers(LEDGERS).slice(0, 1), key, readMarker);'],
+  ['promote colapsa solo en el home, así la clave del proyecto nunca se cierra', 'failure-capture/capture.mjs', 'const found = locateKey(readLedgers(LEDGERS), key, readMarker);\n\n    if (found === undefined) return;', 'const found = locateKey(readLedgers(LEDGERS).slice(0, 1), key, readMarker);\n\n    if (found === undefined) return;'],
   ['el ledger nuevo nace sin encabezado', 'failure-capture/ledgers.mjs', 'ledger.lines ??= ledger.header.split(\'\\n\');', "ledger.lines ??= [''];"],
   // The 2026-09-30 split-store incident: a capture without --session stamped `unknown`.
   ['the harness session id is ignored, so a capture without --session is stamped unknown again', 'failure-capture/capture.mjs', 'const fromHarness = process.env.CLAUDE_CODE_SESSION_ID;', 'const fromHarness = undefined;'],

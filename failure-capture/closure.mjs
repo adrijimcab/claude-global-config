@@ -177,7 +177,12 @@ export function contractFileId(file) {
 }
 
 /**
- * The newest closure whose token count was measured on `file`, or `undefined` when there is none.
+ * The newest closure whose FACE count was measured on `file`, or `undefined` when there is none. A closure
+ * recorded the old way — an OCCURRENCE count (`tokenCount`), no per-file `faces` — is no baseline: occurrences
+ * and faces are different units (`faces.mjs`), so it demands nothing, like a first promotion.
+ * @es El cierre más reciente cuya cuenta de CARAS se midió sobre `file`, o `undefined`. Un cierre registrado
+ * a la antigua (cuenta de APARICIONES `tokenCount`, sin `faces` por fichero) no es línea base: son unidades
+ * distintas, así que no exige nada, como una primera promoción.
  *
  * DECISION, legacy records. A closure written before records carried their file (`file` absent) is NOT a
  * baseline for ANY file: which file its count came from cannot be recovered, and measured on
@@ -191,22 +196,21 @@ export function contractFileId(file) {
  */
 export function baselineFor(closures, file) {
   const id = contractFileId(file);
-  const comparable = closures.filter((entry) => typeof entry.tokenCount === 'number' && typeof entry.file === 'string' && entry.file === id);
+  const comparable = closures.filter((entry) => typeof entry.faces?.[id] === 'number');
 
   return comparable.length === 0 ? undefined : comparable.reduce((newest, entry) => (entry.at > newest.at ? entry : newest));
 }
 
 /** The durable record of a closure, appended to the incident log. @es El registro durable de un cierre. */
-export function closureRecord({ key, closure, verification, target, tokenCount, file }) {
-  // `tokenCount` is how many times the contract text named this key AT THIS CLOSURE. It is what makes
-  // the next promotion able to tell "the text grew to cover the new face" from "the same paragraph is
-  // being re-promoted over a lesson it already failed to prevent"
-  // (`promotion-to-contract-read-as-prevention`). @es Cuántas veces nombraba el texto a esta clave EN
-  // ESTE CIERRE: es lo que permite distinguir un texto que creció de uno que se repromociona igual.
-  // `file` is the contract file that count was taken from, in the form `contractFileId` produces. A count
-  // is only comparable with another count of the SAME file. @es `file` es el fichero del que se tomó la
-  // cuenta, en la forma de `contractFileId`: una cuenta solo es comparable con otra del MISMO fichero.
-  const base = { kind: 'promotion', key, target, tokenCount, file, date: new Date().toISOString().slice(0, 10), at: new Date().toISOString() };
+export function closureRecord({ key, closure, verification, target, scope, faces }) {
+  // `faces` maps EACH file the promotion landed in (in the form `contractFileId` produces) to how many
+  // faces its text named for this key AT THIS CLOSURE (`faces.mjs`). It is what lets the next promotion
+  // tell "the text grew to cover the new face" from "the same paragraph is being re-promoted over a lesson
+  // it already failed to prevent" (`promotion-to-contract-read-as-prevention`), file by file. `scope` is the
+  // project (or `global`) the lesson belongs to. @es `faces` asigna a CADA fichero donde aterrizó la
+  // promoción cuántas caras nombraba su texto para esta clave EN ESTE CIERRE: permite distinguir, fichero a
+  // fichero, un texto que creció de uno que se repromociona igual. `scope` es el proyecto (o `global`).
+  const base = { kind: 'promotion', key, target, scope, faces, date: new Date().toISOString().slice(0, 10), at: new Date().toISOString() };
 
   return closure.kind === 'mechanism'
     ? { ...base, closure: { mechanism: closure.path, selftestExit: verification.selftestExit } }
