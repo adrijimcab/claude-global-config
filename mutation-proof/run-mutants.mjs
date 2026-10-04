@@ -1,14 +1,11 @@
 /**
- * GLOBAL vendor copy. Authored for `b100-am-ui/.claude/mutation-proof/run-mutants.mjs`, copied here
- * unmodified because it is genuinely project-agnostic (plain `node:fs`/`node:child_process`/`node:path`,
- * no b100-specific coupling) and this project's global `~/.claude/` guards (`backlog-guard`,
- * `config-sync-guard`) need the same discrimination proof without depending on a specific project
- * checkout being present on the machine. If the original gains a real fix, port it here too — this is a
- * deliberate, documented vendor copy, not a second source of truth nobody knows about.
- * @es Copia GLOBAL, vendida sin cambios desde `b100-am-ui/.claude/mutation-proof/` porque es genérica
- * (sin acoplamiento a ningún proyecto) y las guardias globales de `~/.claude/` la necesitan sin depender
- * de que ese proyecto esté clonado en la máquina. Copia deliberada y documentada, no una segunda fuente
- * de verdad silenciosa.
+ * GLOBAL copy, now DIVERGED from `b100-am-ui/.claude/mutation-proof/run-mutants.mjs` (it gained the
+ * assertion/crash classification of `kill-kind.mjs`). The original was project-agnostic and was copied here
+ * so the global `~/.claude/` guards need no project checkout; the fix must be ported back there. The copy
+ * under `fleet-kit/vendor/` is a separate, hash-pinned vendoring of the ORIGINAL and is untouched.
+ * @es Copia GLOBAL, ya DIVERGIDA del original de `b100-am-ui` (ganó la clasificación aserción/crash de
+ * `kill-kind.mjs`); el cambio debe portarse allí. La copia de `fleet-kit/vendor/` es otro vendorizado,
+ * fijado por hash, del ORIGINAL, y no se toca.
  */
 
 /**
@@ -43,27 +40,35 @@
  *    ONCE into a snapshot; the plan, the baseline and every mutant are measured against that one copy, so a
  *    campaign describes a single tree rather than whatever each mutant happened to copy.
  *
- * A RUNTIME CRASH IS A KILL, deliberately. A mutant that makes the mechanism throw (a `ReferenceError`, a
- * `TypeError` on a path the selftest drives) was loaded, run and reached, and the selftest refused to pass —
- * the same breakage shipped for real would be caught the same way. What separates it from a syntax error is
- * that the mutated code EXECUTED, and that is decidable statically, so it is decided here. Whether a red came
- * from an assertion or from a throw is not decidable without instrumenting every selftest, and a guess from
- * stderr would be a probe with no reliable NO. The residual gap, stated: a crash-kill proves the selftest
- * reaches that code, not that it checks the named decision — a mutant should keep the code runnable and
- * change what it decides. Same class, same gap: an ESM LINK error (an import of a name no longer exported)
- * passes `node --check` and reads as a kill.
+ * A RUNTIME CRASH IS A KILL, BUT A WEAK ONE, AND IT IS REPORTED APART. A mutant that makes the mechanism
+ * throw (a `ReferenceError`, a `TypeError` on a path the selftest drives) was loaded, run and reached, and the
+ * selftest refused to pass. What separates it from a syntax error is that the mutated code EXECUTED, and
+ * that is decidable statically. What it does NOT prove is that a check decides the named decision: the
+ * selftest died before checking. `kill-kind.mjs` therefore classifies every kill as ASSERTION (the selftest
+ * reported a failed check) or CRASH (uncaught throw, stack trace, or no report at all; an uncaught
+ * `AssertionError` is still an assertion), and a crash prints as `CRASHED` with the first line of its error.
+ * DECISION: `crashKills` is 'report' by default (the verdict is unchanged, a WEAK PROOF notice is printed) and
+ * 'fail' counts each crash as a survivor. The default stays 'report' only while campaigns still hold crash
+ * kills to harden; a campaign that has none should pass 'fail' so a crash can never come back unnoticed.
+ * Same class, same residual gap: an ESM LINK error (an import of a name no longer exported) passes
+ * `node --check` and reads as a crash.
  *
  * A selftest killed by a timeout is a survivor too — a kill signal is not a verdict.
  *
  * @es Prueba que un selftest DISCRIMINA. Se rechaza lo que haría falsa la cifra: un texto a mutar que no
  * aparece EXACTAMENTE una vez (REFUSED), una línea base que no está en verde (sale con 2, nada medido), un
  * mutante que no parsea (BROKEN, superviviente) y una instantánea que se mueve (se copia una sola vez). Un
- * crash en ejecución SÍ es muerte: el código mutado se ejecutó; la brecha residual queda escrita arriba.
+ * crash en ejecución es una muerte DÉBIL: se informa aparte (CRASHED) y `crashKills` decide si falla.
  */
 
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+
+import { classifyKill } from './kill-kind.mjs';
+
+/** What a kill by crash does to the verdict. @es Qué hace al veredicto una muerte por crash. */
+const CRASH_POLICIES = new Set(['report', 'fail']);
 
 /** Directories that hold a run's output rather than the mechanism, never copied into a sandbox. @es Directorios de salida de corridas, nunca copiados. */
 export const RUN_OUTPUT = new Set(['state', 'scratch']);
@@ -112,7 +117,8 @@ export function runMutants(options) {
   }
 }
 
-function measure({ fleetRoot, paths, selftest, mutants, timeoutMs = 900_000 }) {
+function measure({ fleetRoot, paths, selftest, mutants, timeoutMs = 900_000, crashKills = 'report' }) {
+  if (!CRASH_POLICIES.has(crashKills)) throw new NotMeasured(`crashKills must be 'report' or 'fail', got ${JSON.stringify(crashKills)}; no policy is picked on the caller's behalf`);
   if (mutants.length === 0) throw new NotMeasured('the campaign holds no mutant, and 0/0 killed is not a proof');
 
   const sandboxRoot = sandboxRootOf(fleetRoot, paths);
@@ -129,13 +135,20 @@ function measure({ fleetRoot, paths, selftest, mutants, timeoutMs = 900_000 }) {
     requireParseableOriginals(plans, snapshot);
     requireGreenBaseline(sandboxes, selftest, timeoutMs);
 
-    let killed = 0;
+    const tally = { assertion: 0, crash: 0 };
 
-    for (const plan of plans) if (plan.refusal === undefined && runMutant(plan, sandboxes, selftest, timeoutMs)) killed += 1;
+    for (const plan of plans) {
+      const kind = plan.refusal === undefined ? runMutant(plan, sandboxes, selftest, timeoutMs) : undefined;
 
-    console.log(`\n${killed}/${mutants.length} mutants killed`);
+      if (kind === 'assertion' || kind === 'crash') tally[kind] += 1;
+    }
 
-    return mutants.length - killed;
+    const killed = tally.assertion + tally.crash;
+
+    console.log(`\n${killed}/${mutants.length} mutants killed (${tally.assertion} by assertion, ${tally.crash} by crash)`);
+    if (tally.crash > 0) console.log(weakProofNotice(tally.crash, crashKills));
+
+    return mutants.length - killed + (crashKills === 'fail' ? tally.crash : 0);
   } finally {
     rmSync(snapshot, { recursive: true, force: true });
   }
@@ -224,7 +237,21 @@ function requireGreenBaseline(sandboxes, selftest, timeoutMs) {
   console.log(`BASELINE ${selftest} is green (${tallyOf(run)})`);
 }
 
-/** @returns whether the mutant was killed, after printing its verdict. @es Si el mutante murió. */
+/**
+ * Said once per campaign that holds a crash kill: the decision of whether it fails the run lives in
+ * `crashKills`, and the notice states which one applied.
+ * @es Se dice una vez por campaña con un crash: la decisión de si falla la corrida vive en `crashKills`.
+ */
+function weakProofNotice(crashes, crashKills) {
+  const outcome = crashKills === 'fail' ? 'counted as survivors, so the campaign FAILS' : 'only reported, the campaign verdict is unchanged';
+
+  return `WEAK PROOF — ${crashes} mutant(s) died by crash: the code ran, no check decided it (${outcome}). @es PRUEBA DÉBIL — ${crashes} mutante(s) murieron por crash: el código corrió, ningún check lo decidió.`;
+}
+
+/**
+ * @returns `'assertion'` or `'crash'` for a kill, `'survived'` or `'broken'` otherwise, after printing the
+ * verdict. @es `'assertion'` o `'crash'` si murió; `'survived'` o `'broken'` si no.
+ */
 function runMutant({ label, file, original, replacement }, sandboxes, selftest, timeoutMs) {
   const verdict = inSandbox(
     sandboxes,
@@ -243,14 +270,21 @@ function runMutant({ label, file, original, replacement }, sandboxes, selftest, 
   if (verdict.syntaxError !== undefined) {
     console.log(`BROKEN   ${label} — the mutated ${file} does not parse (${verdict.syntaxError}); a red from it proves nothing`);
 
-    return false;
+    return 'broken';
   }
 
   const killed = verdict.run.status !== 0 && verdict.run.signal === null;
+  const kill = killed ? classifyKill(verdict.run) : { kind: 'none' };
+
+  if (kill.kind === 'crash') {
+    console.log(`CRASHED  ${label} — ${kill.firstLine} (${outcomeOf(verdict.run)})`);
+
+    return 'crash';
+  }
 
   console.log(`${killed ? 'KILLED  ' : 'SURVIVED'} ${label} (${outcomeOf(verdict.run)})`);
 
-  return killed;
+  return killed ? 'assertion' : 'survived';
 }
 
 /**
