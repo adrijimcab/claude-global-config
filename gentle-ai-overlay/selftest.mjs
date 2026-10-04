@@ -19,6 +19,7 @@ import { KINDS, applyAll, evaluateAll } from './invariants.mjs';
 import { parseManagedRegions } from './managed-regions.mjs';
 import { inspectSection, reconcileSection, sha256 } from './review-contract-section.mjs';
 import { lazyReviewTrigger } from './lazy-review-triggers.mjs';
+import { registerLineReplacementCases } from './line-replacement-cases.mjs';
 import { readTextOrNull } from './text-file.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -226,6 +227,11 @@ test('forbidden: tools line without Bash -> held; with Bash -> broken and not re
   expect(result.status, 'broken', 'broken');
   expect(result.reapplicable, false, 'reapplicable');
 });
+
+// ---------------------------------------------------------------- anchored line replacement
+// @es Reemplazo de una línea anclada: los casos viven en line-replacement-cases.mjs.
+
+registerLineReplacementCases({ test, expect, newRoot, put, read });
 
 // ---------------------------------------------------------------- owner sections
 
@@ -712,6 +718,9 @@ function completeHome({ telemetryEnabled = false } = {}) {
     const owner = entry.anchors.map((anchor) => `${anchor} text\n`).join('\n');
     put(context.home, entry.file, entry.file === '.claude/CLAUDE.md' ? claudeMd({ owner, eol: '\r\n' }) : owner);
   }
+  for (const entry of CUSTOMIZATIONS.filter((candidate) => candidate.kind === 'anchored-line-replacement')) {
+    put(context.home, entry.file, `# A skill\r\n\r\n${entry.replacement}\r\n`);
+  }
   for (const entry of CUSTOMIZATIONS.filter((candidate) => candidate.kind.startsWith('agent-tool'))) {
     put(context.home, entry.file, agentFile({ tools: entry.kind === 'agent-tool-required' ? `Read, Bash, ${MCP}` : 'WebFetch, WebSearch' }));
   }
@@ -777,10 +786,23 @@ test('apply.mjs --dry-run: the review span would move, nothing is written, exit 
   expect(read(context.home, '.claude/CLAUDE.md'), lazy(withSpan).text, 'CLAUDE.md after apply');
 });
 
-test('check.mjs --json: the lazy kind reports syncSafe, every other kind does not', () => {
+test('check.mjs --json: the lazy kind and the line replacement report syncSafe, every other kind does not', () => {
   const report = JSON.parse(run('check.mjs', [...flags(completeHome()), '--json']).stdout);
   const safe = report.results.filter((entry) => entry.syncSafe === true).map((entry) => entry.id);
-  expect(safe.join(','), 'review-contract-lazy-while-reviews-are-off', 'sync-safe ids');
+  expect(safe.join(','), 'sdd-verify-runs-scoped-gates,review-contract-lazy-while-reviews-are-off', 'sync-safe ids');
+});
+
+test('apply.mjs --dry-run on the REAL list: the upstream verify sentence would be replaced, nothing is written; apply.mjs then replaces it -> exit 0', () => {
+  const context = completeHome();
+  const real = CUSTOMIZATIONS.find((candidate) => candidate.kind === 'anchored-line-replacement');
+  const upstreamText = `# A skill\r\n\r\n${real.upstream}\r\n`;
+  put(context.home, real.file, upstreamText);
+  const dry = run('apply.mjs', [...flags(context), '--dry-run']);
+  expect(dry.status, 1, 'dry-run exit');
+  expect(dry.stdout.includes(`WOULD-REPLACE ${real.id}`), true, `dry-run stdout (${dry.stdout})`);
+  expect(read(context.home, real.file), upstreamText, 'file after dry run');
+  expect(run('apply.mjs', flags(context)).status, 0, 'apply exit');
+  expect(read(context.home, real.file), `# A skill\r\n\r\n${real.replacement}\r\n`, 'file after apply');
 });
 
 test('check.mjs: reference unavailable, nothing broken -> exit 2', () => {

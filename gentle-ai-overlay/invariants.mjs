@@ -5,6 +5,7 @@
  */
 import { agentToolForbidden, agentToolRequired } from './kinds/agent-tool.mjs';
 import { lazyReviewContract } from './kinds/lazy-review-contract.mjs';
+import { anchoredLineReplacement } from './kinds/line-replacement.mjs';
 import { ownerSectionsOutsideManagedRegions } from './kinds/owner-sections.mjs';
 import { personaRegionMatchesUpstream } from './kinds/persona-region.mjs';
 import { telemetryDisabled } from './kinds/telemetry.mjs';
@@ -16,6 +17,7 @@ export const KINDS = {
   'persona-region-matches-upstream': personaRegionMatchesUpstream,
   'telemetry-disabled': telemetryDisabled,
   'lazy-review-contract': lazyReviewContract,
+  'anchored-line-replacement': anchoredLineReplacement,
 };
 
 const kindOf = (customization) => {

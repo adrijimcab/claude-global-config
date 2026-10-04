@@ -49,6 +49,13 @@ const PROMOTED_RULE_ANCHORS = [
   '- **`integrated-a-range-without-running-its-cheap-gates`**',
 ];
 
+// The Hard Rules line of the sdd-verify skill, as gentle-ai renders it, and ours. The upstream line is
+// the anchor, character for character. @es La línea de Hard Rules de la skill sdd-verify tal como la
+// genera gentle-ai, y la nuestra. La línea de upstream es el ancla, carácter por carácter.
+const VERIFY_UPSTREAM_SENTENCE = '- Run full verification only after all tasks are complete. If any task is pending, return `blocked` without running the full suite.';
+const VERIFY_SCOPED_SENTENCE =
+  "- Run verification only after all tasks are complete; if any task is pending, return `blocked` without running any test. Run only the tests and gates that prove the change's requirements and read its touched paths, never the repository's full suite or full gate chain: the orchestrator runs that once, at integration, on the tree being integrated.";
+
 export const CUSTOMIZATIONS = [
   ...PHASES_THAT_NEED_BASH.map((phase) => ({
     id: `${phase}-grants-bash`,
@@ -85,6 +92,18 @@ export const CUSTOMIZATIONS = [
     kind: 'persona-region-matches-upstream',
     file: '.claude/CLAUDE.md',
     region: 'persona',
+  },
+  // Owner rule 2026-10-01 (sdd-mandate point 3): the verify phase runs only the tests and gates that
+  // prove the change and read its touched paths; the full chain runs once, at integration, by the
+  // orchestrator. @es Regla del dueño 2026-10-01 (punto 3 del mandato SDD): la fase verify corre solo los
+  // tests y gates que prueban el cambio y leen sus rutas tocadas; la cadena completa la corre el
+  // orquestador una vez, al integrar.
+  {
+    id: 'sdd-verify-runs-scoped-gates',
+    kind: 'anchored-line-replacement',
+    file: '.claude/skills/sdd-verify/SKILL.md',
+    upstream: VERIFY_UPSTREAM_SENTENCE,
+    replacement: VERIFY_SCOPED_SENTENCE,
   },
   // Owner decision 2026-10-01: the review execution contract is loaded only while gentle-ai reviews
   // may run, until gentle-ai offers that upstream. @es Decisión del dueño 2026-10-01: el contrato de

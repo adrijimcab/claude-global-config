@@ -80,6 +80,15 @@ const MUTANTS = [
   ['lazy-review-hook-output.mjs', "if (result.change === 'moved') return", "if (false) return"],
   ['session-start-hook.mjs', 'const replaced = reconcileLazyReview(context);', 'const replaced = {};'],
   ['session-start-hook.mjs', 'emit(message, joined([replaced.additionalContext, advisory]));', 'emit(message, joined([advisory]));'],
+  ['kinds/line-replacement.mjs', 'lineContent(line) === sentence', 'lineContent(line).includes(sentence)'],
+  ['kinds/line-replacement.mjs', 'upstream.length === 1 && replaced.length === 0', 'upstream.length >= 1 && replaced.length === 0'],
+  ['kinds/line-replacement.mjs', 'if (upstream.length === 0 && replaced.length === 1) return', 'if (replaced.length >= 1) return'],
+  ['kinds/line-replacement.mjs', 'if (upstream.length === 0 && replaced.length === 0) {', 'if (false) {'],
+  ['kinds/line-replacement.mjs', 'withEndingOf(lines[state.index], customization.replacement)', 'customization.replacement'],
+  ['kinds/line-replacement.mjs', 'joinLines(lines));', 'joinLines(state.lines));'],
+  ['kinds/line-replacement.mjs', '  syncSafe: true,', '  syncSafe: false,'],
+  ['kinds/line-replacement.mjs', "outcome: 'would-replace'", "outcome: 'would-try'"],
+  ['customizations.mjs', '`blocked` without running the full suite.\'', '`blocked` without running the whole suite.\''],
 ];
 
 const selftestIn = (directory) => spawnSync(process.execPath, [path.join(directory, 'selftest.mjs')], { encoding: 'utf8' });
