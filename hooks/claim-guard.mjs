@@ -67,8 +67,9 @@ export function evaluate(raw) {
   // Already blocked once this turn: the verification pass has been demanded. Let the turn end.
   if (payload?.stop_hook_active === true) return undefined;
 
+  // No emptiness check: no HIGH_RISK pattern matches an empty or whitespace-only message, so the `find` below
+  // already stands aside for it. @es Sin comprobar vacío: ningún patrón HIGH_RISK casa con un mensaje vacío.
   const message = typeof payload?.last_assistant_message === 'string' ? payload.last_assistant_message : '';
-  if (message.trim().length === 0) return undefined;
 
   const tripped = HIGH_RISK.find((pattern) => pattern.test(message));
   if (!tripped) return undefined;
@@ -76,7 +77,9 @@ export function evaluate(raw) {
   const hasEvidence = EVIDENCE.some((pattern) => pattern.test(message));
   if (hasEvidence) return undefined;
 
-  const matched = message.match(tripped)?.[0] ?? '(unknown)';
+  // `tripped` matched `message` above and carries no `g` flag, so `match` cannot be null here.
+  // @es `tripped` ya casó con `message` y no lleva la bandera `g`, así que `match` no puede ser null.
+  const matched = message.match(tripped)[0];
 
   return {
       decision: 'block',
