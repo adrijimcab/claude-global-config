@@ -61,6 +61,23 @@ function check(ok, label) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
 }
 
+/**
+ * Asks the guard what a turn owes. A throw is a verdict about the guard: it is recorded as a FAILED check
+ * naming the cause and answered with an empty debt list, so the cases below keep reporting what they saw
+ * instead of the whole run dying at the first broken decision.
+ * @es Pregunta al guard qué debe un turno. Un throw es un veredicto: se registra como check FALLIDO con su
+ * causa y se responde con una lista vacía, para que los casos sigan informando en vez de morir en el primero.
+ */
+function asked(payload, store) {
+  try {
+    return owedBy(payload, store);
+  } catch (error) {
+    check(false, `owedBy THREW ${error.message} @es owedBy LANZÓ`);
+
+    return [];
+  }
+}
+
 // --- Transcript construction, in the shape the harness really records. ------------------------------
 // MEASURED against the recorded sessions of this project: a tool call is an `assistant` entry carrying a
 // `tool_use` block; its result is a `user` entry carrying a `tool_result` block matched by `tool_use_id`,
@@ -216,7 +233,7 @@ console.log('--- the decision\'s state space ---');
 
 for (const [label, expected, entries] of cases) {
   const file = transcript(label, entries);
-  const owed = owedBy(payloadFor(file, `s-${checks}`), path.join(SCRATCH, 'state-empty'));
+  const owed = asked(payloadFor(file, `s-${checks}`), path.join(SCRATCH, 'state-empty'));
 
   check(Array.isArray(owed) && owed.length === expected, `${label} -> owed ${Array.isArray(owed) ? owed.length : owed}, expected ${expected}`);
 }
@@ -225,10 +242,10 @@ for (const [label, expected, entries] of cases) {
 // around. @es El rechazo debe NOMBRAR el intento no reintentado.
 {
   const [, , entries] = cases[6];
-  const owed = owedBy(payloadFor(transcript('naming', entries), 's-naming'), path.join(SCRATCH, 'state-empty'));
+  const owed = asked(payloadFor(transcript('naming', entries), 's-naming'), path.join(SCRATCH, 'state-empty'));
 
-  check(owed.length === 1 && owed[0].label.includes('Trace the missing row expander'), `the unretried attempt is named: ${owed[0]?.label}`);
-  check(owed[0]?.reason?.includes('ORPHAN-WORK GUARD') === true, `and the refusal that produced it is quoted: ${owed[0]?.reason?.slice(0, 40)}`);
+  check(owed?.length === 1 && owed[0].label.includes('Trace the missing row expander'), `the unretried attempt is named: ${owed?.[0]?.label}`);
+  check(owed?.[0]?.reason?.includes('ORPHAN-WORK GUARD') === true, `and the refusal that produced it is quoted: ${owed?.[0]?.reason?.slice(0, 40)}`);
 }
 
 // --- THE RECORDED ESCAPE ----------------------------------------------------------------------------
@@ -247,13 +264,13 @@ console.log('\n--- the recorded escape ---');
   const before = new Date(Date.parse(refusedAt) - 60_000).toISOString();
 
   recordAbandonment({ session: 'other-session', reason: 'a reason belonging to a different session entirely', at: after }, store);
-  check(owedBy(payloadFor(file, 's-abandon'), store).length === 1, 'an abandonment recorded by ANOTHER session pays nothing');
+  check(asked(payloadFor(file, 's-abandon'), store)?.length === 1, 'an abandonment recorded by ANOTHER session pays nothing');
 
   recordAbandonment({ session: 's-abandon', reason: 'recorded before the refusal even happened, so it cannot answer it', at: before }, store);
-  check(owedBy(payloadFor(file, 's-abandon'), store).length === 1, 'an abandonment recorded BEFORE the refusal pays nothing');
+  check(asked(payloadFor(file, 's-abandon'), store)?.length === 1, 'an abandonment recorded BEFORE the refusal pays nothing');
 
   recordAbandonment({ session: 's-abandon', reason: 'the orphan work is somebody else\'s and must not be disturbed', at: after }, store);
-  check(owedBy(payloadFor(file, 's-abandon'), store).length === 0, 'an abandonment recorded AFTER the refusal, in this session, pays it');
+  check(asked(payloadFor(file, 's-abandon'), store)?.length === 0, 'an abandonment recorded AFTER the refusal, in this session, pays it');
 }
 
 {
@@ -285,7 +302,7 @@ console.log('\n--- multi-byte content larger than the sliced window ---');
     const entries = [...PROLOGUE, prompt('investiga'), agentCall('t1', 'Trace the missing row expander'), result('t1', REFUSAL, true), result('pad', padding, false), say('va delegado')];
     const file = transcript(`window-${name}`, entries);
 
-    verdicts.push(owedBy(payloadFor(file, `s-${name}`), path.join(SCRATCH, 'state-empty'))?.length);
+    verdicts.push(asked(payloadFor(file, `s-${name}`), path.join(SCRATCH, 'state-empty'))?.length);
   }
 
   check(verdicts[0] === 1, `the ASCII twin, padded past the first window, still sees the refusal (owed ${verdicts[0]})`);
@@ -301,7 +318,7 @@ console.log('\n--- multi-byte content larger than the sliced window ---');
   for (const [name, padding] of [['ascii', ascii], ['multibyte', accented]]) {
     const entries = [prompt('an earlier question'), result('pad', padding, false), say('an earlier answer'), prompt('investiga el gate'), agentCall('t1', 'Trace the missing row expander'), result('t1', REFUSAL, true), say('va delegado')];
     const file = transcript(`behind-${name}`, entries);
-    const owed = owedBy(payloadFor(file, `s-behind-${name}`), path.join(SCRATCH, 'state-empty'));
+    const owed = asked(payloadFor(file, `s-behind-${name}`), path.join(SCRATCH, 'state-empty'));
 
     check(owed?.length === 1, `the ${name} turn is found at the tail, behind ${PAD_BYTES} bytes of older traffic (owed ${owed?.length})`);
   }
@@ -314,18 +331,18 @@ console.log('\n--- malfunction paths all allow ---');
 {
   const missing = path.join(SCRATCH, 'does-not-exist.jsonl');
 
-  check(owedBy(payloadFor(missing, 's-missing'), SCRATCH) === undefined, 'a transcript that does not exist is unknowable, never clean');
-  check(owedBy({ session_id: 's-nopath' }, SCRATCH) === undefined, 'a payload with no transcript_path is unknowable');
-  check(owedBy({}, SCRATCH) === undefined, 'an empty payload is unknowable');
+  check(asked(payloadFor(missing, 's-missing'), SCRATCH) === undefined, 'a transcript that does not exist is unknowable, never clean');
+  check(asked({ session_id: 's-nopath' }, SCRATCH) === undefined, 'a payload with no transcript_path is unknowable');
+  check(asked({}, SCRATCH) === undefined, 'an empty payload is unknowable');
 
   const garbage = path.join(SCRATCH, 'garbage.jsonl');
 
   writeFileSync(garbage, 'this is not JSON\nneither is this\n', 'utf8');
-  check(owedBy(payloadFor(garbage, 's-garbage'), SCRATCH) === undefined, 'a transcript that will not parse is unknowable');
+  check(asked(payloadFor(garbage, 's-garbage'), SCRATCH) === undefined, 'a transcript that will not parse is unknowable');
 
   const boundaryless = transcript('boundaryless', [say('no user entry anywhere'), agentCall('t1', 'A'), result('t1', REFUSAL, true)]);
 
-  check(owedBy(payloadFor(boundaryless, 's-noboundary'), SCRATCH) === undefined, 'a transcript with no turn boundary is unknowable, never clean');
+  check(asked(payloadFor(boundaryless, 's-noboundary'), SCRATCH) === undefined, 'a transcript with no turn boundary is unknowable, never clean');
 }
 
 // --- THE HOOK, end to end, driven exactly as the harness drives it -----------------------------------

@@ -87,6 +87,7 @@ const survivors = runMutants({
   paths: ['delegation-receipts'],
   selftest: 'delegation-receipts/selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);
