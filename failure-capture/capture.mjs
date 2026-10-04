@@ -49,6 +49,7 @@ import { describeOutcome, newRunId, runCondense } from './condense.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { loadedSet } from './loaded-set.mjs';
 import { promotedStub } from './promotion.mjs';
+import { isPromotedStub, promotedRecurrenceLines } from './promoted-recurrence.mjs';
 import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { withLock } from './ledger-lock.mjs';
 import { resolveLoopContext } from './loop-context.mjs';
@@ -404,6 +405,15 @@ function recordCapture(args) {
   }
 
   const target = promotionTarget(key);
+  const found = locateKey(readLedgers(LEDGERS), key, readMarker);
+
+  // A rule that is already promoted is not promoted twice: the reader reads its text and extends it.
+  // @es Una regla ya promovida no se promueve dos veces: se lee su texto y se extiende.
+  if (isPromotedStub(found?.ledger.lines[found.index])) {
+    for (const line of promotedRecurrenceLines({ key, count: mine.count, files: contractFilesOf(target) })) console.log(line);
+
+    return 0;
+  }
 
   console.log(`RECURRENCE — "${key}" has now been recorded ${String(mine.count)}x.`);
   console.log('');
@@ -544,6 +554,9 @@ function incidentsFor(key) {
  * incidente nuevo desde entonces: la primera promoción es libre, y volver a cerrar una antigua con un
  * mecanismo también. Que el párrafo nuevo sea BUENO no es decidible aquí y no se afirma.
  */
+/** Every file whose text carries a promotion of `target`. @es Cada fichero cuyo texto lleva una promoción de `target`. */
+const contractFilesOf = (target) => (target === 'claude-md' ? [ORCHESTRATOR_RULES] : WORKER_CONTRACTS);
+
 /** The file whose token count measures a promotion's text: the orchestrator rules, or the project's first worker contract. @es El fichero cuyo recuento mide el texto. */
 const contractFileOf = (target) => (target === 'claude-md' ? ORCHESTRATOR_RULES : WORKER_CONTRACTS[0] ?? '');
 
