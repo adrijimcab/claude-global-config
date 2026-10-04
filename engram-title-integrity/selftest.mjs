@@ -172,10 +172,10 @@ check('e2e: the refusal names the near miss', denial.stdout.includes('NEAR MISS'
 check('e2e: the refusal offers the first content line', denial.stdout.includes('TASK #98 CLOSED'), true);
 
 // The EMPTY case needs its own assertion, not coverage-by-proximity from the whitespace one. This
-// case exists because `mutation-check.mjs` found its absence: a mutation that removed "NEAR MISS"
+// case exists because `mutants.mjs` found its absence: a mutation that removed "NEAR MISS"
 // from the empty-title refusal SURVIVED a 52/52 green suite. Both near-miss states are worded
 // separately in the guard, so both have to be asserted separately here.
-// @es El caso VACÍO necesita su propia aserción. Existe porque `mutation-check.mjs` detectó su
+// @es El caso VACÍO necesita su propia aserción. Existe porque `mutants.mjs` detectó su
 // ausencia: una mutación que quitaba «NEAR MISS» del rechazo por título vacío SOBREVIVIÓ a una suite
 // en verde 52/52. Ambos estados se redactan por separado en el guard, así que se afirman por separado.
 const emptyDenial = run(payload(TOOL, { title: '', content: 'x' }));

@@ -56,7 +56,8 @@ const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
   paths: [MODULE],
   selftest: `${MODULE}/selftest.mjs`,
-  mutants: MUTANTS
+  mutants: MUTANTS,
+  crashKills: 'fail'
 });
 
 if (survivors > 0) console.error('A surviving mutation is a hole in selftest.mjs: the guard could rot that way undetected.');

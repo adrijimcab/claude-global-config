@@ -8,7 +8,7 @@
  * copy of the census at it, and requires exit 3 — and then points the same copy at the real store and
  * requires exit 0, because a script that ALWAYS exits 3 would also pass the first half.
  *
- * The original is never edited; the copy is mutated in a scratch directory, as in `mutation-check.mjs`.
+ * The original is never edited; the copy is mutated in a scratch directory, as in `mutants.mjs`.
  *
  * @es Demuestra que el código reservado 3 SE DISPARA de verdad con un conjunto vacío. Un guard de
  * vacuidad que nunca se ha visto en rojo es justo lo que pretende evitar. Construye una tienda vacía
