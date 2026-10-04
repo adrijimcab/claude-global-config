@@ -22,7 +22,9 @@ const MUTANTS = [
   ['the data line goes through the renderer', SPEAKER, 'data: (text) => sink.log(text),', 'data: (text) => sink.log(line(text)),'],
   ['dataError prints on the output stream', SPEAKER, 'dataError: (text) => sink.error(text),', 'dataError: (text) => sink.log(text),'],
   ['blank prints nothing', SPEAKER, "blank: () => sink.log(''),", 'blank: () => undefined,'],
-  ['the message is printed without its parameters', SPEAKER, 'return render(table[id], params);', 'return render(table[id]);']
+  ['the message is printed without its parameters', SPEAKER, 'return render(table[id], params);', 'return render(table[id]);'],
+  ['a table that is not bilingual is loaded', SPEAKER, 'if (problems.length > 0) throw', 'if (false) throw'],
+  ['the table is not checked at load', SPEAKER, 'const problems = messageProblems(table);', 'const problems = [];']
 ];
 
 const survivors = runMutants({

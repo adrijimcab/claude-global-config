@@ -62,6 +62,16 @@ const sink = () => {
   equal('line returns the rendered text without printing', attempt(() => speaker.line('hello', { who: 'x' })), 'Hello x. @es Hola x.');
 }
 
+// G8-a at load: a table with a message lacking its @es half is refused when the speaker is made, naming the id,
+// so no emitter over it can print English only. @es G8-a al cargar: una tabla con un mensaje sin su mitad @es se rechaza al crear el speaker, nombrando el id.
+{
+  const loadingFor = (table) => attempt(() => makeSpeaker(table, sink()));
+
+  equal('a table whose message has no Spanish half is refused at load, naming the id', loadingFor({ ...TABLE, bare: { en: 'Only English.' } }), 'threw: message table is not bilingual: bare: a half is missing or empty. @es la tabla de mensajes no es bilingüe: bare: a half is missing or empty.');
+  equal('a table whose Spanish half copies the English one is refused at load', loadingFor({ ...TABLE, same: { en: 'Same.', es: 'Same.' } }), 'threw: message table is not bilingual: same: the Spanish half is a copy of the English one. @es la tabla de mensajes no es bilingüe: same: the Spanish half is a copy of the English one.');
+  equal('a clean table loads', typeof loadingFor(TABLE).say, 'function');
+}
+
 console.log(`speaker selftest: ${String(passed)} passed, ${String(failures.length)} failed`);
 for (const failure of failures) console.error(`  FAIL ${failure}`);
 process.exit(failures.length === 0 ? 0 : 1);

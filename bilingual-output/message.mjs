@@ -20,6 +20,9 @@ const NAME_CHARACTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012
 /** A half as an array of lines. @es Una mitad como array de líneas. */
 const linesOf = (half) => (Array.isArray(half) ? half : [half]);
 
+/** Whether a half holds any text at all. @es Si una mitad contiene algún texto. */
+const hasText = (half) => linesOf(half ?? []).join('\n').trim().length > 0;
+
 /**
  * The `{name}` placeholders of `text`, in order of appearance. A brace group that is not a plain name (a
  * JSON example, say) is literal text, not a placeholder.
@@ -65,10 +68,14 @@ function fill(line, params) {
 }
 
 /**
- * The text of a message in the house form, with its placeholders filled from `params`.
- * @es El texto de un mensaje en la forma de la casa, con sus marcadores rellenados desde `params`.
+ * The text of a message in the house form, with its placeholders filled from `params`. A message missing
+ * either half throws: no sentence is ever printed in one language only.
+ * @es El texto de un mensaje en la forma de la casa, con sus marcadores rellenados desde `params`. Un mensaje
+ * al que le falta una mitad lanza: ninguna frase se imprime nunca en un solo idioma.
  */
 export function render({ en, es }, params = {}) {
+  if (!hasText(en) || !hasText(es)) throw new Error('a message half is missing or empty. @es a un mensaje le falta una mitad o está vacía.');
+
   const english = linesOf(en).map((line) => fill(line, params));
   const spanish = linesOf(es).map((line) => fill(line, params));
 
@@ -90,7 +97,7 @@ export function messageProblems(table) {
     const english = linesOf(message?.en ?? []).join('\n');
     const spanish = linesOf(message?.es ?? []).join('\n');
 
-    if (english.trim().length === 0 || spanish.trim().length === 0) {
+    if (!hasText(message?.en) || !hasText(message?.es)) {
       problems.push(`${id}: a half is missing or empty`);
       continue;
     }

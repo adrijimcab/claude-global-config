@@ -21,10 +21,13 @@ const MUTANTS = [
   ['an unfilled placeholder is printed as it is', MESSAGE, 'if (missing.length > 0) throw', 'if (false) throw'],
   ['only the first occurrence of a placeholder is filled', MESSAGE, 'at = isPlaceholder ? close + 1 : open + 1;', 'at = isPlaceholder ? close + 1 : open + 1; if (isPlaceholder) { filled += line.slice(at); return filled; }'],
   ['any brace group is a placeholder, so a JSON example throws', MESSAGE, 'if (name.length > 0 && [...name].every((character) => NAME_CHARACTERS.includes(character))) names.push(name);', 'if (name.length > 0) names.push(name);'],
-  ['a half that is missing is not reported', MESSAGE, "if (english.trim().length === 0 || spanish.trim().length === 0) {", 'if (false) {'],
+  ['a half that is missing is not reported', MESSAGE, 'if (!hasText(message?.en) || !hasText(message?.es)) {', 'if (false) {'],
   ['an untranslated copy is not reported', MESSAGE, "if (english === spanish) problems.push(", 'if (false) problems.push('],
   ['different placeholders between the halves are not reported', MESSAGE, "if ([...new Set(placeholdersOf(english))].sort().join() !== [...new Set(placeholdersOf(spanish))].sort().join()) problems.push(", 'if (false) problems.push('],
-  ['placeholders are compared in order, so a reordered translation is flagged', MESSAGE, '[...new Set(placeholdersOf(english))].sort().join() !==', '[...new Set(placeholdersOf(english))].join() !==']
+  ['placeholders are compared in order, so a reordered translation is flagged', MESSAGE, '[...new Set(placeholdersOf(english))].sort().join() !==', '[...new Set(placeholdersOf(english))].join() !=='],
+  ['a message with no Spanish half is rendered anyway', MESSAGE, 'if (!hasText(en) || !hasText(es)) throw', 'if (false) throw'],
+  ['a missing English half is not refused when rendered', MESSAGE, 'if (!hasText(en) || !hasText(es)) throw', 'if (!hasText(es)) throw'],
+  ['a half of blanks counts as text', MESSAGE, "linesOf(half ?? []).join('\\n').trim().length > 0", "linesOf(half ?? []).join('\\n').length > 0"]
 ];
 
 const survivors = runMutants({

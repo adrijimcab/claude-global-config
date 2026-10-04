@@ -39,6 +39,17 @@ equal('a Spanish half that adds a placeholder is flagged', messageProblems({ ...
 equal('the same placeholders in another order are not a problem', messageProblems({ ...CLEAN, ok: { en: '{a} then {b}.', es: '{b} tras {a}.' } }), []);
 equal('...whichever half is the reordered one', messageProblems({ ...CLEAN, ok: { en: '{b} then {a}.', es: '{a} tras {b}.' } }), []);
 
+// G8-a: a message without its @es half is refused when rendered, by name, in both languages — never printed English only.
+// @es G8-a: un mensaje sin su mitad @es se rechaza al renderizarlo, por nombre y en ambos idiomas; nunca se imprime solo en inglés.
+const REFUSAL = 'a message half is missing or empty. @es a un mensaje le falta una mitad o está vacía.';
+const refusalOf = (message) => attempt(() => render(message));
+
+equal('a message with no Spanish half is refused when rendered', refusalOf({ en: 'Only English.' }), `threw: ${REFUSAL}`);
+equal('a message with an empty Spanish half is refused when rendered', refusalOf({ en: 'Hi.', es: '' }), `threw: ${REFUSAL}`);
+equal('a message whose Spanish lines are all blank is refused when rendered', refusalOf({ en: 'Hi.', es: ['  ', ''] }), `threw: ${REFUSAL}`);
+equal('a message with no English half is refused when rendered', refusalOf({ es: 'Solo español.' }), `threw: ${REFUSAL}`);
+equal('a message with both halves still renders', refusalOf({ en: 'Hi.', es: 'Hola.' }), 'Hi. @es Hola.');
+
 console.log(`message selftest: ${String(passed)} passed, ${String(failures.length)} failed`);
 for (const failure of failures) console.error(`  FAIL ${failure}`);
 process.exit(failures.length === 0 ? 0 : 1);
