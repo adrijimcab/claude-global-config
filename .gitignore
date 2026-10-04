@@ -116,6 +116,8 @@
 /backlog-content-guard/state/
 !/journal-backup/
 !/journal-backup/**
+!/baseline-record/
+!/baseline-record/**
 !/hook-caller/
 !/hook-caller/**
 /hook-caller/state/
