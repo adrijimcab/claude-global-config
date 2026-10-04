@@ -18,22 +18,17 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { makeSpeaker } from '../../../bilingual-output/speaker.mjs';
+
 const UNITS = { b: 1, kb: 1024, mb: 1024 * 1024 };
 
-/** Every message: `[English, Spanish]`. @es Todos los mensajes: `[inglés, español]`. */
 const MESSAGES = {
-  unreadable: ['{dir} holds no readable angular.json with a buildable project', '{dir} no tiene un angular.json legible con un proyecto compilable'],
-  missing: ['project {project}: no {type} budget with a maximumError', 'proyecto {project}: falta un presupuesto {type} con maximumError'],
-  invalid: ['project {project}: {type} maximumError "{value}" is not a size in b, kb or mb', 'proyecto {project}: maximumError "{value}" de {type} no es un tamaño en b, kb o mb'],
-  over: ['project {project}: {type} maximumError {value} is above the cap {cap}', 'proyecto {project}: maximumError {value} de {type} supera el tope {cap}'],
-  ok: ['{count} budget declaration(s) within their caps', '{count} declaración(es) de presupuesto dentro de sus topes'],
+  unreadable: { en: '{dir} holds no readable angular.json with a buildable project', es: '{dir} no tiene un angular.json legible con un proyecto compilable' },
+  missing: { en: 'project {project}: no {type} budget with a maximumError', es: 'proyecto {project}: falta un presupuesto {type} con maximumError' },
+  invalid: { en: 'project {project}: {type} maximumError "{value}" is not a size in b, kb or mb', es: 'proyecto {project}: el maximumError "{value}" de {type} no es un tamaño en b, kb o mb' },
+  over: { en: 'project {project}: {type} maximumError {value} is above the cap {cap}', es: 'proyecto {project}: el maximumError {value} de {type} supera el tope {cap}' },
+  ok: { en: '{count} budget declaration(s) within their caps', es: '{count} declaración(es) de presupuesto dentro de sus topes' },
 };
-
-function say(id, values = {}) {
-  const [english, spanish] = MESSAGES[id].map((half) => half.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? '')));
-
-  return `${english} @es ${spanish}`;
-}
 
 /** Size text to bytes, or `undefined` when it is not `<number><b|kb|mb>`. @es Tamaño a bytes. */
 function toBytes(text) {
@@ -42,23 +37,24 @@ function toBytes(text) {
   return match === null ? undefined : Number(match[1]) * UNITS[match[2].toLowerCase()];
 }
 
-/** The problems of one project's budgets against the caps. @es Problemas de los presupuestos de un proyecto. */
+/** The problems of one project's budgets against the caps, as `[messageId, params]`. @es Problemas de un proyecto. */
 function projectProblems(project, budgets, caps) {
   return Object.entries(caps).flatMap(([type, { maximumError: cap }]) => {
     const budget = budgets.find((entry) => entry.type === type && entry.maximumError !== undefined);
 
-    if (budget === undefined) return [say('missing', { project, type })];
+    if (budget === undefined) return [['missing', { project, type }]];
 
     const bytes = toBytes(budget.maximumError);
 
-    if (bytes === undefined) return [say('invalid', { project, type, value: budget.maximumError })];
+    if (bytes === undefined) return [['invalid', { project, type, value: budget.maximumError }]];
 
-    return bytes > toBytes(cap) ? [say('over', { project, type, value: budget.maximumError, cap })] : [];
+    return bytes > toBytes(cap) ? [['over', { project, type, value: budget.maximumError, cap }]] : [];
   });
 }
 
 /** Runs the check over `dir` and returns the exit code. @es Corre la comprobación y devuelve la salida. */
-export function main(dir, print = console.log) {
+export function main(dir, sink = console) {
+  const speaker = makeSpeaker(MESSAGES, sink);
   const caps = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'config.json'), 'utf8')).caps;
   let projects;
 
@@ -71,15 +67,15 @@ export function main(dir, print = console.log) {
   const builds = projects.map(([name, project]) => [name, (project.architect ?? project.targets)?.build]).filter(([, build]) => build !== undefined);
 
   if (builds.length === 0) {
-    print(say('unreadable', { dir }));
+    speaker.complain('unreadable', { dir });
 
     return 2;
   }
 
   const problems = builds.flatMap(([name, build]) => projectProblems(name, build.configurations?.production?.budgets ?? [], caps));
 
-  for (const problem of problems) print(problem);
-  if (problems.length === 0) print(say('ok', { count: builds.length * Object.keys(caps).length }));
+  for (const [id, params] of problems) speaker.complain(id, params);
+  if (problems.length === 0) speaker.say('ok', { count: builds.length * Object.keys(caps).length });
 
   return problems.length === 0 ? 0 : 1;
 }
