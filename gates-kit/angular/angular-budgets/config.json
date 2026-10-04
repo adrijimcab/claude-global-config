@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "caps": {
+    "initial": { "maximumError": "2mb" },
+    "anyComponentStyle": { "maximumError": "8kb" },
+    "anyScript": { "maximumError": "1mb" }
+  }
+}

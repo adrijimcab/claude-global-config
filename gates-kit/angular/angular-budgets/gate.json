@@ -1,0 +1,4 @@
+{
+  "command": ["node", "check-budgets.mjs", "{target}"],
+  "timeoutMs": 60000
+}
