@@ -54,47 +54,6 @@ export function transcriptSize(transcriptPath) {
   }
 }
 
-const KNOWN_MASTER_IDS_FILE = path.join(STATE_DIR, 'known-master-ids.json');
-
-/**
- * The engram observation ids already known to BE a master-backlog record (`{ id: topicKey }`), learned
- * from real `mem_save`/`topic_key` pairings observed across turns and sessions. This is a DURABLE fact
- * ("observation 972 is the master backlog"), never a per-turn one, so it lives outside the per-session
- * offset state and is never reset by a new turn or a new session.
- * @es Los ids de observación de engram ya conocidos como registro de backlog maestro, aprendidos de
- * parejas `mem_save`/`topic_key` reales vistas a lo largo de turnos y sesiones. Un hecho DURABLE, nunca
- * de un turno, así que vive fuera del estado de offset por sesión.
- */
-export function readKnownMasterIds() {
-  try {
-    const parsed = JSON.parse(readFileSync(KNOWN_MASTER_IDS_FILE, 'utf8'));
-
-    return Array.isArray(parsed) ? new Set(parsed) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-/**
- * Merges newly-observed `{ id, topicKey }` pairings into the durable known-ids record. Never throws:
- * learning is an optimisation this mechanism benefits from, never a precondition for it to decide.
- * @es Funde parejas `{ id, topicKey }` recién observadas en el registro durable. Nunca lanza.
- */
-export function recordKnownMasterIds(pairings) {
-  if (!Array.isArray(pairings) || pairings.length === 0) return;
-
-  try {
-    const known = readKnownMasterIds();
-
-    for (const { id } of pairings) known.add(id);
-
-    mkdirSync(STATE_DIR, { recursive: true });
-    writeFileSync(KNOWN_MASTER_IDS_FILE, JSON.stringify([...known]), 'utf8');
-  } catch {
-    /* learning is an optimisation, never a precondition */
-  }
-}
-
 /**
  * Transcript bytes written strictly AFTER `offset`, decoded as UTF-8. `''` when nothing new exists,
  * `undefined` when the file cannot be read at all (a genuinely failed measurement, never coerced to
