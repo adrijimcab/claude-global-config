@@ -13,6 +13,12 @@
  * Correr SIEMPRE sobre un espejo de las guardias, no sobre las vivas: las dos rutas escriben en los
  * diarios de las guardias, y un diario vivo lleno de repeticiones deja de ser tráfico real.
  *
+ * MODO `latency` (procedimiento P3b, `latency.mjs`): `node replay.mjs latency --manifest <manifiesto> [--runs 20]
+ * [--projects-root <dir>] [--cwd <dir>] [--repo nombre|worktree[|gitDir]]` corre el manifiesto N veces seguidas sobre un
+ * payload de Stop con forma real y escribe UNA línea JSON (mediana, p95, transcripts a su alcance, bytes, repos).
+ * @es LATENCY mode (procedure P3b): runs the manifest N consecutive times on a real-shaped Stop payload and prints
+ * ONE JSON line (median, p95, transcripts in reach, bytes, repos).
+ *
  * Una discrepancia se vuelve a medir una vez, porque algunas guardias leen estado vivo (worktrees,
  * agentes) que puede moverse entre las dos corridas; solo cuenta si se repite.
  */
@@ -22,16 +28,18 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { runLatencyCli } from './latency.mjs';
 import { labelOf, loadManifest } from './manifest.mjs';
 import { mergeOutputs } from './merge.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const LATENCY = process.argv[2] === 'latency';
 const [settingsFile, manifestFile, payloadsFile] = process.argv.slice(2);
 const concurrencyAt = process.argv.indexOf('--concurrency');
 const CONCURRENCY = concurrencyAt === -1 ? 6 : Number(process.argv[concurrencyAt + 1]);
 const rootAt = process.argv.indexOf('--root');
 
-if (rootAt === -1) throw new Error('falta --root <directorio que contiene .claude/>: el camino viejo se resuelve bajo ese espejo');
+if (!LATENCY && rootAt === -1) throw new Error('falta --root <directorio que contiene .claude/>: el camino viejo se resuelve bajo ese espejo');
 
 const ROOT = process.argv[rootAt + 1];
 const optionValue = (flag) => {
@@ -242,4 +250,5 @@ async function main() {
   process.exitCode = tally.differ === 0 && tally.nonZeroExit === 0 && uncovered.length === 0 ? 0 : 1;
 }
 
-await main();
+if (LATENCY) process.exitCode = runLatencyCli(process.argv.slice(3));
+else await main();
