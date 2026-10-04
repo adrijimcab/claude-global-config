@@ -45,6 +45,7 @@ const survivors = runMutants({
   paths: ['mutation-proof'],
   selftest: 'mutation-proof/selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);
