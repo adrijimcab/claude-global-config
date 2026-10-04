@@ -59,3 +59,20 @@ export function makeCaptureWorld({ scratch, name, config = { scope: 'demo' }, fi
 
   return { home, repo, ledger: path.join(home, '.claude', 'lessons-ledger.md'), incidents: path.join(loop, 'state', 'incidents.jsonl'), run };
 }
+
+/**
+ * The runs of `out` that are English only: a run is a stretch of non-blank lines, and it is bilingual when
+ * the marker `@es` appears in it (one-line messages carry it inline, multi-line ones on their Spanish lines).
+ * @returns the runs without the marker, empty when every message is bilingual.
+ * @es Los tramos de `out` solo en inglés: un tramo es un conjunto de líneas no vacías y es bilingüe si lleva el marcador `@es`.
+ */
+export function monolingualRuns(out) {
+  const runs = [[]];
+
+  for (const line of out.split('\n')) {
+    if (line.trim().length === 0) runs.push([]);
+    else runs.at(-1).push(line);
+  }
+
+  return runs.map((run) => run.join('\n')).filter((run) => run.length > 0 && !run.includes('@es'));
+}

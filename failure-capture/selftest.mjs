@@ -433,7 +433,7 @@ refused(
 
   write(fat.home, { '.claude/lessons-ledger.md': `# Lessons Ledger\n\n---\n- [promoted] 2026-09-01 — ${KEY}: now a binding rule in ~/.claude/rules/promoted-rules.md; closed by mechanism x (selftest run, exit 0); full incident history in y <!--fc:${KEY}#2-->\n` });
 
-  check('status treats a legacy FAT [promoted] ledger line as landed, not due', statusOf(fat).includes('keyed lessons     : 1') && !statusOf(fat).includes('PROMOTION DUE'), statusOf(fat));
+  check('status treats a legacy FAT [promoted] ledger line as landed, not due', statusOf(fat).includes('keyed lessons: 1') && !statusOf(fat).includes('PROMOTION DUE'), statusOf(fat));
 }
 
 {

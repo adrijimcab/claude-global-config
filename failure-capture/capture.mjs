@@ -57,8 +57,13 @@ import { withLock } from './ledger-lock.mjs';
 import { resolveLoopContext } from './loop-context.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
 import { captureTextProblems, newLessonLine } from './tiered-capture.mjs';
+import { CAPTURE_MESSAGES } from './capture-messages.mjs';
+import { makeSpeaker } from './speaker.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+/** Everything this command prints goes through here, in the house bilingual form (`speaker.mjs`). @es Todo lo que este comando imprime pasa por aquí, en la forma bilingüe de la casa. */
+const speaker = makeSpeaker({ ...CAPTURE_MESSAGES });
 // The PROJECT this command runs in (`project.mjs`), never the folder this code sits in: the loop is
 // global since 2026-09-30, so `HERE/../..` would name the user's home, not a repository. It, and the five
 // values derived from it below, are bound by `bindLoopContext` for the commands that read the project, never
@@ -314,15 +319,15 @@ function commandKeys() {
   const keys = ledgerKeys();
 
   if (keys.size === 0) {
-    console.log('(no keyed lessons yet — every capture so far predates the failure-capture loop)');
+    speaker.say('keys.none');
 
     return 0;
   }
 
-  console.log('EXISTING LESSON KEYS — reuse one if this incident is the SAME lesson:');
+  speaker.say('keys.header');
 
   for (const [key, count] of [...keys].sort()) {
-    console.log(`  ${key}  (recorded ${String(count)}x)`);
+    speaker.data(`  ${key}  (${String(count)}x)`);
   }
 
   return 0;
@@ -354,17 +359,17 @@ function recordCapture(args) {
   const { key, scope, actor, lesson, rule, session } = args;
   const problems = [];
 
-  if (!isValidKey(key)) problems.push('--key must be lowercase-kebab-case, 4-60 chars (it becomes the parity anchor if this lesson is ever promoted)');
-  if (!SCOPES.includes(scope)) problems.push(`--scope must be ${SCOPES.map((one) => `"${one}"`).join(' or ')} here${PROJECT === undefined ? ' (no project holds this directory: run from inside one to record a project lesson)' : ''}`);
-  if (typeof actor !== 'string' || (actor !== 'orchestrator' && !actor.startsWith('worker'))) problems.push('--actor must be "orchestrator" or "worker:<agent-type>"');
-  if (typeof lesson !== 'string' || lesson.length < 40) problems.push('--lesson must be a real one-line lesson (40+ chars)');
-  if (rule === undefined && typeof lesson === 'string' && !lesson.includes('RULE')) problems.push('--lesson must state the rule explicitly and contain the word RULE (ledger format: what went wrong -> root cause -> RULE)');
+  if (!isValidKey(key)) problems.push(speaker.line('capture.problem.key'));
+  if (!SCOPES.includes(scope)) problems.push(speaker.line(PROJECT === undefined ? 'capture.problem.scope.noProject' : 'capture.problem.scope', { allowed: SCOPES.map((one) => `"${one}"`).join(' / ') }));
+  if (typeof actor !== 'string' || (actor !== 'orchestrator' && !actor.startsWith('worker'))) problems.push(speaker.line('capture.problem.actor'));
+  if (typeof lesson !== 'string' || lesson.length < 40) problems.push(speaker.line('capture.problem.lessonShort'));
+  if (rule === undefined && typeof lesson === 'string' && !lesson.includes('RULE')) problems.push(speaker.line('capture.problem.lessonRule'));
 
   problems.push(...captureTextProblems({ lesson, rule }));
 
   if (problems.length > 0) {
-    console.error('capture REFUSED — the entry would not be a usable lesson:');
-    for (const problem of problems) console.error(`  - ${problem}`);
+    speaker.complain('capture.refused');
+    for (const problem of problems) speaker.dataError(`  - ${problem}`);
 
     return 1;
   }
@@ -384,7 +389,7 @@ function recordCapture(args) {
   stamp(session, 'capture');
 
   if (deferred > 0) {
-    console.log(`RECORDED (spooled) — the ledger is locked by another writer; ${String(deferred)} entr(y/ies) will fold on the next capture. Nothing is lost. @es El ledger está bloqueado por otro escritor; ${String(deferred)} entrada(s) se plegará(n) en la próxima captura. No se pierde nada.`);
+    speaker.say('capture.deferred', { count: deferred });
 
     return 0;
   }
@@ -392,16 +397,17 @@ function recordCapture(args) {
   const mine = folded.find((f) => f.key === key);
 
   if (mine === undefined) {
-    console.log('RECORDED (spooled) — not folded in this pass; it will fold on the next capture.');
+    speaker.say('capture.spooled');
 
     return 0;
   }
 
-  if (mine.fallback !== undefined) console.log(`NOTE — ${mine.fallback}`);
+  // The fallback reason is already bilingual (`tiered-capture.mjs`), so it is printed after its label as it is.
+  // @es El motivo del respaldo ya es bilingüe (`tiered-capture.mjs`), así que se imprime tras su etiqueta tal cual.
+  if (mine.fallback !== undefined) speaker.data(`NOTE — ${mine.fallback}`);
 
   if (mine.count < PROMOTION_THRESHOLD) {
-    console.log(`RECORDED in the lessons ledger as a NEW lesson: ${key} (1x).`);
-    console.log('It stays an INCIDENT. If it happens again the loop will demand promotion AND a mechanism (or a written reason none is possible).');
+    speaker.say('capture.new', { key });
 
     return 0;
   }
@@ -412,17 +418,14 @@ function recordCapture(args) {
   // A rule that is already promoted is not promoted twice: the reader reads its text and extends it.
   // @es Una regla ya promovida no se promueve dos veces: se lee su texto y se extiende.
   if (isPromotedStub(found?.ledger.lines[found.index])) {
-    for (const line of promotedRecurrenceLines({ key, count: mine.count, files: contractFilesOf(target) })) console.log(line);
+    for (const line of promotedRecurrenceLines({ key, count: mine.count, files: contractFilesOf(target) })) speaker.data(line);
 
     return 0;
   }
 
-  console.log(`RECURRENCE — "${key}" has now been recorded ${String(mine.count)}x.`);
-  console.log('');
-  console.log('An incident that repeats is no longer an incident: ledger injection alone did NOT prevent it.');
-  console.log('This project already ruled on that (ledger 2026-07-07: "a lesson without a blocking gate WILL recur").');
-  console.log('');
-  console.log(promotionInstructions(key, target));
+  speaker.say('capture.recurrence', { key, count: mine.count });
+  speaker.blank();
+  speaker.data(promotionInstructions(key, target));
 
   return 0;
 }
@@ -689,9 +692,7 @@ function commandDismiss(args) {
   const { marker, reason, session } = args;
 
   if (typeof reason !== 'string' || reason.length < 25) {
-    console.error('dismiss REFUSED — --reason must say WHY this is not a correction (25+ chars).');
-    console.error('A dismissal is recorded, never silent: the dismissal log is the only evidence that');
-    console.error('can ever justify tuning the markers, so an empty one destroys the data it exists for.');
+    speaker.complain('dismiss.refused');
 
     return 1;
   }
@@ -699,7 +700,7 @@ function commandDismiss(args) {
   ensureDirs();
   appendFileSync(DISMISSALS, `${JSON.stringify({ marker: marker ?? 'unknown', reason, session: session ?? 'unknown', at: new Date().toISOString() })}\n`, 'utf8');
   stamp(session, 'dismiss');
-  console.log('DISMISSED and recorded. The turn may end.');
+  speaker.say('dismiss.done');
 
   return 0;
 }
@@ -713,11 +714,11 @@ function commandStatus() {
   for (const ledger of readLedgers(LEDGERS)) {
     const bytes = ledger.lines === undefined ? 0 : Buffer.byteLength(ledger.lines.join('\n'));
 
-    console.log(`ledger ${ledger.scope.padEnd(11)}: ${ledger.file} — ${String(bytes)} bytes (~${String(Math.round(bytes / 4))} tokens, loaded once per session)`);
+    speaker.say('status.ledger', { scope: ledger.scope, file: ledger.file, bytes, tokens: Math.round(bytes / 4) });
   }
-  console.log(`keyed lessons     : ${String(keys.size)}`);
-  console.log(`incidents recorded: ${String(incidents)}`);
-  console.log(`dismissals        : ${String(dismissals)}`);
+  speaker.say('status.keyed', { count: keys.size });
+  speaker.say('status.incidents', { count: incidents });
+  speaker.say('status.dismissals', { count: dismissals });
 
   // A key that has already been promoted keeps its recurrence count on the stub line, so counting on
   // the count alone would report it as still owing a promotion for ever. `promoted.md` is the record
@@ -734,9 +735,9 @@ function commandStatus() {
   const due = [...keys].filter(([key, count]) => count >= PROMOTION_THRESHOLD && !stubbed.has(key) && !promoted.includes(` — ${key} -> `));
 
   if (due.length > 0) {
-    console.log('');
-    console.log('PROMOTION DUE (recurred, still only an incident):');
-    for (const [key, count] of due) console.log(`  ${key} (${String(count)}x) -> ${promotionTarget(key)}`);
+    speaker.blank();
+    speaker.say('status.due');
+    for (const [key, count] of due) speaker.data(`  ${key} (${String(count)}x) -> ${promotionTarget(key)}`);
   }
 
   return 0;
@@ -755,7 +756,7 @@ const LEDGER_IMPORT = '@lessons-ledger.md';
  */
 function commandInit() {
   if (PROJECT === undefined) {
-    console.error('init REFUSED — no project holds this directory (no .claude/CLAUDE.md above it, short of the home: the home\'s own .claude is global configuration, never a project). @es init RECHAZADO: ningún proyecto contiene este directorio (no hay .claude/CLAUDE.md por encima, sin llegar al home: el .claude del home es configuración global, nunca un proyecto).');
+    speaker.complain('init.noProject');
 
     return 1;
   }
@@ -782,7 +783,8 @@ function commandInit() {
     appendFileSync(instructions, `${text.endsWith('\n') ? '' : '\n'}${section}`, 'utf8');
   }
 
-  console.log(`project ${PROJECT.scope}: ledger ${created ? 'CREATED' : 'already present'} at ${PROJECT.ledgerFile}; import ${imported ? 'already present' : 'ADDED'} in ${instructions}`);
+  speaker.say(created ? 'init.ledger.created' : 'init.ledger.present', { scope: PROJECT.scope, file: PROJECT.ledgerFile });
+  speaker.say(imported ? 'init.import.present' : 'init.import.added', { scope: PROJECT.scope, file: instructions });
 
   return 0;
 }
