@@ -2,6 +2,11 @@
 /**
  * `PreToolUse` hook on `Bash` / `PowerShell` — the ENFORCEMENT half of the eval guard.
  *
+ * MECHANISM FOR the promoted lesson `shell-one-liner-corrupted-data` (text edits and code payloads
+ * whose escapes the shell eats: node evaluate flags since 2026-09, and since 2026-10-04 the script
+ * arguments of sed, sd, awk, gawk, perl, ruby, python and python3, refusal kind `text-edit`).
+ * @es Mecanismo de la lección promovida `shell-one-liner-corrupted-data`.
+ *
  * WHY A HOOK AND NOT PROSE. The remedy for this failure was, until now, a sentence in the two agent
  * contract files: "never build escapes or non-ASCII in a shell one-liner — write a `.mjs` file". That
  * is the ADVISORY mechanism, and this project's own first ledger entry (2026-06-16) says why it is the

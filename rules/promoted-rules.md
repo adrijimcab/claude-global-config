@@ -262,6 +262,24 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     REGLA: el brief nombra la vía exacta que funciona y las rechazadas, y la cláusula de no reintentar
     se acota a la acción que protege. Cara sin mecanismo: ningún guard distingue en prosa si la vía
     nombrada es la buena; en su lugar, la sección compartida del brief la enuncia.
+- **`shell-one-liner-corrupted-data`** — A text edit written as a shell one-liner (`sed`, `sd`, `awk`,
+  `perl -e`, `python -c`…) passes through a shell that collapses doubled backslashes and eats a
+  backslash before `"`, `$` or a backtick, so the pattern silently matches nothing, the program exits 0
+  and the file is unchanged. Twice (2026-09-30, 2026-10-04); the first occurrence wrote the rule
+  "the eval-guard must refuse it" but nobody built it, which is why it recurred. RULE: text edits with
+  escapes, backslashes or template literals go through the Edit tool or a `.mjs` file, and after any
+  scripted edit the expected marker is counted before anything relies on it. CLOSED BY MECHANISM
+  (2026-10-04, claude-global-config 76c1241): `~/.claude/eval-guard/` refuses eaten escapes and broken
+  quote shapes in the script arguments of sed, sd, awk, gawk, perl, ruby, python and python3 (kind
+  `text-edit`), selftest 101/101, mutation campaign 23/23 killed, a real-shaped payload refused through
+  the dispatcher. Known gap, stated: the shared tokenizer does not understand heredocs, so a heredoc
+  body line that starts with a watched program is refused (a false positive, never a miss); its repair
+  is queued as its own unit.
+  @es Una edición de texto escrita como one-liner de shell pasa por un shell que colapsa las barras
+  invertidas dobles y se come la barra antes de `"`, `$` o el acento grave: el patrón no coincide con
+  nada, el programa sale con 0 y el fichero queda igual. REGLA: esas ediciones van por la herramienta
+  Edit o por un `.mjs`, y tras cualquier edición por script se cuenta el marcador esperado. Lo impide
+  `~/.claude/eval-guard/` desde 76c1241; hueco declarado: los heredocs (falso positivo, nunca un fallo).
 - **`brief-had-workers-open-every-image`** — An image is the most expensive thing a worker can load,
   and every image it opens is re-sent on each of its later steps: the cost is images times remaining
   steps. Twice in one day (2026-10-02) a brief of mine made workers review a body of screenshots
