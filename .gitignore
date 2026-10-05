@@ -137,6 +137,8 @@
 !/failure-capture/**
 !/bilingual-output/
 !/bilingual-output/**
+!/guard-precision/
+!/guard-precision/**
 /failure-capture/state/
 # Proof that a tiering of a loaded rule file conserves it; code only, its selftest sandboxes never. @es
 # Prueba de que un escalonado de un fichero de reglas cargado lo conserva; solo código, nunca sus sandboxes.
