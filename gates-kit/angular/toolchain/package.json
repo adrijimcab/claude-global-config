@@ -1,0 +1,17 @@
+{
+  "name": "gates-kit-angular-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned toolchain the Angular gates run on; install it once into a directory outside every repository.",
+  "dependencies": {
+    "dependency-cruiser": "18.5.0",
+    "eslint": "9.39.4",
+    "jasmine-core": "5.1.2",
+    "karma": "6.4.4",
+    "karma-chrome-launcher": "3.2.0",
+    "karma-coverage": "2.2.1",
+    "karma-jasmine": "5.1.0",
+    "typescript": "5.5.4",
+    "typescript-eslint": "8.57.1"
+  }
+}
