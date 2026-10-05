@@ -1,0 +1,4 @@
+{
+  "command": ["node", "../run-tool.mjs", "dependency-cruiser", "depcruise", "--config", "config.cjs", "{target}/src"],
+  "timeoutMs": 300000
+}
