@@ -5,12 +5,13 @@
  * `{ "command": ["node", "check.mjs", "{target}"], "timeoutMs": 300000 }`. `command` is an argv array run
  * without a shell from the gate directory; `{target}` becomes the absolute path of `pass/` or `fail/`;
  * `timeoutMs` is optional (default 300000). Any other key is refused. The `templates` folder holds
- * contract templates, not gates, so it is never a stack.
+ * contract templates and the `toolchains` folder the pinned packages the gates run on (one subfolder per
+ * stack); neither holds gates, so neither is ever a stack.
  *
  * @es Responde por la FORMA de un directorio de gate: qué gates hay y si cada uno tiene todas sus partes.
  * Un gate es `gates-kit/<stack>/<gate>/` con `config.*`, `pass/` y `fail/` no vacíos, `SOURCE.md` no vacío
  * y `gate.json`, la declaración estructurada de su comando (argv sin shell, desde el directorio del gate;
- * `{target}` se sustituye por la ruta de `pass/` o `fail/`). `templates` no es un stack.
+ * `{target}` se sustituye por la ruta de `pass/` o `fail/`). `templates` (plantillas) y `toolchains` (paquetes fijados sobre los que corren los gates) no son stacks.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -20,7 +21,7 @@ import path from 'node:path';
 export const DEFAULT_TIMEOUT_MS = 300_000;
 
 /** Folders under the kit that are not stacks. @es Carpetas del kit que no son stacks. */
-const NOT_STACKS = new Set(['templates']);
+const NOT_STACKS = new Set(['templates', 'toolchains']);
 
 const DECLARATION_KEYS = new Set(['command', 'timeoutMs']);
 

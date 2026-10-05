@@ -6,7 +6,7 @@
  * declaration; a gate command that times out or does not exist (neither is a kill); a config with an
  * ignore, an `off`, a downgrade to `warn`, a disable directive in a comment, a threshold under the floor;
  * the near misses of each (`office`, `ignored` inside a comment, a threshold at the floor); discovery
- * (stack filter, `templates` skipped, empty kit, unknown stack); and the exit codes of the CLI.
+ * (stack filter, `templates` and `toolchains` skipped, empty kit, unknown stack); and the exit codes of the CLI.
  *
  * @es Prueba de que el verificador de gates-kit DISCRIMINA. Cada caso construye su propio kit temporal.
  * Espacio de estados: gate correcto; fixture fail que pasa; fixture pass que falla; cada parte ausente;
@@ -169,11 +169,14 @@ buildGate(kit, 'angular', 'b-gate');
 buildGate(kit, 'angular', 'a-gate');
 buildGate(kit, 'nest', 'c-gate');
 buildGate(kit, 'templates', 'not-a-gate');
+buildGate(kit, 'toolchains', 'not-a-gate-either');
 writeFileSync(path.join(kit, 'README.md'), 'a plain file\n');
 
 check('discovery lists gates of every stack in a stable order', discoverGates(kit).map((gate) => `${gate.stack}/${gate.name}`).join() === 'angular/a-gate,angular/b-gate,nest/c-gate');
 check('discovery honours the stack filter', discoverGates(kit, 'nest').length === 1);
 check('discovery skips the templates folder', !discoverGates(kit).some((gate) => gate.stack === 'templates'));
+check('discovery skips the toolchains folder', !discoverGates(kit).some((gate) => gate.stack === 'toolchains'));
+check('the toolchains folder is not found even when asked for by name', discoverGates(kit, 'toolchains').length === 0);
 check('an unknown stack yields no gate', discoverGates(kit, 'nope').length === 0);
 check('a plain file beside the stacks is not a stack', discoverGates(kit).length === 3);
 check('inspectGate reports the parsed command', inspectGate(path.join(kit, 'nest', 'c-gate')).gate.command[0] === 'node');
