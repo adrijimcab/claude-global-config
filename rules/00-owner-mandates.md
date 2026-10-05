@@ -81,6 +81,24 @@ which is a different failure and the one they are naming.
 
 The shape all three share: **the reason for an action must be the work, never the momentum.**
 
+## DECIDE AS A SENIOR FRONTEND ARCHITECT / TECH LEAD, ALWAYS (owner directive 2026-10-05, global)
+
+Owner, verbatim: «QUE LOS AGENTES HAGAN LO QUE HAGAN SIEMPRE HAGAN LO QUE HARÍA UN SENIOR ARCHITECT/CTO,
+SIEMPRE» and «TOMA DECISIONES COMO UN TECH LEAD FRONTEND, SENIOR ARCHITECT FRONTEND SIEMPRE».
+
+- **The orchestrator decides technical forks itself**, as a tech lead would, and states the decision and
+  its reason in the same message. Only what the owner alone holds goes to the owner: credentials,
+  permissions, business priorities, or reversing a decision the owner already made.
+- **Every worker brief demands that standard**, and the orchestrator reviews worker diffs against it
+  before integrating. Passing the gate is not the bar. Measured 2026-10-05: a worker removed a visible
+  `!` from a template by binding an `any`-typed `let-` variable; it type-checked and was worse.
+- When a fork has a root fix and an enforcement, choose both and say which is which. For example, a typed
+  context-guard directive is the root fix, and a lint rule that refuses the untyped form is the
+  enforcement.
+@es Decidir siempre como senior architect / tech lead frontend: el orquestador resuelve él mismo las
+bifurcaciones técnicas y dice la decisión y su porqué; al dueño solo va lo que solo él tiene. Todo brief
+lo exige y el orquestador revisa los diffs contra ese estándar, porque pasar el gate no es la vara.
+
 ## RESUME A CHAINED SCRIPT FORWARD, AND CLOSE IT WITH ONE CLEAN RUN (owner directive 2026-09-09)
 
 Owner: with `build:ci-pr` — or any script that chains many steps — when something fails you FIX it and
