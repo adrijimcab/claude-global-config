@@ -6,7 +6,9 @@
  * offset on (`readFrom` of `hook-state/jsonl-tail.mjs`, whose returned offset is the only one ever stored, so
  * a torn last line waits for the next call); one that is unchanged is not opened; one that shrank, was
  * replaced (an older mtime, or the same size under another mtime) or whose cache is unusable is read again
- * from 0.
+ * from 0. Before an append is trusted, the first min(size, 4096) bytes of the file are read and their sha256
+ * compared with the fingerprint stored at index time (over the bytes that existed then); a different head
+ * means a different file that merely grew past the old one, and it is read again from 0.
  *
  * A shell window opens at its tool_use record (its timestamp is `first` and, until a result arrives, `last`)
  * and closes at the tool_result with the same id; a result that is not found closes nothing.
@@ -18,12 +20,14 @@
  * transcript que solo creció se lee desde ese offset (`readFrom`, cuyo offset devuelto es el único que se
  * guarda, así que una última línea rota espera a la llamada siguiente); uno sin cambios no se abre; uno que
  * encogió, fue reemplazado (mtime más antigua, o mismo tamaño con otra mtime) o cuya caché no sirve se lee de
- * nuevo desde 0. Una ventana de shell se abre en su registro tool_use y se cierra en el tool_result con el
+ * nuevo desde 0. Antes de fiarse de un añadido se leen los primeros min(tamaño, 4096) bytes y se compara su
+ * sha256 con la huella guardada al indexar (sobre los bytes que entonces existían); una cabecera distinta es
+ * otro fichero que solo creció más que el anterior, y se lee de nuevo desde 0. Una ventana de shell se abre en su registro tool_use y se cierra en el tool_result con el
  * mismo id; un resultado que no se encuentra no cierra nada.
  */
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { readFrom } from '../hook-state/jsonl-tail.mjs';
@@ -31,7 +35,10 @@ import { stateDir } from '../hook-state/locations.mjs';
 import { bilingual } from './messages.mjs';
 
 /** Bumped whenever the shape of an index changes; a cache of another version is rebuilt. @es Sube con cada cambio de forma del índice; una caché de otra versión se reconstruye. */
-export const INDEX_VERSION = 1;
+export const INDEX_VERSION = 2;
+
+/** How many leading bytes fingerprint a transcript: the file that was indexed is the file that grew. @es Cuántos bytes iniciales identifican un transcript: el fichero indexado es el que creció. */
+const HEAD_BYTES = 4096;
 
 /** The input field that names the path each write tool changes. @es El campo de entrada que nombra la ruta que cambia cada herramienta de escritura. */
 const WRITE_FIELD = { Write: 'file_path', Edit: 'file_path', MultiEdit: 'file_path', NotebookEdit: 'notebook_path' };
@@ -45,7 +52,7 @@ export function cachePath(file) {
 }
 
 function emptyIndex(file) {
-  return { version: INDEX_VERSION, path: path.resolve(file), size: 0, mtimeMs: 0, offset: 0, records: 0, lastTimestamp: null, writes: [], shells: [], toolUseIds: [] };
+  return { version: INDEX_VERSION, path: path.resolve(file), size: 0, mtimeMs: 0, offset: 0, headBytes: 0, head: '', records: 0, lastTimestamp: null, writes: [], shells: [], toolUseIds: [] };
 }
 
 /** The cached index of `file` when it can be trusted, else `null`. @es El índice en caché de `file` si es fiable, si no `null`. */
@@ -57,10 +64,29 @@ function loadCache(file) {
     return null;
   }
   const usable = cached !== null && typeof cached === 'object' && cached.version === INDEX_VERSION && cached.path === path.resolve(file)
-    && Number.isInteger(cached.offset) && cached.offset >= 0 && cached.offset <= cached.size && ARRAYS.every((name) => Array.isArray(cached[name]));
+    && Number.isInteger(cached.offset) && cached.offset >= 0 && cached.offset <= cached.size && Number.isInteger(cached.headBytes) && cached.headBytes >= 0 && cached.headBytes <= cached.size && isText(cached.head) && ARRAYS.every((name) => Array.isArray(cached[name]));
 
   return usable ? cached : null;
 }
+
+/** The first `length` bytes of `file`, every read reported to `io.onRead`. @es Los primeros `length` bytes de `file`, cada lectura informada a `io.onRead`. */
+function readHead(file, length, { onRead, readBytes = readSync }) {
+  const fd = openSync(file, 'r');
+  try {
+    const buffer = Buffer.alloc(length);
+    let filled = 0;
+    for (let got = readBytes(fd, buffer, 0, length, 0); got > 0 && filled < length; got = readBytes(fd, buffer, filled, length - filled, filled)) {
+      onRead(got);
+      filled += got;
+    }
+
+    return buffer.subarray(0, filled);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+const digestOf = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 function saveCache(file, index) {
   const target = cachePath(file);
@@ -129,22 +155,32 @@ function statOf(file) {
 export function indexTranscript(file, { onRead, readBytes } = {}) {
   const stat = statOf(file);
   const cached = loadCache(file);
-  const plan = planFor(cached, stat);
+  let plan = planFor(cached, stat);
 
   if (plan === 'unchanged') return { index: cached, mode: 'unchanged', bytesRead: 0 };
 
-  const index = plan === 'append' ? cached : emptyIndex(file);
   let bytesRead = 0;
-  const { records, offset } = readFrom(file, index.offset, {
+  const io = {
     readBytes,
     onRead: (bytes) => {
       bytesRead += bytes;
       onRead?.(bytes);
     }
-  });
+  };
+  const headLength = Math.min(stat.size, HEAD_BYTES);
+  let head = null;
+
+  if (plan === 'append') {
+    head = readHead(file, headLength, io);
+    if (digestOf(head.subarray(0, cached.headBytes)) !== cached.head) plan = 'rebuild';
+  }
+
+  const index = plan === 'append' ? cached : emptyIndex(file);
+  const { records, offset } = readFrom(file, index.offset, io);
 
   for (const record of records) absorb(index, record);
-  Object.assign(index, { size: stat.size, mtimeMs: stat.mtimeMs, offset });
+  head ??= readHead(file, headLength, io);
+  Object.assign(index, { size: stat.size, mtimeMs: stat.mtimeMs, offset, headBytes: head.length, head: digestOf(head) });
   saveCache(file, index);
 
   return { index, mode: plan === 'append' ? 'appended' : 'rebuilt', bytesRead };

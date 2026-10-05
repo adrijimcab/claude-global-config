@@ -98,6 +98,9 @@ function run(file, options = {}) {
   }
 }
 
+/** The bytes the head fingerprint reads. @es Los bytes que lee la huella de cabecera. */
+const headLength = (file) => Math.min(readFileSync(file).length, 4096);
+
 const NEVER = () => { throw new Error('the file must not be read'); };
 
 try {
@@ -133,7 +136,7 @@ try {
   check('every tool_use id with a string id is kept, whatever the tool', first.index.toolUseIds, ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10']);
   check('only a Bash call opens a shell window, and a result block opens no call', [first.index.shells.length, first.index.writes.length], [2, 4]);
   check('the last timestamp is the last string timestamp of a record', first.index.lastTimestamp, stamp(14));
-  check('the result reports the bytes it read', [first.bytesRead, first.bytesRead === first.counted], [Buffer.byteLength(readFileSync(census)), true]);
+  check('the result reports the bytes it read', [first.bytesRead, first.bytesRead === first.counted], [Buffer.byteLength(readFileSync(census)) + headLength(census), true]);
   check('the index states its version and path', [first.index.version, first.index.path], [INDEX_VERSION, path.resolve(census)]);
 
   const bare = freshFile();
@@ -154,7 +157,7 @@ try {
   const extra = lines([answer(2, 'g1'), use(3, 'g2', 'Write', { file_path: 'C:/repo/ñ.txt' })]);
   add(growing, extra);
   const grown = run(growing);
-  check('appending reads only the appended bytes (plus the one byte before the offset)', [grown.mode, grown.counted], ['appended', Buffer.byteLength(extra) + 1]);
+  check('appending reads only the appended bytes, the one byte before the offset and the head bytes', [grown.mode, grown.counted], ['appended', Buffer.byteLength(extra) + 1 + headLength(growing)]);
   check('the appended result closes the earlier window and the write is added', [grown.index.shells[0]?.last, grown.index.writes.length, grown.index.records], [stamp(2), 1, 3]);
   check('the stored offset moved by the appended bytes', grown.index.offset, before.index.offset + Buffer.byteLength(extra));
   add(growing, lines([use(4, 'g3', 'Edit', { file_path: 'C:/repo/e.txt' })]), BASE_SECOND + 5);
@@ -201,6 +204,54 @@ try {
   const sameRun = run(sameSize);
   check('the same size with another mtime is re-indexed', [sameRun.mode, sameRun.index.writes.map((write) => write.path)], ['rebuilt', ['bbb']]);
 
+  // --- a different file that merely grew past the old one is not an append ---
+  const swapped = freshFile();
+  put(swapped, lines([use(1, 'w1', 'Write', { file_path: 'old1' }), use(2, 'w2', 'Write', { file_path: 'old2' })]), BASE_SECOND);
+  const swappedBefore = run(swapped).index;
+  put(swapped, lines([use(3, 'w3', 'Write', { file_path: 'new1' }), use(4, 'w4', 'Write', { file_path: 'new2' }), use(5, 'w5', 'Write', { file_path: 'new3' })]), BASE_SECOND + 60);
+  const swappedRun = run(swapped);
+  check('a larger file with a newer mtime and another head is rebuilt, the old writes do not survive', [swappedRun.mode, swappedRun.index.writes.map((write) => write.path)], ['rebuilt', ['new1', 'new2', 'new3']]);
+  check('the head fingerprint covers the whole file when it is short', [swappedBefore.headBytes, swappedRun.index.headBytes], [Buffer.byteLength(lines([use(1, 'w1', 'Write', { file_path: 'old1' }), use(2, 'w2', 'Write', { file_path: 'old2' })])), headLength(swapped)]);
+
+  const long = (n, id) => use(n, id, 'Bash', { command: `echo ${'x'.repeat(900)}` });
+  const big = freshFile();
+  put(big, lines([long(1, 'L1'), long(2, 'L2'), long(3, 'L3'), long(4, 'L4'), long(5, 'L5')]));
+  const bigBefore = run(big).index;
+  const bigExtra = lines([long(6, 'L6')]);
+  add(big, bigExtra);
+  const bigRun = run(big);
+  check('an append to a file past 4096 bytes reads exactly the appended bytes, one byte before them and 4096 head bytes', [bigRun.mode, bigRun.counted, bigRun.index.headBytes], ['appended', Buffer.byteLength(bigExtra) + 1 + 4096, 4096]);
+  check('the stored head is the full 4096 bytes after the first indexing of a big file', bigBefore.headBytes, 4096);
+
+  const growsPast = freshFile();
+  put(growsPast, lines([long(1, 'P1')]));
+  const smallRun = run(growsPast);
+  add(growsPast, lines([long(2, 'P2'), long(3, 'P3'), long(4, 'P4'), long(5, 'P5')]));
+  const pastRun = run(growsPast);
+  check('a file shorter than 4096 bytes that grows past it is still an append', [smallRun.index.headBytes < 4096, pastRun.mode, pastRun.index.records], [true, 'appended', 5]);
+  check('the fingerprint is refreshed to the 4096 bytes now present', pastRun.index.headBytes, 4096);
+  add(growsPast, lines([long(6, 'P6')]));
+  check('the next append compares the refreshed head', [run(growsPast).mode, run(growsPast, { readBytes: NEVER }).mode], ['appended', 'unchanged']);
+  const growsWhole = freshFile();
+  put(growsWhole, readFileSync(growsPast, 'utf8'));
+  check('the index that grew past 4096 equals the one built in one pass', content(run(growsPast, { readBytes: NEVER }).index), content(run(growsWhole).index));
+
+  // --- the size and mtime rules still decide when the head is the same ---
+  const base = [long(1, 'B1'), long(2, 'B2'), long(3, 'B3'), long(4, 'B4'), long(5, 'B5')];
+  const write = (n, id, name) => use(n, id, 'Write', { file_path: name });
+  const sameHead = (name, first, second, firstSecond, secondSecond) => {
+    const file = freshFile(name);
+    put(file, lines(first), firstSecond);
+    run(file);
+    put(file, lines(second), secondSecond);
+
+    return run(file);
+  };
+  const pathsOf = (result) => [result.mode, result.index.writes.map((entry) => entry.path)];
+  check('a shrunk file with the same head is rebuilt', pathsOf(sameHead('s1.jsonl', [...base, write(6, 'k1', 'old'), write(7, 'k2', 'old2')], [...base, write(6, 'k1', 'new')], BASE_SECOND, BASE_SECOND + 9)), ['rebuilt', ['new']]);
+  check('the same size with another mtime and the same head is rebuilt', pathsOf(sameHead('s2.jsonl', [...base, write(6, 'k1', 'aaa')], [...base, write(6, 'k1', 'bbb')], BASE_SECOND, BASE_SECOND + 9)), ['rebuilt', ['bbb']]);
+  check('a larger file with an older mtime and the same head is rebuilt', pathsOf(sameHead('s3.jsonl', [...base, write(6, 'k1', 'old')], [...base, write(6, 'k1', 'x'), write(7, 'k2', 'y')], BASE_SECOND + 100, BASE_SECOND)), ['rebuilt', ['x', 'y']]);
+
   // --- a torn last line waits ---
   const torn = freshFile();
   put(torn, lines([use(1, 't1', 'Write', { file_path: 'whole' })]));
@@ -213,7 +264,7 @@ try {
   add(torn, `${tail.slice(25)}\n`);
   const completed = run(torn);
   check('the completed line is indexed once, by the next call', [completed.mode, completed.index.writes.map((write) => write.path), completed.index.records], ['appended', ['whole', 'later'], 2]);
-  check('the completion reads the torn bytes again and nothing before them', completed.counted, Buffer.byteLength(`${tail}\n`) + 1);
+  check('the completion reads the torn bytes again, the head bytes and nothing else', completed.counted, Buffer.byteLength(`${tail}\n`) + 1 + headLength(torn));
 
   // --- the cache ---
   const keyed = freshFile('same.jsonl');
@@ -230,6 +281,16 @@ try {
   const poisoned = (changes) => plant(JSON.stringify({ ...current, writes: [{ id: 'x', tool: 'Write', path: 'POISON', timestamp: null }], ...changes }));
   const rebuiltPaths = () => run(stale).index.writes?.map((write) => write.path);
 
+  poisoned({ version: 1 });
+  check('a cache written by version 1 (no head fingerprint) is rebuilt', rebuiltPaths(), ['real']);
+  poisoned({ head: 7 });
+  check('a cache whose head fingerprint is not text is rebuilt', rebuiltPaths(), ['real']);
+  poisoned({ headBytes: current.size + 1 });
+  check('a cache whose head covers more than the file is rebuilt', rebuiltPaths(), ['real']);
+  poisoned({ headBytes: -1 });
+  check('a cache with a negative head length is rebuilt', rebuiltPaths(), ['real']);
+  poisoned({ headBytes: 1.5 });
+  check('a cache with a fractional head length is rebuilt', rebuiltPaths(), ['real']);
   poisoned({ version: INDEX_VERSION - 1 });
   check('a cache of an older version is rebuilt, not trusted', rebuiltPaths(), ['real']);
   poisoned({ version: INDEX_VERSION + 1 });

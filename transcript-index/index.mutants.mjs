@@ -39,9 +39,9 @@ const MUTANTS = [
   ['the caller is not told about reads', I, 'onRead?.(bytes);', ''],
 
   // --- what is stored ---
-  ['the stored offset is the end of the file, torn tail included', I, 'Object.assign(index, { size: stat.size, mtimeMs: stat.mtimeMs, offset });', 'Object.assign(index, { size: stat.size, mtimeMs: stat.mtimeMs, offset: stat.size });'],
-  ['the stored size is not kept', I, 'Object.assign(index, { size: stat.size, mtimeMs: stat.mtimeMs, offset });', 'Object.assign(index, { size: 0, mtimeMs: stat.mtimeMs, offset });'],
-  ['the stored mtime is not kept', I, 'Object.assign(index, { size: stat.size, mtimeMs: stat.mtimeMs, offset });', 'Object.assign(index, { size: stat.size, mtimeMs: 0, offset });'],
+  ['the stored offset is the end of the file, torn tail included', I, 'mtimeMs: stat.mtimeMs, offset, headBytes', 'mtimeMs: stat.mtimeMs, offset: stat.size, headBytes'],
+  ['the stored size is not kept', I, 'Object.assign(index, { size: stat.size,', 'Object.assign(index, { size: 0,'],
+  ['the stored mtime is not kept', I, 'mtimeMs: stat.mtimeMs, offset, headBytes', 'mtimeMs: 0, offset, headBytes'],
   ['the index is not saved', I, '  saveCache(file, index);\n', ''],
   ['the cache is written but never moved into place', I, '  renameSync(temporary, target);\n', ''],
   ['two transcripts with one file name share a cache', I, ".update(path.resolve(file))", ".update(path.basename(file))"],
@@ -84,6 +84,22 @@ const MUTANTS = [
   ['the last timestamp is never kept', I, 'if (timestamp !== null) index.lastTimestamp = timestamp;', ''],
   ['a non-string timestamp is kept', I, 'const timestamp = isText(record.timestamp) ? record.timestamp : null;', 'const timestamp = record.timestamp ?? null;'],
   ['message content that is not an array is read', I, 'Array.isArray(record.message?.content) ? record.message.content : []', 'record.message?.content ?? []'],
+
+  // --- the head fingerprint ---
+  ['the head is never compared, so a replacement is appended to', I, "    if (digestOf(head.subarray(0, cached.headBytes)) !== cached.head) plan = 'rebuild';\n", ''],
+  ['the head comparison is inverted', I, '!== cached.head) plan', '=== cached.head) plan'],
+  ['the whole current head is compared, not the part that existed', I, 'digestOf(head.subarray(0, cached.headBytes))', 'digestOf(head)'],
+  ['the head bytes are not counted as read', I, '      onRead(got);\n', ''],
+  ['the head is 1024 bytes', I, 'const HEAD_BYTES = 4096;', 'const HEAD_BYTES = 1024;'],
+  ['the head is 8192 bytes', I, 'const HEAD_BYTES = 4096;', 'const HEAD_BYTES = 8192;'],
+  ['the head is the whole file', I, 'Math.min(stat.size, HEAD_BYTES)', 'stat.size'],
+  ['the fingerprint is not refreshed after an append', I, 'headBytes: head.length, head: digestOf(head) }', 'headBytes: index.headBytes || head.length, head: index.head || digestOf(head) }'],
+  ['a rebuild stores no fingerprint', I, 'head ??= readHead(file, headLength, io);', 'head ??= Buffer.alloc(0);'],
+  ['an older cache version is trusted', I, 'export const INDEX_VERSION = 2;', 'export const INDEX_VERSION = 1;'],
+  ['a negative head length is trusted', I, 'cached.headBytes >= 0', 'true'],
+  ['a head length beyond the file is trusted', I, ' && cached.headBytes <= cached.size', ''],
+  ['a fractional head length is trusted', I, 'Number.isInteger(cached.headBytes)', "typeof cached.headBytes === 'number'"],
+  ['a head fingerprint that is not text is trusted', I, ' && isText(cached.head)', ''],
 
   // --- the argument ---
   ['an empty path is accepted', I, "if (!isText(file) || file.length === 0) throw", "if (!isText(file)) throw"],
