@@ -14,7 +14,6 @@
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import { makeSpeaker } from '../../bilingual-output/speaker.mjs';
@@ -40,15 +39,16 @@ if (packageName === undefined || binName === undefined) refuse('usage');
 if (process.env.GATES_KIT_TOOLCHAIN === undefined || process.env.GATES_KIT_TOOLCHAIN === '') refuse('unset');
 
 const toolchain = path.resolve(process.env.GATES_KIT_TOOLCHAIN);
-let manifestPath;
+const manifestPath = path.join(toolchain, 'node_modules', packageName, 'package.json');
+let manifest;
 
 try {
-  manifestPath = createRequire(path.join(toolchain, 'noop.js')).resolve(`${packageName}/package.json`);
+  manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 } catch {
   refuse('missingPackage', { package: packageName, toolchain });
 }
 
-const bin = JSON.parse(readFileSync(manifestPath, 'utf8')).bin;
+const bin = manifest.bin;
 const relative = typeof bin === 'string' ? bin : bin?.[binName];
 
 if (relative === undefined) refuse('missingBin', { package: packageName, bin: binName });
