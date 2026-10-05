@@ -510,3 +510,18 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   o en `HYPOTHESIS:`). Sin mecanismo: el texto no permite decidir si una frase afirma un comportamiento
   ni si se reprodujo; en su lugar, el esqueleto del brief y una regla candidata de brief-lint que solo
   se construye si la tarea 2.7b prueba que discrimina sobre briefs reales.
+
+- **`brief-measured-line-carried-an-unmeasured-claim`** — A `MEASURED:` line carries only what a command
+  in THIS turn measured. Two occurrences:
+  - 2026-10-04: a location was inferred from a name and placed under `MEASURED:`.
+  - 2026-10-05: a plugin brief stated under `MEASURED:` that `plugin-eslint/node_modules` is a junction
+    into b100's tree. The claim was copied from a 2026-09-21 contract note; `Get-Item` showed an empty
+    `LinkType`, and the worker refuted it.
+  RULE: before a durable record's state claim (contract, memory, backlog) goes into a brief, re-measure
+  it in the same turn and write the command beside it. Otherwise it goes under `HYPOTHESIS:` with the
+  record and its date. No mechanism is possible: a hook sees the text of the brief, never whether its
+  author ran the command this turn. In its place, the brief skeleton and this rule stand.
+  @es Una línea `MEASURED:` lleva solo lo que midió un comando en ESTE turno. Una afirmación de estado
+  copiada de un registro duradero (contrato, memoria, backlog) se vuelve a medir en el mismo turno, con
+  el comando al lado, o va bajo `HYPOTHESIS:` con el registro y su fecha. Sin mecanismo posible: un
+  hook ve el texto del brief, nunca si su autor corrió el comando en este turno.
