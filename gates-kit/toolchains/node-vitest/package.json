@@ -1,0 +1,15 @@
+{
+  "name": "gates-kit-node-vitest-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned toolchain the Node and Vitest gates run on; install it once into a directory outside every repository.",
+  "dependencies": {
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
+    "@vitest/coverage-v8": "3.2.7",
+    "eslint": "9.39.4",
+    "typescript": "5.5.4",
+    "typescript-eslint": "8.57.1",
+    "vitest": "3.2.7"
+  }
+}

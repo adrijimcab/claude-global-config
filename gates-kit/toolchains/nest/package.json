@@ -1,0 +1,12 @@
+{
+  "name": "gates-kit-nest-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned toolchain the Nest gates run on; install it once into a directory outside every repository.",
+  "dependencies": {
+    "eslint": "9.39.4",
+    "jest": "30.5.2",
+    "typescript": "5.5.4",
+    "typescript-eslint": "8.57.1"
+  }
+}

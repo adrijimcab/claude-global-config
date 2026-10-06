@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * The decisions of `run-tool.mjs`, each broken once, that `run-tool.selftest.mjs` must catch. The runner and
- * its rules (green baseline, exactly-once target, parse check) live in `../../mutation-proof/run-mutants.mjs`;
+ * its rules (green baseline, exactly-once target, parse check) live in `../mutation-proof/run-mutants.mjs`;
  * crash-only kills count as survivors (`crashKills: 'fail'`). Each row names the decision it removes.
  *
  * Known residual: the `?? EXIT_NOT_RUN` fallback for a child with no exit status is not distinguished by any
@@ -15,10 +15,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { runMutants } from '../../mutation-proof/run-mutants.mjs';
-import { makeSpeaker } from '../../bilingual-output/speaker.mjs';
+import { runMutants } from '../mutation-proof/run-mutants.mjs';
+import { makeSpeaker } from '../bilingual-output/speaker.mjs';
 
-const T = 'gates-kit/angular/run-tool.mjs';
+const T = 'gates-kit/run-tool.mjs';
 
 const MUTANTS = [
   ['the refusal exit code is not 3', T, 'const EXIT_NOT_RUN = 3;', 'const EXIT_NOT_RUN = 4;'],
@@ -34,11 +34,19 @@ const MUTANTS = [
   ['the tool output is not forwarded', T, "stdio: 'inherit'", "stdio: 'pipe'"],
   ['the environment is not forwarded', T, 'env: process.env', 'env: {}'],
   ['the tool arguments are dropped', T, '...args], {', '], {'],
+  ['--cwd is not recognised', T, "argv[0] === '--cwd'", 'false'],
+  ['--cwd is read anywhere in the call', T, "argv[0] === '--cwd'", "argv.includes('--cwd')"],
+  ['--cwd leaves its folder in the package position', T, 'withCwd ? argv.slice(2) : argv', 'withCwd ? argv.slice(1) : argv'],
+  ['a relative --cwd folder is not resolved', T, 'path.resolve(argv[1])', 'argv[1]'],
+  ['a --cwd folder that does not exist is not refused', T, "if (cwd !== undefined && !isDirectory(cwd)) refuse('missingCwd', { cwd });", ''],
+  ['a file counts as the --cwd folder', T, 'statSync(directory).isDirectory()', 'statSync(directory).isFile() || true'],
+  ['a missing --cwd folder counts as a folder', T, 'return false;\n  }\n}', 'return true;\n  }\n}'],
+  ['the working directory is not forwarded to the tool', T, 'env: process.env, cwd }', 'env: process.env }'],
   ['the tool exit code is not passed through', T, 'process.exit(run.status ?? EXIT_NOT_RUN);', 'process.exit(0);'],
 ];
 
-const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const survivors = runMutants({ fleetRoot, paths: ['gates-kit', 'mutation-proof', 'bilingual-output'], selftest: 'gates-kit/angular/run-tool.selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
+const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const survivors = runMutants({ fleetRoot, paths: ['gates-kit', 'mutation-proof', 'bilingual-output'], selftest: 'gates-kit/run-tool.selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
 const speaker = makeSpeaker({
   clean: { en: 'run-tool campaign: 0 survivors.', es: 'campaña de run-tool: 0 supervivientes.' },
   survived: { en: 'run-tool campaign: {count} survivor(s).', es: 'campaña de run-tool: {count} superviviente(s).' },

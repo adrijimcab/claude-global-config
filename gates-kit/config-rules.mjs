@@ -1,7 +1,8 @@
 /**
  * Owns the question "does this gate configuration hide a failure?". A gate config may not carry an ignore or
  * exclusion entry, an allowlist, a rule turned `off` or downgraded to `warn`, a disable directive, or a
- * coverage threshold under the kit floor: each lets the failure the gate exists to catch survive.
+ * coverage threshold, or mutation break score (`break`, Stryker's failing score), under the kit floor: each
+ * lets the failure the gate exists to catch survive.
  *
  * Decision: the scan is textual because the configs span JS, JSON and YAML. Comment lines (`//`, `#`, `*`,
  * `/*`) are skipped for the key rules, so a comment may say "nothing ignored", but the disable-directive
@@ -9,8 +10,8 @@
  * for any numeric coverage-style key; raising it is allowed, lowering it is caught by the campaign.
  *
  * @es Responde a "¿esta config de gate oculta un fallo?". No puede llevar entradas ignore/exclude, listas
- * de permitidos, reglas en `off` o degradadas a `warn`, directivas de desactivación ni umbrales de
- * cobertura bajo el mínimo del kit. El escaneo es textual (JS, JSON y YAML); las líneas de comentario se
+ * de permitidos, reglas en `off` o degradadas a `warn`, directivas de desactivación, umbrales de
+ * cobertura ni puntuación de mutación (`break`) bajo el mínimo del kit. El escaneo es textual (JS, JSON y YAML); las líneas de comentario se
  * omiten salvo para las directivas, que viven en comentarios. `THRESHOLD_FLOOR` es el mínimo del kit.
  */
 
@@ -26,7 +27,7 @@ const CODE_RULES = [
 /** Disable directives, read over the raw text. @es Directivas de desactivación, sobre el texto crudo. */
 const DIRECTIVE = /eslint-disable|stylelint-disable|@ts-ignore|@ts-nocheck|istanbul ignore|c8 ignore|v8 ignore/;
 
-const THRESHOLD = /\b(?:statements|branches|functions|lines|thresholds?|minCoverage)\w*["']?\s*[:=]\s*(\d+(?:\.\d+)?)/gi;
+const THRESHOLD = /\b(?:(?:statements|branches|functions|lines|thresholds?|minCoverage)\w*|break)["']?\s*[:=]\s*(\d+(?:\.\d+)?)/gi;
 
 const COMMENT_START = /^\s*(?:\/\/|#|\*|\/\*)/;
 

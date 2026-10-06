@@ -43,6 +43,28 @@ rechaza una entrega mientras quede trabajo sin commitear o líneas cambiadas sin
 guard`** marca trabajo que existe pero nunca se reportó — la misma clase de "fallo escondido" que la
 regla de no esconder fallos apunta, a nivel del propio entregable de un agente.
 
+## The findings register
+
+A gap a gate or a review finds that cannot be fixed in the same unit (a repository the owner placed out of
+scope, a hypothesis not yet measured) is never routed around: it is recorded in the repository's findings
+register, `.claude/FINDINGS.jsonl`, which every `templates/<stack>/AGENT-CONTRACT.md` names. `node
+~/.claude/gates-kit/findings-register.mjs list` prints the open findings; `add` records one with its receipt
+(the command and its real exit code, a path, or a measurement; a claim with none is recorded as a
+`hypothesis`); `close` closes it with its own receipt. The register is a record and never an exception: no
+gate and no fleet-kit mechanism reads it to pass, and its closed schema has no key that could say "ignore". A
+delegated worker puts the finding in its handback as well, and the orchestrator carries it to the master
+backlog (`rules/00-owner-mandates.md`).
+
+@es Una carencia que un gate o una revisión encuentra y que no se puede arreglar en la misma unidad (un
+repositorio que el dueño dejó fuera de alcance, una hipótesis aún sin medir) nunca se rodea: se anota en el
+registro de hallazgos del repositorio, `.claude/FINDINGS.jsonl`, que nombra cada
+`templates/<stack>/AGENT-CONTRACT.md`. `list` imprime los hallazgos abiertos; `add` anota uno con su recibo
+(el comando y su código de salida real, una ruta o una medición; una afirmación sin ninguno se anota como
+`hypothesis`); `close` lo cierra con su propio recibo. El registro es un registro y nunca una excepción:
+ningún gate ni mecanismo de fleet-kit lo lee para pasar, y su esquema cerrado no tiene ninguna clave que pueda
+decir "ignorar". Un worker delegado pone además el hallazgo en su handback, y el orquestador lo lleva al
+backlog maestro.
+
 ## What this means for a NEW gate from this kit specifically
 
 1. Add the gate's config to the project (its own tree, never referencing this kit's files at runtime).

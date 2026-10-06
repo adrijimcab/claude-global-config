@@ -23,6 +23,10 @@ config que necesita a su propio árbol y la conecta a sus propios scripts/CI.
 | `node-express.md` | Node/Express-specific gates: boundary validation, parameterized DB access, secrets hygiene, security headers/rate limiting |
 | `fleet-kit-integration.md` | How a gate rolls out through `~/.claude/fleet-kit/` without ever going green by hiding a failure |
 | `gaps-manual-checklists.md` | Where no tool exists and a checklist (already in `~/.claude/checklists/`) is the only control |
+| `angular/`, `nest/`, `node-vitest/` | The executable gates of each stack: one folder per gate with its config, `pass/` and `fail/` fixtures, `SOURCE.md` and `gate.json` (the command). `verify.mjs` proves each one goes green on `pass/` and red on `fail/` |
+| `toolchains/<stack>/` | The pinned packages a stack's gates run on: a private `package.json` with exact versions and its `package-lock.json`. Install once outside every repository and point `GATES_KIT_TOOLCHAIN` at it |
+| `run-tool.mjs` | The launcher every gate runs its package through: finds the binary under `GATES_KIT_TOOLCHAIN`, exits 3 rather than pass when it cannot |
+| `findings-register.mjs` | The per-repository findings register (`.claude/FINDINGS.jsonl`): append-only findings and closures with receipts; `list`, `validate`, `add`, `close`. Every `templates/<stack>/AGENT-CONTRACT.md` names its path |
 
 @es
 | Fichero | Qué contiene |
@@ -33,6 +37,10 @@ config que necesita a su propio árbol y la conecta a sus propios scripts/CI.
 | `node-express.md` | Gates específicos de Node/Express (validación en el borde, acceso a BD parametrizado, higiene de secretos, cabeceras/rate limiting) |
 | `fleet-kit-integration.md` | Cómo se despliega un gate a través de `~/.claude/fleet-kit/` sin esconder nunca un fallo |
 | `gaps-manual-checklists.md` | Dónde no existe herramienta y un checklist (ya en `~/.claude/checklists/`) es el único control |
+| `angular/`, `nest/`, `node-vitest/` | Los gates ejecutables de cada stack: una carpeta por gate con su config, fixtures `pass/` y `fail/`, `SOURCE.md` y `gate.json` (el comando). `verify.mjs` prueba que cada uno sale en verde sobre `pass/` y en rojo sobre `fail/` |
+| `toolchains/<stack>/` | Los paquetes fijados sobre los que corren los gates de un stack: un `package.json` privado con versiones exactas y su `package-lock.json`. Se instala una vez fuera de todo repositorio y `GATES_KIT_TOOLCHAIN` apunta a él |
+| `run-tool.mjs` | El lanzador por el que cada gate corre su paquete: busca el binario bajo `GATES_KIT_TOOLCHAIN` y sale con 3 en vez de pasar si no puede |
+| `findings-register.mjs` | El registro de hallazgos por repositorio (`.claude/FINDINGS.jsonl`): hallazgos y cierres con recibos, solo se añade; `list`, `validate`, `add`, `close`. Cada `templates/<stack>/AGENT-CONTRACT.md` nombra su ruta |
 
 ## No hidden failures, through any channel (owner directive 2026-09-30, absolute)
 

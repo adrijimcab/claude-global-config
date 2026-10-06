@@ -1,4 +1,4 @@
 {
-  "command": ["node", "../run-tool.mjs", "typescript", "tsc", "--noEmit", "-p", "{target}"],
+  "command": ["node", "../../run-tool.mjs", "typescript", "tsc", "--noEmit", "-p", "{target}"],
   "timeoutMs": 300000
 }
