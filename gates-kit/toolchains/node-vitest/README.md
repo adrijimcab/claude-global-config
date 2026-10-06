@@ -19,13 +19,13 @@ AGENT-CONTRACT.md` G3): `eslint` and `typescript-eslint` (strict-type-checked li
 (`tsc --noEmit`), `vitest` with `@vitest/coverage-v8` (coverage caps; the provider is Vitest's own coverage
 package), `@stryker-mutator/core` with `@stryker-mutator/vitest-runner` (mutation testing).
 
-Vitest is 3.2.7, not the latest: Stryker 10.0.0's Vitest runner ran no test under Vitest 5.0.3, and Vitest 4.1.11
+Vitest is 3.2.7, not the latest: Stryker 10.0.0's Vitest runner reported 0 tests run per mutant under Vitest 5.0.3, and Vitest 4.1.11
 could not be locked with npm 10.9.4 (measured; see `node-vitest/stryker-mutation/SOURCE.md`). Raise Vitest only
 together with a Stryker whose runner is measured to run the specs.
 
 The lockfile was produced with `npm install --package-lock-only --ignore-scripts`.
 
 @es Cada uno es una herramienta que el contrato del dueño para el stack ya nombra. Vitest es la 3.2.7, no la
-última: el runner de Vitest de Stryker 10.0.0 no ejecutó ningún test con Vitest 5.0.3, y Vitest 4.1.11 no se
+última: el runner de Vitest de Stryker 10.0.0 informó 0 tests ejecutados por mutante con Vitest 5.0.3, y Vitest 4.1.11 no se
 pudo bloquear con npm 10.9.4 (medido). Subir Vitest solo junto con un Stryker cuyo runner se mida que ejecuta
 los specs. El lockfile se generó con `npm install --package-lock-only --ignore-scripts`.
