@@ -125,7 +125,8 @@ Estrategias correctas, de más a menos frecuente:
 ## Zoneless
 
 - Default en Angular v21+ (verificado). En v20 requiere `provideZonelessChangeDetection()`
-  explícito en el bootstrap.
+  explícito en el bootstrap (developer preview en 20.0-20.1, estable desde 20.2); en v19 es
+  experimental (`provideExperimentalZonelessChangeDetection`). Detalle: `../versions/`.
 - Notificación explícita: `markForCheck()`, escritura de signals, `AsyncPipe`, listeners
   enlazados en plantilla. `OnPush` recomendado pero no estrictamente obligatorio.
 - Librerías de terceros: prohibido depender de `NgZone.onMicrotaskEmpty`/`onUnstable`/`onStable`
