@@ -52,12 +52,15 @@ máquina del dueño vive en `checklists/host-backlog.md`.
   `eslint --quiet` banned. Karma gate unmeasured here (no Chrome) -> H10.
 - gentle-ai upgrade — verdict DROP for now (stay on 2.9.1), decision recorded as H9 with evidence.
 
-## IN FLIGHT (stopped by the owner's order "no lances nada más"; not on master)
+## ON MASTER, UNVERIFIED — needs review (stopped by the owner, committed as left)
 
-- A6 global — one state-location module, per-selftest state home, leak detector, census, `rotate.mjs`.
-  Worktree branch only; integrate after its own verification.
-- Profile -> `toolchainFor` wiring (removes the parallel `gatesStackOf`) + `prefer-on-push` for 19-21.
-  Worktree branch only.
+- A6 global (78375b2, merged effd7da) — one state-location module, per-selftest state home
+  (`hook-state/sandbox.mjs`), leak detector (`selftest-runner/leaks.mjs`), census, `rotate.mjs`; 151 files.
+  Stopped while building the rotate mutants campaign. Not run after the stop: selftests, mutants, full
+  runner. Review first: the full runner, `rotate.mjs --dry-run`, and the gates-kit selftest that left
+  residue (`gates-kit/a/`, `x/`, `aaa.txt`, `residue.txt`, `.claude/`, not committed) outside its sandbox.
+- Profile -> `toolchainFor` wiring + `prefer-on-push` on Angular 19-21 (06e7c52) — `gatesStackOf` removed;
+  selftests passed (profile 169, toolchain-for 110, angular-lint-rules 23); mutants and full runner not run.
 
 ## QUEUED (not started)
 
