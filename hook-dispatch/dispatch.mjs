@@ -23,8 +23,10 @@ import { appendFileSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { describeBlocks, recordBlocks } from './block-journal.mjs';
 import { appliesTo, loadManifest } from './manifest.mjs';
 import { mergeOutputs } from './merge.mjs';
+import { parsePayload } from './payload.mjs';
 import { runGuard } from './run-guard.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -41,18 +43,16 @@ function journal(entry) {
 
 /** El nombre de herramienta del payload, o `undefined` si no se puede leer. */
 function toolNameOf(raw) {
-  try {
-    const payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
+  const payload = parsePayload(raw);
 
-    return typeof payload?.tool_name === 'string' ? payload.tool_name : undefined;
-  } catch {
-    return undefined;
-  }
+  return typeof payload?.tool_name === 'string' ? payload.tool_name : undefined;
 }
 
 /**
- * Corre el manifiesto sobre un payload y devuelve la salida fusionada, o `undefined`. Exportada para
- * el selftest y para `replay.mjs`, que la llaman sin pasar por stdin.
+ * Corre el manifiesto sobre un payload y devuelve `{ output, problems, blocks }`: la salida fusionada (o
+ * `undefined`), los problemas, y los bloqueos que dijeron las guardias (`block-journal.mjs`), que `main`
+ * registra y esta función NO: quien la importa (selftests, `replay.mjs`) no escribe journals de nadie.
+ * Exportada para el selftest y para `replay.mjs`, que la llaman sin pasar por stdin.
  */
 export async function dispatch(manifestFile, raw, options = {}) {
   const manifest = loadManifest(manifestFile);
@@ -66,18 +66,19 @@ export async function dispatch(manifestFile, raw, options = {}) {
     const result = await runGuard(guard, raw, options);
 
     if (result.error !== undefined) failures.push(`${guard.name}: ${result.error}`);
-    else results.push({ guard: guard.name, output: result.output });
+    else results.push({ guard: guard.name, mechanism: guard.mechanism, output: result.output });
   }
 
   const { output, anomalies } = mergeOutputs(manifest.event, results);
   const problems = [...failures, ...anomalies];
+  const blocks = describeBlocks({ event: manifest.event, raw, results });
 
-  if (problems.length === 0) return { output, problems };
+  if (problems.length === 0) return { output, problems, blocks };
 
   const notice = `[hook-dispatch] ${problems.length} problema(s) en ${path.basename(manifestFile)}; esas guardias NO decidieron (el resto sí):\n${problems.map((problem) => `  - ${problem}`).join('\n')}`;
   const withNotice = { ...output, systemMessage: output?.systemMessage === undefined ? notice : `${output.systemMessage}\n\n${notice}` };
 
-  return { output: withNotice, problems };
+  return { output: withNotice, problems, blocks };
 }
 
 async function main() {
@@ -91,7 +92,7 @@ async function main() {
   }
 
   try {
-    const { output, problems } = await dispatch(manifestFile, raw);
+    const { output, problems, blocks } = await dispatch(manifestFile, raw);
 
     if (problems.length > 0) {
       journal({ manifest: manifestFile, problems });
@@ -99,6 +100,14 @@ async function main() {
     }
 
     if (output !== undefined) process.stdout.write(`${JSON.stringify(output)}\n`);
+
+    // Después de decir la decisión, y sin poder cambiarla: un diario que falla se informa, no se propaga.
+    const journalFailures = recordBlocks(blocks);
+
+    if (journalFailures.length > 0) {
+      journal({ manifest: manifestFile, journalFailures });
+      process.stderr.write(`${journalFailures.map((failure) => `[hook-dispatch] no se pudo registrar el bloqueo de ${failure}`).join('\n')}\n`);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 

@@ -58,7 +58,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['cwd-change-guard', 'shell-command', 'hook-caller', 'hook-dispatch', 'hook-payloads', 'mutation-proof', 'cherry-pick-guard', 'exit-code-guard', 'eval-guard', 'gentle-ai-sync-guard', 'collision-guard', 'commit-pathspec-guard', 'config-sync-guard'],
+  paths: ['cwd-change-guard', 'shell-command', 'hook-caller', 'hook-dispatch', 'hook-state', 'bilingual-output', 'hook-payloads', 'mutation-proof', 'cherry-pick-guard', 'exit-code-guard', 'eval-guard', 'gentle-ai-sync-guard', 'collision-guard', 'commit-pathspec-guard', 'config-sync-guard'],
   selftest: 'cwd-change-guard/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

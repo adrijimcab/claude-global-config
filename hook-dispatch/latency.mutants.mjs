@@ -115,7 +115,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['hook-dispatch'],
+  paths: ['hook-dispatch', 'hook-state', 'bilingual-output'],
   selftest: 'hook-dispatch/latency.selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',
