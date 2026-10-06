@@ -398,12 +398,33 @@ function matchingAgents(description, repoPath, records, now) {
 }
 
 /**
- * Recent agents in THIS project that already hold the errand AND can be resumed — the ones a fresh
- * delegation is refused over.
- * @es Agentes recientes que ya tienen el encargo Y se pueden reanudar: por ellos se rechaza.
+ * The session that spawned an agent, read from where the harness put its transcript:
+ * `<store>/<project>/<session>/subagents/<id>.jsonl`. Derived here from the record's own `transcript`
+ * rather than added to the shared liveness record, which is byte-pinned from the reference fleet.
+ * @es La sesión que lanzó a un agente, leída de dónde el harness puso su transcript. Se deriva aquí del
+ * `transcript` del propio registro y no se añade al registro compartido de liveness, que está fijado por
+ * hash desde la flota de referencia.
  */
-export function priorAgents(description, repoPath, records = agentRecords(), now = Date.now()) {
-  return matchingAgents(description, repoPath, records, now).filter((match) => !match.exhausted);
+export function sessionOf(record) {
+  return path.basename(path.dirname(path.dirname(record.transcript)));
+}
+
+/**
+ * Recent agents of the DISPATCHING SESSION that already hold the errand AND can be resumed — the ones a
+ * fresh delegation is refused over. A subagent can be resumed (SendMessage to its id) only from the
+ * session that spawned it, so a record of another session is never a candidate: counting it is a
+ * guaranteed false refusal that points at a door that will not open. With no session id there is no
+ * candidate, because the guard cannot tell whose door it would be pointing at.
+ * @es Agentes recientes de la SESIÓN que despacha que ya tienen el encargo Y se pueden reanudar: por
+ * ellos se rechaza. Un subagente solo se reanuda desde la sesión que lo lanzó, así que el registro de otra
+ * sesión nunca es candidato: contarlo es un rechazo falso garantizado. Sin id de sesión no hay candidato.
+ */
+export function priorAgents(description, repoPath, records = agentRecords(), now = Date.now(), session = undefined) {
+  // An absent or empty session matches no record: the fail-open case needs no branch of its own.
+  // @es Una sesión ausente o vacía no casa con ningún registro: el caso de fallo abierto no necesita rama.
+  const own = records.filter((record) => sessionOf(record) === session);
+
+  return matchingAgents(description, repoPath, own, now).filter((match) => !match.exhausted);
 }
 
 /**
@@ -528,9 +549,9 @@ function reason(description, matches, now) {
 /**
  * La salida de hook para un payload crudo, o `undefined`. Exportada para que
  * `~/.claude/hook-dispatch/dispatch.mjs` la corra en su propio proceso; ejecutada directamente, la
- * misma función corre como hook propio (`main`, abajo).
+ * misma función corre como hook propio (`main`, abajo). `records` y `now` se inyectan solo en el selftest.
  */
-export function evaluate(raw) {
+export function evaluate(raw, { records = undefined, now = Date.now() } = {}) {
   let payload;
 
   try {
@@ -545,7 +566,11 @@ export function evaluate(raw) {
   try {
     const repoPath = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
 
-    return decide(payload?.tool_input?.description ?? '', payload?.tool_input?.prompt ?? '', repoPath, agentRecords(), Date.now());
+    // A payload with no `session_id` reaches `decide` as `undefined`, which has no candidate to refuse over:
+    // it fails open, like every other malfunction of this guard.
+    // @es Un payload sin `session_id` llega a `decide` como `undefined`, que no tiene candidato por el que
+    // rechazar: falla abierto, como cualquier otro fallo de este guard.
+    return decide(payload?.tool_input?.description ?? '', payload?.tool_input?.prompt ?? '', repoPath, records ?? agentRecords(), now, payload?.session_id);
   } catch {
     return; // fail open
   }
@@ -560,8 +585,8 @@ export function evaluate(raw) {
  * @es La salida para una delegación, función pura de los registros y el reloj: reanudable -> rechaza;
  * solo agotados -> permite nombrándolos irreanudables; worktree vivo -> aviso; si no, nada.
  */
-export function decide(description, prompt, repoPath, records, now) {
-  const resumable = priorAgents(description, repoPath, records, now);
+export function decide(description, prompt, repoPath, records, now, session = undefined) {
+  const resumable = priorAgents(description, repoPath, records, now, session);
 
   if (resumable.length > 0) {
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason(description, resumable, now) } };

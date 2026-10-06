@@ -31,7 +31,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { priorAgents, relatedLiveAgents, significantWords, canonicalWord, coverage, projectSlug, address, decide } from './guard.mjs';
+import { priorAgents, relatedLiveAgents, significantWords, canonicalWord, coverage, projectSlug, address, decide, evaluate, sessionOf } from './guard.mjs';
 
 const NOW = Date.parse('2026-09-09T21:00:00Z');
 const MINUTE = 60 * 1000;
@@ -47,6 +47,15 @@ const HOUR = 60 * MINUTE;
  */
 const REPO = 'C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui';
 const SLUG = 'C--Users-adrian-jimenez-Desktop-Projects-b100-am-ui';
+
+/**
+ * The session the delegation is dispatched from, and another one of the same project. A subagent can be
+ * resumed only from the session that spawned it, so a record of the OTHER session is never a candidate.
+ * @es La sesión desde la que se despacha y otra del mismo proyecto. Un subagente solo se reanuda desde la
+ * sesión que lo lanzó, así que un registro de la OTRA sesión nunca es candidato.
+ */
+const SESSION = 'c45d798b-d78f-4f60-9a32-1f722bbe86e5';
+const OTHER_SESSION = '0b7e1d2a-5c3f-4e9a-8d61-aa00bb11cc22';
 
 const scratch = mkdtempSync(join(tmpdir(), 'resume-before-fresh-'));
 const EXHAUSTED_TREE = join(scratch, 'agent-aa3437bf9bf7832a9');
@@ -87,8 +96,13 @@ const COMPLETED_RECORD = { type: 'assistant', message: { role: 'assistant', cont
 const SERVER_ERROR_RECORD = { type: 'assistant', isApiErrorMessage: true, error: 'api_error', message: { model: '<synthetic>', content: [{ type: 'text', text: 'API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}}' }] } };
 
 /** A constructed record whose transcript really exists on disk with a chosen age. */
-function record({ id, description, project = SLUG, ageMs = 5 * MINUTE, transcript = true, worktreePath = '', lastRecord = {} }) {
-  const path = join(scratch, `${id}.jsonl`);
+function record({ id, description, project = SLUG, session = SESSION, ageMs = 5 * MINUTE, transcript = true, worktreePath = '', lastRecord = {} }) {
+  // The harness layout, as `agentRecords` walks it: <store>/<project>/<session>/subagents/<id>.jsonl.
+  // @es La disposición del harness tal como la recorre `agentRecords`.
+  const folder = join(scratch, project, session, 'subagents');
+  const path = join(folder, `${id}.jsonl`);
+
+  mkdirSync(folder, { recursive: true });
 
   if (transcript) {
     writeFileSync(path, `{}\n${JSON.stringify(lastRecord)}\n`);
@@ -135,7 +149,11 @@ const records = [
   // @es HERMANOS de un mismo reparto: mismo verbo y mismo sustantivo genérico, cada uno sobre su objeto.
   record({ id: 'agent-aPORTTABLE00000', description: 'Port the table component to signals' }),
   record({ id: 'agent-aMIGRATEUSERS00', description: 'Migrate users controller tests' }),
-  record({ id: 'agent-aFIXCAROUSEL000', description: 'Fix failing carousel specs' })
+  record({ id: 'agent-aFIXCAROUSEL000', description: 'Fix failing carousel specs' }),
+  // ANOTHER SESSION of the same project: stopped, recent, transcript on disk — and not resumable from here.
+  // @es OTRA SESIÓN del mismo proyecto: parada, reciente, con transcript, y no reanudable desde aquí.
+  record({ id: 'agent-aOTHERSESSION00', description: 'Compile the typography scale report', session: OTHER_SESSION }),
+  record({ id: 'agent-aOTHERSESSDUP0', description: 'Re-measure coverage floors', session: OTHER_SESSION })
 ];
 
 const cases = [
@@ -189,6 +207,12 @@ const cases = [
   ['refuse', 'Port the table component to signals and add the stories', 'a re-wording: the stopped errand plus a qualifier'],
   ['refuse', 'Fix failing carousel specs on the hero slide', 'a re-wording: the stopped errand plus a qualifier'],
 
+  // --- A SUBAGENT RESUMES ONLY FROM THE SESSION THAT SPAWNED IT, added 2026-10-06. Counting another
+  // session's record is a guaranteed false refusal: its address does not open from here.
+  // @es UN SUBAGENTE SOLO SE REANUDA DESDE LA SESIÓN QUE LO LANZÓ. Contar el registro de otra sesión es un
+  // rechazo falso garantizado: su dirección no abre desde aquí.
+  ['pass', 'Compile the typography scale report', 'the identical errand, but its agent belongs to ANOTHER session'],
+
   // --- NUMBERS ARE THE OBJECT, added 2026-10-06. «tasks 89 127 129» was a REAL errand whose only objects
   // are its numbers; they are shorter than any word the filter keeps, so two different batches read as
   // the same label.
@@ -206,7 +230,7 @@ let failures = 0;
 let checked = 0;
 
 for (const [expected, description, label] of cases) {
-  const matches = priorAgents(description, REPO, records, NOW);
+  const matches = priorAgents(description, REPO, records, NOW, SESSION);
   const actual = matches.length === 0 ? 'pass' : 'refuse';
   const ok = actual === expected;
 
@@ -220,15 +244,15 @@ for (const [expected, description, label] of cases) {
 // --- THE OUTPUT for the context-exhausted state (owner priority, 2026-09-30): the replacement is ALLOWED,
 //     the old agent is named UNRESUMABLE, and the brief is told to carry a TENANCY line for its worktree.
 {
-  const exhaustedOnly = decide('Gates: coverage-exclusion legitimacy + type-only assertion rule', '', REPO, records, NOW);
+  const exhaustedOnly = decide('Gates: coverage-exclusion legitimacy + type-only assertion rule', '', REPO, records, NOW, SESSION);
   const context = exhaustedOnly?.hookSpecificOutput?.additionalContext ?? '';
   const checks = [
     [exhaustedOnly?.hookSpecificOutput?.permissionDecision === undefined && context.length > 0, 'the replacement of a context-exhausted agent is allowed, with advice'],
     [context.includes('UNRESUMABLE') && context.includes('aa3437bf9bf7832a9'), 'the advice names the old agent as unresumable'],
     [context.includes(EXHAUSTED_TREE) && context.includes('TENANCY:'), 'the advice names its worktree and asks for a TENANCY line'],
     [!context.includes('SendMessage'), 'the advice never prints a resume recipe that cannot work'],
-    [decide('Measure the storybook render budget', '', REPO, records, NOW)?.hookSpecificOutput?.permissionDecision === 'deny', 'a rate-limited agent still gets the resume-first refusal'],
-    [decide('Extract the reorder state machine into its own controller', '', REPO, records, NOW) === undefined, 'unrelated work gets no output at all']
+    [decide('Measure the storybook render budget', '', REPO, records, NOW, SESSION)?.hookSpecificOutput?.permissionDecision === 'deny', 'a rate-limited agent still gets the resume-first refusal'],
+    [decide('Extract the reorder state machine into its own controller', '', REPO, records, NOW, SESSION) === undefined, 'unrelated work gets no output at all']
   ];
 
   for (const [ok, label] of checks) {
@@ -240,13 +264,47 @@ for (const [expected, description, label] of cases) {
 
 // --- The foreign-project record must never be reachable from this repo, whatever the wording.
 {
-  const matches = priorAgents('Re-measure coverage floors', REPO, records, NOW);
+  const matches = priorAgents('Re-measure coverage floors', REPO, records, NOW, SESSION);
   const leaked = matches.some((match) => match.id === 'agent-aFOREIGN0000000');
   const ok = !leaked;
 
   checked += 1; if (!ok) failures += 1;
 
   console.log(`${ok ? 'PASS' : 'FAIL'}  a record from another project is never offered as a candidate`);
+}
+
+// --- The session of a record is read from where the harness put its transcript, and the refusal names
+//     only agents of the dispatching session, even when another session holds the same errand.
+{
+  const own = records.find((entry) => entry.id === 'agent-a06941e5065917eda');
+  const other = records.find((entry) => entry.id === 'agent-aOTHERSESSDUP0');
+  const named = priorAgents('Re-measure coverage floors', REPO, records, NOW, SESSION).map((match) => match.id);
+  const checks = [
+    [sessionOf(own) === SESSION && sessionOf(other) === OTHER_SESSION, 'the session is the folder above subagents/ in the transcript path'],
+    [named.includes('agent-a06941e5065917eda') && !named.includes('agent-aOTHERSESSDUP0'), 'the same errand held by two sessions names only the dispatching one'],
+    [priorAgents('Re-measure coverage floors', REPO, records, NOW, OTHER_SESSION).map((match) => match.id).join() === 'agent-aOTHERSESSDUP0', 'seen from the other session, only its own agent is named'],
+    [priorAgents('Re-measure coverage floors', REPO, records, NOW, undefined).length === 0, 'a delegation with no session id has no candidate: fail open'],
+    [priorAgents('Re-measure coverage floors', REPO, records, NOW, '').length === 0, 'an empty session id has no candidate: fail open'],
+    [decide('Re-measure coverage floors', '', REPO, records, NOW, undefined) === undefined, 'decide allows a delegation with no session id'],
+    [decide('Re-measure coverage floors', '', REPO, records, NOW, SESSION)?.hookSpecificOutput?.permissionDecision === 'deny', 'and refuses the same delegation once the session id names the owner']
+  ];
+
+  // The same decision through the hook entry point: the payload's own `session_id` is what scopes it.
+  // @es La misma decisión por el punto de entrada del hook: el `session_id` del propio payload la acota.
+  const call = (session) => evaluate(JSON.stringify({ session_id: session, tool_name: 'Agent', tool_input: { description: 'Re-measure coverage floors', prompt: '' } }), { records, now: NOW });
+
+  process.env.CLAUDE_PROJECT_DIR = REPO;
+  checks.push(
+    [call(SESSION)?.hookSpecificOutput?.permissionDecision === 'deny', 'evaluate refuses for the session that owns the agent'],
+    [call(undefined) === undefined, 'evaluate allows a payload with no session_id'],
+    [call('ffffffff-0000-4000-8000-000000000000') === undefined, 'evaluate allows a session that owns no agent of the errand']
+  );
+
+  for (const [ok, label] of checks) {
+    checked += 1; if (!ok) failures += 1;
+
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  }
 }
 
 // --- The address is what SendMessage accepts, not the record file name. Getting this wrong is the
@@ -335,7 +393,7 @@ for (const [expected, description, label] of cases) {
 
   // The real case must advise WITHOUT refusing: description overlap is 1 word, so a refusal here would
   // mean the thresholds drifted and legitimate work is being blocked.
-  const refused = priorAgents(realDescription, REPO, [accessibility], NOW).length > 0;
+  const refused = priorAgents(realDescription, REPO, [accessibility], NOW, SESSION).length > 0;
 
   checked += 1;
   if (refused) failures += 1;
