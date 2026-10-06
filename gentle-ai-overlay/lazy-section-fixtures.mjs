@@ -65,8 +65,12 @@ export function fullOrchestratorMd({ eol = '\n', regionId = 'sdd-orchestrator' }
     `${REVIEW_SPAN}#### Cost and Context Balance`,
     '',
     'Cost.',
+    '',
+    region('sdd-model-assignments', [lazyEntryNamed('model-assignments').start, '', 'Table — ñandú.', ''].join('\n')),
   ].join('\n');
-  return ['# Owner pointer', '', region('persona', 'Persona.'), '', region(regionId, body), '', region('agent-routing', 'Routing.'), ''].join('\n').split('\n').join(eol);
+  const rdd = lazyEntryNamed('rdd-user-owned');
+  const routing = ['## Implementation Routing', '', rdd.start, '', 'Switch rules — 日本.', '', region('remote-authorization', 'Remote.')].join('\n');
+  return ['# Owner pointer', '', region('persona', 'Persona.'), '', region(regionId, body), '', region('agent-routing', routing), ''].join('\n').split('\n').join(eol);
 }
 
 /**
@@ -75,8 +79,16 @@ export function fullOrchestratorMd({ eol = '\n', regionId = 'sdd-orchestrator' }
  * @es Un CLAUDE.md con UNA sección diferida de la lista real, construido con los anclajes de la propia entrada.
  */
 export function sectionMd(entry, { eol = '\n', regionId = entry.regions[0], body = ['Body — ñandú 日本.', '', 'Second paragraph.', ''] } = {}) {
-  const inner = ['# Intro', '', entry.start, '', ...body, entry.end, 'After the section.'].join('\n');
-  return ['# Owner pointer', '', region(regionId, inner), ''].join('\n').split('\n').join(eol);
+  const marker = (prefix) => (entry.end.startsWith(prefix) && entry.end.endsWith(' -->') ? entry.end.slice(prefix.length, -' -->'.length) : undefined);
+  const closes = marker('<!-- /gentle-ai:') === regionId;
+  const nested = marker('<!-- gentle-ai:');
+  const lines = ['# Intro', '', entry.start, '', ...body];
+  // The end line may be the closing marker of the region itself, or the opening marker of a region nested in it.
+  // @es La línea final puede ser el marcador de cierre de la propia región, o el de apertura de una región anidada en ella.
+  const text = closes
+    ? [`<!-- gentle-ai:${regionId} -->`, ...lines, entry.end]
+    : [`<!-- gentle-ai:${regionId} -->`, ...lines, entry.end, 'After the section.', ...(nested === undefined ? [] : [`<!-- /gentle-ai:${nested} -->`]), `<!-- /gentle-ai:${regionId} -->`];
+  return ['# Owner pointer', '', ...text, ''].join('\n').split('\n').join(eol);
 }
 
 /** What `gentle-ai sync` does to a region: replaces everything between its markers. @es Lo que hace `gentle-ai sync` con una región: reemplaza todo entre sus marcadores. */

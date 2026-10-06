@@ -90,7 +90,8 @@ export function registerLazySectionCases({ test, expect, newRoot, put, read, ins
         const result = lazy(original);
         const pointer = result.text.slice(spanOf(original).start, result.text.length - (original.length - spanOf(original).end));
         expect(pointer.includes(`sha256=${sha256(result.stash)} -->`), true, 'sentinel sha');
-        ['`~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md`', 'other than `gentle-ai review mode status`', 'consent/v3', 'effective: on', '\n@es '].forEach((needle) => expect(pointer.includes(needle), true, `pointer holds ${needle}`));
+        ['`~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md`', 'other than `gentle-ai review mode status`', 'consent/v3', 'effective: on'].forEach((needle) => expect(pointer.includes(needle), true, `pointer holds ${needle}`));
+        expect(pointer.includes('@es '), review.pointer.es !== undefined, 'the Spanish half is there only when the section declares it');
         expect(pointer.split('\r\n').join('').includes('\n'), eol === '\n', 'line ending');
       });
 
@@ -119,13 +120,41 @@ export function registerLazySectionCases({ test, expect, newRoot, put, read, ins
     }
   }
 
-  test('section: a CLAUDE.md moved by the first release (its pointer, byte for byte) is read as moved, never re-moved', () => {
+  test('section: a CLAUDE.md moved by the first release (its bilingual pointer, byte for byte) is read as moved, and its pointer is brought up to date without touching the stash', () => {
     const original = orchestratorMd();
     const span = spanOf(original);
     const historic = original.slice(0, span.start) + HISTORIC_REVIEW_POINTER.replace('SHA', sha256(span.bytes)) + original.slice(span.end);
     expect(inspectSection(historic, review).form, 'moved', 'form');
-    expect(lazy(historic, span.bytes).outcome, 'unchanged', 'nothing to do');
-    expect(lazy(original).text, historic, 'the pointer written today is the historic one');
+    const repointed = lazy(historic, span.bytes);
+    expect(repointed.outcome, 'repointed', 'outcome');
+    expect(repointed.text, lazy(original).text, 'the pointer written today');
+    expect(repointed.stash, span.bytes, 'the stash is the same bytes');
+    expect(lazy(repointed.text, span.bytes).outcome, 'unchanged', 'idempotent');
+    expect(inspectSection(repointed.text, review).sha, sha256(span.bytes), 'the sentinel sha is unchanged');
+  });
+
+  test('section: a moved pointer that differs from the declared one is repointed in any line ending, and a restore ignores the pointer', () => {
+    for (const eol of ['\n', '\r\n']) {
+      const moved = lazy(orchestratorMd({ eol }));
+      const stale = moved.text.replace('READ THAT FILE IN FULL', 'read it sometime');
+      expect(stale !== moved.text, true, 'the fixture is stale');
+      const fixed = lazy(stale, moved.stash);
+      expect(fixed.outcome, 'repointed', `outcome (${JSON.stringify(eol)})`);
+      expect(fixed.text, moved.text, `bytes (${JSON.stringify(eol)})`);
+      expect(lazy(stale, moved.stash, true).outcome, 'restored', 'restore does not care about the pointer');
+    }
+  });
+
+  test('section: a pointer carries its Spanish half only when the section declares one, and fills {stash} in both', () => {
+    const text = orchestratorMd();
+    const bilingualSection = { ...review, pointer: { en: 'English {stash} end.', es: 'Español {stash} fin.' } };
+    const plainSection = { ...review, pointer: { en: 'English {stash} end.' } };
+    const both = pointerFor(text, bilingualSection, 'a'.repeat(64), '~/x.md');
+    const english = pointerFor(text, plainSection, 'a'.repeat(64), '~/x.md');
+
+    expect(both.includes('\nEnglish ~/x.md end.\n@es Español ~/x.md fin.\n'), true, `bilingual (${JSON.stringify(both)})`);
+    expect(english.includes('@es'), false, 'English only');
+    expect(english.includes('\nEnglish ~/x.md end.\n\n'), true, `english (${JSON.stringify(english)})`);
   });
 
   test('section: a moved span whose stash is tampered, missing or drifted is refused, never guessed', () => {

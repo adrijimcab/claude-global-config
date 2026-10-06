@@ -46,6 +46,7 @@ const detailsOf = (label) => ({
   loaded: `span is loaded in CLAUDE.md, it may be needed @es el tramo está cargado en CLAUDE.md, puede hacer falta`,
   moved: `span is loaded while it is not needed; apply moves it to the stash @es el tramo está cargado sin hacer falta; apply lo mueve al depósito`,
   restored: `span is in the stash while it may be needed or the mode is unreadable; apply restores it @es el tramo está en el depósito con posible necesidad o modo ilegible; apply lo restaura`,
+  repointed: `the pointer is not the declared one; apply rewrites it, the stash stays @es el puntero no es el declarado; apply lo reescribe, el depósito no cambia`,
 });
 
 const needsMode = (customization) => customization.loadedWhile === REVIEWS_MAY_RUN;
@@ -63,7 +64,7 @@ function planFor(customization, context) {
 }
 
 /** An unchanged span is described by its form; a pending change by its outcome. @es Un tramo sin cambios se describe por su forma; un cambio pendiente, por su resultado. */
-const PLANNED = { moved: 'would-move', restored: 'would-restore', unchanged: 'unchanged' };
+const PLANNED = { moved: 'would-move', restored: 'would-restore', repointed: 'would-repoint', unchanged: 'unchanged' };
 function detailFor(customization, plan) {
   const details = detailsOf(customization.label);
   if (plan.outcome !== 'unchanged') return details[plan.outcome];

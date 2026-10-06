@@ -69,8 +69,6 @@ const OWNER_MANDATE_ANCHORS = [
 // ~/.claude/lessons/evidence/). Una clave nueva que promueva failure-capture se agrega acá.
 const PROMOTED_RULE_ANCHORS = [
   '# Promoted rules — recurred despite the ledger',
-  '- **`stale-artifact-read-as-this-runs-result`**',
-  '- **`guard-that-cannot-go-red`**',
   '- **`bounded-search-read-as-absence`**',
   '- **`collision-fixed-by-deleting-unread-side`**',
   '- **`audit-verdict-from-commit-subjects-not-from-reading`**',
@@ -81,6 +79,17 @@ const PROMOTED_RULE_ANCHORS = [
   '- **`gitignored-deliverable-destroyed-by-worktree-autoclean`**',
   '- **`integrated-a-range-without-running-its-cheap-gates`**',
 ];
+
+// The promoted rules whose text is path-scoped, in the rules file of their area (failure-capture/ledger-routes.mjs:
+// the harness loads them only when a file matching the area's `paths:` is read). They were moved out of
+// promoted-rules.md by `capture.mjs route --key <key> --to <area> --write`; their anchors move with them, so the
+// report still names a rule if it ever goes missing. @es Las reglas promovidas cuyo texto tiene alcance de ruta,
+// en el fichero de reglas de su área: el harness las carga solo cuando se lee un fichero que coincide con los
+// `paths:` del área. Las movió `capture.mjs route --key <clave> --to <área> --write`; sus anclas van con ellas.
+const PROMOTED_AREA_RULE_ANCHORS = {
+  guards: ['- **`guard-that-cannot-go-red`**'],
+  'run-artifacts': ['- **`stale-artifact-read-as-this-runs-result`**'],
+};
 
 // The Hard Rules line of the sdd-verify skill, as gentle-ai renders it, and ours. The upstream line is
 // the anchor, character for character. @es La línea de Hard Rules de la skill sdd-verify tal como la
@@ -129,11 +138,11 @@ const LAZY_SECTIONS = [
     },
   },
   // Owner decision 2026-10-01: the review execution contract is loaded only while gentle-ai reviews may
-  // run, until gentle-ai offers that upstream. Its pointer is the one the first release wrote, bilingual and
-  // byte for byte, so the CLAUDE.md already moved stays moved. @es Decisión del dueño 2026-10-01: el contrato
-  // de ejecución de revisiones se carga solo mientras las revisiones de gentle-ai pueden correr, hasta que
-  // gentle-ai lo ofrezca upstream. Su puntero es el que escribió la primera versión, bilingüe y byte a byte,
-  // para que el CLAUDE.md ya movido siga movido.
+  // run, until gentle-ai offers that upstream. Its first pointer was bilingual; it is English only now, like
+  // the others, and a CLAUDE.md already moved is repointed by the next apply. @es Decisión del dueño
+  // 2026-10-01: el contrato de ejecución de revisiones se carga solo mientras las revisiones de gentle-ai
+  // pueden correr, hasta que gentle-ai lo ofrezca upstream. Su primer puntero era bilingüe; ahora es solo en
+  // inglés, como los demás, y un CLAUDE.md ya movido se re-apunta con el siguiente apply.
   {
     name: 'review-contract',
     label: 'review contract',
@@ -145,7 +154,28 @@ const LAZY_SECTIONS = [
     stash: `${LAZY_DIR}/review-execution-contract.md`,
     pointer: {
       en: 'Receipt-driven development is off globally, so this contract is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, before any `gentle-ai review` command other than `gentle-ai review mode status`, before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as `gentle-ai review mode status` reports `effective: on`.',
-      es: 'El desarrollo guiado por recibos está apagado globalmente, así que este contrato no se carga aquí; su texto exacto está en `{stash}`. LEER ESE FICHERO COMPLETO, y seguirlo como si estuviera escrito aquí, antes de cualquier comando `gentle-ai review` distinto de `gentle-ai review mode status`, antes de transmitir un sobre `gentle-ai.review-integration.consent/v3`, y en cuanto `gentle-ai review mode status` informe `effective: on`.',
+    },
+  },
+  {
+    name: 'model-assignments',
+    label: 'model assignments',
+    start: '## Model Assignments',
+    end: '<!-- /gentle-ai:sdd-model-assignments -->',
+    regions: ['sdd-model-assignments'],
+    stash: `${LAZY_DIR}/model-assignments.md`,
+    pointer: {
+      en: 'The model-assignment table (the model alias of every SDD and Judgment-Day role, and of generic delegation) is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL before the first Agent or Task delegation of a session, keep it for the session, and give EVERY Claude Agent call the `model` it maps.',
+    },
+  },
+  {
+    name: 'rdd-user-owned',
+    label: 'receipt-driven development switch rules',
+    start: '### Receipt-driven development is user-owned',
+    end: '<!-- gentle-ai:remote-authorization -->',
+    regions: ['agent-routing'],
+    stash: `${LAZY_DIR}/receipt-driven-development-switch.md`,
+    pointer: {
+      en: 'The rules for the receipt-driven development switch (`gentle-ai review mode enable|disable|status`: opt-in, off by default, never enabled on the user\'s behalf) are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.',
     },
   },
 ];
@@ -181,6 +211,12 @@ export const CUSTOMIZATIONS = [
     file: '.claude/rules/promoted-rules.md',
     anchors: PROMOTED_RULE_ANCHORS,
   },
+  ...Object.entries(PROMOTED_AREA_RULE_ANCHORS).map(([area, anchors]) => ({
+    id: `promoted-${area}-rules-file-holds-every-key`,
+    kind: 'owner-sections-outside-managed-regions',
+    file: `.claude/rules/promoted-${area}.md`,
+    anchors,
+  })),
   {
     id: 'claude-md-persona-region-is-only-gentle-ai-text',
     kind: 'persona-region-matches-upstream',

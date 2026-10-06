@@ -495,7 +495,7 @@ test('apply.mjs --dry-run: the review span would move, nothing is written, exit 
 test('check.mjs --json: the lazy sections and the line replacement report syncSafe, every other kind does not', () => {
   const report = JSON.parse(run('check.mjs', [...flags(completeHome()), '--json']).stdout);
   const safe = report.results.filter((entry) => entry.syncSafe === true).map((entry) => entry.id);
-  expect(safe.join(','), 'sdd-verify-runs-scoped-gates,lazy-blocking-prompts,lazy-delegated-verification,lazy-review-contract', 'sync-safe ids');
+  expect(safe.join(','), 'sdd-verify-runs-scoped-gates,lazy-blocking-prompts,lazy-delegated-verification,lazy-review-contract,lazy-model-assignments,lazy-rdd-user-owned', 'sync-safe ids');
 });
 
 test('apply.mjs --dry-run on the REAL list: the upstream verify sentence would be replaced, nothing is written; apply.mjs then replaces it -> exit 0', () => {

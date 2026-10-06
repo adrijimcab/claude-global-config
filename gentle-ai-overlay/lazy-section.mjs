@@ -122,7 +122,11 @@ export function pointerFor(text, section, movedSha, stashLabel) {
  * hacer falta o no se pudo leer el modo que lo decide: el tramo se restaura, nunca se adivina. Un tramo
  * movido cuyo depósito no coincide con su centinela se rechaza, y `gentle-ai sync` regenera el texto canónico.
  * `form` is the span's form BEFORE reconciling. @es `form` es la forma del tramo ANTES de reconciliar.
- * @returns {{ outcome: 'moved'|'restored'|'unchanged', form: 'absent'|'present'|'moved', text: string, stash: string|null } | { refused: string }}
+ * A span already moved whose pointer is not the declared one is REPOINTED: the pointer is rewritten, the stash and
+ * the sentinel's sha are not, so a change of the declared text reaches the files already moved.
+ * @es Un tramo ya movido cuyo puntero no es el declarado se RE-APUNTA: se reescribe el puntero, no el depósito ni el
+ * sha del centinela, así un cambio del texto declarado llega a los ficheros ya movidos.
+ * @returns {{ outcome: 'moved'|'restored'|'repointed'|'unchanged', form: 'absent'|'present'|'moved', text: string, stash: string|null } | { refused: string }}
  */
 export function reconcileSection(text, section, { keepLoaded, stash, stashLabel }) {
   const found = inspectSection(text, section);
@@ -137,6 +141,9 @@ export function reconcileSection(text, section, { keepLoaded, stash, stashLabel 
   if (stash === null || sha256(stash) !== found.sha) {
     return refuse('the stash is missing or does not match the sentinel; run `gentle-ai sync`', 'el depósito falta o no coincide con el centinela; ejecutar `gentle-ai sync`');
   }
-  if (!keepLoaded) return { outcome: 'unchanged', form, text, stash };
-  return { outcome: 'restored', form, text: text.slice(0, start) + stash + text.slice(end), stash };
+  if (keepLoaded) return { outcome: 'restored', form, text: text.slice(0, start) + stash + text.slice(end), stash };
+
+  const pointer = pointerFor(text, section, found.sha, stashLabel);
+
+  return text.slice(start, end) === pointer ? { outcome: 'unchanged', form, text, stash } : { outcome: 'repointed', form, text: text.slice(0, start) + pointer + text.slice(end), stash };
 }
