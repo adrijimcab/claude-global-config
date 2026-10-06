@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * The decisions of the mutation runner's assertion/crash classification, each broken once, that
- * `selftest.mjs` must catch. The runner mutates a COPY of `mutation-proof/`, so this campaign runs the
- * runner on itself. Every mutant keeps the code runnable and changes what it DECIDES, so a kill is an
- * assertion kill, never a crash.
- * @es Las decisiones de la clasificación aserción/crash del corredor, rotas una a una, que `selftest.mjs`
- * debe cazar. El corredor muta una COPIA de `mutation-proof/`: esta campaña lo corre sobre sí mismo. Cada
- * mutante deja el código ejecutable y cambia lo que DECIDE, así que toda muerte es por aserción.
+ * The runner's own decisions, each reverted once, that `selftest.mjs` must catch — measured BY the runner,
+ * on a sandbox copy of itself. The live runner drives the campaign; the selftest inside each sandbox loads
+ * the MUTATED copy next to it, so every mutant below is the runner as it would be with one of its refusals
+ * gone. The first three revert the three hardening fixes; the rest break the refusals that keep them honest.
+ *
+ * @es Las decisiones del propio runner, revertidas una a una, que `selftest.mjs` debe cazar; las mide el
+ * runner vivo sobre una copia mutada de sí mismo.
  */
 
 import path from 'node:path';
@@ -14,37 +14,23 @@ import { fileURLToPath } from 'node:url';
 
 import { runMutants } from './run-mutants.mjs';
 
-const KIND = 'mutation-proof/kill-kind.mjs';
 const RUNNER = 'mutation-proof/run-mutants.mjs';
 
 const MUTANTS = [
-  // --- THE CLASSIFIER: what makes a red a crash.
-  ['an exit 0 is classified as a kill', KIND, "if (run.status === 0) return { kind: 'none' };", 'if (false) return { kind: "none" };'],
-  ['a silent non-zero exit is read as an assertion', KIND, 'if (stdout.trim().length === 0 && stderr.trim().length === 0) return {', 'if (false) return {'],
-  ['a failure reported only on stderr is read as silent', KIND, 'stdout.trim().length === 0 && stderr.trim().length === 0', 'stdout.trim().length === 0 || stderr.trim().length === 0'],
-  ['an uncaught AssertionError is read as a crash', KIND, "  if (ASSERTION_ERROR.test(stderr)) return { kind: 'assertion' };\n", ''],
-  ['the fatal trailer no longer makes a crash: no red is one', KIND, "if (!FATAL_TRAILER.test(stderr)) return { kind: 'assertion' };", "if (true) return { kind: 'assertion' };"],
-  ['the fatal trailer is not required: every red with output is a crash', KIND, "if (!FATAL_TRAILER.test(stderr)) return { kind: 'assertion' };", ''],
-  ['a stack trace alone makes a crash', KIND, '!FATAL_TRAILER.test(stderr)', '!FATAL_TRAILER.test(stderr) && !STACK_FRAME.test(stderr)'],
-  ['the trailer test is inverted', KIND, '!FATAL_TRAILER.test(stderr)', 'FATAL_TRAILER.test(stderr)'],
-  ['the crash line is the source excerpt instead of the named error', KIND, 'if (named !== null) return named[0].trimEnd();', 'if (false) return named[0].trimEnd();'],
-  ['a crash with no named error reports nothing', KIND, "return stderr.split('\\n').find((line) => line.trim().length > 0)?.trimEnd() ?? '';", "return '';"],
+  // ── the three hardening fixes, each reverted ─────────────────────────────────────────────────────────
+  ['a target occurring more than once is mutated at its first occurrence', RUNNER, 'if (count > 1) return', 'if (false) return'],
+  ['the selftest is never run unmutated, so a red baseline reads as every mutant killed', RUNNER, '    requireGreenBaseline(sandboxes, selftest, timeoutMs);\n', ''],
+  ['a mutated file is never parse-checked, so a syntax error reads as a kill', RUNNER, 'const syntaxError = syntaxErrorOf(path.join(sandbox, file));', 'const syntaxError = undefined;'],
 
-  // --- THE FRAMES: where a crash was thrown.
-  ['the crash keeps one frame instead of three', KIND, 'const FRAMES_REPORTED = 3;', 'const FRAMES_REPORTED = 1;'],
-  ["the runtime's own frames are reported as the place that threw", KIND, ' && !NODE_INTERNAL_FRAME.test(line))', ')'],
-  ['the frame keeps its leading "at"', KIND, ".map((line) => line.trim().replace(/^at /, ''));", '.map((line) => line.trim());'],
-  ['the crash line never names where it was thrown', RUNNER, "frames === undefined || frames.length === 0 ? '' :", "true ? '' :"],
-
-  // --- THE RUNNER: what the classification does to the verdict.
-  ['a crash is never recognised by the runner', RUNNER, "const kill = killed ? classifyKill(verdict.run) : { kind: 'none' };", "const kill = { kind: 'none' };"],
-  ['a survivor is counted as an assertion kill', RUNNER, "return killed ? 'assertion' : 'survived';", "return 'assertion';"],
-  ['the crash count is dropped from the tally', RUNNER, "if (kind === 'assertion' || kind === 'crash') tally[kind] += 1;", "if (kind === 'assertion') tally[kind] += 1;"],
-  ['the weak-proof notice is never printed', RUNNER, 'if (tally.crash > 0) console.log(', 'if (false) console.log('],
-  ['the weak-proof notice is printed for every campaign', RUNNER, 'if (tally.crash > 0) console.log(', 'if (tally.crash >= 0) console.log('],
-  ['the default policy fails on a crash', RUNNER, "crashKills = 'report' }", "crashKills = 'fail' }"],
-  ['the fail policy never counts a crash as a survivor', RUNNER, "(crashKills === 'fail' ? tally.crash : 0)", '0'],
-  ['an unknown policy is accepted', RUNNER, 'if (!CRASH_POLICIES.has(crashKills)) throw', 'if (false) throw'],
+  // ── the refusals that keep those fixes honest ───────────────────────────────────────────────────────
+  ['an absent target is run instead of refused', RUNNER, 'if (count === 0) return', 'if (false) return'],
+  ['a file with no parse check is run unchecked', RUNNER, 'if (!PARSE_CHECKED.has(path.extname(file))) return', 'if (false) return'],
+  ['a path outside the copied paths is not refused, so a mutant can climb out of its sandbox and write a live file', RUNNER, 'if (!paths.some((needed) => isInside(needed, file))) return', 'if (false) return'],
+  ['an unparseable original is accepted, so BROKEN no longer means the mutation broke it', RUNNER, '    requireParseableOriginals(plans, snapshot);\n', ''],
+  ['the mutation is applied with String.replace, which rewrites $& in the replacement', RUNNER, 'return source.slice(0, at) + replacement + source.slice(at + original.length);', 'return source.replace(original, replacement);'],
+  ['a refused mutant is counted as killed', RUNNER, 'runMutant(plan, sandboxes, selftest, timeoutMs) : undefined;', "runMutant(plan, sandboxes, selftest, timeoutMs) : 'assertion';"],
+  ['an empty campaign reports 0/0 killed and exits clean', RUNNER, "if (mutants.length === 0) throw new NotMeasured(", "if (false) throw new NotMeasured("],
+  ['overlapping occurrences are not counted, so "aa" in "aaa" reads as exactly once', RUNNER, 'text.indexOf(needle, at + 1)', 'text.indexOf(needle, at + needle.length)']
 ];
 
 const survivors = runMutants({
@@ -52,7 +38,7 @@ const survivors = runMutants({
   paths: ['mutation-proof'],
   selftest: 'mutation-proof/selftest.mjs',
   mutants: MUTANTS,
-  crashKills: 'fail',
+  crashKills: 'fail'
 });
 
 process.exit(survivors === 0 ? 0 : 1);

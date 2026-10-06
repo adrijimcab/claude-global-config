@@ -11,9 +11,9 @@
  *
  * WHAT IS EXCLUDED, through data and never a hand list:
  *   - what `VENDORED` declares (the caller passes it: the list stays owned by `vendored.mjs`);
- *   - what ANOTHER provenance record already pins. Every other `PROVENANCE.json` under the install names its
- *     files relative to ITS OWN folder (the convention `fleet-kit/vendor/sources.mjs` keeps), so a file such as
- *     `fleet-kit/vendor/shell-command/shell-command.mjs` already has its provenance there. This check's own
+ *   - what ANOTHER provenance record already pins. Any other `PROVENANCE.json` under the install (none today:
+ *     `fleet-kit/vendor/` was folded into this one) names its files relative to ITS OWN folder, so a file such as
+ *     `<kit>/vendor/shell-command/shell-command.mjs` would already have its provenance there. This check's own
  *     record names its files relative to the install root, so read relative to ITS folder it pins nothing:
  *     the derived echo of `VENDORED` can never be a way to silence a finding.
  * Only `.mjs` modules count, `.git`, `node_modules` and `worktrees` are not trees of the reference
@@ -37,7 +37,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { sha256Of } from '../fleet-kit/vendor/provenance.mjs';
+import { sha256Of } from './provenance.mjs';
 
 /** The file name every provenance record carries. @es El nombre de fichero de todo registro de procedencia. */
 export const RECORD_FILE_NAME = 'PROVENANCE.json';

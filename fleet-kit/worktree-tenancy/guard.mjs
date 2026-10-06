@@ -26,9 +26,9 @@ import { findConfig } from '../config/load-config.mjs';
 import { isAgentWorktree } from '../lib/agent-worktrees.mjs';
 import { deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
 import { effectiveDirectory } from '../lib/invocation-directory.mjs';
-import { activeOwner, agentRecords } from '../vendor/agent-liveness/liveness.mjs';
-import { gitInvocations } from '../vendor/shell-command/git-invocations.mjs';
-import { dialectOfTool } from '../vendor/shell-command/shell-command.mjs';
+import { activeOwner, agentRecords } from '../../agent-liveness/liveness.mjs';
+import { gitInvocations } from '../../shell-command/git-invocations.mjs';
+import { dialectOfTool } from '../../shell-command/shell-command.mjs';
 
 export const MUTATING = new Set(['commit', 'add', 'stash', 'reset', 'clean', 'rebase', 'merge', 'cherry-pick', 'revert', 'am', 'apply', 'restore', 'checkout', 'switch', 'mv', 'rm', 'pull']);
 

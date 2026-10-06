@@ -47,7 +47,7 @@
  * analiza el inglés: sus dos límites son estados nombrados del selftest. SIN REGEX.
  */
 
-import { simpleCommands } from '../fleet-kit/vendor/shell-command/shell-command.mjs';
+import { simpleCommands } from '../shell-command/shell-command.mjs';
 
 /**
  * Words that turn their clause into a prohibition or a description of a refusal, in both languages the

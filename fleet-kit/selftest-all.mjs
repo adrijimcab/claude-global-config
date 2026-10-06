@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Runs every kit selftest and the vendored-code provenance check, each in its own process, and exits
- * non-zero when any of them is not green.
+ * Runs every kit selftest and the vendored-code provenance check (`../vendored/vendored.mjs check`), each in
+ * its own process, and exits non-zero when any of them is not green.
  *   node ~/.claude/fleet-kit/selftest-all.mjs [--mutants]
  * `--mutants` runs every mechanism's mutant campaign instead.
  * @es Corre cada selftest del kit y la comprobación de procedencia, cada uno en su proceso; con
@@ -17,16 +17,18 @@ const KIT = path.dirname(fileURLToPath(import.meta.url));
 export const MECHANISMS = ['config', 'gate-run', 'diff-coverage', 'landing-guard', 'worktree-tenancy', 'orphan-work', 'handback'];
 
 const mutants = process.argv.includes('--mutants');
-const scripts = mutants ? MECHANISMS.map((name) => `${name}/mutants.mjs`) : [...MECHANISMS.map((name) => `${name}/selftest.mjs`), 'vendor/provenance.mjs'];
+// The provenance of what the kit imports is `vendored.mjs check`, the install's one vendoring.
+// @es La procedencia de lo que importa el kit es `vendored.mjs check`, el único vendorizado de la instalación.
+const scripts = mutants ? MECHANISMS.map((name) => [`${name}/mutants.mjs`]) : [...MECHANISMS.map((name) => [`${name}/selftest.mjs`]), ['../vendored/vendored.mjs', 'check']];
 let failed = 0;
 
-for (const script of scripts) {
-  const run = spawnSync(process.execPath, [path.join(KIT, script)], { encoding: 'utf8', timeout: 1_800_000, maxBuffer: 256 * 1024 * 1024 });
+for (const [script, ...args] of scripts) {
+  const run = spawnSync(process.execPath, [path.join(KIT, script), ...args], { encoding: 'utf8', timeout: 1_800_000, maxBuffer: 256 * 1024 * 1024 });
   const lines = `${run.stdout ?? ''}${run.stderr ?? ''}`.trim().split('\n');
   const green = run.status === 0 && run.signal === null;
 
   if (!green) failed += 1;
-  process.stdout.write(`${green ? 'GREEN' : 'RED  '} ${script} (exit ${String(run.status)}): ${lines.at(-1)}\n`);
+  process.stdout.write(`${green ? 'GREEN' : 'RED  '} ${[script, ...args].join(' ')} (exit ${String(run.status)}): ${lines.at(-1)}\n`);
   if (!green) for (const line of lines.filter((text) => !text.startsWith('KILLED') && !text.startsWith('BASELINE'))) process.stdout.write(`      ${line}\n`);
 }
 

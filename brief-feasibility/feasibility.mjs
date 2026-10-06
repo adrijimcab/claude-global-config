@@ -24,7 +24,7 @@ import { spawnSync } from 'node:child_process';
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { commandWordIndex, executableName } from '../fleet-kit/vendor/shell-command/shell-command.mjs';
+import { commandWordIndex, executableName } from '../shell-command/shell-command.mjs';
 
 import { denyRules, matchingRule } from './deny-rules.mjs';
 import { instructedCommands, instructedMentions } from './instructions.mjs';

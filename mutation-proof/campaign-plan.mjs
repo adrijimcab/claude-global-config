@@ -9,7 +9,7 @@
  *
  * So the planner RUNS the campaign in a child process with the mutants runner swapped, at module resolution,
  * for a stand-in that writes its options (the root and the files of every mutant) to a file and returns 0
- * without mutating anything. The swap catches ANY copy of the runner (`mutation-proof/`, `fleet-kit/vendor/`,
+ * without mutating anything. The swap catches ANY copy of the runner (`mutation-proof/`, a kit's `vendor/`,
  * a wrapper's import), so no runner is edited and none is run. A campaign that cannot be planned is a PROBLEM
  * the caller must show, never an empty plan: an unplanned campaign would read as "mutates nothing".
  *

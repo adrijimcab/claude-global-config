@@ -128,10 +128,13 @@ under `~/.claude/fleet-kit/state/`.
   module decide) has a `mutants.mjs` campaign run through the vendored
   `mutation-proof/run-mutants.mjs`: a green baseline is required first, every mutant must parse, the text it
   replaces must occur exactly once, and every mutant must turn the selftest red.
-- **Vendored code is proven by provenance, not re-tested.** `vendor/PROVENANCE.json` records each vendored
-  file's source and sha256; `vendor/provenance.mjs` fails when a vendored file was edited in the kit, and
-  when the b100 source moved on since the last `vendor/sync.mjs`. Their behaviour stays proven by b100's own
-  selftests; the kit never forks them.
+- **Vendored code is proven by provenance, not re-tested.** The kit keeps no vendoring of its own: it imports
+  the install's single vendored set (`~/.claude/shell-command/`, `cherry-pick-guard/working-directory.mjs`,
+  `agent-liveness/`, `brief-tenancy/tenancy-declaration.mjs`, `diff-coverage/lib/`, `mutation-proof/`), which
+  `~/.claude/vendored/PROVENANCE.json` pins by sha256. `node ~/.claude/vendored/vendored.mjs check` fails when a
+  copy was edited or the b100 source moved on since the last `sync`. Their behaviour stays proven by b100's own
+  selftests; the kit never forks them. (Until 2026-10-06 the kit had a second record under `vendor/`, which
+  had drifted to an older `shell-command.mjs` and the pre-classification runner; it was folded into this one.)
 - **`selftest-all.mjs` / `mutants-all.mjs`** run every campaign and report per-mechanism results.
 - **Live proof**, without touching tracked files: the grader in `--plan` mode (read-only: diff, classify,
   preconditions, the exact command it would run) on each repository, and one real-shaped payload per
@@ -227,7 +230,7 @@ b100 de la que depende se puede expresar como configuración.
 - `hook-dispatch/`: ya es global; se **reutiliza**, no se reconstruye.
 - Tokenizador de shell, gramática de invocaciones git, núcleo puro de diff-coverage (diff, lcov, calificación),
   vivacidad de agentes con su parser de `TENANCY:`, y el corredor de mutantes: **vendorizados idénticos byte a
-  byte**, con procedencia comprobada.
+  byte** en el único vendorizado de `~/.claude/` (`vendored/vendored.mjs`), con procedencia comprobada.
 - Corredor, clasificador y completitud de diff-coverage: **reescritos** alrededor de la configuración, con un
   adaptador por framework de tests (hoy Karma).
 - `gate-run/`: **reescrito y más pequeño**: registra un comando de suite unitaria configurado por árbol LIMPIO.

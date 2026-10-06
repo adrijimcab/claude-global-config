@@ -2,9 +2,9 @@
 /**
  * Proves the vendored-code provenance check DISCRIMINATES, on constructed roots: untouched, a copy edited
  * in place, a source that moved on, a missing copy, and an absent source (a note, never a failure); then
- * proves both command lines (`vendored.mjs sync|check`, `provenance.mjs`) through real processes.
- * @es Prueba que la comprobación de procedencia DISCRIMINA, sobre raíces construidas, y las dos líneas de
- * órdenes con procesos reales.
+ * proves the command line (`vendored.mjs sync|check`) through real processes.
+ * @es Prueba que la comprobación de procedencia DISCRIMINA, sobre raíces construidas, y la línea de órdenes
+ * con procesos reales.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { provenanceFindings, sha256Of } from '../fleet-kit/vendor/provenance.mjs';
+import { provenanceFindings, sha256Of } from './provenance.mjs';
 import { duplicateFinding, RECORD_FILE_NAME, undeclaredDuplicates } from './duplicates.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'vendored-selftest-'));
@@ -67,17 +67,16 @@ try {
   rmSync(root, { recursive: true, force: true });
 }
 
-// --- Part two: the two command lines, through real processes, over an install this file BUILDS.
-// `vendored.mjs` and `provenance.mjs` both locate their roots from their own path and the home directory,
-// so each run gets a copy of the modules under a constructed `.claude/` and a constructed home.
-// @es Parte dos: las dos líneas de órdenes, con procesos reales, sobre una instalación que este fichero
-// CONSTRUYE. Cada módulo localiza sus raíces desde su propia ruta y el home, así que cada corrida usa una
-// copia bajo un `.claude/` y un home construidos.
+// --- Part two: the command line, through real processes, over an install this file BUILDS.
+// `vendored.mjs` locates its roots from its own path and the home directory, so each run gets a copy of the
+// modules under a constructed `.claude/` and a constructed home.
+// @es Parte dos: la línea de órdenes, con procesos reales, sobre una instalación que este fichero CONSTRUYE.
+// `vendored.mjs` localiza sus raíces desde su propia ruta y el home, así que cada corrida usa una copia bajo
+// un `.claude/` y un home construidos.
 
 const { VENDORED } = await import('./vendored.mjs');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REAL_VENDORED = path.join(HERE, 'vendored.mjs');
-const REAL_KIT_VENDOR = path.join(HERE, '..', 'fleet-kit', 'vendor');
 
 /**
  * One check. The condition is a thunk so that a throw while evaluating it (a file a broken mechanism never
@@ -108,11 +107,9 @@ function installIn(base) {
   const sourceRoot = path.join(home, 'Desktop', 'Projects', 'b100-am-ui', '.claude');
 
   mkdirSync(path.join(claude, 'vendored'), { recursive: true });
-  mkdirSync(path.join(claude, 'fleet-kit', 'vendor'), { recursive: true });
   copyFileSync(REAL_VENDORED, path.join(claude, 'vendored', 'vendored.mjs'));
   copyFileSync(path.join(HERE, 'duplicates.mjs'), path.join(claude, 'vendored', 'duplicates.mjs'));
-  copyFileSync(path.join(REAL_KIT_VENDOR, 'provenance.mjs'), path.join(claude, 'fleet-kit', 'vendor', 'provenance.mjs'));
-  copyFileSync(path.join(REAL_KIT_VENDOR, 'sources.mjs'), path.join(claude, 'fleet-kit', 'vendor', 'sources.mjs'));
+  copyFileSync(path.join(HERE, 'provenance.mjs'), path.join(claude, 'vendored', 'provenance.mjs'));
 
   for (const relative of VENDORED) put(sourceRoot, relative, `// reference copy of ${relative}\n`);
 
@@ -122,7 +119,6 @@ function installIn(base) {
 const runNode = (install, args, extraEnv = {}) =>
   spawnSync(process.execPath, args, { encoding: 'utf8', cwd: install.claude, env: { ...process.env, HOME: install.home, USERPROFILE: install.home, ...extraEnv } });
 const vendoredCli = (install, ...args) => runNode(install, [path.join(install.claude, 'vendored', 'vendored.mjs'), ...args]);
-const provenanceCli = (install) => runNode(install, [path.join(install.claude, 'fleet-kit', 'vendor', 'provenance.mjs')]);
 // The extra argument gives `process.argv[1]` a value, as it has when a module is run as a script, so a broken
 // main-module check cannot hide behind its own `argv[1] !== undefined` precondition.
 // @es El argumento extra da valor a `process.argv[1]`, como cuando se ejecuta un script.
@@ -197,30 +193,6 @@ try {
 
   expect('importing vendored.mjs runs no command: no output, exit 0', () => imported.status === 0 && imported.stdout === '');
 
-  const kit = installIn(path.join(cliRoot, 'two'));
-  const vendorDir = path.join(kit.claude, 'fleet-kit', 'vendor');
-  const kitFiles = VENDORED.map((relative) => {
-    put(vendorDir, relative, `// reference copy of ${relative}\n`);
-
-    return { path: relative, sha256: sha256Of(path.join(vendorDir, relative)) };
-  });
-
-  writeFileSync(path.join(vendorDir, 'PROVENANCE.json'), JSON.stringify({ files: kitFiles }));
-
-  const kitGreen = provenanceCli(kit);
-
-  expect('provenance.mjs on an untouched kit exits 0 and counts the modules', () => kitGreen.status === 0 && kitGreen.stdout.includes(`provenance: ${VENDORED.length} vendored module(s), 0 failure(s)`) && bilingual(kitGreen.stdout));
-
-  writeFileSync(path.join(vendorDir, VENDORED[0]), 'edited in the kit\n');
-  rmSync(kit.sourceRoot, { recursive: true, force: true });
-
-  const kitRed = provenanceCli(kit);
-  const kitLines = kitRed.stdout.split('\n');
-
-  expect('provenance.mjs fails on an edited copy, lists absent sources as notes first', () => kitRed.status === 1 && kitLines[0].startsWith('source absent') && kitLines.some((line) => line.startsWith(`EDITED IN THE KIT   ${VENDORED[0]}`)));
-
-  const kitImported = importOf(kit, path.join(vendorDir, 'provenance.mjs'));
-
   const lines = (() => {
     const base = path.join(cliRoot, 'three');
     const vendorSide = path.join(base, 'vendor');
@@ -239,8 +211,7 @@ try {
   })();
 
   expect('every finding line is bilingual: edited, moved on, missing and absent source', () => ['EDITED IN THE KIT', 'SOURCE MOVED ON', 'MISSING IN THE KIT', 'source absent'].every((kind) => lines.some((line) => line.startsWith(kind) && bilingual(line))));
-
-  expect('importing provenance.mjs runs no check: no output, exit 0', () => kitImported.status === 0 && kitImported.stdout === '');
+  expect('a source that moved on names the command that re-syncs it', () => lines.some((line) => line.startsWith('SOURCE MOVED ON') && line.includes('run vendored/vendored.mjs sync, then the selftests')));
 
   // --- Part three: undeclared duplicates, a module byte-identical under both roots that nobody declared.
   // @es Parte tres: duplicados sin declarar, un módulo idéntico bajo ambas raíces que nadie declaró.
@@ -289,10 +260,10 @@ try {
   });
   expect('an absent reference fleet has no duplicates and never throws', () => JSON.stringify(duplicatesOf({ installRoot: twinsIn('d-absent', [['a/twin.mjs', same, undefined]]).installRoot, sourceRoot: path.join(cliRoot, 'd-absent', 'nowhere') })) === '[]');
 
-  // A module pinned by another provenance record (the kit's `fleet-kit/vendor`, whose record names each file
-  // relative to ITS folder) already has its provenance: the pin's own data excludes it, never a hand list.
-  // @es Un módulo fijado por OTRO registro de procedencia (el `fleet-kit/vendor` del kit, que nombra cada
-  // fichero relativo a SU carpeta) ya tiene su procedencia: lo excluyen los datos del propio registro.
+  // A module pinned by another provenance record (one that names each file relative to ITS folder, as a kit's
+  // `vendor/` record would) already has its provenance: the pin's own data excludes it, never a hand list.
+  // @es Un módulo fijado por OTRO registro de procedencia (que nombra cada fichero relativo a SU carpeta) ya
+  // tiene su procedencia: lo excluyen los datos del propio registro.
   expect('a module pinned by another provenance record, relative to that record\'s folder, is no finding', () => duplicatesOf(twinsIn('d-pinned', [['kit/vendor/a/pinned.mjs', same, same], [`kit/vendor/${RECORD_FILE_NAME}`, pinningRecord('a/pinned.mjs'), undefined]])).length === 0);
   expect('a module the other record does NOT list is still a duplicate, and so is one only its folder name resembles', () => JSON.stringify(duplicatesOf(twinsIn('d-unlisted', [['kit/vendor/a/pinned.mjs', same, same], ['kit/vendor/a/other.mjs', same, same], ['a/other.mjs', same, same], [`kit/vendor/${RECORD_FILE_NAME}`, pinningRecord('a/pinned.mjs'), undefined]]))) === '["a/other.mjs","kit/vendor/a/other.mjs"]');
   expect('a record pins relative to ITS folder: the same relative path elsewhere in the tree is no pinned module', () => JSON.stringify(duplicatesOf(twinsIn('d-relative', [['a/pinned.mjs', same, same], [`kit/${RECORD_FILE_NAME}`, pinningRecord('a/pinned.mjs'), undefined]]))) === '["a/pinned.mjs"]');

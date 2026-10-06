@@ -7,6 +7,7 @@ const B = 'landing-guard/branch-moves.mjs';
 const M = 'landing-guard/move-resolution.mjs';
 const D = 'landing-guard/decision.mjs';
 const I = 'lib/invocation-directory.mjs';
+const G = 'landing-guard/guard.mjs';
 
 runCampaign('landing-guard/selftest.mjs', [
   ['every branch is an integration branch', M, '.filter((branch) => integrationBranches.includes(branch))', '.filter((branch) => true)'],
@@ -24,5 +25,8 @@ runCampaign('landing-guard/selftest.mjs', [
   ['branch -f is not a move', B, "if (hasAny(flags, ['-f', '--force']) && positionals.length > 0) return", 'if (false) return'],
   ['update-ref of a branch is not a move', B, 'if (ref !== undefined && ref.startsWith(HEADS) && value !== undefined) return', 'if (false) return'],
   ['a push refspec moves its source, not its destination', B, 'ref: remote(remoteName, destination)', 'ref: remote(remoteName, source)'],
+  ['the hook never refuses: a denial is spoken as advice', G, 'deny(decision.deny);', 'advise(decision.deny);'],
+  ['the hook refuses what is only advice', G, 'advise(decision.advise)', 'deny(decision.advise)'],
+  ['a line with no finding is advised', G, 'if (decision === undefined) return undefined;', "if (decision === undefined) return advise('');"],
   ['-C is not followed', I, "if (invocation.gitOptions[index] === '-C' && directory !== undefined) directory =", 'if (false) directory =']
 ]);

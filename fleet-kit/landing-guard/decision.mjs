@@ -21,7 +21,7 @@ import { isDisabled } from '../config/validate.mjs';
 import { judge, readVerdict } from '../gate-run/verdicts.mjs';
 import { gitAsker } from '../lib/git.mjs';
 import { effectiveDirectory } from '../lib/invocation-directory.mjs';
-import { dialectOfTool } from '../vendor/shell-command/shell-command.mjs';
+import { dialectOfTool } from '../../shell-command/shell-command.mjs';
 import { requestedMoves } from './branch-moves.mjs';
 import { resolveMove } from './move-resolution.mjs';
 import { landingNotice } from './notice.mjs';

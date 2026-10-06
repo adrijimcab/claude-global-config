@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * The decisions of `vendored.mjs` (the `sync` and `check` command line over the vendored modules), each
- * broken once, that `selftest.mjs` must catch. The runner lives in `../mutation-proof/run-mutants.mjs` and
+ * The decisions of `vendored.mjs` (the `sync` and `check` command line over the vendored modules), of
+ * `provenance.mjs` (the findings `check` prints) and of `duplicates.mjs`, each broken once, that `selftest.mjs`
+ * must catch. The runner lives in `../mutation-proof/run-mutants.mjs` and
  * mutates a COPY. The list of vendored paths is DATA, not a decision, so it is not mutated: the selftest
  * reads it from the module under test, and a second copy of it there would only detect change.
- * @es Las decisiones de `vendored.mjs` (la línea de órdenes `sync`/`check`), rotas una a una, que
+ * @es Las decisiones de `vendored.mjs` (la línea de órdenes `sync`/`check`), de `provenance.mjs` y de
+ * `duplicates.mjs`, rotas una a una, que
  * `selftest.mjs` debe cazar. La lista de rutas vendorizadas es DATO, no decisión, así que no se muta.
  */
 
@@ -15,6 +17,7 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const VENDORED = 'vendored/vendored.mjs';
 const DUPLICATES = 'vendored/duplicates.mjs';
+const PROVENANCE = 'vendored/provenance.mjs';
 
 const MUTANTS = [
   // --- WHERE: which roots the command line copies between.
@@ -34,6 +37,19 @@ const MUTANTS = [
   ['check never fails', VENDORED, 'return failures.length === 0 ? 0 : 1;', 'return 0;'],
   ['check prints failures before the notes', VENDORED, '[...notes, ...failures]', '[...failures, ...notes]'],
   ['check stops reporting in Spanish', VENDORED, ' @es procedencia: ${record.files.length} módulo(s) vendorizado(s), ${failures.length} fallo(s)', ''],
+
+  // --- PROVENANCE: the hash, and what each state of a vendored module means.
+  ['the hash is SHA-1', PROVENANCE, "createHash('sha256')", "createHash('sha1')"],
+  ['the hash is printed as base64', PROVENANCE, ".digest('hex')", ".digest('base64')"],
+  ['a missing copy is not reported', PROVENANCE, 'if (!existsSync(vendored)) failures.push(', 'if (false) failures.push('],
+  ['an edited copy is read as untouched', PROVENANCE, 'else if (sha256Of(vendored) !== sha256) failures.push(', 'else if (sha256Of(vendored) === sha256) failures.push('],
+  ['an absent source is a failure-free silence', PROVENANCE, 'if (!existsSync(source)) notes.push(', 'if (existsSync(source)) notes.push('],
+  ['a source that moved on is read as unchanged', PROVENANCE, 'else if (sha256Of(source) !== sha256) failures.push(', 'else if (sha256Of(source) === sha256) failures.push('],
+  ['the missing-copy line stops being bilingual', PROVENANCE, ' @es FALTA EN EL KIT', ''],
+  ['the edited-copy line stops being bilingual', PROVENANCE, ' @es EDITADO EN EL KIT', ''],
+  ['the absent-source line stops being bilingual', PROVENANCE, ' @es fuente ausente', ''],
+  ['the moved-source line stops being bilingual', PROVENANCE, ' @es la fuente avanzó: correr vendored/vendored.mjs sync y luego los selftests', ''],
+  ['the moved-source line stops naming the re-sync', PROVENANCE, ' — run vendored/vendored.mjs sync, then the selftests', ''],
 
   // --- UNDECLARED DUPLICATES: what `check` reports besides the declared modules.
   ['check reports no duplicate', VENDORED, 'failures.push(duplicateFinding(relative))', 'void relative'],
@@ -74,7 +90,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['vendored', 'fleet-kit/vendor/provenance.mjs', 'fleet-kit/vendor/sources.mjs', 'fleet-kit/vendor/PROVENANCE.json'],
+  paths: ['vendored'],
   selftest: 'vendored/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',
