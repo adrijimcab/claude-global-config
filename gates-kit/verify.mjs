@@ -3,10 +3,13 @@
  * Verifies the gates-kit: every gate directory `gates-kit/<stack>/<gate>/` must hold its parts (see
  * `gate-layout.mjs`), a config free of suppressions (see `config-rules.mjs`), a command that exits 0 on
  * `pass/`, and the same command exiting NON-ZERO on `fail/`. A gate whose fail fixture passes could never
- * go red, which is the `guard-that-cannot-go-red` defect this kit exists to prevent.
+ * go red, which is the `guard-that-cannot-go-red` defect this kit exists to prevent. Every toolchain
+ * `gates-kit/toolchains/<stack>/` must be pinned and locked (see `toolchain-layout.mjs`), and the package a
+ * gate runs must be one its stack's toolchain declares.
  *
- * Usage: `node gates-kit/verify.mjs [--root <kit dir>] [--stack <name>]`.
- * Exit 0 every gate correct; 1 any problem; 2 nothing measured (empty kit, unknown stack, bad usage).
+ * Usage: `node gates-kit/verify.mjs [--root <kit dir>] [--stack <name>]`. The gates of a stack need
+ * `GATES_KIT_TOOLCHAIN` to name that stack's installed toolchain, so a run is per stack (`--stack`).
+ * Exit 0 every gate and toolchain correct; 1 any problem; 2 nothing measured (empty kit, unknown stack, bad usage).
  *
  * Decision: a command that timed out, could not start, or died by signal decided nothing, so on `fail/` it
  * is a problem (`timed-out`, `could-not-run`), never read as the required non-zero exit. A gate with a
@@ -16,8 +19,11 @@
  *
  * @es Verifica el gates-kit: cada gate debe tener sus partes, una config sin supresiones, un comando que
  * sale con 0 sobre `pass/` y con código NO cero sobre `fail/`. Un gate cuyo fixture fail pasa nunca podría
- * ponerse en rojo. Salida 0 todo correcto; 1 algún problema; 2 nada medido. Un comando que agotó el tiempo
- * o no arrancó no decidió nada: es un problema, no un fallo válido. Cada línea sale de la tabla `MESSAGES`.
+ * ponerse en rojo. Cada toolchain debe estar fijada y con lockfile, y el paquete que corre un gate debe estar
+ * declarado en la toolchain de su stack; como `GATES_KIT_TOOLCHAIN` nombra la toolchain instalada de UN stack,
+ * una corrida es por stack (`--stack`). Salida 0 todo correcto; 1 algún problema; 2 nada medido. Un comando
+ * que agotó el tiempo o no arrancó no decidió nada: es un problema, no un fallo válido. Cada línea sale de la
+ * tabla `MESSAGES`.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -27,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 
 import { configViolations } from './config-rules.mjs';
 import { DEFAULT_TIMEOUT_MS, discoverGates, inspectGate } from './gate-layout.mjs';
+import { discoverToolchains, gateToolProblems, inspectToolchain } from './toolchain-layout.mjs';
 
 /** Every runtime message: `[English, Spanish]`. @es Todos los mensajes: `[inglés, español]`. */
 export const MESSAGES = {
@@ -45,9 +52,26 @@ export const MESSAGES = {
   'problem.pass-failed': ['  the command failed on pass/ (exit {detail})', '  el comando falló sobre pass/ (salida {detail})'],
   'problem.fail-passed': ['  the command passed on fail/, so the gate cannot go red', '  el comando pasó sobre fail/, así que el gate no puede ponerse en rojo'],
   'problem.could-not-run': ['  the command could not run on {detail}', '  el comando no pudo ejecutarse sobre {detail}'],
+  'problem.missing-manifest': ['  package.json is missing', '  falta package.json'],
+  'problem.invalid-manifest': ['  package.json is not a readable JSON object', '  package.json no es un objeto JSON legible'],
+  'problem.missing-lockfile': ['  package-lock.json is missing', '  falta package-lock.json'],
+  'problem.invalid-lockfile': ['  package-lock.json is not a readable lockfile', '  package-lock.json no es un lockfile legible'],
+  'problem.no-dependencies': ['  the manifest pins no dependency', '  el manifiesto no fija ninguna dependencia'],
+  'problem.range-version': ['  {detail} is not one exact version', '  {detail} no es una versión exacta'],
+  'problem.unexpected-section': ['  the manifest holds a {detail} section; only dependencies is allowed', '  el manifiesto tiene una sección {detail}; solo se admite dependencies'],
+  'problem.not-private': ['  the manifest is not private', '  el manifiesto no es privado'],
+  'problem.bad-name': ['  the manifest is not named {detail}', '  el manifiesto no se llama {detail}'],
+  'problem.lock-out-of-sync': ['  the lockfile root does not match the manifest dependencies', '  la raíz del lockfile no concuerda con las dependencias del manifiesto'],
+  'problem.lock-missing-package': ['  the lockfile has no entry for {detail}', '  el lockfile no tiene entrada para {detail}'],
+  'problem.lock-version-mismatch': ['  the lockfile resolves {detail} to another version than the pin', '  el lockfile resuelve {detail} a otra versión que la fijada'],
+  'problem.tool-not-declared': ['  the command runs {detail}, which the stack toolchain does not declare', '  el comando ejecuta {detail}, que la toolchain del stack no declara'],
+  'problem.no-toolchain': ['  the command runs a package but the stack has no toolchain', '  el comando ejecuta un paquete pero el stack no tiene toolchain'],
   'problem.timed-out': ['  the command timed out on {detail}', '  el comando agotó el tiempo sobre {detail}'],
   'run.none': ['no gate found to verify', 'no se encontró ningún gate que verificar'],
+  'toolchain.ok': ['toolchain {stack}: pinned to exact versions and locked', 'toolchain {stack}: fijada a versiones exactas y con lockfile'],
+  'toolchain.refused': ['toolchain {stack}: REFUSED ({count} problem(s))', 'toolchain {stack}: RECHAZADA ({count} problema(s))'],
   'run.summary': ['{ok} of {total} gate(s) correct', '{ok} de {total} gate(s) correctos'],
+  'run.summary-toolchains': ['{ok} of {total} toolchain(s) correct', '{ok} de {total} toolchain(s) correctas'],
   'cli.usage': ['unknown or incomplete option {detail}; use --root <dir> and --stack <name>', 'opción desconocida o incompleta {detail}; usar --root <dir> y --stack <name>'],
 };
 
@@ -97,15 +121,25 @@ function configProblems(configs) {
 
 /**
  * Verifies one gate and returns `{ stack, name, problems }`; `problems` is empty when the gate is correct.
- * @es Verifica un gate; `problems` vacío significa gate correcto.
+ * `toolchain` is the directory its stack's packages are installed from. A gate that lacks a part, or runs a
+ * package its toolchain does not declare, is not run: its command is unknown or cannot start.
+ * @es Verifica un gate; `problems` vacío significa gate correcto. `toolchain` es el directorio de donde se
+ * instalan los paquetes de su stack. Un gate sin una parte, o que corre un paquete que su toolchain no
+ * declara, no se ejecuta: su comando es desconocido o no puede arrancar.
  */
-export function verifyGate({ stack, name, dir }) {
+export function verifyGate({ stack, name, dir, toolchain }) {
   const { problems, gate, configs } = inspectGate(dir);
-  const all = [...problems, ...configProblems(configs)];
+  const wiring = gate === undefined ? [] : gateToolProblems(gate.command, toolchain);
+  const all = [...problems, ...wiring, ...configProblems(configs)];
 
-  if (problems.length === 0) for (const side of ['pass', 'fail']) all.push(runSide(gate, dir, side));
+  if (problems.length === 0 && wiring.length === 0) for (const side of ['pass', 'fail']) all.push(runSide(gate, dir, side));
 
   return { stack, name, problems: all.filter((problem) => problem !== undefined) };
+}
+
+/** Verifies one toolchain: `{ stack, problems }`. @es Verifica una toolchain. */
+export function verifyToolchain({ stack, dir }) {
+  return { stack, problems: inspectToolchain(dir) };
 }
 
 /** Parses `--root` and `--stack`; returns `{ error }` for anything else. @es Lee `--root` y `--stack`. */
@@ -134,9 +168,11 @@ export function main(argv, defaultRoot, print = console.log) {
     return 2;
   }
 
-  const gates = discoverGates(path.resolve(options.root), options.stack);
+  const root = path.resolve(options.root);
+  const gates = discoverGates(root, options.stack);
+  const toolchains = discoverToolchains(root, options.stack);
 
-  if (gates.length === 0) {
+  if (gates.length === 0 && toolchains.length === 0) {
     print(say('run.none'));
 
     return 2;
@@ -152,10 +188,19 @@ export function main(argv, defaultRoot, print = console.log) {
   }
 
   const ok = results.filter((result) => result.problems.length === 0).length;
+  const toolchainResults = toolchains.map(verifyToolchain);
 
-  print(say('run.summary', { ok, total: results.length }));
+  for (const { stack, problems } of toolchainResults) {
+    print(problems.length === 0 ? say('toolchain.ok', { stack }) : say('toolchain.refused', { stack, count: problems.length }));
+    for (const { id, ...values } of problems) print(say(`problem.${id}`, values));
+  }
 
-  return ok === results.length ? 0 : 1;
+  const toolchainsOk = toolchainResults.filter((result) => result.problems.length === 0).length;
+
+  if (gates.length > 0) print(say('run.summary', { ok, total: results.length }));
+  if (toolchains.length > 0) print(say('run.summary-toolchains', { ok: toolchainsOk, total: toolchainResults.length }));
+
+  return ok === results.length && toolchainsOk === toolchainResults.length ? 0 : 1;
 }
 
 if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

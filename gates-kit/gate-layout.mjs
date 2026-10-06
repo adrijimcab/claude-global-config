@@ -20,8 +20,16 @@ import path from 'node:path';
 /** Default per-run timeout. @es Tiempo máximo por defecto de cada corrida. */
 export const DEFAULT_TIMEOUT_MS = 300_000;
 
+/** The folder holding one pinned toolchain per stack. @es La carpeta con una toolchain fijada por stack. */
+export const TOOLCHAINS_FOLDER = 'toolchains';
+
 /** Folders under the kit that are not stacks. @es Carpetas del kit que no son stacks. */
-const NOT_STACKS = new Set(['templates', 'toolchains']);
+const NOT_STACKS = new Set(['templates', TOOLCHAINS_FOLDER]);
+
+/** The toolchain directory of `stack` under the kit `root`. @es El directorio de la toolchain de `stack` bajo `root`. */
+export function toolchainOf(root, stack) {
+  return path.join(root, TOOLCHAINS_FOLDER, stack);
+}
 
 const DECLARATION_KEYS = new Set(['command', 'timeoutMs']);
 
@@ -29,11 +37,31 @@ function subdirectories(dir) {
   return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
 }
 
-/** The gates under `root`, optionally of one stack. @es Los gates bajo `root`, opcionalmente de un stack. */
+/**
+ * The gates under `root`, optionally of one stack, each `{ stack, name, dir, toolchain }` where `toolchain` is
+ * the directory its stack's packages are installed from. @es Los gates bajo `root`, opcionalmente de un stack,
+ * cada uno con `toolchain`, el directorio de donde se instalan los paquetes de su stack.
+ */
 export function discoverGates(root, stack) {
   const stacks = subdirectories(root).filter((name) => !NOT_STACKS.has(name) && (stack === undefined || name === stack));
 
-  return stacks.flatMap((name) => subdirectories(path.join(root, name)).map((gate) => ({ stack: name, name: gate, dir: path.join(root, name, gate) })));
+  return stacks.flatMap((name) => subdirectories(path.join(root, name)).map((gate) => ({ stack: name, name: gate, dir: path.join(root, name, gate), toolchain: toolchainOf(root, name) })));
+}
+
+/** The launcher script every gate runs its package through. @es El script lanzador por el que cada gate corre su paquete. */
+const LAUNCHER = 'run-tool.mjs';
+
+/**
+ * The npm package a gate command runs through the launcher (`node <path>/run-tool.mjs [--cwd <dir>] <package>
+ * ...`), or `undefined` when the command is anything else. @es El paquete npm que el comando de un gate
+ * ejecuta con el lanzador (`--cwd <dir>` antes del paquete se salta), o `undefined` si el comando es otra cosa.
+ */
+export function toolPackageOf(command) {
+  const [program, script, ...rest] = command;
+
+  if (program !== 'node' || script?.split(/[\\/]/).at(-1) !== LAUNCHER) return undefined;
+
+  return rest[0] === '--cwd' ? rest[2] : rest[0];
 }
 
 function hasContent(dir) {

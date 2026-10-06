@@ -6,13 +6,19 @@
  * declaration; a gate command that times out or does not exist (neither is a kill); a config with an
  * ignore, an `off`, a downgrade to `warn`, a disable directive in a comment, a threshold under the floor;
  * the near misses of each (`office`, `ignored` inside a comment, a threshold at the floor); discovery
- * (stack filter, `templates` and `toolchains` skipped, empty kit, unknown stack); and the exit codes of the CLI.
+ * (stack filter, `templates` and `toolchains` skipped, empty kit, unknown stack); the toolchains (verified
+ * beside the gates, a broken one refused, a stack with a toolchain and no gate measured, the package a launched
+ * gate runs read against the toolchain of its own stack and never run when undeclared); and the exit codes of
+ * the CLI.
  *
  * @es Prueba de que el verificador de gates-kit DISCRIMINA. Cada caso construye su propio kit temporal.
  * Espacio de estados: gate correcto; fixture fail que pasa; fixture pass que falla; cada parte ausente;
  * carpeta de fixtures vacía; declaración inválida; comando que agota el tiempo o no existe (ninguno
  * cuenta como detección); config con ignore, `off`, `warn`, directiva de desactivación en un comentario,
- * umbral bajo el mínimo; los casi-aciertos de cada uno; el descubrimiento y los códigos de salida del CLI.
+ * umbral bajo el mínimo (o puntuación de mutación `break`); los casi-aciertos de cada uno; el descubrimiento;
+ * las toolchains (verificadas junto a los gates, una rota rechazada, un stack con toolchain y sin gate medido,
+ * el paquete que corre un gate lanzado leído contra la toolchain de SU stack y nunca ejecutado si no está
+ * declarado); y los códigos de salida del CLI.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -154,6 +160,11 @@ check('a threshold under the floor is refused', rules(`lines: ${THRESHOLD_FLOOR 
 check('a threshold at the floor is allowed', rules(`lines: ${THRESHOLD_FLOOR}`).length === 0);
 check('a decimal threshold under the floor is refused', rules('statements: 79.5').join() === 'threshold');
 check('a key merely ending in lines is not a threshold', rules('maxLines: 5').length === 0);
+check('a mutation break score under the floor is refused', rules(`"break": ${THRESHOLD_FLOOR - 1}`).join() === 'threshold');
+check('a mutation break score at the floor is allowed', rules(`"break": ${THRESHOLD_FLOOR}`).length === 0);
+check('a yaml break score under the floor is refused', rules('break: 10').join() === 'threshold');
+check('a key merely starting with break is not a threshold', rules('breakpoint: 10').length === 0);
+check('a key merely ending in break is not a threshold', rules('lineBreak: 1').length === 0);
 check('a violation names its line', configViolations('a: 1\nb: "off"\n')[0].line === 2);
 check('a clean config has no violation', rules(GOOD_CONFIG).length === 0);
 check('a config with an ignore makes the gate refuse', problemsOf({ 'config.mjs': 'ignores: []\n' }).includes('config-ignore'));
@@ -204,6 +215,93 @@ check('a Spanish half keeps its accents', Object.values(MESSAGES).some(([, spani
 check('a message without its @es half throws', (() => { MESSAGES['test.half'] = ['only English', '']; try { say('test.half'); return false; } catch { return true; } finally { delete MESSAGES['test.half']; } })());
 check('an unknown message id throws', (() => { try { say('no.such.id'); return false; } catch { return true; } })());
 check('every problem id has a message', ['missing-config', 'missing-pass', 'missing-fail', 'missing-source', 'missing-gate-json', 'invalid-gate-json', 'config-ignore', 'config-off', 'config-directive', 'config-threshold', 'pass-failed', 'fail-passed', 'could-not-run', 'timed-out'].every((id) => MESSAGES[`problem.${id}`] !== undefined));
+
+// Toolchains: the verifier checks each one beside the gates, and a gate's package against its stack's toolchain.
+/** Writes `<root>/toolchains/<stack>` with a manifest and the lockfile that matches it; `lock: false` omits the lockfile. @es Escribe una toolchain correcta; `lock: false` omite el lockfile. */
+function buildToolchain(root, stack, { dependencies = { eslint: '9.39.4' }, lock = true } = {}) {
+  const dir = path.join(root, 'toolchains', stack);
+  const manifest = { name: `gates-kit-${stack}-toolchain`, version: '1.0.0', private: true, dependencies };
+  const packages = { '': { dependencies } };
+
+  for (const [name, version] of Object.entries(dependencies)) packages[`node_modules/${name}`] = { version };
+
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, 'package.json'), JSON.stringify(manifest));
+  if (lock) writeFileSync(path.join(dir, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }));
+}
+
+const LAUNCHED = JSON.stringify({ command: ['node', '../../run-tool.mjs', 'eslint', 'eslint', '{target}'] });
+const coupledKit = freshRoot();
+
+buildGate(coupledKit, 'angular', 'g', { 'gate.json': LAUNCHED });
+buildToolchain(coupledKit, 'angular');
+
+/** Problem ids and detail of a gate of `root` named `stack/g`. @es Ids de problema de un gate. */
+function coupling(root, stack, overrides) {
+  const dir = buildGate(root, stack, 'g', overrides);
+
+  return verifyGate({ stack, name: 'g', dir, toolchain: path.join(root, 'toolchains', stack) }).problems.map((problem) => `${problem.id}${problem.detail === undefined ? '' : `:${problem.detail}`}`);
+}
+
+check('a gate whose package its toolchain declares has no coupling problem', !coupling(coupledKit, 'angular', { 'gate.json': LAUNCHED }).some((id) => id.startsWith('tool-') || id === 'no-toolchain'));
+
+const undeclared = freshRoot();
+
+buildToolchain(undeclared, 's', { dependencies: { karma: '6.4.4' } });
+
+check('a gate whose package its toolchain does not declare is refused and not run', coupling(undeclared, 's', { 'gate.json': LAUNCHED }).join() === 'tool-not-declared:eslint');
+check('a gate in a stack without a toolchain is refused and not run', coupling(freshRoot(), 's', { 'gate.json': LAUNCHED }).join() === 'no-toolchain');
+check('a gate that runs no package needs no toolchain', coupling(freshRoot(), 's', {}).length === 0);
+
+const withToolchains = freshRoot();
+
+buildGate(withToolchains, 'good', 'g');
+buildGate(withToolchains, 'broken', 'g');
+buildToolchain(withToolchains, 'good');
+buildToolchain(withToolchains, 'broken', { lock: false });
+buildToolchain(withToolchains, 'only', {});
+
+const tools = runCli(['--root', withToolchains]);
+const goodOnly = runCli(['--root', withToolchains, '--stack', 'good']);
+const onlyToolchain = runCli(['--root', withToolchains, '--stack', 'only']);
+const brokenOnly = runCli(['--root', withToolchains, '--stack', 'broken']);
+
+check('a toolchain is verified beside the gates and named', tools.lines.some((line) => line.includes('toolchain good') && line.includes('pinned')));
+check('a toolchain without its lockfile is refused and its problem named', brokenOnly.lines.some((line) => line.includes('toolchain broken') && line.includes('REFUSED')) && brokenOnly.lines.some((line) => line.includes('package-lock.json is missing')));
+check('a broken toolchain makes the CLI exit 1', brokenOnly.status === 1 && tools.status === 1);
+check('a correct stack and toolchain exit 0', goodOnly.status === 0);
+check('the toolchain summary counts the toolchains', goodOnly.lines.some((line) => line.includes('1 of 1 toolchain(s) correct')));
+check('the stack filter narrows the toolchains too', !goodOnly.lines.some((line) => line.includes('toolchain broken')));
+check('a stack with a toolchain and no gate is measured, not empty', onlyToolchain.status === 0);
+check('no toolchain line is printed when the kit holds none', !runCli(['--root', kit, '--stack', 'nest']).lines.some((line) => line.includes('toolchain')));
+check('a toolchain-only run prints no gate summary', !onlyToolchain.lines.some((line) => line.includes('gate(s) correct')));
+
+// A launched gate end to end: the launcher is a stub beside the stacks, so the wiring to the stack's toolchain is what is measured.
+const STUB_LAUNCHER = "import{readdirSync,readFileSync}from'node:fs';const d=process.argv.at(-1);process.exit(readdirSync(d).some((f)=>readFileSync(d+'/'+f,'utf8').includes('BAD'))?1:0);";
+const wired = freshRoot();
+
+writeFileSync(path.join(wired, 'run-tool.mjs'), STUB_LAUNCHER);
+buildGate(wired, 'wired', 'g', { 'gate.json': LAUNCHED });
+buildToolchain(wired, 'wired');
+
+const wiredRun = runCli(['--root', wired]);
+
+check('a launched gate whose package its stack toolchain declares is verified and runs', wiredRun.status === 0 && wiredRun.lines.some((line) => line.includes('gate wired/g: pass exits 0')));
+
+const unwired = freshRoot();
+
+writeFileSync(path.join(unwired, 'run-tool.mjs'), STUB_LAUNCHER);
+buildGate(unwired, 'unwired', 'g', { 'gate.json': LAUNCHED });
+buildToolchain(unwired, 'unwired', { dependencies: { karma: '6.4.4' } });
+buildGate(unwired, 'aaa', 'g', { 'gate.json': LAUNCHED });
+buildToolchain(unwired, 'aaa');
+
+const unwiredRun = runCli(['--root', unwired]);
+
+check('a launched gate is read against the toolchain of its own stack', unwiredRun.status === 1 && unwiredRun.lines.some((line) => line.includes('eslint') && line.includes('does not declare')));
+check('the toolchain of another stack does not satisfy a gate', unwiredRun.lines.some((line) => line.includes('gate unwired/g: REFUSED')));
+check('every toolchain problem id has a message', ['missing-manifest', 'invalid-manifest', 'missing-lockfile', 'invalid-lockfile', 'no-dependencies', 'range-version', 'unexpected-section', 'not-private', 'bad-name', 'lock-out-of-sync', 'lock-missing-package', 'lock-version-mismatch', 'tool-not-declared', 'no-toolchain'].every((id) => MESSAGES[`problem.${id}`] !== undefined));
+check('every toolchain line carries its @es half', [...tools.lines, ...goodOnly.lines, ...brokenOnly.lines].every((line) => line.includes(' @es ')));
 
 for (const root of roots) rmSync(root, { recursive: true, force: true });
 
