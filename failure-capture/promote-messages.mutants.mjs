@@ -31,8 +31,8 @@ const MUTANTS = [
   english('the not-a-lesson refusal', "speaker.complain('promote.notALesson', { key });", "console.error('promote REFUSED');"),
   english('the no-closure refusal', "speaker.complain('promote.noClosure');", "console.error('promote REFUSED');"),
   english('the not-landed refusal', "speaker.complain('promote.notLanded');", "console.error('promote REFUSED');"),
-  english('the missing global token', "missing.push(speaker.line('promote.missing.token', { key, file: ORCHESTRATOR_RULES }))", "missing.push('the token is absent')"),
-  english('the missing contract token', "missing.push(speaker.line('promote.missing.token', { key, file }))", "missing.push('the token is absent')"),
+  english('the missing global token', "for (const file of contractFilesOf(target, key)) if (!readFileOr(file, '').includes(key)) missing.push(speaker.line('promote.missing.token', { key, file }));", "for (const file of contractFilesOf(target, key)) if (!readFileOr(file, '').includes(key)) missing.push('the token is absent');"),
+  english('the missing contract token', "for (const file of WORKER_CONTRACTS) if (!readFileOr(file, '').includes(key)) missing.push(speaker.line('promote.missing.token', { key, file }));", "for (const file of WORKER_CONTRACTS) if (!readFileOr(file, '').includes(key)) missing.push('the token is absent');"),
   english('the missing parity anchor', "missing.push(speaker.line('promote.missing.anchor', { key, gate: PARITY_GATE }))", "missing.push('the anchor is absent')"),
   english('the growth refusal header', "speaker.complain('promote.alreadyPromoted');", "console.error('promote REFUSED');"),
   english('the parity-red refusal', "speaker.complain('promote.parityRed');", "console.error('promote REFUSED');"),
@@ -44,7 +44,7 @@ const MUTANTS = [
   ['the growth advice is dropped', COMMAND, ", speaker.line('growth.advice')].join", '].join'],
 
   // --- the instructions
-  english('the global instructions', "speaker.line('instructions.global', { file: ORCHESTRATOR_RULES, key })", '`add the rule to ${ORCHESTRATOR_RULES}`'),
+  english('the global instructions', "speaker.line('instructions.global', { file: globalRulesOf(key)[0], key })", '`add the rule to ${globalRulesOf(key)[0]}`'),
   english('the way to close', "speaker.line('instructions.close', { number })", '`${number}. close it`'),
   english('the note on the way to close', "speaker.line('instructions.close.note')", "'the mechanism must name the key'"),
   english('the global tail', "speaker.line('instructions.global.tail')", "'it refuses'"),
@@ -60,7 +60,7 @@ const MUTANTS = [
   // --- a closed promotion
   english('the promoted headline', "speaker.say('promote.done', { key });", "console.log('PROMOTED');"),
   ['a project promotion says it landed in the global file', COMMAND, "target === GLOBAL_TARGET ? 'promote.landed.global' : 'promote.landed.contract'", "'promote.landed.global'"],
-  ['the files it landed in are not listed', COMMAND, "files: contractFilesOf(target).join(', ')", "files: ''"],
+  ['the files it landed in are not listed', COMMAND, "files: contractFilesOf(target, key).join(', ')", "files: ''"],
   ['a project promotion claims only a token in the file', COMMAND, "if (target !== PROJECT_TARGET) return ['promote.proof.token', {}];", "if (true) return ['promote.proof.token', {}];"],
   ['a promotion with a parity gate claims no gate ran', COMMAND, "PARITY_GATE === undefined ? 'promote.proof.contracts' : 'promote.proof.contractsGate'", "'promote.proof.contracts'"],
   ['a promotion with no parity gate claims one ran', COMMAND, "PARITY_GATE === undefined ? 'promote.proof.contracts' : 'promote.proof.contractsGate'", "'promote.proof.contractsGate'"],

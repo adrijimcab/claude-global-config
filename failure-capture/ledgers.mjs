@@ -21,6 +21,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import { PROMOTED_SCOPE, STUBS_HEADER, areaLedgerFile, areaLedgerHeader, areaScopes, stubsLedgerFile } from './ledger-routes.mjs';
 import { GLOBAL_SCOPE } from './project.mjs';
 
 /** The header of a new ledger; it says what loads it, so nobody injects it per prompt again. @es El encabezado de un ledger nuevo. */
@@ -35,12 +36,23 @@ export const PROJECT_LOADER = '`.claude/CLAUDE.md` (an `@lessons-ledger.md` impo
 export const globalLedgerFile = (home = homedir()) => path.join(home, '.claude', 'lessons-ledger.md');
 
 /**
- * The ledger files a command can see: the global one, and its project's when it runs in one.
+ * The ledgers every command of this home can see, whatever the project: the loaded home ledger, the path-scoped
+ * ledger of each area and the unloaded file of the promoted stubs (`ledger-routes.mjs`).
+ * @es Los ledgers que ve todo comando de este home, sea cual sea el proyecto: el ledger del home, cargado, el de cada área con alcance de ruta y el fichero NO cargado de los muñones promovidos.
+ */
+export const homeLedgerFiles = (home = homedir()) => ({
+  [GLOBAL_SCOPE]: { file: globalLedgerFile(home), header: HEADER(GLOBAL_SCOPE, GLOBAL_LOADER) },
+  ...Object.fromEntries(areaScopes().map((area) => [area, { file: areaLedgerFile(home, area), header: areaLedgerHeader(area) }])),
+  [PROMOTED_SCOPE]: { file: stubsLedgerFile(home), header: STUBS_HEADER },
+});
+
+/**
+ * The ledger files a command can see: the home's, and its project's when it runs in one.
  * @param options `{ project, home }` — `project` from `project.mjs`, or `undefined`.
- * @es Los ledgers que ve un comando: el global y, si corre en un proyecto, el suyo.
+ * @es Los ledgers que ve un comando: los del home y, si corre en un proyecto, el suyo.
  */
 export function ledgerFiles({ project, home = homedir() }) {
-  const files = { [GLOBAL_SCOPE]: { file: globalLedgerFile(home), header: HEADER(GLOBAL_SCOPE, GLOBAL_LOADER) } };
+  const files = homeLedgerFiles(home);
 
   if (project !== undefined) files[project.scope] = { file: project.ledgerFile, header: HEADER(project.scope, PROJECT_LOADER) };
 

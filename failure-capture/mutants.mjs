@@ -39,14 +39,14 @@ const MUTANTS = [
   ['growth is satisfied by standing still', 'failure-capture/text-growth.mjs', 'if (recurred && now <= then)', 'if (recurred && now < then)'],
 
   // --- the checks that were already there
-  ['the rule text no longer has to have landed', 'failure-capture/capture.mjs', "if (!readFileOr(ORCHESTRATOR_RULES, '').includes(key)) missing.push", 'if (false) missing.push'],
+  ['the rule text no longer has to have landed', 'failure-capture/capture.mjs', "for (const file of contractFilesOf(target, key)) if (!readFileOr(file, '').includes(key)) missing.push", 'for (const file of contractFilesOf(target, key)) if (false) missing.push'],
   ['the orchestrator contract is read from the old CLAUDE.md again', 'failure-capture/capture.mjs', "const ORCHESTRATOR_RULES = path.join(homedir(), '.claude', 'rules', 'promoted-rules.md');", "const ORCHESTRATOR_RULES = path.join(homedir(), '.claude', 'CLAUDE.md');"],
   ['a key that is in no ledger line can be promoted', 'failure-capture/capture.mjs', 'if (!keys.has(key)) {', 'if (false) {'],
 
   // --- the ledger lock: promote writes only while it holds it (the module is proved by ledger-lock.mutants.mjs)
   ['promote takes some other lock, so a held ledger lock is ignored', 'failure-capture/capture.mjs', 'const collapsed = withLock(LOCK_FILE, () => {', "const collapsed = withLock(path.join(STATE_DIR, 'other.lock'), () => {"],
   ['promote does not notice that the lock was refused, and reports a closure that never happened', 'failure-capture/capture.mjs', 'if (!collapsed.held) {', 'if (false) {'],
-  ['promote reads the ledger before it holds the lock, so it writes back a stale copy', 'failure-capture/capture.mjs', 'const collapsed = withLock(LOCK_FILE, () => {\n    const found = locateKey(readLedgers(LEDGERS), key, readMarker);', 'const early = locateKey(readLedgers(LEDGERS), key, readMarker);\n  const collapsed = withLock(LOCK_FILE, () => {\n    const found = early;'],
+  ['promote reads the ledger before it holds the lock, so it writes back a stale copy', 'failure-capture/capture.mjs', 'const collapsed = withLock(LOCK_FILE, () => {\n    const ledgers = readLedgers(LEDGERS);\n    const found = locateKey(ledgers, key, readMarker);', 'const early = readLedgers(LEDGERS);\n  const collapsed = withLock(LOCK_FILE, () => {\n    const ledgers = early;\n    const found = locateKey(ledgers, key, readMarker);'],
   ['the stub of a promoted lesson loses its recurrence counter', 'failure-capture/promotion.mjs', 'marker: original.slice(marker.open, marker.close) })', 'marker: `<!--fc:${marker.key}#1-->` })'],
   ['the refusal to promote loses its Spanish half', 'failure-capture/capture.mjs', "speaker.complain('promote.locked');", "console.error('promote: the ledger is locked by another writer — re-run in a moment. Nothing was changed.');"],
 
@@ -54,7 +54,7 @@ const MUTANTS = [
   ['una lección nueva ignora su alcance y cae siempre en el home', 'failure-capture/capture.mjs', 'const ledger = ledgerForScope(ledgers, entry.scope);', "const ledger = ledgerForScope(ledgers, 'global');"],
   ['una recurrencia no busca la clave: se duplica en el ledger del alcance nuevo', 'failure-capture/capture.mjs', 'const found = locateKey(ledgers, entry.key, readMarker);', 'const found = undefined;'],
   ['keys lee solo el primer ledger', 'failure-capture/capture.mjs', 'for (const ledger of readLedgers(LEDGERS)) {\n    for (const line of ledger.lines ?? []) {', 'for (const ledger of readLedgers(LEDGERS).slice(0, 1)) {\n    for (const line of ledger.lines ?? []) {'],
-  ['promote colapsa solo en el home, así la clave del proyecto nunca se cierra', 'failure-capture/capture.mjs', 'const found = locateKey(readLedgers(LEDGERS), key, readMarker);\n\n    if (found === undefined) return;', 'const found = locateKey(readLedgers(LEDGERS).slice(0, 1), key, readMarker);\n\n    if (found === undefined) return;'],
+  ['promote colapsa solo en el home, así la clave del proyecto nunca se cierra', 'failure-capture/capture.mjs', 'const found = locateKey(ledgers, key, readMarker);\n\n    if (found === undefined) return;', 'const found = locateKey(ledgers.slice(0, 1), key, readMarker);\n\n    if (found === undefined) return;'],
   ['el ledger nuevo nace sin encabezado', 'failure-capture/ledgers.mjs', 'ledger.lines ??= ledger.header.split(\'\\n\');', "ledger.lines ??= [''];"],
   // The 2026-09-30 split-store incident: a capture without --session stamped `unknown`.
   ['the harness session id is ignored, so a capture without --session is stamped unknown again', 'failure-capture/capture.mjs', 'const fromHarness = process.env.CLAUDE_CODE_SESSION_ID;', 'const fromHarness = undefined;'],
@@ -63,7 +63,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'mutation-proof'],
+  paths: ['failure-capture', 'bilingual-output', 'mutation-proof'],
   selftest: 'failure-capture/selftest.mjs',
   mutants: MUTANTS
 });

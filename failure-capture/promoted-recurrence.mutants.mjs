@@ -27,12 +27,12 @@ const MUTANTS = [
   ['the exit "the face is already named" is dropped', MODULE, 'If it is, say so in your report:', 'If it is, move on:'],
   ['the Spanish half is dropped', MODULE, '  @es 4. Si lo es,', '  4. Si lo es,'],
   ['the Spanish headline is dropped', MODULE, '  @es YA PROMOVIDA', '  YA PROMOVIDA'],
-  ['the files named are the global rules file even for a project lesson', 'failure-capture/promotion-target.mjs', 'target === GLOBAL_TARGET ? [globalRules] : workerContracts', '[globalRules]']
+  ['the files named are the global rules file even for a project lesson', 'failure-capture/promotion-target.mjs', 'target === GLOBAL_TARGET ? [globalRules].flat() : workerContracts', '[globalRules].flat()']
 ];
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'mutation-proof'],
+  paths: ['failure-capture', 'bilingual-output', 'mutation-proof'],
   selftest: 'failure-capture/promoted-recurrence.selftest.mjs',
   mutants: MUTANTS
 });
