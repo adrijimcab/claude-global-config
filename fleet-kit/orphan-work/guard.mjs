@@ -30,6 +30,7 @@ import { isAgentWorktree, listWorktrees } from '../lib/agent-worktrees.mjs';
 import { gitAsker, porcelainEntries } from '../lib/git.mjs';
 import { deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
 import { ACTIVE_WINDOW_MS, activeOwner, agentRecords } from '../vendor/agent-liveness/liveness.mjs';
+import { nativeSpelling } from '../vendor/cherry-pick-guard/working-directory.mjs';
 
 export const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 
@@ -115,32 +116,100 @@ export function lastWorkedMs(worktree) {
   return times.length === 0 ? 0 : Math.max(...times);
 }
 
-/** A drive-letter absolute path start: `C:\` or `C:/`. @es El inicio de una ruta absoluta con letra de unidad. */
-function startsAbsolutePath(text, at) {
-  const letter = text[at];
-  const isLetter = letter !== undefined && letter.toLowerCase() !== letter.toUpperCase();
-  const separator = text[at + 2];
+const BACKSLASH = '\\';
 
-  return isLetter && text[at + 1] === ':' && (separator === '\\' || separator === '/') && (at === 0 || !/[A-Za-z0-9]/.test(text[at - 1]));
+/** Where a path run ends. @es Dónde termina una ruta. */
+const PATH_STOPS = ' \t\r\n"\'`)]>';
+
+/**
+ * What may stand right before a POSIX, Git Bash or UNC path: the start of the text, a blank, a quote, an
+ * opener or `=` (`--cwd=/srv/x`). A path glued to a word is no path: `and/or`, `src/a/b`, `./a`, `~/a`
+ * and `https://h/x` all have a letter, a dot, a tilde or a colon before their slash.
+ * @es Lo que puede preceder a una ruta POSIX, de Git Bash o UNC: inicio, blanco, comilla, apertura o `=`.
+ * Una ruta pegada a una palabra no es ruta: `and/or`, `src/a/b`, `./a`, `~/a` y `https://h/x` tienen una
+ * letra, un punto, una tilde o dos puntos antes de la barra.
+ */
+const BEFORE_A_PATH = ' \t\r\n"\'`([<=';
+
+/** Prose punctuation a sentence puts after a path, never part of it. @es Puntuación de la frase tras una ruta. */
+const SENTENCE_PUNCTUATION = '.,;:!?';
+
+const isSeparator = (character) => character === '/' || character === BACKSLASH;
+const isLetter = (character) => character !== undefined && character.toLowerCase() !== character.toUpperCase();
+const isDigit = (character) => character !== undefined && character >= '0' && character <= '9';
+const isPathCharacter = (character) => character !== undefined && !PATH_STOPS.includes(character) && !isSeparator(character);
+
+/**
+ * Whether a path starts at `at`, and in which spelling:
+ *   `drive`   `C:\` or `C:/`, on every platform (a brief may name a place on another machine);
+ *   `unc`     `\\server\share`;
+ *   `posix`   `/home/u/x`, off Windows, where it is a filesystem path;
+ *   `gitbash` `/c/Users/x`, on Windows, the only POSIX spelling that names a Windows location. A lone
+ *             `/c` (`cmd /c`) is a switch, not a path.
+ * @es Si en `at` empieza una ruta, y con qué grafía: `drive` (en toda plataforma), `unc`, `posix` (fuera de
+ * Windows, donde es ruta del sistema) y `gitbash` (en Windows, la única grafía POSIX que nombra una
+ * ubicación de Windows; un `/c` suelto es un switch).
+ */
+function pathSpelling(text, at, platform) {
+  const here = text[at];
+  const before = text[at - 1];
+
+  if (isLetter(here) && text[at + 1] === ':' && isSeparator(text[at + 2])) return isLetter(before) || isDigit(before) ? undefined : 'drive';
+
+  if (before !== undefined && !BEFORE_A_PATH.includes(before)) return undefined;
+
+  if (here === BACKSLASH) return text[at + 1] === BACKSLASH && isPathCharacter(text[at + 2]) ? 'unc' : undefined;
+
+  if (here !== '/' || !isPathCharacter(text[at + 1])) return undefined;
+
+  if (platform !== 'win32') return 'posix';
+
+  return isLetter(text[at + 1]) && text[at + 2] === '/' && isPathCharacter(text[at + 3]) ? 'gitbash' : undefined;
 }
 
 /**
- * Every absolute drive path a brief names, normalised to forward slashes and lower case. A path ends at
- * whitespace, a quote, a backtick or a closing bracket.
- * @es Cada ruta absoluta con unidad que nombra un brief, normalizada a barras y minúsculas.
+ * One key for a location, whatever spelling named it: forward slashes, no empty or doubled separators, no
+ * trailing one, Git Bash `/c/x` as `c:/x` on Windows, UNC as `//server/share`. Case is folded where the
+ * filesystem folds it (on Windows, and for any drive or UNC path) and kept for a POSIX path, where
+ * `/home/u/Repo` and `/home/u/repo` are two places.
+ * @es Una clave para una ubicación, sea cual sea la grafía que la nombró: barras normales, sin separadores
+ * vacíos ni final, `/c/x` de Git Bash como `c:/x` en Windows y UNC como `//servidor/recurso`. Se pliegan
+ * mayúsculas donde el sistema las pliega (Windows y toda ruta de unidad o UNC) y se conservan en POSIX.
  */
-export function absolutePathsIn(text) {
+export function canonicalPath(raw, platform = process.platform) {
+  const slashed = raw.replaceAll(BACKSLASH, '/');
+  // `//host/share` is UNC only where the platform reads it so; on POSIX it is a doubled separator.
+  // @es `//host/share` es UNC solo donde la plataforma lo lee así; en POSIX es un separador doblado.
+  const unc = slashed.startsWith('//') && (platform === 'win32' || raw.startsWith(`${BACKSLASH}${BACKSLASH}`));
+  const parts = (unc ? slashed : nativeSpelling(slashed, platform)).split('/').filter((part) => part.length > 0);
+  const drive = parts.length > 0 && parts[0].length === 2 && isLetter(parts[0][0]) && parts[0][1] === ':';
+  const key = unc ? `//${parts.join('/')}` : drive ? parts.join('/') : `/${parts.join('/')}`;
+
+  return platform === 'win32' || unc || drive ? key.toLowerCase() : key;
+}
+
+/**
+ * Every absolute path a brief names (Windows drive, UNC, POSIX, Git Bash `/c/`) as its canonical key. A
+ * path ends at whitespace, a quote, a backtick or a closing bracket, less the sentence punctuation that
+ * follows it.
+ * @es Cada ruta absoluta que nombra un brief (unidad de Windows, UNC, POSIX, `/c/` de Git Bash) como su
+ * clave canónica. Una ruta acaba en blanco, comilla, comilla invertida o cierre, sin la puntuación que la sigue.
+ */
+export function absolutePathsIn(text, platform = process.platform) {
   const paths = [];
-  const stops = ' \t\r\n"\'`)]>';
 
   for (let at = 0; at < text.length; at += 1) {
-    if (!startsAbsolutePath(text, at)) continue;
+    if (pathSpelling(text, at, platform) === undefined) continue;
 
     let end = at;
 
-    while (end < text.length && !stops.includes(text[end])) end += 1;
+    while (end < text.length && !PATH_STOPS.includes(text[end])) end += 1;
 
-    paths.push(text.slice(at, end).replaceAll('\\', '/').toLowerCase());
+    let named = end;
+
+    while (named > at + 1 && SENTENCE_PUNCTUATION.includes(text[named - 1])) named -= 1;
+
+    paths.push(canonicalPath(text.slice(at, named), platform));
     at = end;
   }
 
@@ -163,13 +232,13 @@ export function absolutePathsIn(text) {
  * la auditoría de guards (#1141) y dos veces en vivo en una sesión — una delegación que solo trabajaba en
  * `~/.claude` se rechazó porque el proyecto de la SESIÓN tenía una rama de estudio de otra sesión.
  */
-export function delegationTouches(payload, repositoryRoot) {
+export function delegationTouches(payload, repositoryRoot, platform = process.platform) {
   const input = payload?.tool_input ?? {};
   const brief = [input.prompt, input.message, input.description].filter((part) => typeof part === 'string').join('\n');
-  const named = absolutePathsIn(brief);
-  const root = `${repositoryRoot.replaceAll('\\', '/').toLowerCase().replace(/\/$/, '')}/`;
+  const named = absolutePathsIn(brief, platform);
+  const root = canonicalPath(repositoryRoot, platform);
 
-  return named.length === 0 || named.some((named_) => `${named_}/`.startsWith(root));
+  return named.length === 0 || named.some((candidate) => candidate === root || candidate.startsWith(`${root}/`));
 }
 
 /**
