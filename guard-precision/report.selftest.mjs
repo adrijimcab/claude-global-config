@@ -1,23 +1,30 @@
 #!/usr/bin/env node
 /**
- * DISCRIMINATION PROOF for `guard-precision/report.mjs`: the per-guard precision report. Every case builds
- * its journals under a temp `HOOK_STATE_DIR` with the real v2 writer; the real home is never touched.
+ * DISCRIMINATION PROOF for `guard-precision/report.mjs` (and `blocks.mjs`, which it reads through): the
+ * per-guard false-block rate report. Every case builds its journals under a temp `HOOK_STATE_DIR` with the
+ * real v2 writer; the real home is never touched.
  *
- * THE STATE SPACE: a guard with enough blocks and mixed outcomes / 9 blocks / exactly 10 blocks / 0 blocks;
- * a dismissal or report whose block does not exist (orphan), in the same or another mechanism; two outcomes
- * (or a repeated one) for one block; a block journaled twice; v1 lines in `journal.jsonl`, a torn line, a v2
- * record of an unknown kind or without a blockId, and legacy `*.jsonl` files beside the journal; a state
- * directory with no journal, a directory that is not a plain mechanism name; the table and `--json` outputs,
- * a bad argument, and the real process.
+ * THE STATE SPACE: a guard with enough labelled blocks and mixed labels / 9 labelled / exactly 10 labelled /
+ * 10 blocks and none labelled (the case the old precision formula read as 100%) / 0 blocks; the three label
+ * kinds (`dismissal`, `false-positive-report`, `true-positive-report`) and a block holding several, in either
+ * order (the LAST label decides); an outcome whose block does not exist (orphan), in the same or another
+ * mechanism, of each kind; a block journaled twice; v1 lines in `journal.jsonl`, a torn line, a v2 record of
+ * an unknown kind or without a blockId, and legacy `*.jsonl` files beside the journal; a state directory
+ * with no journal, a directory that is not a plain mechanism name; the Wilson interval at its edges
+ * (0 of n, n of n, no population); the table and `--json` outputs, a bad argument, and the real process.
  *
- * @es PRUEBA DE DISCRIMINACIÓN de `report.mjs`, el informe de precisión por guard. Cada caso construye sus
- * journals bajo un `HOOK_STATE_DIR` temporal con el escritor v2 real; el home real no se toca. Espacio de
- * estados: un guard con bloqueos suficientes y desenlaces mixtos / 9 bloqueos / exactamente 10 / 0; un
- * descarte o informe de un bloqueo inexistente (huérfano), en el mismo u otro mecanismo; dos desenlaces (o
- * uno repetido) de un bloqueo; un bloqueo registrado dos veces; líneas v1 en `journal.jsonl`, una línea
- * cortada, un registro v2 de tipo desconocido o sin blockId y ficheros `*.jsonl` heredados junto al journal;
- * un directorio de estado sin journal, un directorio que no es nombre simple de mecanismo; la tabla y
- * `--json`, un argumento erróneo y el proceso real.
+ * @es PRUEBA DE DISCRIMINACIÓN de `report.mjs` (y de `blocks.mjs`, que lee a través de él): el informe de
+ * tasa de falsos bloqueos por guard. Cada caso construye sus journals bajo un `HOOK_STATE_DIR` temporal con
+ * el escritor v2 real; el home real no se toca. Espacio de estados: un guard con bloqueos etiquetados
+ * suficientes y etiquetas mixtas / 9 etiquetados / exactamente 10 / 10 bloqueos sin ninguno etiquetado (el
+ * caso que la antigua fórmula de precisión leía como 100 %) / 0 bloqueos; los tres tipos de etiqueta
+ * (`dismissal`, `false-positive-report`, `true-positive-report`) y un bloqueo con varias, en cualquier
+ * orden (decide la ÚLTIMA); un desenlace de un bloqueo inexistente (huérfano), en el mismo u otro
+ * mecanismo, de cada tipo; un bloqueo registrado dos veces; líneas v1 en `journal.jsonl`, una línea cortada,
+ * un registro v2 de tipo desconocido o sin blockId y ficheros `*.jsonl` heredados junto al journal; un
+ * directorio de estado sin journal, un directorio que no es nombre simple de mecanismo; el intervalo de
+ * Wilson en sus bordes (0 de n, n de n, sin población); la tabla y `--json`, un argumento erróneo y el
+ * proceso real.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -30,7 +37,7 @@ import { appendRecord, digestInput, journalPath } from '../hook-state/journal.mj
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const saved = { HOOK_STATE_DIR: process.env.HOOK_STATE_DIR, HOOK_CLAUDE_HOME: process.env.HOOK_CLAUDE_HOME };
-const scratch = mkdtempSync(path.join(tmpdir(), 'precision-selftest-'));
+const scratch = mkdtempSync(path.join(tmpdir(), 'false-block-rate-selftest-'));
 const stateRoot = path.join(scratch, 'state');
 const claudeRoot = path.join(scratch, 'claude');
 process.env.HOOK_STATE_DIR = stateRoot;
@@ -66,7 +73,7 @@ try {
 }
 
 if (loaded !== undefined) {
-  const { buildReport, main } = loaded;
+  const { MIN_LABELLED, buildReport, main, wilsonInterval } = loaded;
   const safe = (action) => {
     try {
       return action();
@@ -81,34 +88,74 @@ if (loaded !== undefined) {
       return 'not json';
     }
   };
+  const round = (value) => (typeof value === 'number' ? Math.round(value * 10_000) / 10_000 : value);
   const guards = () => Object.fromEntries((safe(() => buildReport()).guards ?? []).map((guard) => [guard.mechanism, guard]));
-  const shape = (guard = {}) => [guard.blocks, guard.dismissed, guard.falsePositive, guard.flagged, guard.orphaned, guard.unclassified, guard.precision, guard.status];
+  const shape = (guard = {}) => [guard.blocks, guard.labelled, guard.falseBlocks, guard.correctBlocks, guard.falseBlockRate, guard.orphaned, guard.unclassified, guard.status];
+  const bounds = (guard = {}) => (guard.interval === null || guard.interval === undefined ? guard.interval : [round(guard.interval.low), round(guard.interval.high)]);
 
-  // --- the exact figure: 12 blocks, 2 dismissals, 1 false-positive report ---
-  decideMany('guard-a', 12);
+  // --- the Wilson interval, pinned to published values and to its edges ---
+  const wilson = (falseCount, total) => {
+    const interval = safe(() => wilsonInterval(falseCount, total));
+
+    return interval === null || interval.threw ? interval : [round(interval.low), round(interval.high)];
+  };
+  check('Wilson 3 of 10', wilson(3, 10), [0.1078, 0.6032]);
+  check('Wilson 2 of 10', wilson(2, 10), [0.0567, 0.5098]);
+  check('Wilson 1 of 100', wilson(1, 100), [0.0018, 0.0545]);
+  check('Wilson 5 of 10 is symmetric around one half', wilson(5, 10), [0.2366, 0.7634]);
+  check('Wilson 0 of 10 starts at exactly 0, not below', safe(() => wilsonInterval(0, 10)).low, 0);
+  check('Wilson 0 of 10 ends at 0.2775', wilson(0, 10)[1], 0.2775);
+  check('Wilson 5 of 5 ends at exactly 1, not above', safe(() => wilsonInterval(5, 5)).high, 1);
+  check('Wilson 10 of 10 starts at 0.7225', wilson(10, 10)[0], 0.7225);
+  check('Wilson of an empty population has no interval', safe(() => wilsonInterval(0, 0)), null);
+  check('the minimum of labelled blocks is 10', MIN_LABELLED, 10);
+
+  // --- the block of a decision keeps its FIRST record as evidence ---
+  const { classifyBlocks } = await import('./blocks.mjs');
+  const classified = classifyBlocks([
+    { kind: 'decision', blockId: 'X', id: 'first' },
+    { kind: 'decision', blockId: 'X', id: 'second' },
+    { kind: 'decision', blockId: 'Y', id: 'only' }
+  ]);
+  check('a block journaled twice keeps its first decision as the evidence', [[...classified.decisions.keys()], classified.decisions.get('X')?.id, classified.labels.size, classified.orphaned], [['X', 'Y'], 'first', 0, []]);
+
+  // --- the exact figure: 20 blocks, 10 labelled: 2 dismissals + 1 report = 3 false, 7 correct, 10 unlabelled ---
+  decideMany('guard-a', 20);
   outcome('guard-a', 'dismissal', 'B1');
   outcome('guard-a', 'dismissal', 'B2');
   outcome('guard-a', 'false-positive-report', 'B3');
+  for (let index = 4; index <= 10; index += 1) outcome('guard-a', 'true-positive-report', `B${index}`);
 
-  // --- the thresholds: 9 blocks, exactly 10, 0 ---
+  // --- the thresholds: 9 labelled, exactly 10 labelled, 0 blocks ---
   decideMany('guard-b', 9);
   outcome('guard-b', 'dismissal', 'B1');
+  for (let index = 2; index <= 9; index += 1) outcome('guard-b', 'true-positive-report', `B${index}`);
   decideMany('guard-d', 10);
+  for (let index = 1; index <= 10; index += 1) outcome('guard-d', 'true-positive-report', `B${index}`);
   mkdirSync(path.dirname(journalPath('guard-c')), { recursive: true });
   legacy('guard-c', 'refusals.jsonl', '{"ts":"x"}\n');
 
-  // --- an orphan is listed, never counted; the same id in another mechanism does not join ---
+  // --- an unlabelled population has no rate (the old formula read it as 100%); an orphan is listed, never counted ---
   outcome('guard-d', 'dismissal', 'ZZ');
   decideMany('guard-g', 10);
   outcome('guard-h', 'dismissal', 'B1');
 
-  // --- two outcomes for one block count once; a repeated outcome and a repeated block count once ---
-  decideMany('guard-e', 10);
+  // --- a block with several labels counts once; the LAST label decides; a repeated block counts once ---
+  decideMany('guard-e', 12);
   decide('guard-e', 'B2');
   outcome('guard-e', 'dismissal', 'B1');
   outcome('guard-e', 'false-positive-report', 'B1');
   outcome('guard-e', 'false-positive-report', 'B1');
   outcome('guard-e', 'dismissal', 'B2');
+  for (let index = 3; index <= 10; index += 1) outcome('guard-e', 'true-positive-report', `B${index}`);
+  decideMany('guard-j', 10);
+  outcome('guard-j', 'dismissal', 'B1');
+  outcome('guard-j', 'true-positive-report', 'B1');
+  outcome('guard-j', 'false-positive-report', 'B2');
+  outcome('guard-j', 'true-positive-report', 'B2');
+  outcome('guard-j', 'true-positive-report', 'B3');
+  outcome('guard-j', 'dismissal', 'B3');
+  for (let index = 4; index <= 10; index += 1) outcome('guard-j', 'true-positive-report', `B${index}`);
 
   // --- v1 lines, a torn line, an unknown kind, a missing blockId, and legacy files ---
   decideMany('guard-f', 10);
@@ -135,24 +182,29 @@ if (loaded !== undefined) {
   writeFileSync(path.join(stateRoot, '.hidden', 'journal.jsonl'), '{"a":1}\n');
   writeFileSync(path.join(stateRoot, 'stray-file'), '{"a":1}\n');
 
-  // --- orphans are listed sorted, each once, whether a dismissal or a report ---
+  // --- orphans are listed sorted, each once, whatever their kind ---
   outcome('guard-i', 'dismissal', 'Y');
   outcome('guard-i', 'false-positive-report', 'Y');
   outcome('guard-i', 'false-positive-report', 'X');
+  outcome('guard-i', 'true-positive-report', 'W');
 
   const report = new Proxy(guards(), { get: (target, key) => target[key] ?? {} });
-  check('12 blocks, 2 dismissals, 1 false positive: precision is exactly 1 - 3/12', shape(report['guard-a']), [12, 2, 1, 3, [], 0, 0.75, 'ok']);
-  check('9 blocks read insufficient data, with no figure', shape(report['guard-b']), [9, 1, 0, 1, [], 0, null, 'insufficient-data']);
-  check('exactly 10 blocks is enough for a figure', [report['guard-d'].blocks, report['guard-d'].status, report['guard-d'].precision], [10, 'ok', 1]);
-  check('0 blocks read no data, never 100%', shape(report['guard-c']), [0, 0, 0, 0, [], 1, null, 'no-data']);
-  check('an orphan dismissal is listed and not counted', [report['guard-d'].orphaned, report['guard-d'].dismissed, report['guard-d'].flagged], [['ZZ'], 0, 0]);
-  check('an outcome without any block reads no data and lists the orphan', shape(report['guard-h']), [0, 0, 0, 0, ['B1'], 0, null, 'no-data']);
-  check('an outcome in another mechanism does not join the block of this one', [report['guard-g'].dismissed, report['guard-g'].orphaned], [0, []]);
-  check('two outcomes for one block, a repeated outcome and a repeated block count once', shape(report['guard-e']), [10, 2, 1, 2, [], 0, 0.8, 'ok']);
+  check('20 blocks, 10 labelled (3 false, 7 correct): the rate is 3 of 10, not 3 of 20, and unlabelled blocks add nothing', shape(report['guard-a']), [20, 10, 3, 7, 0.3, [], 0, 'ok']);
+  check('the interval of that rate is the Wilson interval of 3 of 10', bounds(report['guard-a']), [0.1078, 0.6032]);
+  check('9 labelled blocks read insufficient, with no rate and no interval', [shape(report['guard-b']), report['guard-b'].interval], [[9, 9, 1, 8, null, [], 0, 'insufficient'], null]);
+  check('exactly 10 labelled blocks is enough for a rate', [report['guard-d'].labelled, report['guard-d'].status, report['guard-d'].falseBlockRate, bounds(report['guard-d'])], [10, 'ok', 0, [0, 0.2775]]);
+  check('0 blocks read insufficient, never a rate', shape(report['guard-c']), [0, 0, 0, 0, null, [], 1, 'insufficient']);
+  check('10 blocks and none labelled read insufficient: an unlabelled population is never 0% or 100%', [shape(report['guard-g']), report['guard-g'].interval], [[10, 0, 0, 0, null, [], 0, 'insufficient'], null]);
+  check('an orphan dismissal is listed and not counted', [report['guard-d'].orphaned, report['guard-d'].falseBlocks, report['guard-d'].labelled], [['ZZ'], 0, 10]);
+  check('an outcome without any block reads insufficient and lists the orphan', shape(report['guard-h']), [0, 0, 0, 0, null, ['B1'], 0, 'insufficient']);
+  check('an outcome in another mechanism does not join the block of this one', [report['guard-g'].falseBlocks, report['guard-g'].orphaned], [0, []]);
+  check('several false labels of one block, a repeated label and a repeated block count once', shape(report['guard-e']), [12, 10, 2, 8, 0.2, [], 0, 'ok']);
+  check('the LAST label of a block decides: dismissed then confirmed is correct, reported then confirmed is correct, confirmed then dismissed is false', shape(report['guard-j']), [10, 10, 1, 9, 0.1, [], 0, 'ok']);
   check('v1 lines, a torn line, a null, an unknown kind, a missing, numeric or empty blockId, a v2 record in a legacy file and legacy files are unclassified, blank lines and non-jsonl files are not', [report['guard-f'].blocks, report['guard-f'].unclassified, Object.entries(report['guard-f'].unclassifiedFiles ?? {}).sort()], [11, 13, [['extra.jsonl', 1], ['journal.jsonl', 9], ['refusals.jsonl', 3]]]);
-  check('orphans are listed sorted and once each, from dismissals and from reports', shape(report['guard-i']), [0, 0, 0, 0, ['X', 'Y'], 0, null, 'no-data']);
-  check('the report is sorted by mechanism and omits directories with no journal file', Object.keys(report), ['guard-a', 'guard-b', 'guard-c', 'guard-d', 'guard-e', 'guard-f', 'guard-g', 'guard-h', 'guard-i']);
+  check('orphans are listed sorted and once each, from every label kind', shape(report['guard-i']), [0, 0, 0, 0, null, ['W', 'X', 'Y'], 0, 'insufficient']);
+  check('the report is sorted by mechanism and omits directories with no journal file', Object.keys(report), ['guard-a', 'guard-b', 'guard-c', 'guard-d', 'guard-e', 'guard-f', 'guard-g', 'guard-h', 'guard-i', 'guard-j']);
   check('the report counts every unclassified line once', safe(() => buildReport()).unclassifiedTotal, 14);
+  check('no figure is called precision', JSON.stringify(safe(() => buildReport())).includes('recision'), false);
   const reversed = safe(() => buildReport({ readDirectory: (directory, options) => readdirSync(directory, options).reverse() }));
   check('a listing in the opposite order gives the same report', reversed, safe(() => buildReport()));
 
@@ -170,17 +222,21 @@ if (loaded !== undefined) {
   const table = run([]);
   check('the table exits 0 and every line is bilingual', [table.code, table.err, table.out.length > 0, table.out.every((line) => line.includes(' @es '))], [0, [], true, true]);
   const text = table.out.join('\n');
-  check('the table says 75.0% for the 12-block guard', /guard-a: 12 blocks, 2 dismissed, 1 false positives, precision 75\.0%, 0 unclassified lines\./.test(text), true);
-  check('the table says insufficient data and the minimum for 9 blocks', /guard-b: 9 blocks.*insufficient data \(fewer than 10 blocks\)/.test(text), true);
-  check('the table says no data for 0 blocks', /guard-c: no data \(0 blocks\), 1 unclassified lines\./.test(text), true);
-  check('the table lists the orphan block ids of a guard, and only of guards that have some', [/guard-d: .*not counted: ZZ\./.test(text), /guard-i: .*not counted: X, Y\./.test(text), text.split('\n').filter((row) => row.includes('does not exist, not counted')).length], [true, true, 3]);
+  const rowOf = (mechanism) => table.out.find((row) => row.startsWith(`${mechanism}: `)) ?? '';
+  check('the table says 30.0% and its interval for the 20-block guard, in both languages', /^guard-a: 20 blocks, 10 labelled, 3 false, false-block rate 30\.0% \(95% interval 10\.8% to 60\.3%\), 0 unclassified lines\. @es guard-a: 20 bloqueos, 10 etiquetados, 3 falsos, tasa de falsos bloqueos 30.0 % \(intervalo del 95 % de 10.8 % a 60.3 %\), 0 líneas sin clasificar\.$/.test(rowOf('guard-a')), true);
+  check('the table says insufficient and the minimum for 9 labelled blocks', /^guard-b: 9 blocks, 9 labelled, 1 false, insufficient \(fewer than 10 labelled blocks; label a sample with label\.mjs\), 0 unclassified lines\./.test(rowOf('guard-b')), true);
+  check('an insufficient row never prints a percent, in either language', ['guard-b', 'guard-c', 'guard-g', 'guard-h', 'guard-i'].map((mechanism) => rowOf(mechanism).includes('%')), [false, false, false, false, false]);
+  check('the table says 0 blocks and insufficient for a guard with no blocks', /^guard-c: 0 blocks, 0 labelled, 0 false, insufficient \(fewer than 10 labelled blocks; label a sample with label\.mjs\), 1 unclassified lines\./.test(rowOf('guard-c')), true);
+  check('the table says 10 blocks and 0 labelled for a guard nobody labelled', /^guard-g: 10 blocks, 0 labelled, 0 false, insufficient/.test(rowOf('guard-g')), true);
+  check('the table lists the orphan block ids of a guard, and only of guards that have some', [/guard-d: .*not counted: ZZ\./.test(text), /guard-i: .*not counted: W, X, Y\./.test(text), text.split('\n').filter((row) => row.includes('does not exist, not counted')).length], [true, true, 3]);
   check('the table counts the unclassified lines of a guard and in total', [/guard-f: 11 blocks.*, 13 unclassified lines\./.test(text), /^14 lines of the guard journals could not be classified/m.test(text), text.includes('No guard journal was found')], [true, true, false]);
+  check('the table never says precision', /recision|precisión/.test(text), false);
   const bad = run(['--nope']);
   check('an unknown argument exits 2 with a bilingual line on the error stream', [bad.code, bad.out, bad.err.length, bad.err.every((line) => line.includes(' @es ')), (bad.err[0] ?? '').includes('"--nope"')], [2, [], 1, true, true]);
 
   // --- the real process ---
   const spawned = spawnSync(process.execPath, [path.join(HERE, 'report.mjs'), '--json'], { encoding: 'utf8', env: process.env });
-  check('the process exits 0 and prints the JSON report', [spawned.status, parseJson(spawned.stdout)?.guards?.length], [0, 9]);
+  check('the process exits 0 and prints the JSON report', [spawned.status, parseJson(spawned.stdout)?.guards?.length], [0, 10]);
   const empty = spawnSync(process.execPath, [path.join(HERE, 'report.mjs')], { encoding: 'utf8', env: { ...process.env, HOOK_STATE_DIR: path.join(scratch, 'nothing-here') } });
   check('a home with no state at all exits 0 and says so, bilingual', [empty.status, empty.stdout.trim()], [0, 'No guard journal was found. @es No se encontró ningún journal de guards.']);
   const badRun = spawnSync(process.execPath, [path.join(HERE, 'report.mjs'), '--nope'], { encoding: 'utf8', env: process.env });

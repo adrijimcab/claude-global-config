@@ -1,120 +1,78 @@
 #!/usr/bin/env node
 /**
- * The per-guard precision report. For every mechanism with a state directory it reads the v2 journal
- * (`journal.jsonl`), counts the blocks (distinct `blockId` of `decision` records: an allow is never journaled),
- * joins the explicit outcomes (`dismissal`, `false-positive-report`) to them by `blockId`, and computes
- * precision = 1 - flagged / blocks, where `flagged` counts a block ONCE however many outcomes it has. Fewer
- * than 10 blocks reads "insufficient data" and no blocks "no data": a figure is never printed for them, so
- * an empty guard can never read 100%. An outcome whose `blockId` matches no block is ORPHANED: listed, never
- * counted. Every other line (v1 lines, a torn line, an unknown kind, no `blockId`, any other `*.jsonl` beside
- * the journal) is UNCLASSIFIED and counted per file: no outcome is guessed for it. `--json` prints the report
+ * The per-guard FALSE-BLOCK RATE report (the folder keeps its old name `guard-precision/` because the live
+ * state paths depend on it). For every mechanism with a state directory it reads the v2 journal
+ * (`journal.jsonl`) through `blocks.mjs`: the blocks, and the blocks a human LABELLED, `false`
+ * (`dismissal`, `false-positive-report`) or `correct` (`true-positive-report`). The rate is estimated ONLY
+ * from labelled blocks: falseBlockRate = labelled-false / labelled, with a 95% Wilson interval. An unlabelled
+ * block contributes nothing, because counting it as correct is what inflated the old precision figure. A
+ * guard with fewer than 10 labelled blocks reads `insufficient` and no rate, no percent and no interval is
+ * printed or computed for it, so a guard nobody labelled can never read 0% or 100%. Label a sample by hand
+ * with `label.mjs`. Every other line (v1 lines, a torn line, an unknown kind, no `blockId`, any other
+ * `*.jsonl` beside the journal) is UNCLASSIFIED and counted per file. `--json` prints the report
  * untranslated; otherwise a bilingual table is printed through `bilingual-output/`.
  *
- * @es El informe de precisión por guard. De cada mecanismo con directorio de estado lee el journal v2
- * (`journal.jsonl`), cuenta los bloqueos (`blockId` distintos de los registros `decision`: un permiso nunca
- * se registra), une los desenlaces explícitos (`dismissal`, `false-positive-report`) por `blockId` y calcula
- * precisión = 1 - marcados / bloqueos; un bloqueo se marca UNA vez, tenga los desenlaces que tenga. Menos de 10
- * bloqueos dice «datos insuficientes» y ninguno «sin datos»: nunca se imprime una cifra para ellos, así que un
- * guard vacío no puede leerse como 100 %. Un desenlace cuyo `blockId` no coincide con ningún bloqueo es
- * HUÉRFANO: se lista, nunca se cuenta. Toda otra línea (v1, cortada, tipo desconocido, sin `blockId`, otro
- * `*.jsonl` junto al journal) es SIN CLASIFICAR y se cuenta por fichero: no se adivina un desenlace para ella.
- * `--json` imprime el informe sin traducir; si no, una tabla bilingüe por `bilingual-output/`.
+ * @es El informe de TASA DE FALSOS BLOQUEOS por guard (la carpeta conserva su nombre antiguo
+ * `guard-precision/` porque las rutas de estado vivas dependen de él). De cada mecanismo con directorio de
+ * estado lee el journal v2 (`journal.jsonl`) a través de `blocks.mjs`: los bloqueos y los que una persona
+ * ETIQUETÓ, `false` (`dismissal`, `false-positive-report`) o `correct` (`true-positive-report`). La tasa se
+ * estima SOLO con bloqueos etiquetados: tasaFalsosBloqueos = falsos etiquetados / etiquetados, con un
+ * intervalo de Wilson del 95 %. Un bloqueo sin etiquetar no aporta nada, porque contarlo como acertado era
+ * lo que inflaba la antigua cifra de precisión. Un guard con menos de 10 bloqueos etiquetados dice
+ * `insufficient` y no se calcula ni se imprime tasa, porcentaje ni intervalo, así que un guard que nadie
+ * etiquetó nunca puede leerse como 0 % ni 100 %. Etiqueta una muestra a mano con `label.mjs`. Toda otra
+ * línea (v1, cortada, tipo desconocido, sin `blockId`, otro `*.jsonl` junto al journal) es SIN CLASIFICAR y
+ * se cuenta por fichero. `--json` imprime el informe sin traducir; si no, una tabla bilingüe por
+ * `bilingual-output/`.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import path from 'node:path';
+import { readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { makeSpeaker } from '../bilingual-output/speaker.mjs';
-import { KINDS, journalPath } from '../hook-state/journal.mjs';
-import { assertMechanism, claudeHome, stateDir } from '../hook-state/locations.mjs';
+import { FALSE_LABEL, classifyBlocks, mechanismNames, readMechanism } from './blocks.mjs';
 import { MESSAGE_TABLE } from './report-messages.mjs';
 
-/** The blocks a guard needs before a figure is printed. @es Los bloqueos que un guard necesita antes de imprimir una cifra. */
-export const MIN_BLOCKS = 10;
+/** The labelled blocks a guard needs before a rate is printed. @es Los bloqueos etiquetados que un guard necesita antes de imprimir una tasa. */
+export const MIN_LABELLED = 10;
 
-const isPlainName = (name) => {
-  try {
-    assertMechanism(name);
-
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-/** The mechanisms that have a state directory, sorted. @es Los mecanismos con directorio de estado, ordenados. */
-function mechanismNames(readDirectory) {
-  const root = process.env.HOOK_STATE_DIR ? path.resolve(process.env.HOOK_STATE_DIR) : claudeHome();
-
-  if (!existsSync(root)) return [];
-
-  return readDirectory(root, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && isPlainName(entry.name))
-    .map((entry) => entry.name)
-    .filter((name) => existsSync(stateDir(name)))
-    .sort();
-}
-
-/** The parsed line, or undefined when it is not JSON. @es La línea parseada, o undefined si no es JSON. */
-function parse(line) {
-  try {
-    return JSON.parse(line);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Whether a parsed line is a v2 record of a known kind with a blockId. @es Si una línea parseada es un registro v2 de tipo conocido con blockId. */
-const isV2Record = (record) => record?.v === 2 && KINDS.has(record.kind) && typeof record.blockId === 'string' && record.blockId !== '';
+/** The normal quantile of a two-sided 95% interval. @es El cuantil normal de un intervalo bilateral del 95 %. */
+const Z_95 = 1.96;
 
 /**
- * The v2 records of one mechanism's journal, and how many lines of each `*.jsonl` file could not be classified.
- * @es Los registros v2 del journal de un mecanismo, y cuántas líneas de cada `*.jsonl` no se pudieron clasificar.
+ * The 95% Wilson score interval of `falseCount` out of `total`, or null for an empty population. It is
+ * clamped to [0, 1]: the formula overshoots by rounding at the edges (0 of n, n of n).
+ * @es El intervalo de Wilson del 95 % de `falseCount` sobre `total`, o null si la población está vacía. Se acota a [0, 1]: la fórmula se pasa por redondeo en los bordes (0 de n, n de n).
  */
-function readMechanism(mechanism, readDirectory) {
-  const directory = stateDir(mechanism);
-  const journal = path.basename(journalPath(mechanism));
-  const records = [];
-  const unclassifiedFiles = {};
-  const files = readDirectory(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl')).map((entry) => entry.name).sort();
+export function wilsonInterval(falseCount, total) {
+  if (total === 0) return null;
 
-  for (const file of files) {
-    for (const line of readFileSync(path.join(directory, file), 'utf8').split('\n')) {
-      if (line.trim() === '') continue;
+  const proportion = falseCount / total;
+  const scale = 1 + Z_95 ** 2 / total;
+  const center = (proportion + Z_95 ** 2 / (2 * total)) / scale;
+  const margin = (Z_95 * Math.sqrt((proportion * (1 - proportion)) / total + Z_95 ** 2 / (4 * total ** 2))) / scale;
 
-      const record = file === journal ? parse(line) : undefined;
-
-      if (isV2Record(record)) records.push(record);
-      else unclassifiedFiles[file] = (unclassifiedFiles[file] ?? 0) + 1;
-    }
-  }
-
-  return { records, unclassifiedFiles };
+  return { low: Math.max(0, center - margin), high: Math.min(1, center + margin) };
 }
 
 /** The figures of one mechanism. @es Las cifras de un mecanismo. */
 function summarize(mechanism, { records, unclassifiedFiles }) {
-  const idsOf = (kind) => new Set(records.filter((record) => record.kind === kind).map((record) => record.blockId));
-  const blockIds = idsOf('decision');
-  const dismissals = idsOf('dismissal');
-  const reports = idsOf('false-positive-report');
-  const joined = (ids) => [...ids].filter((id) => blockIds.has(id));
-  const flagged = new Set([...joined(dismissals), ...joined(reports)]).size;
-  const orphaned = [...new Set([...dismissals, ...reports])].filter((id) => !blockIds.has(id)).sort();
-  const blocks = blockIds.size;
-  const status = blocks === 0 ? 'no-data' : blocks < MIN_BLOCKS ? 'insufficient-data' : 'ok';
+  const { decisions, labels, orphaned } = classifyBlocks(records);
+  const labelled = labels.size;
+  const falseBlocks = [...labels.values()].filter((label) => label === FALSE_LABEL).length;
+  const status = labelled < MIN_LABELLED ? 'insufficient' : 'ok';
 
   return {
     mechanism,
-    blocks,
-    dismissed: joined(dismissals).length,
-    falsePositive: joined(reports).length,
-    flagged,
+    blocks: decisions.size,
+    labelled,
+    falseBlocks,
+    correctBlocks: labelled - falseBlocks,
     orphaned,
     unclassified: Object.values(unclassifiedFiles).reduce((sum, count) => sum + count, 0),
     unclassifiedFiles,
-    precision: status === 'ok' ? 1 - flagged / blocks : null,
+    falseBlockRate: status === 'ok' ? falseBlocks / labelled : null,
+    interval: status === 'ok' ? wilsonInterval(falseBlocks, labelled) : null,
     status
   };
 }
@@ -133,14 +91,19 @@ export function buildReport({ readDirectory = readdirSync } = {}) {
   return { guards, unclassifiedTotal: guards.reduce((sum, guard) => sum + guard.unclassified, 0) };
 }
 
-const ROW_OF = { ok: 'row-ok', 'insufficient-data': 'row-insufficient', 'no-data': 'row-no-data' };
+const ROW_OF = { ok: 'row-ok', insufficient: 'row-insufficient' };
+
+/** A fraction as a percent with one decimal. @es Una fracción como porcentaje con un decimal. */
+const percentOf = (fraction) => (fraction * 100).toFixed(1);
 
 /** Prints the bilingual table of `report`. @es Imprime la tabla bilingüe de `report`. */
 function printTable(report, speaker) {
   if (report.guards.length === 0) speaker.say('no-journals');
 
   for (const guard of report.guards) {
-    speaker.say(ROW_OF[guard.status], { ...guard, percent: (guard.precision * 100).toFixed(1), minimum: MIN_BLOCKS });
+    const figures = guard.status === 'ok' ? { percent: percentOf(guard.falseBlockRate), low: percentOf(guard.interval.low), high: percentOf(guard.interval.high) } : {};
+
+    speaker.say(ROW_OF[guard.status], { ...guard, ...figures, minimum: MIN_LABELLED });
     if (guard.orphaned.length > 0) speaker.say('orphans', { mechanism: guard.mechanism, ids: guard.orphaned.join(', ') });
   }
 

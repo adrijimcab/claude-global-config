@@ -1,25 +1,21 @@
 /**
- * The runtime messages of the guard precision report, as a table consumed through `bilingual-output/`: the
- * speaker refuses a table with a message that lacks a half, and renders every line English first with the
+ * The runtime messages of the guard false-block rate report, as a table consumed through `bilingual-output/`:
+ * the speaker refuses a table with a message that lacks a half, and renders every line English first with the
  * Spanish half marked `@es`. Placeholders are `{name}`.
  *
- * @es Los mensajes de ejecución del informe de precisión de guards, como una tabla consumida por
- * `bilingual-output/`: el speaker rechaza una tabla con un mensaje al que le falta una mitad, y renderiza cada
- * línea en inglés primero con la mitad española marcada `@es`. Los marcadores son `{name}`.
+ * @es Los mensajes de ejecución del informe de tasa de falsos bloqueos de guards, como una tabla consumida
+ * por `bilingual-output/`: el speaker rechaza una tabla con un mensaje al que le falta una mitad, y
+ * renderiza cada línea en inglés primero con la mitad española marcada `@es`. Los marcadores son `{name}`.
  */
 
 export const MESSAGE_TABLE = {
   'row-ok': {
-    en: '{mechanism}: {blocks} blocks, {dismissed} dismissed, {falsePositive} false positives, precision {percent}%, {unclassified} unclassified lines.',
-    es: '{mechanism}: {blocks} bloqueos, {dismissed} descartados, {falsePositive} falsos positivos, precisión {percent} %, {unclassified} líneas sin clasificar.'
+    en: '{mechanism}: {blocks} blocks, {labelled} labelled, {falseBlocks} false, false-block rate {percent}% (95% interval {low}% to {high}%), {unclassified} unclassified lines.',
+    es: '{mechanism}: {blocks} bloqueos, {labelled} etiquetados, {falseBlocks} falsos, tasa de falsos bloqueos {percent} % (intervalo del 95 % de {low} % a {high} %), {unclassified} líneas sin clasificar.'
   },
   'row-insufficient': {
-    en: '{mechanism}: {blocks} blocks, {dismissed} dismissed, {falsePositive} false positives, insufficient data (fewer than {minimum} blocks), {unclassified} unclassified lines.',
-    es: '{mechanism}: {blocks} bloqueos, {dismissed} descartados, {falsePositive} falsos positivos, datos insuficientes (menos de {minimum} bloqueos), {unclassified} líneas sin clasificar.'
-  },
-  'row-no-data': {
-    en: '{mechanism}: no data (0 blocks), {unclassified} unclassified lines.',
-    es: '{mechanism}: sin datos (0 bloqueos), {unclassified} líneas sin clasificar.'
+    en: '{mechanism}: {blocks} blocks, {labelled} labelled, {falseBlocks} false, insufficient (fewer than {minimum} labelled blocks; label a sample with label.mjs), {unclassified} unclassified lines.',
+    es: '{mechanism}: {blocks} bloqueos, {labelled} etiquetados, {falseBlocks} falsos, insuficiente (menos de {minimum} bloqueos etiquetados; etiqueta una muestra con label.mjs), {unclassified} líneas sin clasificar.'
   },
   orphans: {
     en: '{mechanism}: outcomes whose block does not exist, not counted: {ids}.',
