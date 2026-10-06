@@ -23,6 +23,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
+import { refusalPair, toolchainForProfile } from '../gates-kit/toolchain-for.mjs';
 import { supportOf } from './angular-support.mjs';
 
 /** The majors this repository has a version file for. @es Los majors para los que este repo tiene fichero de versión. */
@@ -82,12 +83,40 @@ export function docsText(major, { root, exists }) {
   return [`Apply ${column} of ~/.claude/rules/fe-angular.md; ${first}.`, `Aplicar la ${columnEs} de ~/.claude/rules/fe-angular.md; ${firstEs}.`];
 }
 
+/** The frameworks the gates-kit has toolchains for; the others get no gates sentence at all. @es Los frameworks con toolchain en gates-kit; los demás no reciben frase de gates. */
+const GATES_FRAMEWORKS = Object.freeze(['angular', 'nest', 'node']);
+
 /**
- * The one line for a profile. `today` is an ISO date; `exists(path)` tests a file; `gatesToolchains` is the
- * folder holding `gates-kit/toolchains/<stack>/`.
- * @es La línea para un perfil. `today` es una fecha ISO; `exists(path)` prueba un fichero.
+ * The gates sentence: the toolchain `toolchainFor` (gates-kit, the only decision) picks for this profile and
+ * host Node, or its refusal as one short clause. `undefined` for a framework the kit does not cover, and for a
+ * chosen toolchain that is not on disk.
+ * @es La frase de gates: la toolchain que elige `toolchainFor` (gates-kit, la única decisión) para este perfil
+ * y este Node, o su rechazo en una cláusula corta. `undefined` si el kit no cubre el framework o la toolchain
+ * elegida no está en disco.
  */
-export function profileLine(profile, { home, today = new Date().toISOString().slice(0, 10), exists = existsSync } = {}) {
+export function gatesText(profile, { home, exists, hostNode }) {
+  if (!GATES_FRAMEWORKS.includes(profile.framework)) return undefined;
+
+  const result = toolchainForProfile(profile, hostNode);
+
+  if (result.ok === false) {
+    const [english, spanish] = refusalPair(result);
+
+    return [`No gates toolchain: ${english}.`, `Sin toolchain de gates: ${spanish}.`];
+  }
+
+  if (home === undefined || !exists(path.join(home, '.claude', 'gates-kit', 'toolchains', result.toolchain, 'package.json'))) return undefined;
+
+  return [`Gates toolchain: ~/.claude/gates-kit/toolchains/${result.toolchain} (${result.testRunner}).`, `Toolchain de gates: ~/.claude/gates-kit/toolchains/${result.toolchain} (${result.testRunner}).`];
+}
+
+/**
+ * The one line for a profile. `today` is an ISO date; `exists(path)` tests a file; `hostNode` is the Node
+ * version the gates would run on (`process.versions.node`).
+ * @es La línea para un perfil. `today` es una fecha ISO; `exists(path)` prueba un fichero; `hostNode` es el
+ * Node sobre el que correrían los gates (`process.versions.node`).
+ */
+export function profileLine(profile, { home, today = new Date().toISOString().slice(0, 10), exists = existsSync, hostNode = process.versions.node } = {}) {
   const english = [];
   const spanish = [];
   const add = (pair) => {
@@ -105,9 +134,7 @@ export function profileLine(profile, { home, today = new Date().toISOString().sl
     add(['Apply the matching ~/.claude/rules/fe-*.md for the files you touch.', 'Aplicar las ~/.claude/rules/fe-*.md que correspondan a los ficheros que se toquen.']);
   }
 
-  if (profile.gatesStack !== undefined && home !== undefined && exists(path.join(home, '.claude', 'gates-kit', 'toolchains', profile.gatesStack, 'package.json'))) {
-    add([`Gates toolchain: ~/.claude/gates-kit/toolchains/${profile.gatesStack}.`, `Toolchain de gates: ~/.claude/gates-kit/toolchains/${profile.gatesStack}.`]);
-  }
+  add(gatesText(profile, { home, exists, hostNode }));
 
   const where = profile.relativeRoot === undefined || profile.relativeRoot === '' ? '' : ` (${profile.relativeRoot}/)`;
 

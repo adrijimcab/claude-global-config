@@ -24,19 +24,21 @@ detiene la config y el gate sale en rojo.
 | `prefer-host-metadata-property` | absent from 19.8.1; the 19 guide says "consider @HostBinding" | on | on | on |
 | `template/prefer-control-flow` | off: `NgIf`/`NgFor` deprecated only from 20.0 | on | on | on |
 | `prefer-service-decorator` | absent | absent | absent from 21.4.0 | on (`@Service()` exists from 22.0) |
+| `prefer-on-push-component-change-detection` | on | on | on | off: OnPush is the default and `rules/fe-angular.md` says to omit it |
 
 "absent" was read from the rule tables of each installed `@angular-eslint/eslint-plugin` and
-`-template` (19.8.1, 20.7.0, 21.4.0, 22.5.0). OnPush (`prefer-on-push-component-change-detection`, 19 to 21
-only, since 22 makes OnPush the default) is not in the table yet: it was not asked for.
+`-template` (19.8.1, 20.7.0, 21.4.0, 22.5.0). `prefer-on-push-component-change-detection` exists in all four
+(`npm pack`), and is gated to 19 to 21 because 22 makes OnPush the default.
 
-## Measured (2026-10-06, Node 22.22.0)
+## Measured (2026-10-06, Node 22.22.0; the OnPush rule re-measured on 19 and 22 only, 20 and 21 follow from the table)
 
 `pass/` exits 0 on all four toolchains. `fail/` exits 1 on all four, each with exactly its major's rules:
 
-- `angular-19`: 1 error, `prefer-signals` (the `@Input()`).
-- `angular-20`, `angular-21`: 6 errors, `prefer-signals`, `prefer-host-metadata-property`, `prefer-inject`,
+- `angular-19`: 2 errors, `prefer-signals` (the `@Input()`) and `prefer-on-push-component-change-detection` (no
+  `changeDetection`).
+- `angular-20`, `angular-21`: 7 errors, `prefer-signals`, `prefer-host-metadata-property`, `prefer-inject`,
   `no-developer-preview` (`previewLabel`), `no-experimental` (`previewTotal`), `template/prefer-control-flow`
-  (`*ngIf`).
+  (`*ngIf`) and `prefer-on-push-component-change-detection`.
 - `angular-22`: the same 6 plus `prefer-service-decorator` (`@Injectable({ providedIn: 'root' })`), 7 errors.
 
 ## Sources (not re-fetched)

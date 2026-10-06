@@ -17,9 +17,16 @@
  * `{ ok: false, reason, detail }`, never a fallback to another toolchain. Reasons:
  * `unsupported-framework`, `unsupported-major` (no toolchain for that Angular major, or the major is not an
  * integer), `unsupported-test-runner` (the toolchain does not pin the runner the project uses; `'jasmine'`
- * without Karma has no gate), `unknown-test-runner` (absent), `node-outside-framework` (the host Node is
+ * without Karma has no gate), `unknown-test-runner` (absent), `ambiguous-test-runner` (only from
+ * `toolchainForProfile`: the profile lists several real runners and none is chosen for the project), `node-outside-framework` (the host Node is
  * outside the framework major's own `engines.node`), `node-outside-toolchain` (outside the range every
  * package of the locked toolchain accepts), `unreadable-node` (not one exact version).
+ *
+ * `toolchainForProfile(profile, hostNode)` is the adapter for the project profile (`project-profile/profile.mjs`),
+ * which reports `testRunners` as an array and the framework version as `frameworkVersion.major`: it maps them to
+ * the one `testRunner` and the `major` above and calls `toolchainFor`, so no other module decides a toolchain.
+ * Karma and Jasmine come together (Karma runs the Jasmine specs), so `['karma', 'jasmine']` is `'karma'`; any
+ * other pair of runners is refused as `ambiguous-test-runner`, never guessed.
  *
  * Decision: an unsupported or unreadable value is refused with its reason, not mapped to a near toolchain; a
  * gate run on the wrong major's TypeScript or runner can go green or red for reasons that are not the code.
@@ -38,6 +45,10 @@
  * `major` (solo para Angular) y `testRunner` (el runner que el proyecto USA; el gate corre ese, nunca el de
  * por defecto de la major). Devuelve `{ ok: true, toolchain, testRunner }` o `{ ok: false, reason, detail }`,
  * nunca un repliegue a otra toolchain. Un valor no soportado o ilegible se rechaza con su motivo.
+ * `toolchainForProfile(profile, hostNode)` adapta el perfil del proyecto (`testRunners` como lista y
+ * `frameworkVersion.major`) al `testRunner` único y a la `major` y llama a `toolchainFor`: nadie más decide una
+ * toolchain. Karma y Jasmine van juntos (`['karma', 'jasmine']` es `'karma'`); cualquier otra combinación de
+ * runners se rechaza como `ambiguous-test-runner`, nunca se adivina.
  */
 
 import { satisfies } from './node-range.mjs';
@@ -70,6 +81,7 @@ export const REFUSALS = {
   'unsupported-framework': ['no gates toolchain for framework {detail}', 'no hay toolchain de gates para el framework {detail}'],
   'unsupported-major': ['no gates toolchain for Angular major {detail} (supported: 19, 20, 21, 22)', 'no hay toolchain de gates para la major {detail} de Angular (soportadas: 19, 20, 21, 22)'],
   'unknown-test-runner': ['the profile names no test runner, so no runner gate can be chosen', 'el perfil no nombra runner de tests, así que no se puede elegir gate de runner'],
+  'ambiguous-test-runner': ['the project has several test runners ({detail}), so none is chosen', 'el proyecto tiene varios runners de tests ({detail}), así que no se elige ninguno'],
   'unsupported-test-runner': ['toolchain {toolchain} does not pin the test runner the project uses ({detail})', 'la toolchain {toolchain} no fija el runner de tests que usa el proyecto ({detail})'],
   'unreadable-node': ['the host Node version {detail} is not one exact version', 'la versión de Node anfitriona {detail} no es una versión exacta'],
   'node-outside-framework': ['host Node {detail} is outside the range the framework major supports ({range})', 'el Node anfitrión {detail} está fuera del rango que soporta la major del framework ({range})'],
@@ -126,15 +138,50 @@ export function toolchainFor(profile, hostNode) {
 }
 
 /**
- * The bilingual line for a refusal, English first, then `@es` Spanish.
- * @es La línea bilingüe de un rechazo, inglés y luego `@es` español.
+ * The test runner a profile's runner list names, or a refusal when it names several. Jasmine beside Karma is
+ * Karma's own assertion library, not a second runner.
+ * @es El runner que nombra la lista de un perfil, o un rechazo si nombra varios. Jasmine junto a Karma es la
+ * librería de aserciones de Karma, no un segundo runner.
  */
-export function describeRefusal(refusal) {
+function runnerOf(testRunners) {
+  const list = Array.isArray(testRunners) ? testRunners.filter((id) => typeof id === 'string' && id !== '') : [];
+  const real = list.includes(KARMA) ? list.filter((id) => id !== 'jasmine') : list;
+
+  if (real.length > 1) return refuse('ambiguous-test-runner', real.join('+'));
+
+  return real[0];
+}
+
+/**
+ * The toolchain for a project profile (runner list, `frameworkVersion.major`), or the reason there is none.
+ * @es La toolchain de un perfil de proyecto (lista de runners, `frameworkVersion.major`), o el motivo de que no haya.
+ */
+export function toolchainForProfile(profile, hostNode) {
+  const testRunner = runnerOf(profile?.testRunners);
+
+  if (testRunner?.ok === false) return testRunner;
+
+  return toolchainFor({ framework: profile?.framework, major: profile?.frameworkVersion?.major, testRunner }, hostNode);
+}
+
+/**
+ * The refusal as `[English, Spanish]` clauses.
+ * @es El rechazo como cláusulas `[inglés, español]`.
+ */
+export function refusalPair(refusal) {
   const entry = REFUSALS[refusal.reason];
 
   if (entry === undefined) throw new Error(`unknown refusal reason ${refusal.reason} @es motivo de rechazo desconocido ${refusal.reason}`);
 
-  const [english, spanish] = entry.map((half) => half.replace(/\{(\w+)\}/g, (_, key) => String(refusal[key] ?? '')));
+  return entry.map((half) => half.replace(/\{(\w+)\}/g, (_, key) => String(refusal[key] ?? '')));
+}
+
+/**
+ * The bilingual line for a refusal, English first, then `@es` Spanish.
+ * @es La línea bilingüe de un rechazo, inglés y luego `@es` español.
+ */
+export function describeRefusal(refusal) {
+  const [english, spanish] = refusalPair(refusal);
 
   return `${english} @es ${spanish}`;
 }

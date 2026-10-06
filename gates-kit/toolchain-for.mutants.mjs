@@ -49,6 +49,16 @@ const MUTANTS = [
   ['a refusal line drops its @es half', F, '`${english} @es ${spanish}`', '`${english}`'],
   ['an unknown refusal reason renders empty', F, 'if (entry === undefined) throw new Error(`unknown refusal reason', 'if (entry === undefined) return \'\';\n  if (false) throw new Error(`unknown refusal reason'],
   ['a refusal line keeps its placeholders', F, ".replace(/\\{(\\w+)\\}/g, (_, key) => String(refusal[key] ?? ''))", ''],
+  ['Jasmine is not folded into Karma, so the pair is ambiguous', F, "list.includes(KARMA) ? list.filter((id) => id !== 'jasmine') : list", 'list'],
+  ['Jasmine is dropped even without Karma', F, "list.includes(KARMA) ? list.filter((id) => id !== 'jasmine') : list", "list.filter((id) => id !== 'jasmine')"],
+  ['several runners take the first one', F, "if (real.length > 1) return refuse('ambiguous-test-runner', real.join('+'));", ''],
+  ['several runners are refused only above two', F, 'if (real.length > 1)', 'if (real.length > 2)'],
+  ['an ambiguous refusal does not name its runners', F, "refuse('ambiguous-test-runner', real.join('+'))", "refuse('ambiguous-test-runner', '')"],
+  ['the profile adapter reads the major from the wrong field', F, 'major: profile?.frameworkVersion?.major', 'major: profile?.major'],
+  ['the profile adapter pins the host Node', F, 'testRunner }, hostNode);', "testRunner }, '24.15.0');"],
+  ['the profile adapter ignores the ambiguity refusal', F, 'if (testRunner?.ok === false) return testRunner;', ''],
+  ['a missing runner list is read as an empty one that passes', F, "Array.isArray(testRunners) ? testRunners.filter((id) => typeof id === 'string' && id !== '') : []", "Array.isArray(testRunners) ? testRunners : ['vitest']"],
+  ['a refusal pair swaps its halves', F, 'return entry.map((half)', 'return [...entry].reverse().map((half)'],
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
