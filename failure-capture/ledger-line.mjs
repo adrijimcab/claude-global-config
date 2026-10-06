@@ -177,6 +177,14 @@ export function evidenceKeyOf(rule) {
   return pointer?.end === rule.length ? pointer.key : undefined;
 }
 
+/** The key a tiered line points its evidence to, or `undefined` for any other line. @es La clave a la que apunta una línea con niveles, o `undefined` para cualquier otra. */
+export function pointerKeyOf(line) {
+  const entry = parseEntry(line);
+  const split = entry.ok ? splitRule(entry.body) : entry;
+
+  return split.ok ? evidenceKeyOf(split.rule) : undefined;
+}
+
 /**
  * Reads a minimal stub back: `{ date, key, mechanism, marker }`, `mechanism` being `undefined` for the
  * no-mechanism form; `undefined` for any other line.
