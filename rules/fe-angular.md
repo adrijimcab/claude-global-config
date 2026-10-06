@@ -38,7 +38,7 @@ branches and `npm view`, measured 2026-10-06; the per-major detail and citations
 | Topic | 19 | 20 | 21 | 22 |
 |---|---|---|---|---|
 | Support (2026-10-06) | EOL since 2026-05-19 | LTS to 2026-11-28 | LTS to 2027-06 | active to 2027-06 |
-| TypeScript (compiler-cli peer) | `>=5.5 <5.9` | `>=5.8 <6.0` | `>=5.9 <6.1` | `>=6.0 <6.1` |
+| TypeScript (compiler-cli peer) | `>=5.5 <5.9` | `>=5.8 <6.0` | `>=5.9 <6.1` (`@angular/build` peers `<6.0`: stay on 5.9) | `>=6.0 <6.1` |
 | Node | `^18.19.1 \|\| ^20.11.1 \|\| >=22` | `^20.19 \|\| ^22.12 \|\| >=24` | same as 20 | `^22.22.3 \|\| ^24.15 \|\| >=26` |
 | `standalone: true` | omit (default) | omit | omit | omit |
 | `changeDetection: OnPush` | write it | write it | write it | omit (default); `Eager` only on purpose |
