@@ -207,6 +207,52 @@ const cases = [
   ['deny', payload(String.raw`sd foo bar <<< "a\\\\b"`), 'a here-string payload is an ordinary argument of sd, so it is judged', 'backslash the shell eats'],
   ['deny', payload(String.raw`cat <<< "x" && sd -F "a\\\\b" c f`), 'after a here-string the next command is still inspected', 'backslash the shell eats'],
 
+  // --- A SCRIPT FILE IS A FILE RUN, whatever its module extension. Node stops reading its own options at
+  // the script path, so a `-e` / `-p` after `x.cjs` is the script's argument and its payload is never an
+  // eval. One case per extension and per way a script is named, so no extension can quietly start to
+  // read as code: the walk keys on the SHAPE of the word (a non-option ends node's options), never on
+  // a suffix list, and these cases keep it that way.
+  // @es UN FICHERO DE SCRIPT ES UNA EJECUCIÓN DE FICHERO, sea cual sea su extensión de módulo. Node deja de
+  // leer sus opciones en la ruta del script, así que un `-e`/`-p` tras `x.cjs` es argumento del script. Un
+  // caso por extensión y por forma de nombrar el script: el recorrido decide por la FORMA de la palabra,
+  // nunca por una lista de sufijos, y estos casos lo mantienen así.
+  ...['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'].flatMap((extension) => [
+    ['allow', payload(String.raw`node ./scripts/run${extension} -e "console.log('\\b')"`), `script ${extension}: a relative path, its -e is the script's`],
+    ['allow', payload(String.raw`node --require ./hook.cjs ./run${extension} -p "a\\b"`), `script ${extension}: after a value-taking option, its -p is the script's`],
+    ['allow', payload(String.raw`node "C:\Users\me\scripts\run${extension}" --eval "x\\y"`), `script ${extension}: a quoted Windows path, its --eval is the script's`],
+    ['allow', payload(String.raw`FOO=1 node --no-warnings run${extension} -pe "'\\d'"`, 'PowerShell'), `script ${extension}: env prefix and boolean option, via PowerShell`]
+  ]),
+  ['allow', payload(`node run.cjs && sed -n 1p run.cjs`), 'a script file named on both sides of an operator'],
+  ['allow', payload(`sed -i 's/a/b/' src/run.cjs`), 'a text edit whose FILE argument is a .cjs'],
+  ['deny', payload(String.raw`node --require ./hook.cjs -e "console.log('\\b')"`), 'a .cjs as the VALUE of -r is not the script: the -e after it is still node\'s'],
+
+  // --- COMMENTS AND LINE CONTINUATIONS are not payload. A `#` that opens a word runs to the end of the line
+  // and is data, like a heredoc body; an unquoted backslash-newline is removed by the shell and joins
+  // nothing. Measured shape: a multi-line `sed -n \` + newline + the script was refused for "a backslash
+  // the shell eats", and an apostrophe in a trailing comment was refused as an unterminated quote.
+  // @es COMENTARIOS Y CONTINUACIONES DE LÍNEA no son payload. Un `#` que abre palabra llega al fin de línea
+  // y es dato, como un cuerpo de heredoc; un backslash-salto sin comillas lo elimina el shell. Forma medida:
+  // un `sed -n \` multilínea se rechazaba por «backslash que el shell se come» y un apóstrofe en un
+  // comentario final por «comilla sin cerrar».
+  ['allow', payload(`sed -n \\\n  '1,5p' src/run.cjs`), 'an unquoted line continuation between sed and its script'],
+  ['allow', payload(`sd foo bar \\\n  src/run.cjs`), 'a line continuation before the file argument of sd'],
+  ['allow', payload(`awk -F: \\\n  '{print $1}' src/run.cjs`), 'a line continuation between awk options and its script'],
+  ['allow', payload(`node run.cjs \\\n  --flag value`), 'a line continuation inside a node script invocation'],
+  ['allow', payload(`sed -n 1p run.cjs # it's the second pass`), 'an apostrophe in a trailing comment'],
+  ['allow', payload(String.raw`sed -n 1p run.cjs # the pattern a\\b stays literal here`), 'a doubled backslash in a trailing comment'],
+  ['allow', payload(`# node -e "x\\\\y" is what I want to avoid\nsed -n 1p run.cjs`), 'a whole-line comment naming a refused shape'],
+  ['allow', payload(`sed -n 1p run.cjs;# it's glued to the operator`), 'a comment right after an operator'],
+  ['allow', payload(String.raw`echo a;# note; sed "s/a\\b/c/" f`), 'a comment glued to ; hides the commands it names'],
+  ['allow', payload(String.raw`echo a|# note; sed "s/a\\b/c/" f`), 'a comment glued to | hides the commands it names'],
+  ['allow', payload(String.raw`echo a&# note; sed "s/a\\b/c/" f`), 'a comment glued to & hides the commands it names'],
+  ['allow', payload(String.raw`echo a # note; sed "s/a\\b/c/" f`), 'a comment after a blank hides the commands it names'],
+  ['deny', payload(`sed -n 1p run.cjs # fine\n${String.raw`sd -F "a\\\\b" c f`}`), 'a dangerous command on the line AFTER a comment is still judged', 'backslash the shell eats'],
+  ['deny', payload(`${String.raw`node -e "console.log('\\b')"`} # trailing comment`), 'a dangerous payload BEFORE a comment is still judged', 'backslash the shell eats'],
+  ['deny', payload(`echo \${#x}; ${String.raw`node -e "console.log('\\b')"`}`), 'the # of ${#x} does not open a comment that hides the rest of the line', 'backslash the shell eats'],
+  ['deny', payload(`sed -n a#b ${String.raw`"x\\\\y"`} f`), 'a # inside a word is no comment: the script after it is still judged', 'backslash the shell eats'],
+  ['deny', payload(`sed \\\n  ${String.raw`"s/a\\b/c/"`} f`), 'a line continuation does not hide a dangerous script that follows it', 'backslash the shell eats'],
+  ['deny', payload(`sed "s/a\\\nb/c/" f`), 'a backslash-newline INSIDE double quotes is still eaten', 'before "\\n"'],
+
   // --- FAIL OPEN: every corruption of the hook's own input / FALLAR ABIERTO
   ['allow', 'this is not json at all', 'unparseable stdin'],
   ['allow', '', 'empty stdin'],

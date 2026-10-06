@@ -48,6 +48,16 @@ const MUTANTS = [
   ['the eaten-escape characters are no longer reported', DETECT, 'return findings.length > 0 ? findings : undefined;', 'return undefined;'],
   ['the script path no longer ends the interpreter options', DETECT, " || token.raw[0] !== '-') break;", ') break;'],
   ['the text-edit kind is not rendered by the guard', GUARD, "  if (refusal.kind === 'text-edit') return textEditReason(refusal);\n", ''],
+  // --- comments and line continuations: data, not payload ---
+  ['an unquoted backslash-newline is read as an eaten escape instead of a line continuation', DETECT, "    if (character === BACKSLASH && command[index + 1] === '\\n') {\n", '    if (false) {\n'],
+  ['a comment is tokenized as words, so its quotes and backslashes are judged', DETECT, "if (character === '#' && startsComment(command, index)) {", 'if (false) {'],
+  ['every # opens a comment, including the one of ${#x} and a#b', DETECT, 'return index === 0 || BEFORE_A_COMMENT.has(command[index - 1]);', 'return true;'],
+  ['a # after a brace opens a comment, so ${#x} hides the rest of the line', DETECT, "'\\n', ';', '|', '&']", "'\\n', ';', '|', '&', '{']"],
+  ['a comment glued to ; is not a comment', DETECT, "'\\n', ';', '|', '&']", "'\\n', '|', '&']"],
+  ['a comment glued to | is not a comment', DETECT, "'\\n', ';', '|', '&']", "'\\n', ';', '&']"],
+  ['a comment glued to & is not a comment', DETECT, "'\\n', ';', '|', '&']", "'\\n', ';', '|']"],
+  ['a comment after a blank is not a comment', DETECT, '...BLANK_CHARACTERS, ', ''],
+  ['a comment stops at a quote instead of the end of the line', DETECT, "      const lineEnd = command.indexOf('\\n', index);\n", "      const lineEnd = command.indexOf(\"'\", index);\n"],
   // --- heredocs: the body is data, the scan resumes after the terminator ---
   ['the heredoc body is not skipped, so its lines are inspected as commands', DETECT, '        for (const heredoc of pendingHeredocs) index = skipHeredocBody(command, index, heredoc);\n', ''],
   ['the scan does not resume after the terminator, so a later dangerous command hides', DETECT, "if (line === heredoc.delimiter) return lineEnd === -1 ? command.length : lineEnd + 1;", 'if (line === heredoc.delimiter) return command.length;'],

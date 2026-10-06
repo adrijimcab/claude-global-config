@@ -77,6 +77,14 @@ const CARRIAGE_RETURN = 13;
 const HEREDOC_OPERATOR = '<<';
 const HERE_STRING_LENGTH = 3;
 
+/** What a comment may follow: a blank or a command separator. A brace is NOT one (`${#x}`). @es Lo que puede preceder a un comentario: un blanco o un separador de comandos; una llave NO (`${#x}`). */
+const BEFORE_A_COMMENT = new Set([...BLANK_CHARACTERS, '\n', ';', '|', '&']);
+
+/** Whether the `#` at `index` opens a comment. @es Si el `#` de `index` abre un comentario. */
+function startsComment(command, index) {
+  return index === 0 || BEFORE_A_COMMENT.has(command[index - 1]);
+}
+
 /** Whether `<<<` starts at `index`. @es Si en `index` empieza un `<<<`. */
 function startsHereString(command, index) {
   return command.startsWith('<<<', index);
@@ -183,6 +191,10 @@ function skipHeredocBody(command, start, heredoc) {
  * leyéndose como dos backslashes, porque eso es lo que el shell va a colapsar. Cada palabra lleva
  * además la forma de su entrecomillado (`quoted`, `bare`, `unterminated`), que es lo que hace
  * detectable el fallo 2: un payload sano está entero entrecomillado o entero desnudo.
+ *
+ * What is DATA and never a word: a heredoc body, a `#` comment, and an unquoted backslash-newline
+ * (a line continuation). @es Lo que es DATO y nunca palabra: el cuerpo de un heredoc, un comentario `#` y un
+ * backslash-salto sin comillas (continuación de línea).
  */
 export function tokenize(command) {
   if (typeof command !== 'string') return [];
@@ -247,6 +259,30 @@ export function tokenize(command) {
         pendingHeredocs.length = 0;
       }
 
+      continue;
+    }
+
+    // An unquoted backslash-newline is a LINE CONTINUATION: the shell removes the pair and the word (or the
+    // blank) carries on, so it is neither payload nor a word of its own. Inside double quotes it is still
+    // an eaten escape and is judged there, by `dangerousCharacters`.
+    // @es Un backslash-salto sin comillas es una CONTINUACIÓN DE LÍNEA: el shell quita el par y la palabra
+    // (o el blanco) sigue, así que no es payload ni palabra. Dentro de comillas dobles sigue siendo un
+    // escape comido y lo juzga allí `dangerousCharacters`.
+    if (character === BACKSLASH && command[index + 1] === '\n') {
+      index += 2;
+      continue;
+    }
+
+    // A `#` that opens a word is a COMMENT: it runs to the end of the line and is data, like a heredoc body.
+    // Only where a shell starts a comment — at a word start after a blank or a separator — so the `#` of
+    // `${#x}` or `a#b` never hides the rest of the line.
+    // @es Un `#` que abre palabra es un COMENTARIO: llega al fin de línea y es dato, como un cuerpo de
+    // heredoc. Solo donde el shell lo abre —inicio de palabra tras blanco o separador—, así el `#` de
+    // `${#x}` o `a#b` nunca esconde el resto de la línea.
+    if (character === '#' && startsComment(command, index)) {
+      const lineEnd = command.indexOf('\n', index);
+
+      index = lineEnd === -1 ? command.length : lineEnd;
       continue;
     }
 
