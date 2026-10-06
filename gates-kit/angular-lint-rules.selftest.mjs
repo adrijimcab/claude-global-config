@@ -35,9 +35,9 @@ function throws(run) {
 
 const P = '@angular-eslint/';
 const EXPECTED = {
-  19: { ts: ['prefer-signals'], template: [] },
-  20: { ts: ['no-developer-preview', 'no-experimental', 'prefer-host-metadata-property', 'prefer-inject', 'prefer-signals'], template: ['prefer-control-flow'] },
-  21: { ts: ['no-developer-preview', 'no-experimental', 'prefer-host-metadata-property', 'prefer-inject', 'prefer-signals'], template: ['prefer-control-flow'] },
+  19: { ts: ['prefer-on-push-component-change-detection', 'prefer-signals'], template: [] },
+  20: { ts: ['no-developer-preview', 'no-experimental', 'prefer-host-metadata-property', 'prefer-inject', 'prefer-on-push-component-change-detection', 'prefer-signals'], template: ['prefer-control-flow'] },
+  21: { ts: ['no-developer-preview', 'no-experimental', 'prefer-host-metadata-property', 'prefer-inject', 'prefer-on-push-component-change-detection', 'prefer-signals'], template: ['prefer-control-flow'] },
   22: { ts: ['no-developer-preview', 'no-experimental', 'prefer-host-metadata-property', 'prefer-inject', 'prefer-service-decorator', 'prefer-signals'], template: ['prefer-control-flow'] },
 };
 
@@ -51,7 +51,8 @@ for (const major of Object.keys(EXPECTED).map(Number)) {
 }
 
 check('the covered majors are 19 to 22', LINT_MAJORS.join() === '19,20,21,22');
-check('every rule of the table is on for Angular 22', RULE_TABLE.length === Object.keys(angularRulesFor(22).ts).length + Object.keys(angularRulesFor(22).template).length);
+check('every rule of the table without a last major is on for Angular 22', RULE_TABLE.filter(([, , to]) => to === undefined).length === Object.keys(angularRulesFor(22).ts).length + Object.keys(angularRulesFor(22).template).length);
+check('OnPush is on for 19, 20 and 21 and off for 22, where it is the default', [19, 20, 21, 22].map((major) => `${P}prefer-on-push-component-change-detection` in angularRulesFor(major).ts).join() === 'true,true,true,false');
 check('a template rule is never handed to the TypeScript plugin', !Object.keys(angularRulesFor(22).ts).some((rule) => rule.includes('/template/')));
 check('Angular 18 throws instead of taking 19\'s rules', throws(() => angularRulesFor(18)));
 check('Angular 23 throws instead of taking 22\'s rules', throws(() => angularRulesFor(23)));

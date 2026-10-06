@@ -160,13 +160,6 @@ export function eslintConfigOf(rootFiles = []) {
   return rootFiles.some((name) => name.startsWith('.eslintrc')) ? 'eslintrc' : undefined;
 }
 
-/** The gates-kit stack whose toolchain grades this project, or `undefined`. @es El stack de gates-kit que corresponde, o `undefined`. */
-export function gatesStackOf(framework, testRunners) {
-  if (framework === 'angular' || framework === 'nest') return framework;
-
-  return framework === 'node' && testRunners.includes('vitest') ? 'node-vitest' : undefined;
-}
-
 /** The Claude Code / agent files a project root may already hold (`ng new --ai-config` writes some). @es Los ficheros de agente que la raíz puede tener ya. */
 export const AGENT_FILES = Object.freeze(['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.mcp.json', '.claude']);
 
@@ -210,7 +203,6 @@ export function profileOf(facts) {
     eslintConfig: eslintConfigOf(facts.rootFiles),
     angular,
     packageManager: packageManagerOf(facts, LOCKFILES),
-    gatesStack: gatesStackOf(framework, testRunners),
     agentFiles: AGENT_FILES.filter((name) => facts.rootFiles?.includes(name)),
   };
 }

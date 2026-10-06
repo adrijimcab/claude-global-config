@@ -26,7 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { satisfies } from './node-range.mjs';
-import { ANGULAR_MAJORS, REFUSALS, TOOLCHAINS, describeRefusal, toolchainFor } from './toolchain-for.mjs';
+import { ANGULAR_MAJORS, REFUSALS, TOOLCHAINS, describeRefusal, refusalPair, toolchainFor, toolchainForProfile } from './toolchain-for.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NODE = '24.15.0';
@@ -125,6 +125,33 @@ check('a refusal line names the toolchain and runner', lines[1].includes('angula
 check('a Node refusal line names the version and the range', lines[3].includes('25.0.0') && lines[3].includes(TOOLCHAINS['angular-21'].node.toolchain));
 check('every refusal reason has both halves', Object.values(REFUSALS).every(([english, spanish]) => english.trim() !== '' && spanish.trim() !== ''));
 check('an unknown refusal reason throws', (() => { try { describeRefusal({ reason: 'nope' }); return false; } catch { return true; } })());
+
+// The adapter from the project profile: the runner list and `frameworkVersion.major` become toolchainFor's input.
+/** `toolchain/runner` or `reason:detail` for a profile as `project-profile` reports it. @es El resultado en una línea. */
+function pickProfile(framework, major, testRunners, node = NODE) {
+  const result = toolchainForProfile({ framework, frameworkVersion: major === undefined ? undefined : { major, minor: 0, source: 'installed' }, testRunners }, node);
+
+  return result.ok === true ? `${result.toolchain}/${result.testRunner}` : `${result.reason}:${result.detail}`;
+}
+
+check('profile: Angular 19 with Karma and Jasmine is Karma', pickProfile('angular', 19, ['karma', 'jasmine']) === 'angular-19/karma');
+check('profile: Jasmine before Karma is still Karma', pickProfile('angular', 19, ['jasmine', 'karma']) === 'angular-19/karma');
+check('profile: Angular 21 with Vitest alone is Vitest', pickProfile('angular', 21, ['vitest']) === 'angular-21/vitest');
+check('profile: Nest with Jest is Jest', pickProfile('nest', 11, ['jest']) === 'nest/jest');
+check('profile: Node with Vitest is Vitest', pickProfile('node', undefined, ['vitest']) === 'node-vitest/vitest');
+check('profile: Jasmine without Karma is refused, not read as Karma', pickProfile('angular', 19, ['jasmine']) === 'unsupported-test-runner:jasmine');
+check('profile: Karma and Vitest are refused as ambiguous, naming both', pickProfile('angular', 21, ['vitest', 'karma']) === 'ambiguous-test-runner:vitest+karma');
+check('profile: Jest and Vitest are refused as ambiguous', pickProfile('node', undefined, ['jest', 'vitest']) === 'ambiguous-test-runner:jest+vitest');
+check('profile: Karma, Jasmine and Jest are ambiguous after Jasmine is folded into Karma', pickProfile('angular', 19, ['karma', 'jasmine', 'jest']) === 'ambiguous-test-runner:karma+jest');
+check('profile: no runners is refused as unknown', pickProfile('angular', 21, []) === 'unknown-test-runner:');
+check('profile: a missing runner list is refused as unknown', toolchainForProfile({ framework: 'nest' }, NODE).reason === 'unknown-test-runner');
+check('profile: the framework major picks the Angular toolchain', pickProfile('angular', 20, ['karma']) === 'angular-20/karma' && pickProfile('angular', 22, ['karma']) === 'angular-22/karma');
+check('profile: an Angular without a readable major is refused', pickProfile('angular', undefined, ['karma']) === 'unsupported-major:undefined');
+check('profile: React has no toolchain', pickProfile('react', 19, ['vitest']) === 'unsupported-framework:react');
+check('profile: the host Node is still checked', pickProfile('angular', 21, ['vitest'], '25.0.0') === 'node-outside-toolchain:25.0.0');
+check('profile: no profile at all is refused, not thrown', toolchainForProfile(undefined, NODE).ok === false);
+check('an ambiguous refusal line names its runners in both halves', refusalPair(toolchainForProfile({ framework: 'node', testRunners: ['jest', 'vitest'] }, NODE)).every((half) => half.includes('jest+vitest')));
+check('a refusal pair is [English, Spanish]', refusalPair({ reason: 'unknown-test-runner' }).length === 2 && refusalPair({ reason: 'unknown-test-runner' })[1].startsWith('el perfil'));
 
 // The table against the live toolchains.
 const folders = readdirSync(path.join(HERE, 'toolchains'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();

@@ -8,7 +8,7 @@
  * versions (hoisted install, declared only, unparseable range), each range form, the framework precedence, the
  * test runners from packages and from the Angular builder, zone.js versus zoneless (polyfill, dependency, a
  * polyfills file), standalone per major, the package manager (field, nearest lockfile), the ESLint config
- * flavour, the gates stack, the support status on each side of every limit, the summary line (EOL, near EOL,
+ * flavour, the gates sentence (the toolchain `toolchainFor` picks, or its refusal), the support status on each side of every limit, the summary line (EOL, near EOL,
  * comfortable, unknown major, official rules file present or missing, majors outside the matrix, toolchain
  * present or absent), the hook (payload cwd, env fallback, malformed payload, silence, a malfunction reported)
  * and the CLI (exit codes, JSON, a run through a symlinked path).
@@ -16,7 +16,7 @@
  * @es PRUEBA DE DISCRIMINACIÓN de `project-profile/`: cada caso corre sobre un árbol de proyecto CONSTRUIDO en
  * una carpeta temporal, nunca sobre un checkout real. Recorre la búsqueda de la raíz, versión instalada contra
  * declarada, cada forma de rango, la precedencia de frameworks, los runners, zone.js contra zoneless,
- * standalone por major, el gestor de paquetes, el formato de ESLint, el stack de gates, el estado de soporte a
+ * standalone por major, el gestor de paquetes, el formato de ESLint, la frase de gates (la toolchain que elige `toolchainFor`, o su rechazo), el estado de soporte a
  * ambos lados de cada límite, la línea resumen, el hook y la CLI.
  */
 
@@ -28,9 +28,10 @@ import { fileURLToPath } from 'node:url';
 
 import { NEAR_EOL_DAYS, supportOf } from './angular-support.mjs';
 import { ancestry, findProjectRoot, frameworkChild, installedVersion, readFacts, readJsonObject } from './facts.mjs';
-import { eslintConfigOf, gatesStackOf, lowerBoundOf, majorMinorOf, packageManagerOf, PROFILE_PACKAGES, profileOf, readProfile, runProfileCli, standaloneOf, versionOf, zonelessOf } from './profile.mjs';
+import { eslintConfigOf, lowerBoundOf, majorMinorOf, packageManagerOf, PROFILE_PACKAGES, profileOf, readProfile, runProfileCli, standaloneOf, versionOf, zonelessOf } from './profile.mjs';
 import { payloadOf, sessionDirectory, sessionStartOutput } from './session-start.mjs';
-import { docsText, factsText, OFFICIAL_RULES_FILE, profileLine, supportText } from './summary-line.mjs';
+import { toolchainForProfile } from '../gates-kit/toolchain-for.mjs';
+import { docsText, factsText, gatesText, OFFICIAL_RULES_FILE, profileLine, supportText } from './summary-line.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -134,7 +135,33 @@ check('packageManagerOf: a field without a version is not read', packageManagerO
 check('packageManagerOf: nothing known', packageManagerOf({ manifest: {}, lockfiles: [] }, {}), undefined);
 check('eslintConfigOf: flat, eslintrc, none', [eslintConfigOf(['eslint.config.mjs']), eslintConfigOf(['.eslintrc.json']), eslintConfigOf(['package.json']), eslintConfigOf(undefined)], ['flat', 'eslintrc', undefined, undefined]);
 check('eslintConfigOf: flat wins when both exist', eslintConfigOf(['.eslintrc.json', 'eslint.config.js']), 'flat');
-check('gatesStackOf: angular, nest, node+vitest, none', [gatesStackOf('angular', []), gatesStackOf('nest', ['jest']), gatesStackOf('node', ['vitest']), gatesStackOf('node', ['jest']), gatesStackOf('react', ['vitest'])], ['angular', 'nest', 'node-vitest', undefined, undefined]);
+const HOST = '24.15.0';
+const toolchainDir = (id) => path.join(HOME, '.claude', 'gates-kit', 'toolchains', id, 'package.json');
+const present = (id) => (file) => file === toolchainDir(id);
+const gatesOf = (framework, major, testRunners, options = {}) => {
+  try {
+    return gatesText({ framework, frameworkVersion: major === undefined ? undefined : { major, minor: 0, source: 'installed' }, testRunners }, { home: HOME, exists: () => true, hostNode: HOST, ...options }) ?? undefined;
+  } catch (error) {
+    return [`threw: ${error.message}`];
+  }
+};
+
+check('gatesText: Angular 19 with Karma and Jasmine names angular-19 and the runner', gatesOf('angular', 19, ['karma', 'jasmine'])[0], 'Gates toolchain: ~/.claude/gates-kit/toolchains/angular-19 (karma).');
+check('gatesText: the Spanish half mirrors it', gatesOf('angular', 21, ['vitest'])[1], 'Toolchain de gates: ~/.claude/gates-kit/toolchains/angular-21 (vitest).');
+check('gatesText: Nest and Node with Vitest', [gatesOf('nest', 11, ['jest'])?.[0], gatesOf('node', undefined, ['vitest'])?.[0]], ['Gates toolchain: ~/.claude/gates-kit/toolchains/nest (jest).', 'Gates toolchain: ~/.claude/gates-kit/toolchains/node-vitest (vitest).']);
+check('gatesText: a chosen toolchain that is not on disk is not named', gatesOf('angular', 21, ['vitest'], { exists: present('angular-20') }), undefined);
+check('gatesText: without a home nothing is named', gatesOf('angular', 21, ['vitest'], { home: undefined }), undefined);
+check('gatesText: several real runners are refused with both runners, never guessed', gatesOf('angular', 21, ['karma', 'vitest']), ['No gates toolchain: the project has several test runners (karma+vitest), so none is chosen.', 'Sin toolchain de gates: el proyecto tiene varios runners de tests (karma+vitest), así que no se elige ninguno.']);
+check('gatesText: the refusal is said even when nothing is installed', gatesOf('node', undefined, ['jest', 'vitest'], { exists: () => false, home: undefined })[0].startsWith('No gates toolchain: the project has several'), true);
+check('gatesText: Jasmine without Karma is refused', gatesOf('angular', 19, ['jasmine'])[0], 'No gates toolchain: toolchain angular-19 does not pin the test runner the project uses (jasmine).');
+check('gatesText: an Angular major with no toolchain is refused', gatesOf('angular', 18, ['karma'])[0].startsWith('No gates toolchain: no gates toolchain for Angular major 18'), true);
+check('gatesText: a host Node outside the toolchain range is refused', gatesOf('angular', 21, ['vitest'], { hostNode: '25.0.0' })[0].startsWith('No gates toolchain: host Node 25.0.0 is outside the range every package of toolchain angular-21 accepts'), true);
+check('gatesText: the host Node is the one injected', [gatesOf('nest', 11, ['jest'], { hostNode: '24.15.0' })?.[0].startsWith('Gates'), gatesOf('nest', 11, ['jest'], { hostNode: '22.12.0' })?.[0].startsWith('No gates')], [true, true]);
+check('gatesText: no runner at all is refused', gatesOf('node', undefined, [])[0], 'No gates toolchain: the profile names no test runner, so no runner gate can be chosen.');
+check('gatesText: React, Vue and Next get no gates sentence', ['react', 'vue', 'next'].map((framework) => gatesOf(framework, 19, ['vitest'])), [undefined, undefined, undefined]);
+const nestOnProcessNode = { framework: 'nest', frameworkLabel: 'NestJS', root: '/p', frameworkVersion: { major: 11, minor: 0, source: 'installed' }, testRunners: ['jest'] };
+
+check('gatesText: the default host Node is process.versions.node', profileLine(nestOnProcessNode, { home: HOME, exists: () => true }).includes(toolchainForProfile(nestOnProcessNode, process.versions.node).ok ? 'Gates toolchain: ~/.claude/gates-kit/toolchains/nest (jest).' : 'No gates toolchain: host Node'), true);
 check('profileOf: no facts, no profile', profileOf(undefined), undefined);
 check('PROFILE_PACKAGES: reads the Angular core, CLI and zone.js', ['@angular/core', '@angular/cli', 'zone.js', 'typescript', 'eslint', 'karma', 'vitest'].every((pkg) => PROFILE_PACKAGES.includes(pkg)), true);
 
@@ -183,17 +210,17 @@ check('relativeRoot: the start itself is not', profileOf(factsWith({}, { root: p
   check('ng19: installed Angular', profile.frameworkVersion, { major: 19, minor: 2, source: 'installed' });
   check('ng19: installed TypeScript', profile.typescript, { major: 5, minor: 8, source: 'installed' });
   check('ng19: declared-only ESLint', profile.eslint, { major: 9, minor: 20, source: 'declared' });
-  check('ng19: the rest of the profile', [profile.testRunners, profile.eslintConfig, profile.packageManager, profile.gatesStack, profile.angular], [['karma', 'jasmine'], 'flat', 'npm', 'angular', { build: '@angular-devkit/build-angular:application', test: '@angular-devkit/build-angular:karma', projectType: 'application', cli: { major: 19, minor: 2, source: 'installed' }, zoneless: false, standalone: 'default' }]);
+  check('ng19: the rest of the profile', [profile.testRunners, profile.eslintConfig, profile.packageManager, profile.angular], [['karma', 'jasmine'], 'flat', 'npm', { build: '@angular-devkit/build-angular:application', test: '@angular-devkit/build-angular:karma', projectType: 'application', cli: { major: 19, minor: 2, source: 'installed' }, zoneless: false, standalone: 'default' }]);
   check('ng19: started below the root, so no relative root', profile.relativeRoot, undefined);
 
-  const line = profileLine(profile, { home: HOME, today: '2026-10-06', exists: () => false });
+  const line = profileLine(profile, { home: HOME, today: '2026-10-06', exists: () => false, hostNode: HOST });
 
   check('ng19 line: facts first', line.startsWith('Profile: Angular 19.2 · TS 5.8 · Karma+Jasmine · ESLint 9 flat · @angular-devkit/build-angular:application · zone.js · npm. '), true);
   check('ng19 line: EOL with its date and the next major', line.includes('Angular 19 is END OF LIFE since 2026-05-19 (no security patches): plan the update to v20.'), true);
   check('ng19 line: the v19 column and the full-source file', line.includes('Apply column v19 of ~/.claude/rules/fe-angular.md; docs: ~/.claude/skills/angular-best-practices/versions/v19.md (full source'), true);
   check('ng19 line: no toolchain sentence when the toolchain is absent', line.includes('Gates toolchain'), false);
   check('ng19 line: the Spanish mirror, accents intact', line.includes(' @es Angular 19 está FUERA DE SOPORTE desde el 2026-05-19 (sin parches de seguridad): planificar la actualización a v20.'), true);
-  check('ng19 line: a toolchain that exists is named', profileLine(profile, { home: HOME, today: '2026-10-06', exists: (file) => file === path.join(HOME, '.claude', 'gates-kit', 'toolchains', 'angular', 'package.json') }).includes('Gates toolchain: ~/.claude/gates-kit/toolchains/angular.'), true);
+  check('ng19 line: a toolchain that exists is named', profileLine(profile, { home: HOME, today: '2026-10-06', exists: present('angular-19'), hostNode: HOST }).includes('Gates toolchain: ~/.claude/gates-kit/toolchains/angular-19 (karma).'), true);
   check('ng19 line: one line', line.includes('\n'), false);
 
   const parent = path.dirname(app);
@@ -293,8 +320,12 @@ check('relativeRoot: the start itself is not', profileOf(factsWith({}, { root: p
 
   const profile = read(nodeLib);
 
-  check('node lib: the vitest toolchain and yarn', [profile.framework, profile.gatesStack, profile.packageManager], ['node', 'node-vitest', 'yarn']);
-  check('node lib line: the generic rules sentence', profileLine(profile, { home: HOME, today: '2026-10-06', exists: () => false }), 'Profile: Node · TS 5.9 (declared, not installed) · Vitest · yarn. Apply the matching ~/.claude/rules/fe-*.md for the files you touch. @es Aplicar las ~/.claude/rules/fe-*.md que correspondan a los ficheros que se toquen.');
+  check('node lib: vitest and yarn', [profile.framework, profile.packageManager], ['node', 'yarn']);
+  check('node lib line: the generic rules sentence', profileLine(profile, { home: HOME, today: '2026-10-06', exists: () => false, hostNode: HOST }), 'Profile: Node · TS 5.9 (declared, not installed) · Vitest · yarn. Apply the matching ~/.claude/rules/fe-*.md for the files you touch. @es Aplicar las ~/.claude/rules/fe-*.md que correspondan a los ficheros que se toquen.');
+  const nodeLine = profileLine(profile, { home: HOME, today: '2026-10-06', exists: present('node-vitest'), hostNode: HOST });
+
+  check('node lib line: the toolchain chosen from the profile, in both languages', [nodeLine.includes('Gates toolchain: ~/.claude/gates-kit/toolchains/node-vitest (vitest). @es'), nodeLine.endsWith('Toolchain de gates: ~/.claude/gates-kit/toolchains/node-vitest (vitest).')], [true, true]);
+  check('node lib line: a Node below the toolchain range says so', profileLine(profile, { home: HOME, today: '2026-10-06', exists: () => false, hostNode: '22.13.0' }).includes('No gates toolchain: host Node 22.13.0 is outside the range every package of toolchain node-vitest accepts'), true);
 }
 
 {
