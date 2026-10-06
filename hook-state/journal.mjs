@@ -1,17 +1,17 @@
 /**
  * The v2 journal of a hook mechanism and its fires counter. A journal line is one of four kinds
  * (`decision`, `dismissal`, `false-positive-report`, `true-positive-report`), each correlated by `blockId`,
- * `toolUseId` and `inputDigest` and carrying a time-sortable id. The last three are the outcomes of a block:
- * a human judged it wrong (`dismissal`, `false-positive-report`) or right (`true-positive-report`). The fires
- * counter (`fires.json`) counts how often a mechanism ran, WITHOUT adding a journal line: an allow is
- * counted, never journaled.
+ * `toolUseId` and `inputDigest` and carrying a time-sortable id, and optionally the hook `event` it happened
+ * in. The last three are the outcomes of a block: a human judged it wrong (`dismissal`,
+ * `false-positive-report`) or right (`true-positive-report`). The fires counter (`fires.json`) counts how
+ * often a mechanism ran, WITHOUT adding a journal line: an allow is counted, never journaled.
  *
  * @es El journal v2 de un mecanismo de hooks y su contador de disparos. Una línea es de uno de cuatro tipos
  * (`decision`, `dismissal`, `false-positive-report`, `true-positive-report`), correlacionada por `blockId`,
- * `toolUseId` e `inputDigest`, con un id ordenable por tiempo. Los tres últimos son desenlaces de un
- * bloqueo: una persona lo juzgó erróneo (`dismissal`, `false-positive-report`) o acertado
- * (`true-positive-report`). El contador (`fires.json`) cuenta cuántas veces corrió un mecanismo SIN añadir
- * línea al journal: un permiso se cuenta, nunca se registra.
+ * `toolUseId` e `inputDigest`, con un id ordenable por tiempo y, opcionalmente, el `event` de hook en que
+ * ocurrió. Los tres últimos son desenlaces de un bloqueo: una persona lo juzgó erróneo (`dismissal`,
+ * `false-positive-report`) o acertado (`true-positive-report`). El contador (`fires.json`) cuenta cuántas
+ * veces corrió un mecanismo SIN añadir línea al journal: un permiso se cuenta, nunca se registra.
  */
 
 import { createHash, randomBytes } from 'node:crypto';
@@ -69,12 +69,13 @@ export function digestInput(input) {
 const badField = (field, expected) => new Error(bilingual('bad-field', { field, expected }));
 
 /** Refuses a record that is not of a known kind or lacks a correlation field. @es Rechaza un registro de tipo ajeno o sin campo de correlación. */
-function assertRecord({ kind, blockId, toolUseId = null, inputDigest, reason }) {
+function assertRecord({ kind, blockId, toolUseId = null, inputDigest, reason, event }) {
   if (typeof kind !== 'string' || !KINDS.has(kind)) throw new Error(bilingual('unknown-kind', { kind: String(kind), allowed: [...KINDS].join(', ') }));
   if (typeof blockId !== 'string' || blockId === '') throw badField('blockId', 'non-empty string');
   if (typeof inputDigest !== 'string' || inputDigest === '') throw badField('inputDigest', 'non-empty string');
   if (toolUseId !== null && typeof toolUseId !== 'string') throw badField('toolUseId', 'string or null');
   if (reason !== undefined && typeof reason !== 'string') throw badField('reason', 'string');
+  if (event !== undefined && typeof event !== 'string') throw badField('event', 'string');
 }
 
 /** The path of the journal of `mechanism`. @es La ruta del journal de `mechanism`. */
@@ -90,8 +91,8 @@ export const firesPath = (mechanism) => path.join(stateDir(mechanism), 'fires.js
 export function appendRecord(mechanism, fields, { now = Date.now() } = {}) {
   assertRecord(fields);
 
-  const { kind, blockId, toolUseId = null, inputDigest, reason } = fields;
-  const record = { v: 2, id: newId(now), kind, ts: new Date(now).toISOString(), blockId, toolUseId, inputDigest, ...(reason === undefined ? {} : { reason }) };
+  const { kind, blockId, toolUseId = null, inputDigest, reason, event } = fields;
+  const record = { v: 2, id: newId(now), kind, ts: new Date(now).toISOString(), blockId, toolUseId, inputDigest, ...(event === undefined ? {} : { event }), ...(reason === undefined ? {} : { reason }) };
 
   mkdirSync(stateDir(mechanism), { recursive: true });
   appendFileSync(journalPath(mechanism), `${JSON.stringify(record)}\n`);
@@ -100,11 +101,11 @@ export function appendRecord(mechanism, fields, { now = Date.now() } = {}) {
 }
 
 /** The counter stored in `file`, 0 when there is none; a corrupt one throws and is not touched. @es El contador guardado, 0 si no hay; uno corrupto lanza y no se toca. */
-function readCount(file) {
+function readCount(file, readFile) {
   let text;
 
   try {
-    text = readFileSync(file, 'utf8');
+    text = readFile(file, 'utf8');
   } catch (error) {
     if (error.code === 'ENOENT') return 0;
 
@@ -127,10 +128,11 @@ function readCount(file) {
 /**
  * Counts one more run of `mechanism` and returns the new total; the journal is not touched.
  * @es Cuenta una corrida más de `mechanism` y devuelve el total; el journal no se toca.
+ * @param options.readFile Replaces `fs.readFileSync` (a test seam: a read failure other than absence cannot be told from a write failure on a real directory). @es Sustituye a `fs.readFileSync` (punto de prueba: un fallo de lectura que no es ausencia no se distingue de un fallo de escritura sobre un directorio real).
  */
-export function incrementFires(mechanism) {
+export function incrementFires(mechanism, { readFile = readFileSync } = {}) {
   const file = firesPath(mechanism);
-  const count = readCount(file) + 1;
+  const count = readCount(file, readFile) + 1;
 
   mkdirSync(stateDir(mechanism), { recursive: true });
   writeFileSync(`${file}.tmp`, `${JSON.stringify({ count })}\n`);

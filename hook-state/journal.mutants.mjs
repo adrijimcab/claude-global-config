@@ -35,6 +35,11 @@ const MUTANTS = [
   ['the record has no toolUseId default', J, 'const { kind, blockId, toolUseId = null,', 'const { kind, blockId, toolUseId,'],
   ['a reason of any type is accepted', J, "reason !== undefined && typeof reason !== 'string'", 'false'],
   ['the record always carries a reason key', J, '...(reason === undefined ? {} : { reason })', '...{ reason }'],
+  ['an event of any type is accepted', J, "event !== undefined && typeof event !== 'string'", 'false'],
+  ['the record always carries an event key', J, '...(event === undefined ? {} : { event })', '...{ event }'],
+  ['the event is never written', J, '...(event === undefined ? {} : { event }), ', ''],
+  ['the event is not read from the fields', J, 'const { kind, blockId, toolUseId = null, inputDigest, reason, event } = fields;', 'const { kind, blockId, toolUseId = null, inputDigest, reason } = fields; const event = undefined;'],
+  ['the counter reader given is ignored', J, "text = readFile(file, 'utf8');", "text = readFileSync(file, 'utf8');"],
   ['the bad-field refusal names no field', J, "bilingual('bad-field', { field, expected })", "bilingual('bad-field', { field: 'x', expected })"],
 
   // --- ids ---
@@ -63,7 +68,7 @@ const MUTANTS = [
 
   // --- the fires counter ---
   ['the fires file has another name', J, "'fires.json'", "'fires.txt'"],
-  ['an increment adds two', J, 'readCount(file) + 1', 'readCount(file) + 2'],
+  ['an increment adds two', J, 'readCount(file, readFile) + 1', 'readCount(file, readFile) + 2'],
   ['an absent counter is an error', J, "error.code === 'ENOENT'", 'false'],
   ['any unreadable counter is read as zero', J, "if (error.code === 'ENOENT') return 0;", 'return 0;'],
   ['a corrupt counter is read as valid', J, 'parsed = JSON.parse(text);', 'parsed = { count: 0 };'],

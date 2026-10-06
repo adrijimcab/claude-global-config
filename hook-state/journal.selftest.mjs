@@ -90,6 +90,10 @@ try {
   check('a reason is kept when given', appendRecord('guard-c', { kind: 'dismissal', ...GOOD, reason: 'mine' }).reason, 'mine');
   check('no reason key when none is given', 'reason' in appendRecord('guard-c', { kind: 'dismissal', ...GOOD }), false);
   check('a reason that is not a string is refused', /"reason"/.test(thrown(() => appendRecord('guard-c', { kind: 'dismissal', ...GOOD, reason: 4 })) ?? ''), true);
+  check('an event is kept when given', appendRecord('guard-c', { kind: 'decision', ...GOOD, event: 'PreToolUse' }).event, 'PreToolUse');
+  check('no event key when none is given', 'event' in appendRecord('guard-c', { kind: 'decision', ...GOOD }), false);
+  check('an event that is not a string is refused', /"event"/.test(thrown(() => appendRecord('guard-c', { kind: 'decision', ...GOOD, event: 4 })) ?? ''), true);
+  check('an event is written to the journal line', lines('guard-c').find((record) => record.event === 'PreToolUse')?.event, 'PreToolUse');
   check('a field outside the record shape is not written', 'secret' in appendRecord('guard-c', { kind: 'decision', ...GOOD, secret: 'x' }), false);
   check('a mechanism that is a path is refused', /@es /.test(thrown(() => appendRecord('../x', { kind: 'decision', ...GOOD })) ?? ''), true);
 
@@ -146,6 +150,19 @@ try {
   rmSync(firesPath('guard-x'));
   mkdirSync(firesPath('guard-x'));
   check('a counter that cannot be read for a reason other than absence is not read as zero', /EISDIR/.test(thrown(() => incrementFires('guard-x')) ?? ''), true);
+
+  // The read failure is injected: a directory in place of the counter also fails the WRITE, which hides whether the read refused.
+  // @es El fallo de lectura se inyecta: un directorio en lugar del contador también hace fallar la ESCRITURA, y eso oculta si la lectura rechazó.
+  const denied = () => {
+    throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+  };
+  check('a counter that cannot be read (injected EACCES) is refused with that error', thrown(() => incrementFires('guard-y', { readFile: denied })), 'permission denied');
+  check('a counter that cannot be read is not replaced by one', existsSync(firesPath('guard-y')), false);
+  const absent = () => {
+    throw Object.assign(new Error('no such file'), { code: 'ENOENT' });
+  };
+  check('a counter that is absent (injected ENOENT) reads as zero', incrementFires('guard-y', { readFile: absent }), 1);
+  check('an injected reader is given the counter file', incrementFires('guard-z', { readFile: (file) => { check('the reader is asked for the counter of the mechanism', file, firesPath('guard-z')); return '{"count":41}'; } }), 42);
 
   // --- nothing leaked into the real locations ---
   check('nothing was written outside the temp roots', existsSync(path.join(claudeRoot, 'guard-a')), false);
