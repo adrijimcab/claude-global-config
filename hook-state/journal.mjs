@@ -1,13 +1,17 @@
 /**
- * The v2 journal of a hook mechanism and its fires counter. A journal line is one of three kinds
- * (`decision`, `dismissal`, `false-positive-report`), each correlated by `blockId`, `toolUseId` and
- * `inputDigest` and carrying a time-sortable id. The fires counter (`fires.json`) counts how often a
- * mechanism ran, WITHOUT adding a journal line: an allow is counted, never journaled.
+ * The v2 journal of a hook mechanism and its fires counter. A journal line is one of four kinds
+ * (`decision`, `dismissal`, `false-positive-report`, `true-positive-report`), each correlated by `blockId`,
+ * `toolUseId` and `inputDigest` and carrying a time-sortable id. The last three are the outcomes of a block:
+ * a human judged it wrong (`dismissal`, `false-positive-report`) or right (`true-positive-report`). The fires
+ * counter (`fires.json`) counts how often a mechanism ran, WITHOUT adding a journal line: an allow is
+ * counted, never journaled.
  *
- * @es El journal v2 de un mecanismo de hooks y su contador de disparos. Una línea es de uno de tres tipos
- * (`decision`, `dismissal`, `false-positive-report`), correlacionada por `blockId`, `toolUseId` e
- * `inputDigest`, con un id ordenable por tiempo. El contador (`fires.json`) cuenta cuántas veces corrió un
- * mecanismo SIN añadir línea al journal: un permiso se cuenta, nunca se registra.
+ * @es El journal v2 de un mecanismo de hooks y su contador de disparos. Una línea es de uno de cuatro tipos
+ * (`decision`, `dismissal`, `false-positive-report`, `true-positive-report`), correlacionada por `blockId`,
+ * `toolUseId` e `inputDigest`, con un id ordenable por tiempo. Los tres últimos son desenlaces de un
+ * bloqueo: una persona lo juzgó erróneo (`dismissal`, `false-positive-report`) o acertado
+ * (`true-positive-report`). El contador (`fires.json`) cuenta cuántas veces corrió un mecanismo SIN añadir
+ * línea al journal: un permiso se cuenta, nunca se registra.
  */
 
 import { createHash, randomBytes } from 'node:crypto';
@@ -18,7 +22,7 @@ import { stateDir } from './locations.mjs';
 import { bilingual } from './message-table.mjs';
 
 /** The record kinds a journal accepts. @es Los tipos de registro que acepta un journal. */
-export const KINDS = new Set(['decision', 'dismissal', 'false-positive-report']);
+export const KINDS = new Set(['decision', 'dismissal', 'false-positive-report', 'true-positive-report']);
 
 const ID_MS_WIDTH = 12;
 const ID_SEQ_WIDTH = 4;

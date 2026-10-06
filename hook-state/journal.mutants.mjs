@@ -16,9 +16,10 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const J = 'hook-state/journal.mjs';
 
 const MUTANTS = [
-  // --- the three kinds ---
+  // --- the four kinds ---
   ['the decision kind is not accepted', J, "'decision', ", ''],
-  ['a fourth kind is accepted', J, "'false-positive-report'])", "'false-positive-report', 'block'])"],
+  ['the true-positive-report kind is not accepted', J, ", 'true-positive-report'])", '])'],
+  ['a fifth kind is accepted', J, "'true-positive-report'])", "'true-positive-report', 'block'])"],
   ['any kind is accepted', J, '!KINDS.has(kind)', 'false'],
 
   // --- the record shape ---

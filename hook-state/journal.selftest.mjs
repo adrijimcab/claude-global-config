@@ -4,14 +4,14 @@
  * Every case writes under a temp `HOOK_STATE_DIR`; the real home is never written (a probe at the end proves
  * nothing leaked into the fallback location).
  *
- * THE STATE SPACE: the three record kinds and kinds outside them (including inherited property names), each
+ * THE STATE SPACE: the four record kinds and kinds outside them (including inherited property names), each
  * required field missing or of the wrong type, the optional ones absent / present, ids from a clock that
  * advances / stands still / goes back / starts small, a journal that already holds lines, a counter that is
  * absent / one / corrupt, and a counter increment that must leave the journal untouched.
  *
  * @es PRUEBA DE DISCRIMINACIÓN de `journal.mjs`: registros v2 del journal y contador de disparos por
  * mecanismo. Todo se escribe bajo un `HOOK_STATE_DIR` temporal; el home real no se escribe nunca. Espacio de
- * estados: los tres tipos y tipos ajenos, cada campo obligatorio ausente o de tipo erróneo, ids con un reloj
+ * estados: los cuatro tipos y tipos ajenos, cada campo obligatorio ausente o de tipo erróneo, ids con un reloj
  * que avanza / se detiene / retrocede / empieza pequeño, un journal con líneas previas, un contador ausente /
  * en uno / corrupto, y un incremento que no debe tocar el journal.
  */
@@ -57,25 +57,25 @@ const GOOD = { blockId: 'blk-1', toolUseId: 'toolu_1', inputDigest: digestInput(
 const CLOCK = Date.UTC(2026, 9, 4, 12, 0, 0);
 
 try {
-  check('the kinds are exactly decision, dismissal and false-positive-report', [...KINDS].sort(), ['decision', 'dismissal', 'false-positive-report']);
+  check('the kinds are exactly decision, dismissal, false-positive-report and true-positive-report', [...KINDS].sort(), ['decision', 'dismissal', 'false-positive-report', 'true-positive-report']);
 
   // --- records ---
   for (const kind of KINDS) {
     const record = appendRecord('guard-a', { kind, ...GOOD }, { now: CLOCK });
     check(`${kind}: the record carries v2, its kind, the clock time and the three correlation fields`, [record.v, record.kind, record.ts, record.blockId, record.toolUseId, record.inputDigest], [2, kind, new Date(CLOCK).toISOString(), 'blk-1', 'toolu_1', GOOD.inputDigest]);
   }
-  check('three records were appended as three JSON lines, in order', lines('guard-a').map((record) => record.kind), [...KINDS]);
+  check('one record per kind was appended as one JSON line each, in order', lines('guard-a').map((record) => record.kind), [...KINDS]);
   check('the journal lives at <stateDir>/journal.jsonl under the temp root', journalPath('guard-a'), path.join(stateRoot, 'guard-a', 'journal.jsonl'));
   const returned = appendRecord('guard-b', { kind: 'decision', ...GOOD }, { now: CLOCK });
   check('the written line equals the returned record', lines('guard-b')[0], returned);
   check('the record id starts with the clock time it was given', returned.id.startsWith(CLOCK.toString(16).padStart(12, '0')), true);
 
-  check('a later append keeps the earlier lines', (() => { appendRecord('guard-a', { kind: 'decision', ...GOOD }); return lines('guard-a').length; })(), 4);
-  check('the record id is written to the journal line', typeof lines('guard-a')[3].id, 'string');
+  check('a later append keeps the earlier lines', (() => { appendRecord('guard-a', { kind: 'decision', ...GOOD }); return lines('guard-a').length; })(), 5);
+  check('the record id is written to the journal line', typeof lines('guard-a')[4].id, 'string');
 
   for (const bad of ['block', 'Decision', 'toString', '__proto__', '', undefined, 3]) {
     const message = thrown(() => appendRecord('guard-c', { kind: bad, ...GOOD }));
-    check(`a kind outside the three is refused: ${JSON.stringify(bad)}`, /Unknown journal record kind/.test(message ?? '') && /@es /.test(message ?? ''), true);
+    check(`a kind outside the four is refused: ${JSON.stringify(bad)}`, /Unknown journal record kind/.test(message ?? '') && /@es /.test(message ?? ''), true);
   }
   check('a refused kind writes nothing', lines('guard-c'), []);
 
