@@ -1,0 +1,4 @@
+{
+  "command": ["node", "../../run-tool.mjs", "eslint", "eslint", "--format", "stylish", "--config", "config.mjs", "--max-warnings", "0", "{target}"],
+  "timeoutMs": 300000
+}
