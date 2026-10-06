@@ -4,7 +4,7 @@
  * carries a `remedy` telling a human what to do instead.
  */
 import { agentToolForbidden, agentToolRequired } from './kinds/agent-tool.mjs';
-import { lazyReviewContract } from './kinds/lazy-review-contract.mjs';
+import { lazySection } from './kinds/lazy-section.mjs';
 import { anchoredLineReplacement } from './kinds/line-replacement.mjs';
 import { ownerSectionsOutsideManagedRegions } from './kinds/owner-sections.mjs';
 import { personaRegionMatchesUpstream } from './kinds/persona-region.mjs';
@@ -17,7 +17,7 @@ export const KINDS = {
   'owner-sections-outside-managed-regions': ownerSectionsOutsideManagedRegions,
   'persona-region-matches-upstream': personaRegionMatchesUpstream,
   'telemetry-disabled': telemetryDisabled,
-  'lazy-review-contract': lazyReviewContract,
+  'lazy-section': lazySection,
   'anchored-line-replacement': anchoredLineReplacement,
   'pruned-text-stays-pruned': prunedTextStaysPruned,
 };
@@ -44,6 +44,13 @@ function brokenAndReapplicable(customizations, context) {
   const broken = new Set(evaluateAll(customizations, context).filter((result) => result.status === 'broken').map((result) => result.id));
   return customizations.filter((customization) => broken.has(customization.id) && typeof kindOf(customization).apply === 'function');
 }
+
+/**
+ * The customizations whose kind `gentle-ai sync` can only undo, never erase: what a hook may re-apply by
+ * itself after a raw sync. @es Las personalizaciones cuyo tipo `gentle-ai sync` solo puede deshacer, nunca
+ * borrar: lo que un hook puede reaplicar solo tras un sync crudo.
+ */
+export const syncSafeOnly = (customizations) => customizations.filter((customization) => kindOf(customization).syncSafe === true);
 
 /** Apply every broken, reapplicable customization. @returns {{ id, outcome, detail }[]} */
 export const applyAll = (customizations, context) =>

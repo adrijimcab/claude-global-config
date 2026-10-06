@@ -1,13 +1,15 @@
 /**
- * Which shell commands can change where the review execution contract belongs: a real `gentle-ai
- * sync` (it rewrites the sdd-orchestrator region and puts the full span back) and `gentle-ai review
- * mode enable|disable` (it changes whether reviews may run). The shell parsing is the sync guard's
- * own (sync-invocations.mjs, executed-programs.mjs), so a command reads the same to both mechanisms.
+ * Which shell commands can undo or change the sync-safe customizations: a real `gentle-ai sync` (it rewrites
+ * every managed region from its assets and puts back what the owner pruned, replaced or made lazy) and
+ * `gentle-ai review mode enable|disable` (it changes whether reviews may run, which decides where the review
+ * contract belongs). The shell parsing is the sync guard's own (sync-invocations.mjs, executed-programs.mjs),
+ * so a command reads the same to both mechanisms.
  *
- * @es Qué comandos de shell pueden cambiar dónde debe estar el contrato de ejecución de revisiones: un
- * `gentle-ai sync` real (reescribe la región sdd-orchestrator y devuelve el tramo completo) y
- * `gentle-ai review mode enable|disable` (cambia si las revisiones pueden correr). El análisis del
- * shell es el del propio guard de sync, así que un comando se lee igual para ambos mecanismos.
+ * @es Qué comandos de shell pueden deshacer o cambiar las personalizaciones seguras ante sync: un
+ * `gentle-ai sync` real (reescribe toda región gestionada desde sus assets y devuelve lo que el dueño podó,
+ * reemplazó o hizo diferido) y `gentle-ai review mode enable|disable` (cambia si las revisiones pueden
+ * correr, lo que decide dónde debe estar el contrato de revisiones). El análisis del shell es el del propio
+ * guard de sync, así que un comando se lee igual para ambos mecanismos.
  */
 import { dialectOfTool } from '../gentle-ai-sync-guard/decide.mjs';
 import { executedPrograms } from '../gentle-ai-sync-guard/executed-programs.mjs';
@@ -27,7 +29,7 @@ function changesReviewMode({ program, args }) {
  * @param {string} toolName  `Bash` or `PowerShell` @es `Bash` o `PowerShell`
  * @returns {'sync' | 'review-mode' | null}
  */
-export function lazyReviewTrigger(command, toolName) {
+export function reapplyTrigger(command, toolName) {
   if (typeof command !== 'string') return null;
   const dialect = dialectOfTool(toolName);
   if (syncInvocations(command, dialect).some((invocation) => !invocation.dryRun)) return 'sync';

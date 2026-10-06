@@ -19,8 +19,22 @@
  * internal/components/filemerge/section.go), and no pruning decision of the owner is recorded for
  * CLAUDE.md as it stands, so none is invented here.
  *
+ * Loading text only when it is needed: add a section to LAZY_SECTIONS below (kind `lazy-section`,
+ * lazy-section.mjs): the span between two whole lines of CLAUDE.md moves to a stash file under
+ * gentle-ai-overlay/lazy/ and a pointer saying exactly when to read it takes its place. The check proves the
+ * stash is byte-identical to what gentle-ai rendered (a SHA-256 in the sentinel), and sync can only undo it.
+ *
  * Syncing: run `node ~/.claude/gentle-ai-overlay/sync.mjs [gentle-ai sync arguments]` (sync-wrapper.mjs). It
- * runs the real sync, re-applies what sync undid, checks, and exits non-zero while anything drifts.
+ * runs the real sync, re-applies what sync undid, checks, and exits non-zero while anything drifts. A RAW
+ * `gentle-ai sync` is healed by the PostToolUse and SessionStart hooks, which re-apply every sync-safe
+ * customization (post-command-hook.mjs, reapply-hook-output.mjs).
+ *
+ * @es Cargar texto solo cuando hace falta: añadir una sección a LAZY_SECTIONS más abajo (tipo `lazy-section`,
+ * lazy-section.mjs): el tramo entre dos líneas enteras de CLAUDE.md pasa a un fichero de depósito bajo
+ * gentle-ai-overlay/lazy/ y un puntero que dice exactamente cuándo leerlo ocupa su lugar. El check prueba que
+ * el depósito es idéntico byte a byte a lo que generó gentle-ai (un SHA-256 en el centinela), y sync solo
+ * puede deshacerlo. Un `gentle-ai sync` CRUDO lo reparan los hooks PostToolUse y SessionStart, que reaplican
+ * toda personalización segura ante sync.
  *
  * @es Podar texto que sync sigue emitiendo: añadir una entrada del tipo `pruned-text-stays-pruned`
  * (kinds/pruned-text.mjs) con `file`, dos líneas estables que sync emite alrededor del texto (`before`,
@@ -75,6 +89,67 @@ const VERIFY_UPSTREAM_SENTENCE = '- Run full verification only after all tasks a
 const VERIFY_SCOPED_SENTENCE =
   "- Run verification only after all tasks are complete; if any task is pending, return `blocked` without running any test. Run only the tests and gates that prove the change's requirements and read its touched paths, never the repository's full suite or full gate chain: the orchestrator runs that once, at integration, on the tree being integrated.";
 
+// Sections of CLAUDE.md that are loaded only when needed. Each one is a span of the orchestrator region
+// that gentle-ai renders whole (`start` up to, not including, `end`; both whole lines, anchors that are
+// headings gentle-ai itself uses) and that this machine reads only in a situation, which the pointer names.
+// `regions`: the orchestrator region is `sdd-orchestrator` in gentle-ai v2/v3 and `orchestrator` in v4 (internal/
+// components/agentguidance/orchestrator.go: OrchestratorSectionID, legacyOrchestratorSectionID).
+// The pointers are English only: they are instructions to the model, not user-facing text, and every
+// character of them is paid in every session.
+// @es Secciones de CLAUDE.md que se cargan solo cuando hacen falta. Cada una es un tramo de la región
+// orquestadora que gentle-ai genera entero (`start` hasta, sin incluir, `end`; ambas líneas enteras, anclajes
+// que son encabezados que gentle-ai mismo usa) y que esta máquina lee solo ante una situación, que el puntero
+// nombra. `regions`: la región orquestadora es `sdd-orchestrator` en gentle-ai v2/v3 y `orchestrator` en v4.
+// Los punteros van solo en inglés: son instrucciones para el modelo, no texto para el usuario, y cada
+// carácter suyo se paga en cada sesión.
+const ORCHESTRATOR_REGIONS = ['sdd-orchestrator', 'orchestrator'];
+const LAZY_DIR = '.claude/gentle-ai-overlay/lazy';
+
+const LAZY_SECTIONS = [
+  {
+    name: 'blocking-prompts',
+    label: 'blocking-prompt contracts',
+    start: '### Lossless Blocking Prompts (MANDATORY)',
+    end: '### Language Domain Contract',
+    regions: ORCHESTRATOR_REGIONS,
+    stash: `${LAZY_DIR}/blocking-prompt-contracts.md`,
+    pointer: {
+      en: 'The blocking-prompt contracts (lossless relay of a prompt, menu or choice envelope meant for the user; the Gentle AI provider-defect handoff; the SDD edit-authority consent relay) are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, a `gentle-ai` invocation exits non-zero or refuses, or SDD status reports `blocked(edit_authority_missing)`.',
+    },
+  },
+  {
+    name: 'delegated-verification',
+    label: 'verification contracts',
+    start: '#### Delegated Verification Gate (MANDATORY)',
+    end: '#### Review Execution Contract',
+    regions: ORCHESTRATOR_REGIONS,
+    stash: `${LAZY_DIR}/delegated-verification-contracts.md`,
+    pointer: {
+      en: 'The verification contracts (Delegated Verification Gate, Native Checking Contract) are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, when a delegated writer returns work, and before deciding what verification or checking a finished change needs.',
+    },
+  },
+  // Owner decision 2026-10-01: the review execution contract is loaded only while gentle-ai reviews may
+  // run, until gentle-ai offers that upstream. Its pointer is the one the first release wrote, bilingual and
+  // byte for byte, so the CLAUDE.md already moved stays moved. @es Decisión del dueño 2026-10-01: el contrato
+  // de ejecución de revisiones se carga solo mientras las revisiones de gentle-ai pueden correr, hasta que
+  // gentle-ai lo ofrezca upstream. Su puntero es el que escribió la primera versión, bilingüe y byte a byte,
+  // para que el CLAUDE.md ya movido siga movido.
+  {
+    name: 'review-contract',
+    label: 'review contract',
+    start: '#### Review Execution Contract',
+    end: '#### Cost and Context Balance',
+    regions: ORCHESTRATOR_REGIONS,
+    witness: '# Native Compact Review Orchestration',
+    loadedWhile: 'reviews-may-run',
+    stash: `${LAZY_DIR}/review-execution-contract.md`,
+    pointer: {
+      en: 'Receipt-driven development is off globally, so this contract is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, before any `gentle-ai review` command other than `gentle-ai review mode status`, before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as `gentle-ai review mode status` reports `effective: on`.',
+      es: 'El desarrollo guiado por recibos está apagado globalmente, así que este contrato no se carga aquí; su texto exacto está en `{stash}`. LEER ESE FICHERO COMPLETO, y seguirlo como si estuviera escrito aquí, antes de cualquier comando `gentle-ai review` distinto de `gentle-ai review mode status`, antes de transmitir un sobre `gentle-ai.review-integration.consent/v3`, y en cuanto `gentle-ai review mode status` informe `effective: on`.',
+    },
+  },
+];
+
 export const CUSTOMIZATIONS = [
   ...PHASES_THAT_NEED_BASH.map((phase) => ({
     id: `${phase}-grants-bash`,
@@ -124,16 +199,7 @@ export const CUSTOMIZATIONS = [
     upstream: VERIFY_UPSTREAM_SENTENCE,
     replacement: VERIFY_SCOPED_SENTENCE,
   },
-  // Owner decision 2026-10-01: the review execution contract is loaded only while gentle-ai reviews
-  // may run, until gentle-ai offers that upstream. @es Decisión del dueño 2026-10-01: el contrato de
-  // ejecución de revisiones se carga solo mientras las revisiones de gentle-ai pueden correr, hasta que
-  // gentle-ai lo ofrezca upstream.
-  {
-    id: 'review-contract-lazy-while-reviews-are-off',
-    kind: 'lazy-review-contract',
-    file: '.claude/CLAUDE.md',
-    stash: '.claude/gentle-ai-overlay/lazy/review-execution-contract.md',
-  },
+  ...LAZY_SECTIONS.map((section) => ({ id: `lazy-${section.name}`, kind: 'lazy-section', file: '.claude/CLAUDE.md', ...section })),
   // Owner decision 2026-09-28: telemetry stays off. Checked and re-applied through the gentle-ai CLI.
   {
     id: 'gentle-ai-telemetry-disabled',
