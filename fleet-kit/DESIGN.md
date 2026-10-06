@@ -124,7 +124,8 @@ under `~/.claude/fleet-kit/state/`.
 - **Constructed fixtures, never live state.** Every selftest builds its own git repositories under the OS
   temp dir (or drives pure decisions with literal text) and exercises each state its decision ranges over:
   the allow states, the refuse states, the near misses, and the malfunction (fail-open) states.
-- **Mutants.** Each mechanism has a `mutants.mjs` campaign run through the vendored
+- **Mutants.** Each mechanism that DECIDES (`mutation-proof/scope.mjs` lists them; a verdict is what makes a
+  module decide) has a `mutants.mjs` campaign run through the vendored
   `mutation-proof/run-mutants.mjs`: a green baseline is required first, every mutant must parse, the text it
   replaces must occur exactly once, and every mutant must turn the selftest red.
 - **Vendored code is proven by provenance, not re-tested.** `vendor/PROVENANCE.json` records each vendored
@@ -268,7 +269,7 @@ avería, registrándola en `~/.claude/fleet-kit/state/`.
 ## 5. Cómo se prueba el kit
 
 Fixtures construidos (repositorios git temporales o texto literal) que recorren cada estado de cada decisión;
-campañas de mutantes con el corredor vendorizado (línea base verde, mutantes que parsean, texto único, y cada
+campañas de mutantes, exigidas a los mecanismos que DECIDEN (las lista `mutation-proof/scope.mjs`), con el corredor vendorizado (línea base verde, mutantes que parsean, texto único, y cada
 mutante debe poner el selftest en rojo); el código vendorizado se prueba por procedencia (sha256 contra la fuente),
 no se bifurca; `selftest-all.mjs` y `mutants-all.mjs` lo corren todo; y la prueba en vivo usa el calificador en
 modo `--plan` (solo lectura) y un payload real por guarda registrada, sin tocar ficheros versionados.
