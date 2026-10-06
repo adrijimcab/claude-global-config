@@ -9,8 +9,10 @@
  * The states the decisions range over: a module that decides by being DISPATCHED (a manifest under
  * `hook-dispatch/`, a manifest elsewhere, an unreadable one, one that lists a missing guard, one that lists
  * a guard outside the repository), by being a HOOK ENTRY that emits a verdict (each word of the verdict
- * vocabulary, a quiet entry, a verdict word in a file that is no hook entry, a sidecar with no file), by its
- * NAME (each segment, the near misses, a test file, a campaign file, a non-JavaScript file), by DECLARATION
+ * vocabulary, a quiet entry, a verdict word in a file that is no hook entry, a sidecar with no file), by being
+ * a HOOK ENTRY that calls a VERDICT HELPER it imports (each declaration kind, an alias, an import over several
+ * lines or after another, a helper never called, a quiet neighbour, a private builder, a bare specifier, a
+ * module the tree lacks), by its NAME (each segment, the near misses, a test file, a campaign file, a non-JavaScript file), by DECLARATION
  * (with and without a reason, naming a file that is gone), or by several of them at once; a deciding module
  * covered by one campaign, by two, by none; a campaign over a module that does not decide; a campaign that
  * cannot be planned. The planner runs the REAL child process over campaign files written here: one that
@@ -22,7 +24,9 @@
  * repositorio mismo lo mide `scope-repository.selftest.mjs`. Estados: un módulo que decide por ser DESPACHADO
  * (manifiesto bajo `hook-dispatch/`, uno de fuera, uno ilegible, uno que lista una guardia ausente o ajena al
  * repo), por ser una ENTRADA DE HOOK que emite veredicto (cada palabra del vocabulario, una entrada callada, una
- * palabra en un fichero que no es hook, un sidecar sin fichero), por su NOMBRE (cada segmento, los casi, un
+ * palabra en un fichero que no es hook, un sidecar sin fichero), por LLAMAR a un HELPER DE VEREDICTO que
+ * importa (cada tipo de declaración, un alias, un import en varias líneas o tras otro, un helper nunca llamado,
+ * un vecino callado, un constructor privado, un especificador desnudo, un módulo ausente), por su NOMBRE (cada segmento, los casi, un
  * test, una campaña, un fichero no JavaScript), por DECLARACIÓN (con y sin motivo, de un fichero que ya no
  * está), o por varias a la vez; cubierto por una campaña, por dos, por ninguna; una campaña sobre un módulo
  * que no decide; una campaña que no se puede planificar. El planificador corre el proceso hijo REAL sobre
@@ -37,7 +41,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { isCampaignFile, planCampaign } from './campaign-plan.mjs';
-import { VERDICT_VOCABULARY, decidingModules } from './deciding-modules.mjs';
+import { VERDICT_VOCABULARY, decidingModules, verdictHelpersOf } from './deciding-modules.mjs';
 import { exitCodeOf, listPopulation, renderScope, scopeOf } from './scope.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -136,6 +140,79 @@ expect('a verdict word in a file that is no hook entry does not make it decide',
 expect('a sidecar whose hook file is not in the tree is ignored here (the registration self-check owns that)', decidingIn({ 'x/hook.mjs.hook-registration.json': '{}' }).modules.size === 0);
 expect('a sidecar with no hook file beside it decides nothing even if every file reads as a verdict', decidingModules({ files: ['x/hook.mjs.hook-registration.json'], readText: () => 'permissionDecision', declared: [] }).modules.size === 0);
 expect('and the reason says the entry emits a verdict', same(reasonsOf(decidingIn({ 'x/hook.mjs': 'permissionDecision', 'x/hook.mjs.hook-registration.json': '{}' }), 'x/hook.mjs'), ['hook entry that emits a verdict']));
+
+// --- deciding by being a HOOK ENTRY that emits its verdict through a HELPER it imports.
+// The shared hook-io shape: one export builds the verdict, its neighbours do not. @es La forma de hook-io compartido.
+const HOOK_IO = `/** A refusal. */
+export const deny = (reason) => ({ hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: reason } });
+
+/** Context, not a refusal; the next export's comment names permissionDecision without building one. */
+export const advise = (context) => ({ hookSpecificOutput: { additionalContext: context } });
+
+export function block(reason) {
+  const output = {
+    decision: 'block',
+    reason
+  };
+
+  return output;
+}
+
+export async function blockLater(reason) {
+  return { decision: "block", reason };
+}
+
+export let exitBlocking = () => {
+  process.exitCode = 2;
+};
+
+export class Refusal {
+  emit() {
+    process.exit(2);
+  }
+}
+
+export function quiet(x) {
+  return x;
+}
+const trailing = 'permissionDecision';
+function deniedButPrivate() {
+  return { permissionDecision: 'deny' };
+}
+`;
+const SIDECAR = '{}';
+const viaHelper = (entrySource, extra = {}) => decidingIn({ 'x/lib/hook-io.mjs': HOOK_IO, 'x/hook.mjs': entrySource, 'x/hook.mjs.hook-registration.json': SIDECAR, ...extra });
+const decidesViaHelper = (entrySource, extra) => viaHelper(entrySource, extra).modules.has('x/hook.mjs');
+
+expect('the verdict helpers of a module are exactly its exports whose OWN declaration holds a verdict word, of every declaration kind', same([...verdictHelpersOf(HOOK_IO)].toSorted(), ['Refusal', 'block', 'blockLater', 'deny', 'exitBlocking']));
+expect('a hook entry that calls a verdict helper it imports decides, and the reason names the helper and its module', same(reasonsOf(viaHelper("import { deny } from './lib/hook-io.mjs';\nexport const evaluate = () => deny('no');"), 'x/hook.mjs'), ['hook entry that emits a verdict through deny() of x/lib/hook-io.mjs']));
+expect('a helper reached by `../` from the entry is found too', decidingIn({ 'lib/hook-io.mjs': HOOK_IO, 'x/hook.mjs': "import { deny } from '../lib/hook-io.mjs';\ndeny('no');", 'x/hook.mjs.hook-registration.json': SIDECAR }).modules.has('x/hook.mjs'));
+expect('a helper-emitting entry a manifest dispatches carries the manifest too', same(reasonsOf(decidingIn({ 'hook-dispatch/m.json': JSON.stringify({ guards: ['../x/hook.mjs'] }), 'x/lib/hook-io.mjs': HOOK_IO, 'x/hook.mjs': "import { deny } from './lib/hook-io.mjs';\ndeny('no');" }), 'x/hook.mjs'), ['hook entry that emits a verdict through deny() of x/lib/hook-io.mjs', 'dispatched by hook-dispatch/m.json']));
+expect('every helper the entry calls is named, in import order', same(reasonsOf(viaHelper("import { advise, deny, block } from './lib/hook-io.mjs';\ndeny('a'); block('b'); advise('c');"), 'x/hook.mjs'), ['hook entry that emits a verdict through deny() of x/lib/hook-io.mjs, block() of x/lib/hook-io.mjs']));
+expect('an import that spans several lines is read', decidesViaHelper("import {\n  advise,\n  deny\n} from './lib/hook-io.mjs';\ndeny('no');"));
+expect('an aliased helper is followed under its local name, and the reason names the exported one', same(reasonsOf(viaHelper("import { deny as refuse } from './lib/hook-io.mjs';\nrefuse('no');"), 'x/hook.mjs'), ['hook entry that emits a verdict through deny() of x/lib/hook-io.mjs']));
+expect('a local name holding `$` is matched literally', decidesViaHelper("import { deny as $deny } from './lib/hook-io.mjs';\n$deny('no');"));
+expect('a space before the call parenthesis is still a call', decidesViaHelper("import { deny } from './lib/hook-io.mjs';\ndeny ('no');"));
+expect('an entry that imports only a helper that emits no verdict does not decide', !decidesViaHelper("import { advise, quiet } from './lib/hook-io.mjs';\nadvise('a'); quiet(1);"));
+expect('an entry that imports a verdict helper but never calls it does not decide', !decidesViaHelper("import { advise, deny } from './lib/hook-io.mjs';\nadvise('a');"));
+expect('a call of another name that ends like the helper, or of a property named like it, is no call of it', !decidesViaHelper("import { deny } from './lib/hook-io.mjs';\nundeny('a'); my$deny('b'); io.deny('c');"));
+expect('an export with no verdict in its own declaration is no helper, whatever follows it at the top level', !decidesViaHelper("import { quiet } from './lib/hook-io.mjs';\nquiet(1);") && !verdictHelpersOf(HOOK_IO).has('quiet'));
+expect('a private function that builds a verdict is no exported helper', !decidesViaHelper("import { deniedButPrivate } from './lib/hook-io.mjs';\ndeniedButPrivate();"));
+expect('a bare specifier is another repository\'s code and is never followed, even when a same-named folder sits beside the entry', !decidesViaHelper("import { deny } from 'lib/hook-io.mjs';\ndeny('no');"));
+expect('a helper module the tree does not hold is never read (the real reader throws on it), and makes no decision and no problem', (() => {
+  const texts = { 'x/hook.mjs': "import { deny } from './gone/hook-io.mjs';\ndeny('no');", 'x/hook.mjs.hook-registration.json': SIDECAR };
+
+  try {
+    const found = decidingModules({ files: Object.keys(texts), readText: (file) => { if (!(file in texts)) throw new Error(`ENOENT ${file}`); return texts[file]; }, declared: [] });
+
+    return found.modules.size === 0 && found.problems.length === 0;
+  } catch {
+    return false;
+  }
+})());
+expect('an entry whose helper import is not its first line is read', decidesViaHelper("import path from 'node:path';\nimport { deny } from './lib/hook-io.mjs';\ndeny(path.sep);"));
+expect('a helper call in a file that is no hook entry does not make it decide', decidingIn({ 'x/lib/hook-io.mjs': HOOK_IO, 'x/lib.mjs': "import { deny } from './lib/hook-io.mjs';\ndeny('no');" }).modules.size === 0);
+expect('an entry that holds a verdict word itself keeps the plain reason, helper or not', same(reasonsOf(viaHelper("import { deny } from './lib/hook-io.mjs';\ndeny('no'); // permissionDecision"), 'x/hook.mjs'), ['hook entry that emits a verdict']));
 
 // --- deciding by NAME.
 for (const name of ['a/decide.mjs', 'a/decision.mjs', 'a/run-verdict.mjs', 'a/tree-verdicts.mjs', 'a/decide-more.mjs', 'a/verdict.cjs', 'a/decide.js', 'a/tree.verdict.mjs']) {

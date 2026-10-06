@@ -10,15 +10,19 @@
  *   1. A HOOK ENTRY THAT EMITS A VERDICT. A hook entry is a guard listed in a dispatcher manifest (a `.json`
  *      under a `hook-dispatch/` folder with a `guards` list: the dispatcher exists to merge verdicts) or a file
  *      with a `<file>.hook-registration.json` beside it (the repositories' own way to say "this is wired as a
- *      hook"). It DECIDES when its source holds a word of the harness's verdict vocabulary. A hook that records
- *      (the task ledger, which says of itself that it never blocks), formats a file or provisions a worktree
- *      carries none and is not demanded a campaign; a guard that blocks a stop and is wired straight in the
- *      settings, not through a manifest, carries one.
+ *      hook"). It DECIDES when its source holds a word of the harness's verdict vocabulary, OR when it CALLS a
+ *      VERDICT HELPER: a function it imports by name, through a relative static import, from a module of the
+ *      repository whose own exported declaration of that name holds a verdict word (`deny()` of a shared
+ *      hook-io module builds the `permissionDecision` the entry never spells). A hook that records (the task
+ *      ledger, which says of itself that it never blocks), formats a file or provisions a worktree carries
+ *      none and is not demanded a campaign; a guard that blocks a stop and is wired straight in the settings,
+ *      not through a manifest, carries one. The helper is followed ONE import deep, and a declaration ends at
+ *      the next statement that starts at column 0, so the rule reads formatted code: a helper re-exported
+ *      through a second module, or written on one minified line with its neighbours, is not seen.
  *   2. NAMED FOR IT. A code file whose name has the segment `decide`, `decision`, `verdict` or `verdicts`
  *      (`decide.mjs`, `tree-verdicts.mjs`, `run-verdict.mjs`).
  *   3. DECLARED, in `declared-deciding.mjs`, with the reason: only for what none of the above can see (a
- *      landing verdict that is neither a hook nor named for it, a hook that emits its verdict through a helper
- *      and so names no verdict word itself).
+ *      landing verdict that is neither a hook nor named for it).
  *
  * A selftest or a campaign never decides, whatever lists it. A deciding module the runner cannot parse (it
  * parses JavaScript only) is reported as OUT OF REACH, since no campaign could ever mutate it.
@@ -31,7 +35,9 @@
  * producto: un veredicto de permitir/denegar/bloquear, de aterrizaje o integración, o de gate. Tres reglas, en
  * orden, ESTRUCTURALES donde el árbol lo dice y DECLARADAS solo donde no: 1. ENTRADA DE HOOK que emite veredicto
  * (listada en un manifiesto de dispatcher o con sidecar `.hook-registration.json`, y una palabra del vocabulario
- * del harness en su fuente: un hook que solo registra, formatea o provisiona no la lleva); 2. NOMBRADO así
+ * del harness en su fuente, o una llamada a un HELPER DE VEREDICTO: una función importada por nombre de un módulo
+ * del repositorio cuya declaración exportada lleva esa palabra, como `deny()` de hook-io; se sigue UN import; un
+ * hook que solo registra, formatea o provisiona no la lleva); 2. NOMBRADO así
  * (segmento `decide`, `decision`, `verdict`, `verdicts`); 3. DECLARADO en `declared-deciding.mjs`, con su
  * motivo. Un selftest o una campaña nunca decide. Un módulo que el corredor no sabe parsear (solo JavaScript)
  * sale como FUERA DE ALCANCE.
@@ -54,6 +60,75 @@ const HOOK_SIDECAR_SUFFIX = '.hook-registration.json';
  * @es Las palabras que lleva la fuente de un hook que emite veredicto: decisión de `PreToolUse`, bloqueo de `Stop`, o la salida que bloquea.
  */
 export const VERDICT_VOCABULARY = Object.freeze(['permissionDecision', "decision: 'block'", 'decision: "block"', 'exitCode = 2', 'process.exit(2)']);
+
+/**
+ * A static import of named bindings from a relative path: `import { a, b as c } from './x.mjs'`, on one line or
+ * several. A bare specifier (`node:fs`, a package) is another repository's code and is never followed.
+ * @es Un import estático de nombres desde una ruta relativa, en una línea o en varias; un especificador desnudo no se sigue.
+ */
+const NAMED_RELATIVE_IMPORT = /^import\s*\{([^}]*)\}\s*from\s*['"](\.{1,2}\/[^'"]+)['"]/gm;
+
+/** The first line of an exported declaration, and the name it declares. @es La primera línea de una declaración exportada y el nombre que declara. */
+const EXPORTED_DECLARATION = /^export\s+(?:async\s+)?(?:function\*?|const|let|class)\s+([A-Za-z_$][\w$]*)/;
+
+/** A line that starts at column 0: the next top-level statement, or the bracket that closes this one. @es Una línea en la columna 0: la siguiente sentencia de primer nivel, o el cierre de esta. */
+const NEXT_STATEMENT = /^\S/;
+
+const holdsVerdict = (text) => VERDICT_VOCABULARY.some((word) => text.includes(word));
+
+/**
+ * The names a module exports whose OWN declaration holds a verdict word: from the `export` line to the line
+ * before the next top-level statement. A verdict word in a neighbouring declaration or in a comment above the
+ * next one does not make every export a helper.
+ * @param {string} source
+ * @returns {Set<string>}
+ * @es Los nombres exportados cuya PROPIA declaración lleva una palabra de veredicto, desde su `export` hasta la
+ * siguiente sentencia de primer nivel.
+ */
+export function verdictHelpersOf(source) {
+  const lines = source.split('\n');
+  const helpers = new Set();
+
+  for (const [at, line] of lines.entries()) {
+    const declared = line.match(EXPORTED_DECLARATION);
+
+    if (declared === null) continue;
+
+    let end = at + 1;
+
+    while (end < lines.length && !NEXT_STATEMENT.test(lines[end])) end += 1;
+
+    if (holdsVerdict(lines.slice(at, end).join('\n'))) helpers.add(declared[1]);
+  }
+
+  return helpers;
+}
+
+/**
+ * The verdict helpers a hook entry CALLS, as `name() of module` reasons: each name it imports from a module of
+ * the repository that exports it as a helper, called under the local name it was bound to.
+ * @es Los helpers de veredicto que una entrada de hook LLAMA: cada nombre importado de un módulo del repositorio
+ * que lo exporta como helper, llamado con el nombre local con el que se ligó.
+ */
+function helperCallsOf(entry, source, present, readText) {
+  const calls = [];
+
+  for (const [, bindings, specifier] of source.matchAll(NAMED_RELATIVE_IMPORT)) {
+    const helperModule = path.posix.normalize(path.posix.join(path.posix.dirname(entry), specifier));
+
+    if (!present.has(helperModule)) continue;
+
+    const helpers = verdictHelpersOf(readText(helperModule) ?? '');
+
+    for (const binding of bindings.split(',')) {
+      const [imported, local = imported] = binding.trim().split(/\s+as\s+/);
+
+      if (helpers.has(imported) && new RegExp(`(?<![\\w$.])${local.replaceAll('$', '\\$')}\\s*\\(`).test(source)) calls.push(`${imported}() of ${helperModule}`);
+    }
+  }
+
+  return calls;
+}
 
 /** The segments of a file name that say it decides. @es Los segmentos del nombre de un fichero que dicen que decide. */
 const DECIDING_SEGMENTS = Object.freeze(['decide', 'decision', 'verdict', 'verdicts']);
@@ -135,9 +210,16 @@ export function decidingModules({ files, readText, declared }) {
   }
 
   for (const [entry, manifests] of entries) {
-    if (!VERDICT_VOCABULARY.some((word) => (readText(entry) ?? '').includes(word))) continue;
+    const source = readText(entry) ?? '';
 
-    add(entry, 'hook entry that emits a verdict');
+    if (holdsVerdict(source)) add(entry, 'hook entry that emits a verdict');
+    else {
+      const calls = helperCallsOf(entry, source, present, readText);
+
+      if (calls.length === 0) continue;
+
+      add(entry, `hook entry that emits a verdict through ${calls.join(', ')}`);
+    }
 
     for (const manifest of manifests) add(entry, `dispatched by ${manifest}`);
   }

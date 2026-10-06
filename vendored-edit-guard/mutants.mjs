@@ -71,7 +71,6 @@ const survivors = runMutants({
     'write-targets',
     'shell-command',
     'cherry-pick-guard',
-    'fleet-kit/vendor',
     'settings.json',
     'hook-caller',
     'hook-dispatch',

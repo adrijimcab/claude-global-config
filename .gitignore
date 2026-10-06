@@ -169,6 +169,9 @@
 !/write-targets/
 !/write-targets/**
 /write-targets/state/
+!/diff-coverage/
+!/diff-coverage/**
+/diff-coverage/state/
 
 !/eval-guard/
 !/eval-guard/*.mjs

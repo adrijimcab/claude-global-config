@@ -17,11 +17,19 @@
  * so moving them would break b100's fleet. Copying is this script's job, never a person's, and the check
  * fails the moment either side moves.
  *
+ * ONE MECHANISM, ONE RECORD. This is the ONLY vendoring of this install: `fleet-kit/` imports the same copies
+ * (`~/.claude/shell-command/…`, `~/.claude/diff-coverage/lib/…`) instead of keeping a second, older set with a
+ * record of its own, so a module can never be pinned at two hashes. The mutation-proof ENGINE (runner,
+ * kill classifier, scope rule, planner, with their selftests and campaigns) is vendored here too: b100 owns
+ * it, every repository runs the same one, and only `mutation-proof/declared-deciding.mjs` stays per repository.
+ *
  * @es Los módulos compartidos que importan las guardias GLOBALES de `~/.claude/`, vendorizados idénticos
  * desde la flota de b100-am-ui, que sigue siendo su dueña porque sus guardias propias también los importan.
  * Cada copia conserva la posición relativa de su fuente, para que los imports relativos resuelvan igual.
  * Copiar es trabajo de este script; la comprobación falla en cuanto cualquiera de los dos lados cambia, o en
- * cuanto un módulo aparece idéntico bajo ambas raíces sin estar declarado aquí (`duplicates.mjs`).
+ * cuanto un módulo aparece idéntico bajo ambas raíces sin estar declarado aquí (`duplicates.mjs`). Es el ÚNICO
+ * vendorizado de la instalación: `fleet-kit/` importa estas mismas copias, y el MOTOR de mutation-proof también
+ * se vendoriza aquí; solo `declared-deciding.mjs` es propio de cada repositorio.
  */
 
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -29,7 +37,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { provenanceFindings, sha256Of } from '../fleet-kit/vendor/provenance.mjs';
+import { provenanceFindings, sha256Of } from './provenance.mjs';
 import { duplicateFinding, RECORD_FILE_NAME, undeclaredDuplicates } from './duplicates.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -53,6 +61,15 @@ export const VENDORED = Object.freeze([
   'toolchain-guard/tree-tenancy.mjs',
   'toolchain-guard/package-manager-mutations.mjs',
   'brief-tenancy/tenancy-declaration.mjs',
+  'diff-coverage/lib/diff-parse.mjs',
+  'diff-coverage/lib/lcov-parse.mjs',
+  'diff-coverage/lib/grade.mjs',
+  'mutation-proof/run-mutants.mjs',
+  'mutation-proof/kill-kind.mjs',
+  'mutation-proof/selftest.mjs',
+  'mutation-proof/mutants.mjs',
+  'mutation-proof/kill-kind.selftest.mjs',
+  'mutation-proof/kill-kind.mutants.mjs',
   'mutation-proof/campaign-plan.mjs',
   'mutation-proof/deciding-modules.mjs',
   'mutation-proof/scope.mjs',

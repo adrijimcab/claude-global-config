@@ -31,7 +31,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { commandWordIndex } from '../fleet-kit/vendor/shell-command/shell-command.mjs';
+import { commandWordIndex } from '../shell-command/shell-command.mjs';
 
 /** The permission tools whose rules govern a shell command. @es Las herramientas cuyas reglas gobiernan un comando de shell. */
 const SHELL_TOOLS = ['Bash', 'PowerShell'];

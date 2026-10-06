@@ -1,160 +1,195 @@
 #!/usr/bin/env node
 /**
- * Selftest of the mutation runner: how it tells a kill by ASSERTION from a kill by CRASH, and what it does
- * with each. Part one drives the classifier with constructed run results; part two runs the real runner
- * over a fleet this file BUILDS (never one read from the repository), so the verdicts cannot drift with
- * the mechanisms the repository holds.
- * @es Selftest del corredor de mutantes: cómo distingue una muerte por ASERCIÓN de una por CRASH y qué hace
- * con cada una. La parte uno alimenta al clasificador con resultados construidos; la parte dos corre el
- * corredor real sobre un fleet que este fichero CONSTRUYE, nunca uno leído del repositorio.
+ * Proves the mutation runner itself DISCRIMINATES. Every fixture is CONSTRUCTED here, in a temporary
+ * directory: a tiny mechanism, a tiny selftest for it, and a campaign that runs the runner sitting NEXT TO
+ * this file — so when `mutants.mjs` mutates a sandbox copy of the runner, this selftest measures that copy.
+ * Nothing is read from a live guard, whose legitimate edits would otherwise redden this proof.
+ *
+ * The state space is the runner's verdicts: KILLED, SURVIVED, BROKEN, REFUSED (absent, ambiguous, no parse
+ * check, outside the copied paths) and NOT MEASURED (red baseline, a sandbox missing a file the selftest
+ * needs, unparseable original, empty campaign). Each is
+ * exercised, and so are the two cases that must NOT be caught by a refusal: a runtime crash is a kill (printed
+ * apart as CRASHED: `kill-kind.selftest.mjs` owns how a crash is told from an assertion), and a replacement
+ * carrying `$&` is written literally. The fixture selftest logs every run it makes, so "refused
+ * before anything runs" and "BROKEN is never run" are counted, not assumed.
+ *
+ * @es Prueba que el runner DISCRIMINA con fixtures CONSTRUIDOS en un directorio temporal; cada veredicto del
+ * runner se ejercita y cada ejecución del selftest del fixture se cuenta.
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { classifyKill } from './kill-kind.mjs';
+import { EXIT_NOT_MEASURED, occurrencesOf } from './run-mutants.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const RUNNER_URL = pathToFileURL(path.join(HERE, 'run-mutants.mjs')).href;
+const RUNNER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'run-mutants.mjs');
 
-let assertions = 0;
-let failures = 0;
-
-function check(ok, label) {
-  assertions += 1;
-  if (ok) return;
-
-  failures += 1;
-  console.error(`FAIL ${label} @es FALLO ${label}`);
+const MECHANISM = `export function isAdult(age) {
+  if (age >= 18) return true;
+  else return false;
 }
 
-const FATAL_TAIL = '\n\nNode.js v22.22.0\n';
-const run = (stdout, stderr, status = 1) => ({ status, signal: null, stdout, stderr });
+export function describe(age) {
+  return age > 99 ? 'old' : 'young';
+}
 
-// --- Part one: the classifier over every state it ranges over.
-// @es Parte uno: el clasificador sobre cada estado de su dominio.
+export function greeting(name) {
+  return 'hello ' + name;
+}
 
-const asserted = classifyKill(run('PASS a\nFAIL b\n1/2 passed\n', ''));
-check(asserted.kind === 'assertion', 'a reported failed check with a clean stderr is an ASSERTION kill');
-
-const reportedOnStderr = classifyKill(run('', 'FAIL b @es FALLO b\n1 passed, 1 failed\n'));
-check(reportedOnStderr.kind === 'assertion', 'a failure reported only on stderr is still an ASSERTION kill');
-
-const thrown = classifyKill(run('PASS a\n', `/x/target.mjs:3\n  return missing.x;\n         ^\n\nReferenceError: missing is not defined\n    at decide (file:///x/target.mjs:3:10)${FATAL_TAIL}`));
-check(thrown.kind === 'crash', 'an uncaught throw is a CRASH kill');
-check(thrown.firstLine === 'ReferenceError: missing is not defined', 'and the crash names the thrown error, not the source excerpt above it');
-check(JSON.stringify(thrown.frames) === JSON.stringify(['decide (file:///x/target.mjs:3:10)']), 'and it carries the frames of its trace, with the first one naming where it threw');
-const longTrace = 'Error: x\n    at one (a.mjs:1:1)\n    at node:internal/modules/run_main:1:1\n    at two (b.mjs:2:2)\n    at three (c.mjs:3:3)\n    at four (d.mjs:4:4)\n';
-check(classifyKill(run('', `${longTrace}${FATAL_TAIL}`)).frames?.join('|') === 'one (a.mjs:1:1)|two (b.mjs:2:2)|three (c.mjs:3:3)', 'at most three frames are kept and the ones that are the runtime internals are skipped');
-
-const nearMiss = classifyKill(run('PASS a\n', `AssertionError [ERR_ASSERTION]: the decision is wrong\n    at file:///x/selftest.mjs:9:1${FATAL_TAIL}`));
-check(nearMiss.kind === 'assertion', 'an uncaught AssertionError is an ASSERTION kill: node:assert IS the check');
-
-const traceOnly = classifyKill(run('PASS a\nFAIL b\n', 'TypeError: handled\n    at somewhere (file:///x/y.mjs:1:1)\n'));
-check(traceOnly.kind === 'assertion', 'a stack trace on stderr WITHOUT the fatal trailer is an ASSERTION kill: the selftest printed it itself, inside a failure report');
-
-const reportWithTrace = classifyKill(run('', 'FAIL no test command: exit 2, got 1: RED [verification-red]\n    at TracingChannel.traceSync (node:diagnostics_channel:328:14)\n'));
-check(reportWithTrace.kind === 'assertion', 'a failed check that embeds the trace of the code it observed (a report quoting a child) is an ASSERTION kill');
-
-const thrownString = classifyKill(run('PASS a\n', `/x/target.mjs:3\nthrow 'boom';\n^\nboom\n(Use node --trace-uncaught to show where the exception was thrown)${FATAL_TAIL}`));
-check(thrownString.kind === 'crash', 'an uncaught throw of a non-Error carries the fatal trailer and no stack frame: still a CRASH');
-check(thrownString.firstLine === '/x/target.mjs:3', 'and with no named error the crash falls back to the first printed line');
-
-const silent = classifyKill(run('', ''));
-check(silent.kind === 'crash' && silent.firstLine.includes('no output'), 'a non-zero exit that printed nothing reported no check: CRASH');
-
-const exitedZero = classifyKill(run('all fine\n', '', 0));
-check(exitedZero.kind === 'none', 'an exit 0 is not a kill at all');
-
-// --- Part two: the real runner over a constructed fleet.
-// @es Parte dos: el corredor real sobre un fleet construido.
-
-const FLEET_SELFTEST = `
-import { decide, tag } from './target.mjs';
-import assert from 'node:assert';
-
-let failed = 0;
-const check = (ok, label) => { if (!ok) { failed += 1; console.log('FAIL ' + label); } };
-
-check(decide(5) === true, 'positive');
-check(decide(0) === false, 'zero is not positive');
-if (process.env.NEVER_SET) assert.strictEqual(tag(), 'x');
-console.log(tag.length + '/' + tag.length + ' ignored');
-process.exit(failed === 0 ? 0 : 1);
+export const motto = 'untested';
+export const first = 'twin';
+export const second = 'twin';
 `;
 
-const FLEET_TARGET = `
-export function decide(x) {
-  return x > 0;
-}
+/** A top-level FILE the fixture selftest imports: `paths` must copy single files, not only directories. */
+const EXPECTED = "export const EXPECTED_GREETING = 'hello x';\n";
 
-export function tag() {
-  return 'unobserved-detail';
-}
+/** A live file beside the fleet's copied paths: no mutant may ever write to it. */
+const OUTSIDE = "export const outside = 'outside';\n";
+
+const GREEN_ASSERTIONS = `[isAdult(18) === true, isAdult(17) === false, describe(5) === 'young', greeting('x') === EXPECTED_GREETING]`;
+const RED_ASSERTIONS = `[isAdult(18) === false]`;
+
+const fixtureSelftest = (assertions) => `import { appendFileSync } from 'node:fs';
+import { describe, greeting, isAdult } from './decide.mjs';
+import { EXPECTED_GREETING } from '../expected.mjs';
+
+appendFileSync(process.env.MUTATION_PROOF_RUN_LOG, 'run\\n');
+
+const results = ${assertions};
+const passed = results.filter(Boolean).length;
+
+console.log(\`\${passed}/\${results.length} passed\`);
+process.exit(passed === results.length ? 0 : 1);
 `;
 
-function buildFleet() {
-  const root = mkdtempSync(path.join(tmpdir(), 'mutation-runner-selftest-'));
+const cases = [];
+const check = (name, holds) => cases.push({ name, holds });
 
-  mkdirSync(path.join(root, 'thing'));
-  writeFileSync(path.join(root, 'thing', 'target.mjs'), FLEET_TARGET);
-  writeFileSync(path.join(root, 'thing', 'selftest.mjs'), FLEET_SELFTEST);
+/** Builds a fixture fleet, runs one campaign over it, and reports what the runner said and did. */
+function campaign({ assertions = GREEN_ASSERTIONS, extraFiles = {}, paths = ['mech', 'expected.mjs'], mutants }) {
+  const fleet = mkdtempSync(path.join(os.tmpdir(), 'mutation-proof-fixture-'));
+  const runLog = path.join(fleet, 'runs.log');
 
-  return root;
-}
+  try {
+    mkdirSync(path.join(fleet, 'mech'));
+    mkdirSync(path.join(fleet, 'other'));
+    writeFileSync(path.join(fleet, 'mech', 'decide.mjs'), MECHANISM);
+    writeFileSync(path.join(fleet, 'mech', 'selftest.mjs'), fixtureSelftest(assertions));
+    writeFileSync(path.join(fleet, 'other', 'outside.mjs'), OUTSIDE);
+    writeFileSync(path.join(fleet, 'expected.mjs'), EXPECTED);
+    writeFileSync(runLog, '');
 
-function campaignOver(root, mutants, extraOptions = '') {
-  const file = path.join(root, 'campaign.mjs');
+    for (const [file, content] of Object.entries(extraFiles)) writeFileSync(path.join(fleet, file), content);
 
-  writeFileSync(
-    file,
-    `import { runMutants } from ${JSON.stringify(RUNNER_URL)};
-const survivors = runMutants({ fleetRoot: ${JSON.stringify(root)}, paths: ['thing'], selftest: 'thing/selftest.mjs', mutants: ${JSON.stringify(mutants)}${extraOptions} });
+    const script = path.join(fleet, 'campaign.mjs');
+
+    writeFileSync(
+      script,
+      `import { runMutants } from ${JSON.stringify(pathToFileURL(RUNNER).href)};
+const survivors = runMutants({ fleetRoot: ${JSON.stringify(fleet)}, paths: ${JSON.stringify(paths)}, selftest: 'mech/selftest.mjs', mutants: ${JSON.stringify(mutants)} });
 process.exit(survivors === 0 ? 0 : 1);
 `
-  );
+    );
 
-  return spawnSync(process.execPath, [file], { encoding: 'utf8', timeout: 120_000 });
+    const run = spawnSync(process.execPath, [script], { encoding: 'utf8', env: { ...process.env, MUTATION_PROOF_RUN_LOG: runLog }, timeout: 120_000 });
+    const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
+
+    return {
+      status: run.status,
+      output,
+      runs: occurrencesOf(readFileSync(runLog, 'utf8'), 'run\n'),
+      outsideAfter: readFileSync(path.join(fleet, 'other', 'outside.mjs'), 'utf8'),
+      verdictOf: (label) => output.split('\n').find((line) => line.includes(label))?.slice(0, 8).trim()
+    };
+  } finally {
+    rmSync(fleet, { recursive: true, force: true });
+  }
 }
 
-const ASSERTION_MUTANT = ['the comparison admits zero', 'thing/target.mjs', 'return x > 0;', 'return x >= 0;'];
-const CRASH_MUTANT = ['the decision reads a name that does not exist', 'thing/target.mjs', 'return x > 0;', 'return missing.value;'];
-const SURVIVOR_MUTANT = ['an unobserved detail changes', 'thing/target.mjs', "'unobserved-detail'", "'other-detail'"];
+// ── the counter every refusal rests on ──────────────────────────────────────────────────────────────
+check('occurrencesOf counts a single occurrence once', occurrencesOf('abc', 'b') === 1);
+check('occurrencesOf counts overlapping starts, so "aa" in "aaa" is ambiguous', occurrencesOf('aaa', 'aa') === 2);
+check('occurrencesOf reports absence as zero', occurrencesOf('abc', 'z') === 0);
 
-const root = buildFleet();
+// ── every per-mutant verdict, in one campaign ───────────────────────────────────────────────────────
+const LABELS = {
+  kill: 'the age threshold is loosened',
+  survivor: 'an untested constant changes',
+  absent: 'a threshold that is not in the file',
+  twice: 'a literal that occurs twice',
+  broken: 'one arm of the if/else is deleted, leaving a dangling else',
+  crash: 'describe reads a name that does not exist',
+  dollar: 'a replacement carrying a dollar pattern',
+  typescript: 'a TypeScript file',
+  outside: 'a path that climbs out of the sandbox onto a live file'
+};
 
-try {
-  const mixed = campaignOver(root, [ASSERTION_MUTANT, CRASH_MUTANT]);
+const mixed = campaign({
+  extraFiles: { 'mech/notes.ts': 'export const note: string = "note";\n' },
+  mutants: [
+    [LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18'],
+    [LABELS.survivor, 'mech/decide.mjs', "'untested'", "'changed'"],
+    [LABELS.absent, 'mech/decide.mjs', 'age >= 99', 'age > 99'],
+    [LABELS.twice, 'mech/decide.mjs', "'twin'", "'triplet'"],
+    [LABELS.broken, 'mech/decide.mjs', 'if (age >= 18) return true;', ''],
+    [LABELS.crash, 'mech/decide.mjs', "return age > 99 ? 'old' : 'young';", 'return notDeclaredAnywhere;'],
+    [LABELS.dollar, 'mech/decide.mjs', "'hello '", "'$&'"],
+    [LABELS.typescript, 'mech/notes.ts', '"note"', '"other"'],
+    // From any sandbox under <fleet>/scratch/mutation-proof/, three levels up is the fleet itself.
+    [LABELS.outside, '../../../other/outside.mjs', "'outside'", "'inside'"]
+  ]
+});
 
-  check(mixed.status === 0, `a campaign whose crash kill is only reported exits 0 by default (exit ${mixed.status})`);
-  check(/^KILLED   the comparison admits zero/m.test(mixed.stdout), 'an assertion kill is printed as KILLED');
-  check(/^CRASHED  the decision reads a name that does not exist .*ReferenceError: missing is not defined/m.test(mixed.stdout), 'a crash kill is printed as CRASHED with the first line of its stderr');
-check(/^CRASHED  .* \[at .*target\.mjs:\d+:\d+/m.test(mixed.stdout), 'and with the frame that threw, so the place to harden is known');
-  check(mixed.stdout.includes('2/2 mutants killed (1 by assertion, 1 by crash)'), 'the tally separates assertion kills from crash kills');
-  check(mixed.stdout.includes('WEAK PROOF'), 'a campaign holding a crash kill says so in its closing lines');
+check('a mutant that breaks the tested decision is KILLED', mixed.verdictOf(LABELS.kill) === 'KILLED');
+check('a mutant the selftest cannot see SURVIVES', mixed.verdictOf(LABELS.survivor) === 'SURVIVED');
+check('an absent target is REFUSED, saying 0 occurrences', mixed.verdictOf(LABELS.absent) === 'REFUSED' && mixed.output.includes('occurs 0 times'));
+check('a target occurring twice is REFUSED, saying 2 occurrences', mixed.verdictOf(LABELS.twice) === 'REFUSED' && mixed.output.includes('occurs 2 times'));
+check('a mutant that no longer parses is BROKEN, not KILLED', mixed.verdictOf(LABELS.broken) === 'BROKEN');
+check('a runtime crash on a path the selftest drives is a kill, printed apart as CRASHED — the mutated code ran', mixed.verdictOf(LABELS.crash) === 'CRASHED');
+check('a replacement carrying $& is written literally, so it is KILLED, not BROKEN', mixed.verdictOf(LABELS.dollar) === 'KILLED');
+check('a file with no parse check is REFUSED', mixed.verdictOf(LABELS.typescript) === 'REFUSED');
+check('a path that climbs out of the sandbox is REFUSED, and the live file it names is untouched', mixed.verdictOf(LABELS.outside) === 'REFUSED' && mixed.outsideAfter === OUTSIDE);
+check('only the baseline and the four runnable mutants ran: refused and BROKEN mutants never run', mixed.runs === 5);
+check('the tally counts refused and BROKEN mutants as survivors', mixed.output.includes('3/9 mutants killed (2 by assertion, 1 by crash)'));
+check('a campaign with survivors exits 1', mixed.status === 1);
 
-  const strict = campaignOver(root, [ASSERTION_MUTANT, CRASH_MUTANT], ", crashKills: 'fail'");
+// ── a clean campaign ────────────────────────────────────────────────────────────────────────────────
+const clean = campaign({ mutants: [[LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18']] });
 
-  check(strict.status === 1, 'with crashKills "fail" a crash kill fails the campaign');
-  check(strict.stdout.includes('2/2 mutants killed (1 by assertion, 1 by crash)'), 'and the tally is the same, so the policy changes the verdict, not the measurement');
+check('a campaign whose every mutant is killed exits 0', clean.status === 0 && clean.output.includes('1/1 mutants killed'));
 
-  const clean = campaignOver(root, [ASSERTION_MUTANT], ", crashKills: 'fail'");
+// ── the preconditions: nothing is measured ─────────────────────────────────────────────────────────
+const redBaseline = campaign({ assertions: RED_ASSERTIONS, mutants: [[LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18']] });
 
-  check(clean.status === 0 && !clean.stdout.includes('WEAK PROOF'), 'a campaign of assertion kills passes even under "fail" and prints no warning');
+check('a red baseline refuses to measure, with its own exit code', redBaseline.status === EXIT_NOT_MEASURED && redBaseline.output.includes('NOT MEASURED'));
+check('a red baseline runs no mutant', redBaseline.runs === 1 && redBaseline.verdictOf(LABELS.kill) === undefined);
 
-  const survived = campaignOver(root, [ASSERTION_MUTANT, SURVIVOR_MUTANT]);
+const unparseable = campaign({
+  extraFiles: { 'mech/unparsed.mjs': 'export const broken = ;\n' },
+  mutants: [['a mutant in a file that never parsed', 'mech/unparsed.mjs', 'broken', 'mended']]
+});
 
-  check(survived.status === 1 && /^SURVIVED an unobserved detail changes/m.test(survived.stdout), 'a survivor still fails the campaign and is printed as SURVIVED');
+check('an UNMUTATED file that does not parse refuses to measure: BROKEN would mean nothing', unparseable.status === EXIT_NOT_MEASURED && unparseable.output.includes('UNMUTATED mech/unparsed.mjs does not parse'));
+check('an unparseable original stops the run before the baseline', unparseable.runs === 0);
 
-  const invalid = campaignOver(root, [ASSERTION_MUTANT], ", crashKills: 'maybe'");
+const incomplete = campaign({ paths: ['mech'], mutants: [[LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18']] });
 
-  check(invalid.status === 2 && invalid.stderr.includes('crashKills'), 'an unknown crashKills value measures nothing (exit 2) instead of picking a policy');
-} finally {
-  rmSync(root, { recursive: true, force: true });
-}
+check('a campaign whose paths omit a file the selftest needs refuses to measure, not "every mutant killed"', incomplete.status === EXIT_NOT_MEASURED && incomplete.verdictOf(LABELS.kill) === undefined);
 
-console.log(`${assertions - failures}/${assertions} assertions passed @es ${assertions - failures}/${assertions} aserciones correctas`);
-process.exit(failures === 0 ? 0 : 1);
+const empty = campaign({ mutants: [] });
+
+check('an empty campaign refuses to measure: 0/0 killed proves nothing', empty.status === EXIT_NOT_MEASURED && empty.runs === 0);
+
+// ── verdict ─────────────────────────────────────────────────────────────────────────────────────────
+const failed = cases.filter(({ holds }) => !holds);
+
+for (const { name, holds } of cases) console.log(`${holds ? 'ok  ' : 'FAIL'} ${name}`);
+
+console.log(`\n${cases.length - failed.length}/${cases.length} passed`);
+
+process.exit(failed.length === 0 ? 0 : 1);

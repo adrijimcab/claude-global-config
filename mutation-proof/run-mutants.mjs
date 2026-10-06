@@ -1,11 +1,12 @@
 /**
- * GLOBAL copy, now DIVERGED from `b100-am-ui/.claude/mutation-proof/run-mutants.mjs` (it gained the
- * assertion/crash classification of `kill-kind.mjs`). The original was project-agnostic and was copied here
- * so the global `~/.claude/` guards need no project checkout; the fix must be ported back there. The copy
- * under `fleet-kit/vendor/` is a separate, hash-pinned vendoring of the ORIGINAL and is untouched.
- * @es Copia GLOBAL, ya DIVERGIDA del original de `b100-am-ui` (ganó la clasificación aserción/crash de
- * `kill-kind.mjs`); el cambio debe portarse allí. La copia de `fleet-kit/vendor/` es otro vendorizado,
- * fijado por hash, del ORIGINAL, y no se toca.
+ * ONE ENGINE, ONE OWNER. This file and `kill-kind.mjs` are owned HERE and vendored byte-identical into
+ * `~/.claude/mutation-proof/` by `~/.claude/vendored/vendored.mjs sync`, pinned by sha256 in its
+ * `PROVENANCE.json`, with the rest of the engine (`scope.mjs`, `deciding-modules.mjs`, `campaign-plan.mjs`)
+ * and their selftests and campaigns. A change is made here and re-synced; an edit to a copy fails the check.
+ * Only `declared-deciding.mjs` stays per repository.
+ * @es UN MOTOR, UN DUEÑO. Este fichero y `kill-kind.mjs` se poseen AQUÍ y se vendorizan idénticos en
+ * `~/.claude/mutation-proof/` con `vendored.mjs sync`, fijados por sha256. Se cambian aquí y se resincronizan;
+ * editar una copia hace fallar la comprobación. Solo `declared-deciding.mjs` es propio de cada repositorio.
  */
 
 /**

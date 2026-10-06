@@ -90,7 +90,7 @@ const PREFLIGHT_MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const paths = ['brief-feasibility', 'brief-provenance', 'hook-payloads', 'fleet-kit/vendor/shell-command', 'hook-dispatch', 'hook-state', 'bilingual-output'];
+const paths = ['brief-feasibility', 'brief-provenance', 'hook-payloads', 'shell-command', 'hook-dispatch', 'hook-state', 'bilingual-output'];
 const survivors =
   runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/selftest.mjs', mutants: MUTANTS, crashKills: 'fail' }) +
   runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/preflight.selftest.mjs', mutants: PREFLIGHT_MUTANTS, crashKills: 'fail' });

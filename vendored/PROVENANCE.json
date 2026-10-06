@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-06T20:28:59.166Z",
+  "syncedAt": "2026-10-06T21:49:07.890Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -31,12 +31,48 @@
       "sha256": "e76e0f8f9d4dcd87c7941580fbe754a764ff0f1cc9d1572a0beb3d536ce6f982"
     },
     {
+      "path": "diff-coverage/lib/diff-parse.mjs",
+      "sha256": "124c7cc376ce8b049ed896af3e0c1012e747f7c5f047b671d0134900d794b7a0"
+    },
+    {
+      "path": "diff-coverage/lib/lcov-parse.mjs",
+      "sha256": "f0c98a60346935e7d2fd43df1249daf22319b19b20292155204927e595bcf365"
+    },
+    {
+      "path": "diff-coverage/lib/grade.mjs",
+      "sha256": "8d0521f551b21f75be2b149f86437f72d808e4b7db50b2f6548b474c809de6c9"
+    },
+    {
+      "path": "mutation-proof/run-mutants.mjs",
+      "sha256": "c69f62b8625df95a6b8164223cb3aace8255a2495540e03bf2753c468c5ed2ad"
+    },
+    {
+      "path": "mutation-proof/kill-kind.mjs",
+      "sha256": "3ae5c6be0ca92f74a12f84f04d72e99abc2aaf71987760876bc97e736dbbe9b5"
+    },
+    {
+      "path": "mutation-proof/selftest.mjs",
+      "sha256": "fef69e87c695b174bed6a5a84b3236797a1b90fce04fad10fb07b8cd09e34b02"
+    },
+    {
+      "path": "mutation-proof/mutants.mjs",
+      "sha256": "7e1f469cc1031f201f2a2eea5a7014feb8f1cadfb41cd39bbfaee6f9fe6b77f7"
+    },
+    {
+      "path": "mutation-proof/kill-kind.selftest.mjs",
+      "sha256": "0b57df698f38b3396b8fd607ee11ca2cda454f07e86d7082ee0872edd1300518"
+    },
+    {
+      "path": "mutation-proof/kill-kind.mutants.mjs",
+      "sha256": "ac2ffb844cbcc622ab3f51ddf9152fdebb0bd7b9dfbadf4a8d0e895772dcb563"
+    },
+    {
       "path": "mutation-proof/campaign-plan.mjs",
-      "sha256": "46883af3f837b5ff53da9296134de15dd3fa7ed0dc19dfcfa68a9542ff5c71dc"
+      "sha256": "ae375b46f509cec9dcf81e984d8cab47fa0597aa9a928693435ee0d2e7e253e2"
     },
     {
       "path": "mutation-proof/deciding-modules.mjs",
-      "sha256": "671d24eac940392f6a17ac1b0d538d32ca4b0d5208b02a2dea584d17789dc968"
+      "sha256": "d61c74ea85f71f562f63ab587d6258526bfaf55c0e136e94adc466cac0ca2355"
     },
     {
       "path": "mutation-proof/scope.mjs",
@@ -44,11 +80,11 @@
     },
     {
       "path": "mutation-proof/scope.selftest.mjs",
-      "sha256": "6a461cbe3cd8be7cee889ff2432969a7e781d9b22a6a487f3efb348d2558b27c"
+      "sha256": "14c4e7485134b51f828b3746be6b26dcd49becc8271ee3f1a9f032e8672c901b"
     },
     {
       "path": "mutation-proof/scope.mutants.mjs",
-      "sha256": "de4d140ecc3d2bb3df70c1f36bb0147051767af91925918b4dcbd83375348fb1"
+      "sha256": "25bbfcfdee1b53ab0dac1e9c726ee3159990274cd5521bea54673945833f5678"
     },
     {
       "path": "mutation-proof/scope-repository.selftest.mjs",

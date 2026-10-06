@@ -24,7 +24,7 @@
  * pilotaje sin movimiento nunca son peticiones.
  */
 
-import { gitInvocations } from '../vendor/shell-command/git-invocations.mjs';
+import { gitInvocations } from '../../shell-command/git-invocations.mjs';
 
 const HEADS = 'refs/heads/';
 
