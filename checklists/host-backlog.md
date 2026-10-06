@@ -19,6 +19,12 @@ que lo cierra. Se cierra cambiando `OPEN` por `CLOSED <fecha> — <evidencia>`.
 
 ## H6 — Real turn-close timings on Windows (B1 target ≤ 300 ms) — OPEN
 
-## H7 — Bash/gate output compression (rtk or an alternative) — PENDING VERDICT
+## H7 — rtk (Bash output compressor) — DROP
 
-Being researched in this session; the verdict and its implementation replace this entry.
+Verdict 2026-10-06, from rtk's source (v0.49.0, commit eb225a1) and code.claude.com/docs/en/costs and
+tools-reference: rtk rewrites whole command chains but keeps redirects, so `cmd > out.txt 2>&1` logs the
+FILTERED output and grepping the log for errors stops proving anything; its vitest filter drops
+file-level import/collection errors and stderr; it covers Bash only (not PowerShell); parallel guards
+judge the original command, not the rewritten one; it bypasses permission prompts by design; its
+changelog carries a long run of swallowed-failure fixes. Adopted instead: the project-owned summarising
+gate runner (full log with `EXIT=` inside, verdict line, capped failure excerpt, log path).
