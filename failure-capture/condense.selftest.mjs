@@ -205,7 +205,15 @@ for (const [name, content] of [['a keys file that does not exist', undefined], [
 /** Condenses one keyed line in a fresh ledger with `deps` replacing the real archive and write. @es Condensa una línea con `deps` en lugar del archivo y la escritura reales. */
 function withDeps(name, deps) {
   const target = world(name, [KEYED]);
-  const outcome = runCondense({ load: () => [{ scope: 'global', file: target.ledger, lines: readFileSync(target.ledger, 'utf8').split('\n') }], keyMap: [], write: true, date: '2026-09-30', runId: 'run-1', lockFile: target.lock, preImageRoot: target.runs, deps });
+  const run = () => runCondense({ load: () => [{ scope: 'global', file: target.ledger, lines: readFileSync(target.ledger, 'utf8').split('\n') }], keyMap: [], write: true, date: '2026-09-30', runId: 'run-1', lockFile: target.lock, preImageRoot: target.runs, deps });
+  // A run that throws is a failed check, never a crash of this proof. @es Una ejecución que lanza es un check fallido, nunca un crash de esta prueba.
+  const outcome = (() => {
+    try {
+      return run();
+    } catch (error) {
+      return { status: 'threw', problems: [String(error)], ledgers: [{ restored: false }] };
+    }
+  })();
 
   return { target, outcome, after: readOr(target.ledger) };
 }
