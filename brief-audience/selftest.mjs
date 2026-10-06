@@ -21,7 +21,7 @@
  * halló el censo. Payloads con forma del harness y cableado como parte de la prueba.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -110,11 +110,24 @@ const cases = [
   ['allow', 'NOT JSON AT ALL', 'garbage payload'],
   ['allow', '', 'empty payload'],
   ['allow', '{"tool_name":', 'truncated json'],
-  ['allow', '﻿NOT JSON', 'BOM + garbage']
+  ['allow', '﻿NOT JSON', 'BOM + garbage'],
+  ['allow', 'null', 'a payload that parses but is not an object: the decision cannot read it, and fails open'],
+  ['deny', `\ufeff${agent(`${BODY}\n\n${CLOSE}\n\n${REAL_LEAK}`)}`, 'a BOM-prefixed payload (PowerShell writes one) is still decided, not read as garbage', 'addressing someone who is not']
 ];
 
 let failures = 0;
 let total = 0;
+
+/** True when `output` is exactly the envelope the harness reads for a refused PreToolUse call. @es Verdadero si `output` es el sobre exacto que lee el harness. */
+function isHookRefusal(output) {
+  try {
+    const { hookSpecificOutput } = JSON.parse(output);
+
+    return hookSpecificOutput.hookEventName === 'PreToolUse' && hookSpecificOutput.permissionDecision === 'deny' && hookSpecificOutput.permissionDecisionReason.startsWith('BRIEF-AUDIENCE REFUSED');
+  } catch {
+    return false;
+  }
+}
 
 /** Records one outcome and prints it. @es Registra un resultado y lo imprime. */
 function report(ok, line) {
@@ -138,8 +151,33 @@ for (const [expected, input, label, expectedText] of cases) {
 
   const actual = output.includes('"deny"') ? 'deny' : 'allow';
   const textOk = expectedText === undefined || output.includes(expectedText);
+  const shapeOk = expected === 'allow' ? output === '' : isHookRefusal(output);
 
-  report(actual === expected && code === 0 && textOk, `expected=${expected} actual=${actual} exit=${code}  ${label}${textOk ? '' : `  [the refusal never named: ${expectedText}]`}`);
+  report(actual === expected && code === 0 && textOk && shapeOk, `expected=${expected} actual=${actual} exit=${code}  ${label}${textOk ? '' : `  [the refusal never named: ${expectedText}]`}`);
+}
+
+// --- THE MODULE IS A LIBRARY FIRST: the dispatcher imports `evaluate` and runs it in its own process, so
+//     importing the guard must run nothing (it would read the importer's stdin and cut it off), and
+//     `evaluate` must hand back the same envelope the process prints.
+// @es El módulo es primero una biblioteca: importarlo no corre nada y `evaluate` devuelve el mismo sobre.
+{
+  // The guard is imported in a CHILD process: were its entry check wrong, the import itself would read this
+  // selftest's stdin and end the process with exit 0, taking the verdict with it.
+  // @es El guard se importa en un proceso HIJO: si su comprobación de entrada fallara, el import leería el stdin de este selftest y lo terminaría con 0.
+  const PROBE = `const { evaluate } = await import(process.argv[1]);
+console.log(JSON.stringify({ type: typeof evaluate, refused: evaluate(process.argv[2]) ?? null, allowed: evaluate(process.argv[3]) ?? null, nonBrief: evaluate(process.argv[4]) ?? null, garbage: evaluate('NOT JSON') ?? null }));`;
+  const probe = spawnSync('node', ['--input-type=module', '-e', PROBE, pathToFileURL(GUARD).href, agent(`${BODY}\n\n${CLOSE}\n\n${REAL_LEAK}`), agent(`${BODY}\n\n${CLOSE}`), JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } })], { input: agent(`${BODY}\n\n${CLOSE}\n\n${REAL_LEAK}`), encoding: 'utf8' });
+  const lines = probe.stdout.split('\n').filter((line) => line.length > 0);
+
+  report(probe.status === 0 && lines.length === 1, 'importing the guard from another module runs nothing: it neither reads stdin nor prints a verdict of its own');
+
+  try {
+    const answer = JSON.parse(lines.at(-1));
+
+    report(answer.type === 'function' && isHookRefusal(JSON.stringify(answer.refused)) && answer.allowed === null && answer.nonBrief === null && answer.garbage === null, 'the exported evaluate refuses with the envelope the process prints, and returns undefined for an allowed, a non-brief or an unreadable payload');
+  } catch {
+    report(false, 'the guard could not be imported as a library');
+  }
 }
 
 // --- THE WIRING: the tools the decision reads are exactly the tools the declaration registers.

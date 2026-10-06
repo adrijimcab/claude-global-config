@@ -25,11 +25,11 @@
  * lista deny leída del fichero real, metas y briefs copiados del transcript, e incidentes REPRODUCIDOS.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { payloadFor, recordedPayload } from '../hook-payloads/payloads.mjs';
 
@@ -151,7 +151,8 @@ const cases = [
   ['allow', 'NOT JSON AT ALL', 'garbage payload'],
   ['allow', '', 'empty payload'],
   ['allow', '{"tool_name":', 'truncated json'],
-  ['allow', '\uFEFFNOT JSON', 'BOM + garbage']
+  ['allow', '\uFEFFNOT JSON', 'BOM + garbage'],
+  ['deny', `\uFEFF${agent('Rebase your branch: `git rebase develop`.')}`, 'a BOM-prefixed payload (PowerShell writes one) is still decided, not read as garbage', 'DENIED COMMAND']
 ];
 
 let failures = 0;
@@ -164,6 +165,17 @@ function report(ok, line) {
   if (!ok) failures += 1;
 
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${line}`);
+}
+
+/** True when `output` is exactly the envelope the harness reads for a refused PreToolUse call. @es Verdadero si `output` es el sobre exacto que lee el harness. */
+function isHookRefusal(output) {
+  try {
+    const { hookSpecificOutput } = JSON.parse(output);
+
+    return hookSpecificOutput.hookEventName === 'PreToolUse' && hookSpecificOutput.permissionDecision === 'deny' && hookSpecificOutput.permissionDecisionReason.startsWith('BRIEF-FEASIBILITY REFUSED');
+  } catch {
+    return false;
+  }
 }
 
 /** Runs the guard as the harness does, returning `{ verdict, output, code }`. @es Corre el guard como el harness. */
@@ -185,8 +197,32 @@ try {
   for (const [expected, input, label, expectedText] of cases) {
     const { verdict, output, code } = run(input);
     const textOk = expectedText === undefined || output.includes(expectedText);
+    const shapeOk = expected === 'allow' ? output === '' : isHookRefusal(output);
 
-    report(verdict === expected && code === 0 && textOk, `expected=${expected} actual=${verdict} exit=${code}  ${label}${textOk ? '' : `  [the refusal never named: ${expectedText}]`}`);
+    report(verdict === expected && code === 0 && textOk && shapeOk, `expected=${expected} actual=${verdict} exit=${code}  ${label}${textOk ? '' : `  [the refusal never named: ${expectedText}]`}`);
+  }
+
+  // The module is a library first: the dispatcher imports `evaluate` and runs it in its own process, so
+  // importing the guard must run nothing (it would read the importer's stdin and cut it off), and
+  // `evaluate` must hand back the envelope the process prints. The guard is imported in a CHILD process: were
+  // its entry check wrong, the import itself would read this selftest's stdin and end the process with exit 0,
+  // taking the verdict with it.
+  // @es El módulo es primero una biblioteca: importarlo no corre nada y `evaluate` devuelve el sobre del
+  // proceso. Se importa en un proceso HIJO: si su comprobación de entrada fallara, el import terminaría este selftest con 0.
+  const PROBE = `const { evaluate } = await import(process.argv[1]);
+console.log(JSON.stringify({ type: typeof evaluate, refused: evaluate(process.argv[2]) ?? null, allowed: evaluate(process.argv[3]) ?? null, nonBrief: evaluate(process.argv[4]) ?? null, garbage: evaluate('NOT JSON') ?? null }));`;
+  const refusedBrief = agent('Rebase your branch: `git rebase develop`.');
+  const probe = spawnSync('node', ['--input-type=module', '-e', PROBE, pathToFileURL(GUARD).href, refusedBrief, agent('Run `git status`.'), JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git rebase develop' } })], { input: refusedBrief, encoding: 'utf8', cwd: world });
+  const lines = probe.stdout.split('\n').filter((line) => line.length > 0);
+
+  report(probe.status === 0 && lines.length === 1, 'importing the guard from another module runs nothing: it neither reads stdin nor prints a verdict of its own');
+
+  try {
+    const answer = JSON.parse(lines.at(-1));
+
+    report(answer.type === 'function' && isHookRefusal(JSON.stringify(answer.refused)) && answer.allowed === null && answer.nonBrief === null && answer.garbage === null, 'the exported evaluate refuses with the envelope the process prints, and returns undefined for an allowed, a non-brief or an unreadable payload');
+  } catch {
+    report(false, 'the guard could not be imported as a library');
   }
 
   // A delegation payload without `cwd` falls back to the process directory, which the harness sets to
