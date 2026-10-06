@@ -3,6 +3,9 @@
 Copy to the repository as `.claude/AGENT-CONTRACT.md`. Replace the full-chain command with the repository's own script and keep exactly one such line.
 @es Copiar al repositorio como `.claude/AGENT-CONTRACT.md`. Reemplazar el comando de cadena completa por el script propio del repositorio y conservar exactamente una línea así.
 
+Findings register: `.claude/FINDINGS.jsonl`
+@es Registro de hallazgos: `.claude/FINDINGS.jsonl`
+
 ## G1 Zero suppression
 
 No agent adds or creates an exclusion, allowlist, ignore entry, baseline, coverage exclusion, skipped or `.only` test, `eslint-disable`, `@ts-ignore`, a rule set to off, or a threshold below the measured value. A failing gate is fixed in the code; only when a rule is genuinely wrong for the domain is the rule changed, with a written justification. A public API change is made on purpose and recorded, never hidden by loosening the API check.
@@ -26,8 +29,8 @@ A worker runs only the gates that read what it touched; the full chain runs once
 
 ## G4 Out-of-scope repositories untouched
 
-An agent edits only the repository and the paths its brief names. Consumer applications and other repositories the owner placed out of scope are read-only: a gap found there becomes a finding with its evidence, never an edit.
-@es Un agente edita solo el repositorio y las rutas que su brief nombra. Las aplicaciones consumidoras y los demás repositorios que el dueño dejó fuera de alcance son de solo lectura: una carencia encontrada allí se convierte en un hallazgo con su evidencia, nunca en una edición.
+An agent edits only the repository and the paths its brief names. Consumer applications and other repositories the owner placed out of scope are read-only: a gap found there becomes a finding with its evidence in the findings register (`node ~/.claude/gates-kit/findings-register.mjs add`), never an edit.
+@es Un agente edita solo el repositorio y las rutas que su brief nombra. Las aplicaciones consumidoras y los demás repositorios que el dueño dejó fuera de alcance son de solo lectura: una carencia encontrada allí se convierte en un hallazgo con su evidencia en el registro de hallazgos (`node ~/.claude/gates-kit/findings-register.mjs add`), nunca en una edición.
 
 ## G5 Unit size and writers
 
@@ -36,5 +39,5 @@ A unit is at most about 130 product lines and a commit is at most 400 changed li
 
 ## G6 Closed items need evidence
 
-A backlog item, an open point or a "closed by mechanism" claim is closed only with evidence: the command, its real exit code, the path or the measurement. A claim without a receipt is a hypothesis and is marked as one.
-@es Un ítem del backlog, un punto abierto o una afirmación de "cerrado por mecanismo" se cierra solo con evidencia: el comando, su código de salida real, la ruta o la medición. Una afirmación sin recibo es una hipótesis y se marca como tal.
+A backlog item, an open point or a "closed by mechanism" claim is closed only with evidence: the command, its real exit code, the path or the measurement. A claim without a receipt is a hypothesis and is marked as one. A finding is closed only by a `close` entry in the register that carries its own receipt; an open finding never exempts a gate.
+@es Un ítem del backlog, un punto abierto o una afirmación de "cerrado por mecanismo" se cierra solo con evidencia: el comando, su código de salida real, la ruta o la medición. Una afirmación sin recibo es una hipótesis y se marca como tal. Un hallazgo se cierra solo con una entrada `close` en el registro que lleve su propio recibo; un hallazgo abierto nunca exime a un gate.

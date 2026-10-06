@@ -50,9 +50,9 @@ const MUTANTS = [
   ['a missing chain line is not reported', R, 'if (chain.length === 0) return', 'if (false) return'],
   ['two chain lines are accepted', R, 'if (chain.length > 1) return', 'if (chain.length > 2) return'],
   ['one chain line counts as many', R, 'if (chain.length > 1) return', 'if (chain.length >= 1) return'],
-  ['a placeholder command is accepted', R, '`([^`<>]*)`', '`([^`]*)`'],
-  ['text after the command is accepted', R, '`([^`<>]*)`$/', '`([^`<>]*)`/'],
-  ['a command without backticks is accepted', R, '`([^`<>]*)`$/', '`?([^`<>]*)`?$/'],
+  ['a placeholder command is accepted', R, 'command: `([^`<>]*)`$/', 'command: `([^`]*)`$/'],
+  ['text after the command is accepted', R, 'command: `([^`<>]*)`$/', 'command: `([^`<>]*)`/'],
+  ['a command without backticks is accepted', R, 'command: `([^`<>]*)`$/', 'command: `?([^`<>]*)`?$/'],
   ['trailing spaces after the command break the line', R, 'CHAIN_LINE.exec(chain[0].trimEnd())', 'CHAIN_LINE.exec(chain[0])'],
   ['a blank command is accepted', R, "match === null || match[1].trim() === ''", 'match === null'],
   ['a non-matching line is accepted as a command', R, "match === null || match[1].trim() === ''", "match !== null && match[1].trim() === ''"],
@@ -63,6 +63,31 @@ const MUTANTS = [
   ['the Spanish sentence loses its accent', R, 'lo que tocó;', 'lo que toco;'],
   ['the Spanish sentence needs no marker', R, 'line.startsWith(MIRROR_MARKER) && line.includes(SCOPED_SENTENCE_ES)', 'line.includes(SCOPED_SENTENCE_ES)'],
   ['the sentence problem is reported under the Spanish id', R, "{ id: 'missing-sentence' }", "{ id: 'missing-sentence-es' }"],
+  ['the register check is skipped', R, 'problems.push(...registerProblems(lines));', ''],
+  ['the register prefix is reworded', R, "const REGISTER_PREFIX = 'Findings register:';", "const REGISTER_PREFIX = 'Findings Register:';"],
+  ['a register line is found anywhere in a line', R, 'lines.filter((line) => line.startsWith(REGISTER_PREFIX))', 'lines.filter((line) => line.includes(REGISTER_PREFIX))'],
+  ['a missing register line is not reported', R, 'if (written.length === 0) return', 'if (false) return'],
+  ['two register lines are accepted', R, 'if (written.length > 1) return', 'if (written.length > 2) return'],
+  ['one register line counts as many', R, 'if (written.length > 1) return', 'if (written.length >= 1) return'],
+  ['trailing spaces after the register path break the line', R, 'REGISTER_LINE.exec(written[0].trimEnd())', 'REGISTER_LINE.exec(written[0])'],
+  ['text after the register path is accepted', R, '/^Findings register: `([^`]*)`$/', '/^Findings register: `([^`<>]*)`/'],
+  ['a register path without backticks is accepted', R, '/^Findings register: `([^`]*)`$/', '/^Findings register: `?([^`<>]*)`?$/'],
+  ['a malformed register path is accepted', R, 'if (match === null || !isRegisterPath(match[1])) return', 'if (match === null) return'],
+  ['the register path is not read as a path', R, 'REGISTER_PATH.test(written) && ', ''],
+  ['the register path segments are not checked', R, " && written.split('/').every((segment) => segment !== '.' && segment !== '..')", ''],
+  ['a climbing register path is accepted', R, "segment !== '.' && segment !== '..'", "segment !== '.'"],
+  ['a current-folder register path is accepted', R, "segment !== '.' && segment !== '..'", "segment !== '..'"],
+  ['another extension is accepted', R, '*\\.jsonl$/;', '*\\.json[l]?$/;'],
+  ['an absolute register path is accepted', R, '/^[\\w.-]+(?:', '/^\\/?[\\w.-]+(?:'],
+  ['a colon is allowed in a register path', R, '/^[\\w.-]+(?:\\/[\\w.-]+)*\\.jsonl$/', '/^[\\w.:-]+(?:\\/[\\w.:-]+)*\\.jsonl$/'],
+  ['a space is allowed in a register path', R, '/^[\\w.-]+(?:\\/[\\w.-]+)*\\.jsonl$/', '/^[\\w. -]+(?:\\/[\\w. -]+)*\\.jsonl$/'],
+  ['a backslash is allowed in a register path', R, '/^[\\w.-]+(?:\\/[\\w.-]+)*\\.jsonl$/', '/^[\\w.\\\\-]+(?:\\/[\\w.\\\\-]+)*\\.jsonl$/'],
+  ['the Spanish register line is not required', R, "? [] : [{ id: 'missing-register-es' }]", '? [] : []'],
+  ['the Spanish register line may name another path', R, 'line.trimEnd() === `${MIRROR_MARKER}Registro de hallazgos: \\`${match[1]}\\``', "line.startsWith(`${MIRROR_MARKER}Registro de hallazgos:`)"],
+  ['the Spanish register line needs no marker', R, '`${MIRROR_MARKER}Registro de hallazgos:', '`Registro de hallazgos:'],
+  ['trailing spaces break the Spanish register line', R, 'line.trimEnd() === `${MIRROR_MARKER}Registro', 'line === `${MIRROR_MARKER}Registro'],
+  ['the Spanish register line is worded loosely', R, '`${MIRROR_MARKER}Registro de hallazgos: ', '`${MIRROR_MARKER}Registro: '],
+  ['the register problem is reported under the Spanish id', R, "{ id: 'missing-register' }", "{ id: 'missing-register-es' }"],
   ['a plain file counts as a template', R, 'filter((entry) => entry.isDirectory())', 'filter(() => true)'],
   ['a folder is read by another file name', R, "const CONTRACT_FILE = 'AGENT-CONTRACT.md';", "const CONTRACT_FILE = 'AGENT-CONTRACT';"],
   ['a folder without its file is read as correct', R, 'existsSync(file) ? inspectTemplate(readFileSync(file, \'utf8\')) : [{ id: \'missing-file\' }]', 'existsSync(file) ? inspectTemplate(readFileSync(file, \'utf8\')) : []'],
@@ -70,6 +95,6 @@ const MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const survivors = runMutants({ fleetRoot, paths: ['gates-kit', 'mutation-proof'], selftest: 'gates-kit/templates/templates.selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
+const survivors = runMutants({ fleetRoot, paths: ['gates-kit', 'mutation-proof', 'bilingual-output'], selftest: 'gates-kit/templates/templates.selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
 
 process.exit(survivors === 0 ? 0 : 1);

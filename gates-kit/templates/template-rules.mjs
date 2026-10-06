@@ -3,8 +3,11 @@
  * `gates-kit/templates/<stack>/AGENT-CONTRACT.md` is complete when it carries (1) the six stance anchors
  * G1 to G6 as second-level headings with the wording of the hardened-dev-environment spec, each section
  * holding an `@es` Spanish mirror line; (2) exactly one full-chain command line, `Full-chain command:`
- * followed by one backticked command with no placeholder; (3) the scoped-versus-full sentence with its
- * exact Spanish mirror. A template is a document: nothing here reads a project, it only reads text.
+ * followed by one backticked command with no placeholder; (3) exactly one findings-register line,
+ * `Findings register:` followed by one backticked relative path to a `.jsonl` file (where the repository
+ * keeps `findings-register.mjs`'s record), with its Spanish mirror line naming the same path; (4) the
+ * scoped-versus-full sentence with its exact Spanish mirror. A template is a document: nothing here reads a
+ * project, it only reads text.
  *
  * Decisions: G4 is anchored on its stack-neutral title (the b100 parity-twin clause belongs to that
  * repository, not to a template); a template is found by walking the folder, never from a list, so a stack
@@ -14,7 +17,10 @@
  * @es Responde a "¿está completa esta plantilla de contrato de agente?". Está completa cuando lleva (1) las
  * seis anclas G1 a G6 como títulos de segundo nivel con la redacción de la spec, y en cada sección una línea
  * espejo `@es`; (2) exactamente una línea de comando de cadena completa (`Full-chain command:` y un comando
- * entre acentos graves, sin relleno); (3) la frase acotado-contra-completo con su espejo español exacto. Las
+ * entre acentos graves, sin relleno); (3) exactamente una línea del registro de hallazgos (`Findings
+ * register:` y una ruta relativa a un fichero `.jsonl` entre acentos graves, donde el repositorio guarda el
+ * registro de `findings-register.mjs`), con su línea espejo en español con la misma ruta; (4) la frase
+ * acotado-contra-completo con su espejo español exacto. Las
  * plantillas se descubren recorriendo la carpeta, nunca desde una lista: una carpeta sin su fichero es un
  * problema. Cada defecto se informa solo, para que ninguno se esconda tras otro.
  */
@@ -40,6 +46,9 @@ const SCOPED_SENTENCE_ES = 'Un worker corre solo los gates que leen lo que tocó
 
 const CHAIN_PREFIX = 'Full-chain command:';
 const CHAIN_LINE = /^Full-chain command: `([^`<>]*)`$/;
+const REGISTER_PREFIX = 'Findings register:';
+const REGISTER_LINE = /^Findings register: `([^`]*)`$/;
+const REGISTER_PATH = /^[\w.-]+(?:\/[\w.-]+)*\.jsonl$/;
 const MIRROR_MARKER = '@es ';
 const CONTRACT_FILE = 'AGENT-CONTRACT.md';
 
@@ -63,6 +72,25 @@ function chainProblems(lines) {
   return match === null || match[1].trim() === '' ? [{ id: 'malformed-chain' }] : [];
 }
 
+/** Whether `written` is a relative path of forward-slash segments to a `.jsonl` file, none of them `.` or `..`. @es Si `written` es una ruta relativa a un `.jsonl`, sin segmentos `.` ni `..`. */
+function isRegisterPath(written) {
+  return REGISTER_PATH.test(written) && written.split('/').every((segment) => segment !== '.' && segment !== '..');
+}
+
+/** Problems of the findings-register line and of its Spanish mirror. @es Problemas de la línea del registro de hallazgos y de su espejo. */
+function registerProblems(lines) {
+  const written = lines.filter((line) => line.startsWith(REGISTER_PREFIX));
+
+  if (written.length === 0) return [{ id: 'missing-register' }];
+  if (written.length > 1) return [{ id: 'multiple-register' }];
+
+  const match = REGISTER_LINE.exec(written[0].trimEnd());
+
+  if (match === null || !isRegisterPath(match[1])) return [{ id: 'malformed-register' }];
+
+  return lines.some((line) => line.trimEnd() === `${MIRROR_MARKER}Registro de hallazgos: \`${match[1]}\``) ? [] : [{ id: 'missing-register-es' }];
+}
+
 /**
  * Inspects one template text and returns `[{ id, detail? }]`; empty when the template is complete.
  * @es Inspecciona el texto de una plantilla; vacío cuando está completa.
@@ -79,6 +107,7 @@ export function inspectTemplate(text) {
   }
 
   problems.push(...chainProblems(lines));
+  problems.push(...registerProblems(lines));
 
   if (!lines.some((line) => line.includes(SCOPED_SENTENCE))) problems.push({ id: 'missing-sentence' });
   if (!lines.some((line) => line.startsWith(MIRROR_MARKER) && line.includes(SCOPED_SENTENCE_ES))) problems.push({ id: 'missing-sentence-es' });

@@ -4,7 +4,9 @@
  * Fixtures are built here from literal text (never from the checker's own constants), so a mutated constant
  * cannot move the fixture with it. State space: a correct template; each of the six G anchors missing, at the
  * wrong heading level, or worded differently; the full-chain line absent, duplicated, empty, a placeholder,
- * or mirrored by an `@es` line (which is not a second command); the scoped-versus-full sentence absent,
+ * or mirrored by an `@es` line (which is not a second command); the findings-register line absent,
+ * duplicated, empty, a placeholder, an absolute or climbing path, not a `.jsonl` file, or without its Spanish
+ * mirror naming the same path; the scoped-versus-full sentence absent,
  * altered, or without its Spanish mirror; a G section without its `@es` line; discovery (a folder without its
  * contract file, a plain file that is not a template, an empty root); and the live `templates/` folder.
  * Every defect is reported ALONE, so a message cannot hide behind another one.
@@ -13,15 +15,18 @@
  * pasa. Los fixtures se construyen aquí con texto literal (nunca con las constantes del verificador).
  * Espacio de estados: plantilla correcta; cada ancla G ausente, con otro nivel de título o con otro texto;
  * la línea de cadena completa ausente, duplicada, vacía, de relleno o espejada por una línea `@es` (que no
- * es un segundo comando); la frase acotado-contra-completo ausente, alterada o sin espejo; una sección G sin
+ * es un segundo comando); la línea del registro de hallazgos ausente, duplicada, vacía, de relleno, con ruta
+ * absoluta o que sube de carpeta, que no sea un fichero `.jsonl` o sin su espejo español con la misma ruta;
+ * la frase acotado-contra-completo ausente, alterada o sin espejo; una sección G sin
  * su línea `@es`; el descubrimiento (carpeta sin su fichero, fichero suelto, raíz vacía) y la carpeta real.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { DEFAULT_REGISTER_PATH } from '../findings-register.mjs';
 import { inspectDirectory, inspectTemplate } from './template-rules.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -36,6 +41,8 @@ const HEADINGS = [
   ['G6', '## G6 Closed items need evidence'],
 ];
 const CHAIN = 'Full-chain command: `npm run build:ci-pr`';
+const REGISTER = 'Findings register: `.claude/FINDINGS.jsonl`';
+const REGISTER_ES = '@es Registro de hallazgos: `.claude/FINDINGS.jsonl`';
 
 let passed = 0;
 const failures = [];
@@ -66,7 +73,7 @@ function inspectSafely(root) {
 
 /** Builds a correct template; `edit` receives the line list and may change it. @es Construye una plantilla correcta. */
 function template(edit = (lines) => lines) {
-  const lines = ['# Agent Contract template', ''];
+  const lines = ['# Agent Contract template', '', REGISTER, REGISTER_ES, ''];
 
   for (const [id, heading] of HEADINGS) {
     lines.push(heading, `English text of ${id}.`, `@es Texto en español de ${id}.`, '');
@@ -122,7 +129,38 @@ check('the Spanish sentence missing is the only problem', problemsOf(template(wi
 check('the Spanish sentence without its accents is refused', problemsOf(template(replace(`@es ${SENTENCE_ES}`, `@es ${SENTENCE_ES.replace('tocó', 'toco')}`))).join() === 'missing-sentence-es');
 check('the Spanish sentence without the @es marker is refused', problemsOf(template(replace(`@es ${SENTENCE_ES}`, SENTENCE_ES))).join() === 'missing-sentence-es');
 
-check('an empty text reports every part', problemsOf('').length === 6 + 3 && problemsOf('')[0] === 'missing-anchor:G1');
+check('the register line missing is the only problem', problemsOf(template(without(REGISTER))).join() === 'missing-register');
+check('the Spanish register line missing is the only problem', problemsOf(template(without(REGISTER_ES))).join() === 'missing-register-es');
+check('a Spanish register line naming another path is refused', problemsOf(template(replace(REGISTER_ES, '@es Registro de hallazgos: `.claude/OTHER.jsonl`'))).join() === 'missing-register-es');
+check('a Spanish register line without the marker is refused', problemsOf(template(replace(REGISTER_ES, 'Registro de hallazgos: `.claude/FINDINGS.jsonl`'))).join() === 'missing-register-es');
+check('a Spanish register line worded differently is refused', problemsOf(template(replace(REGISTER_ES, '@es Registro de los hallazgos: `.claude/FINDINGS.jsonl`'))).join() === 'missing-register-es');
+check('two register lines are refused', problemsOf(template(replace(REGISTER, `${REGISTER}\nFindings register: \`.claude/OTHER.jsonl\``))).join() === 'multiple-register');
+check('a register line that is not at column zero is no register line', problemsOf(template(replace(REGISTER, ` ${REGISTER}`))).join() === 'missing-register');
+check('trailing spaces after the register path are tolerated', problemsOf(template(replace(REGISTER, `${REGISTER}   `))).length === 0);
+check('another repository path is accepted', problemsOf(template((lines) => replace(REGISTER, 'Findings register: `docs/team.findings.jsonl`')(replace(REGISTER_ES, '@es Registro de hallazgos: `docs/team.findings.jsonl`')(lines)))).length === 0);
+
+for (const [label, written] of [
+  ['an empty path', ''],
+  ['a blank path', ' '],
+  ['no backticks', '.claude/FINDINGS.jsonl'],
+  ['a placeholder', '<where the register lives>'],
+  ['an absolute path', '/etc/FINDINGS.jsonl'],
+  ['a path that climbs', '../FINDINGS.jsonl'],
+  ['a path that climbs in the middle', '.claude/../FINDINGS.jsonl'],
+  ['a current-folder segment', './FINDINGS.jsonl'],
+  ['a Windows separator', '.claude\\FINDINGS.jsonl'],
+  ['a drive letter', 'C:/FINDINGS.jsonl'],
+  ['another extension', '.claude/FINDINGS.json'],
+  ['a folder', '.claude/'],
+  ['a space inside', '.claude/MY FINDINGS.jsonl'],
+  ['text after the path', '.claude/FINDINGS.jsonl` and more'],
+]) {
+  const line = label === 'no backticks' ? `Findings register: ${written}` : label === 'text after the path' ? `Findings register: \`${written}` : `Findings register: \`${written}\``;
+
+  check(`${label} is a malformed register line`, problemsOf(template(replace(REGISTER, line))).join() === 'malformed-register');
+}
+
+check('an empty text reports every part', problemsOf('').length === 6 + 4 && problemsOf('')[0] === 'missing-anchor:G1');
 
 /** The problem ids of the entry named `name`, or `absent` when no such entry exists. @es Los ids de problema de la entrada `name`, o `absent`. */
 function idsOf(entries, name) {
@@ -174,11 +212,19 @@ check('the contract file is read by the exact name AGENT-CONTRACT.md', (() => {
 
 const live = inspectSafely(HERE);
 
+check('the register path of the kit is the one the contracts name', DEFAULT_REGISTER_PATH === '.claude/FINDINGS.jsonl');
+
 for (const stack of ['angular-app', 'angular-lib', 'nest-api', 'node-lib-vitest']) {
   const entry = live.find((candidate) => candidate.name === stack);
 
   check(`the live ${stack} template exists`, entry !== undefined);
   check(`the live ${stack} template has no problem${entry === undefined ? '' : ` (${entry.problems.map((problem) => `${problem.id}${problem.detail ?? ''}`).join(',')})`}`, entry !== undefined && entry.problems.length === 0);
+}
+
+for (const stack of ['angular-app', 'angular-lib', 'nest-api', 'node-lib-vitest']) {
+  const text = readFileSync(path.join(HERE, stack, 'AGENT-CONTRACT.md'), 'utf8');
+
+  check(`the live ${stack} template names the register path the module writes to`, text.includes(`\nFindings register: \`${DEFAULT_REGISTER_PATH}\`\n`) && text.includes(`\n@es Registro de hallazgos: \`${DEFAULT_REGISTER_PATH}\`\n`));
 }
 
 check('every discovered live template has no problem', live.length > 0 && live.every((entry) => entry.problems.length === 0));
