@@ -30,58 +30,70 @@ máquina del dueño vive en `checklists/host-backlog.md`.
   host-backlog H1-H7 (d839206).
 - Anti-recurrence — vendored-edit guard (668e130), undeclared duplicates (1c8b155), journal producers
   (12dedb8).
+- Premise-judging hooks — claim-guard "attributed premise" class (126/126, 76/76 mutants) + native Stop
+  `prompt` judge journaled for guard-precision (56/56, 48/48) + H8 (425c97d).
+- Frontend standards for ALL sessions and projects (99314b7): `project-profile` detector + SessionStart
+  line (154/154, 97/97 mutants, ~92 ms, no spawn); path-scoped `rules/fe-{angular,typescript,testing,styles}.md`
+  gated by the project's real major; `skills/angular-best-practices` restructured with one file per major
+  (19/20 full, 21/22 delta over the official `node_modules/@angular/core/resources/best-practices.md`);
+  `project-bootstrap` and `frontend-audit` skills (invocation only); canonical `.claude` structure
+  re-judged item by item (`skills/project-bootstrap/references/structure-verdicts.md`); five committed
+  `agents/*.md.bak` removed (no producer remains). Always-loaded set unchanged (64.7k).
+- Angular 19/20/21/22 official-docs research (angular/angular `adev/` + angular-cli sources, npm) feeding
+  the rules and skill above.
+- One mutation-proof engine (3add3b9, b100 4cb89d8): b100 owns runner + `kill-kind.mjs` (assertion vs
+  crash) + scope/planner; `~/.claude` vendors it through `vendored/` (25 pinned modules); `fleet-kit/vendor/`
+  folded in; 14 crash-only kills in b100 turned into assertion kills. Scope rule: a hook entry that calls an
+  imported verdict helper decides — G 44 -> 49 deciding, 0 gaps. Premise corrected: resume-before-fresh and
+  claim-guard were already in scope; the invisible ones were orphan-work and worktree-tenancy.
+- Per-major gates toolchains (a99931f): angular-19/20/21/22, nest, node-vitest pinned with npm-verified
+  versions and lockfiles; `toolchainFor(profile, hostNode)` refuses instead of falling back; angular-eslint
+  rules gated by major (`no-experimental` / `no-developer-preview` from 20); reporters pinned in every gate;
+  `eslint --quiet` banned. Karma gate unmeasured here (no Chrome) -> H10.
+- gentle-ai upgrade — verdict DROP for now (stay on 2.9.1), decision recorded as H9 with evidence.
 
-## IN FLIGHT (redone: the previous session's worktrees were lost with its container)
+## IN FLIGHT (stopped by the owner's order "no lances nada más"; not on master)
 
-- A6 global — one state-location module for every path, per-selftest state home, leak detector, census,
-  `rotate.mjs` (registries clean break; host apply = H1).
-- Premise-judging hooks — claim-guard "attributed premise" class + native Stop `prompt` hook + H8.
-- One mutation-proof engine (branches `mutation-owner` in b100, the global worktree branch): b100 owns
-  runner + `kill-kind.mjs` (assertion vs crash, `crashKills`) + scope/planner with selftests and campaigns;
-  `~/.claude` vendors all of it through `vendored/` (25 pinned modules); `fleet-kit/vendor/` and its second
-  record folded in (one `shell-command.mjs` hash). Scope rule: a hook entry that CALLS an imported verdict
-  helper decides (structural, one import deep) — G 44 -> 49 deciding, 0 gaps; orphan
-  `hooks/engram-title-guard.mjs` removed (superseded by the wired `engram-title-integrity/guard.mjs`).
-  Premise corrected: the queued item named resume-before-fresh and claim-guard as invisible; both were
-  already in scope (own `permissionDecision` / `decision: 'block'`, each with a campaign). The invisible ones
-  were fleet-kit orphan-work and worktree-tenancy (hook-io `deny()`), now demanded and covered.
-- Research: Angular 19/20/21/22 official docs (from angular/angular `adev/` sources) and gentle-ai upgrade
-  (build, simulate sync in an emulated home, verdict, converge plan).
+- A6 global — one state-location module, per-selftest state home, leak detector, census, `rotate.mjs`.
+  Worktree branch only; integrate after its own verification.
+- Profile -> `toolchainFor` wiring (removes the parallel `gatesStackOf`) + `prefer-on-push` for 19-21.
+  Worktree branch only.
 
-## QUEUED
+## QUEUED (not started)
 
 - B1 — Stop fast path when repos are clean + incremental transcript index (covers A5: head-record session
   id fingerprint; A5's premise "integrate as is" was false — no code existed) + git spawn counter (an
   instrument to find spawns to cut, not a speed-up by itself) + target <= 300 ms (host timing = H6).
-- Shared `isMain` helper replacing ~74 hand-rolled entry checks (symlink false-green); entry-point-check
-  requires it.
-- Summarising gate runner (rtk replacement): full log with `EXIT=`, GREEN|RED line, capped failure
-  excerpt, log path, "green with error marks", pinned reporters, `eslint --quiet` banned.
-- Token/perf — autoCompactWindow + compact instructions; drop UserPromptSubmit echo and per-prompt
-  selfcheck; `if` filters on hooks; drop gentle-ai review stop-hook via overlay while RDD is off;
-  mechanised rules out of the always-loaded set; `disable-model-invocation` for off-stack skills;
-  attribution settings; effortLevel verification; plugins pr-review-toolkit / security-guidance /
-  typescript-lsp at user scope.
-- Portability — Windows-only selftests (paths, drives, backslashes), config-sync-guard `C:\` hardcode;
-  verify config-sync-guard ms float flake and the Stop-manifest test reading the real `~/.claude`.
-- 200-line instruction file recommendation (Claude Code warns above it).
+  Mapped: 8 Stop guards, 4 git + 1 node child per clean turn; config-sync-guard reads every live transcript
+  before knowing whether repos are dirty; backlog-guard reads eagerly.
+- Shared `isMain` helper replacing 73 hand-rolled entry checks (G 46, B 27; 66 false in a symlinked run;
+  `fleet-kit/lib/hook-io.mjs` `runWhenMain` is the correct base); entry-point-check requires it.
+- Summarising gate runner (rtk replacement): full log with `EXIT=`, GREEN|RED line, capped failure excerpt,
+  log path, "green with error marks".
+- Token/perf — autoCompactWindow + compact instructions; drop UserPromptSubmit `echo` and per-prompt
+  `skill-registry refresh` / b100 selfcheck; `if` filters (no hook has one today); drop gentle-ai
+  `review stop-hook` via overlay while RDD is off; `disable-model-invocation` for off-stack skills
+  (go-testing, nextjs-app-router, react-best-practices, gentle-ai-bench, GitHub-workflow skills);
+  attribution settings; effortLevel verification; plugins at user scope; weigh the premise judge's
+  per-turn background-model call.
+- Portability and hermeticity — split hermetic selftests from host checks (`doctor`): G 10 REDs on Linux,
+  b100 17 (real Stop manifest, `C:/Users/...` paths, real repos with TypeScript, npm-cli path, Windows job
+  objects); b100 PostToolUse entries hardcode `C:/Users/...`.
+- gentle-ai version pin in `gentle-ai-sync-guard`: refuse a sync whose binary major differs from the pinned
+  one (a v4 sync would leave a UserPromptSubmit hook that exits 1 on every prompt).
+- 200-line rule: only b100 `AGENT-LEDGER.md` (467 lines) exceeds it.
 - Path-scoped rules from `~/.claude/rules/` inside subagents: unverified (host check, like H2).
-- Frontend JS/TS standards for ALL sessions and projects: `rules/fe-*.md` (path-scoped, < 200 lines),
-  `project-profile` detector + SessionStart line, `project-bootstrap` skill, `frontend-audit` skill,
-  `.bak` hygiene; canonical `.claude` structure re-judged item by item (`.mcp.json` for project MCP
-  servers such as `ng mcp`, `CLAUDE.local.md`).
-- Angular 19/20/21/22 version-aware: feature matrix, per-version skill files, docs source per major,
-  per-major gates toolchains + `toolchainFor(profile)`.
-- gentle-ai upgrade: converge the repo + host commands, if the verdict is to upgrade.
-- Angular CLI MCP (`ng mcp`) evaluation -> host item if adopted.
 - B7 — lessons for this session's real bugs via `capture.mjs`, each with its anti-recurrence mechanism;
   the three named by the owner (reconcile order, duplicated stub, monolingual message) have no trace in
   either history: they need the owner's data, never invented.
 - A3 — closure doc: CLOSED/DROP per item with proof; old-plan checkboxes retired.
-- Owner premises register — every mandate and premise stated in the conversation, judged (keep / amend /
-  drop) with evidence.
+- Owner premises register — `checklists/owner-premises.md` (started; judged during the audit).
 - C2 — one final full run of both repos.
-- Deep multi-agent audit of both repos (owner premises judged too) -> fix findings -> verdict.
+- Deep multi-agent audit of both repos (owner premises judged too) -> fix findings -> verdict. Queued
+  questions: vendoring direction (generic engines owned by the b100 project and vendored into the
+  user-level config through a hardcoded Desktop path — should the user level own them?); b100
+  fleet-env/scratch-dir 1 surviving mutant; b100 worktree-work 1 refused mutant; hook-registration
+  selfcheck flags vendored-edit-guard's two-manifest split.
 - Post-audit research (official Anthropic docs and repos) for further gains in quality, speed and token
   use -> implement.
 - Final list to the owner: done + host-only (`host-backlog.md`).

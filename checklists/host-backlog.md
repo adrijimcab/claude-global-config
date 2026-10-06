@@ -63,3 +63,40 @@ if ANY of these holds at the end of the week:
   that blocks that rarely cannot repay a model call on every turn.
 
 Close with `CLOSED <date> — kept|retired: addedMs median/p95, falseBlockRate (n), correct blocks`.
+
+## H9 — gentle-ai v4: decide SDD -> ODD before any upgrade — OPEN (decision: owner)
+
+Verdict 2026-10-06: stay on 2.9.1. v4.0.0 (2026-10-01, commit e219644b) retires SDD for ODD; it is a
+workflow change, not a version bump. Measured in an emulated home: always-loaded set 64,535 -> 87,524
+chars with the overlay (over the 66k global target); v4 keeps the `sdd-preflight-hook` UserPromptSubmit
+entry, which then exits 1 on every prompt; the 8 review/jd agents are frozen by v4's ownership file; SDD
+commands the leftover skills call are "unknown command". The overlay itself converges under v4 (19/19
+customizations, idempotent). Re-assess at the later of 2026-11-15 or a v4.x patch release at least 30
+days old. If the owner chooses ODD, it is a port (rewrite `sdd-mandate.md`, delete SDD agents/skills/
+commands, drop the preflight hook, delete the 8 review/jd agents before the first v4 sync, lazy-load
+ODD's reference text, decide on ODD's automatic work-unit commits vs the commit guards), then:
+
+```powershell
+go install github.com/gentleman-programming/gentle-ai/v4/cmd/gentle-ai@v4.0.0
+gentle-ai sync --dry-run
+node $HOME\.claude\gentle-ai-overlay\sync.mjs
+# rollback
+go install github.com/gentleman-programming/gentle-ai/v2/cmd/gentle-ai@v2.9.1
+git -C $HOME\.claude checkout -- .   # or restore ~/.gentle-ai/backups/<id>
+```
+
+@es Quedarse en 2.9.1: la v4 cambia SDD por ODD (decisión del dueño), sube el set siempre cargado a 87,5k
+y deja un hook que falla en cada prompt. Se revisa en la fecha indicada.
+
+## H10 — Karma gate and Angular 22 Node floor on the host — OPEN
+
+The Karma coverage gate of the angular-19..22 toolchains could not run in the cloud (no Chrome; the
+browser download host is refused), and Angular 22 needs Node >= 22.22.3. On the host, for each N in
+19 20 21 22: `node $HOME\.claude\gates-kit\verify.mjs --toolchain angular-N` (see its header for the
+stack argument). Closes with every gate correct (green on pass fixture, red on fail fixture).
+
+## H11 — Vendored check against the real owner checkout — OPEN
+
+The vendored source (`~/Desktop/Projects/b100-am-ui/.claude`) exists only on the host. After pulling both
+repos: `node $HOME\.claude\vendored\vendored.mjs check`; if SOURCE MOVED ON, `... sync` then commit.
+Closes with 25 modules, 0 failures.
