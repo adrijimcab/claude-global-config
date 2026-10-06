@@ -22,10 +22,12 @@
  */
 
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+import { claudeHome, stateDirsUnder } from '../hook-state/locations.mjs';
 
 /** Every runtime message, English first, then the Spanish half. @es Cada mensaje, inglés primero y luego el español. */
 export const MESSAGES = {
@@ -48,12 +50,13 @@ function say(out, id, params = {}) {
   out(`${fill(MESSAGES[id].en)} @es ${fill(MESSAGES[id].es)}`);
 }
 
-/** The `<guard>/state` directories of a home, absolute. @es Los directorios `<guardia>/state` de un home. */
-function stateTrees(home) {
-  return readdirSync(home, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && lstatSync(path.join(home, entry.name, 'state'), { throwIfNoEntry: false })?.isDirectory() === true)
-    .map((entry) => path.join(home, entry.name, 'state'));
-}
+/**
+ * The `<guard>/state` directories of a home, absolute: the listing of the one state-location module (a real
+ * directory, never a link, of a plain mechanism name), so the backup and the guards agree on where state is.
+ * @es Los directorios `<guardia>/state` de un home: el listado del único módulo de ubicaciones (un directorio
+ * real, nunca un enlace, de nombre simple), así la copia y las guardias coinciden en dónde está el estado.
+ */
+const stateTrees = (home) => stateDirsUnder(home).map(({ directory }) => directory);
 
 /**
  * Every `.jsonl` at any depth under a directory. A directory entry that is a link or junction reports
@@ -133,7 +136,7 @@ export function backupJournals({ home, backupRoot, date, out = console.log, copy
 
 /** Reads the command line, then runs the backup. @es Lee la línea de comandos y corre la copia. */
 export function run(argv, { out = console.log } = {}) {
-  const options = { home: path.join(homedir(), '.claude'), backupRoot: path.join(homedir(), '.claude-backups'), date: new Date().toISOString().slice(0, 10) };
+  const options = { home: claudeHome(), backupRoot: path.join(homedir(), '.claude-backups'), date: new Date().toISOString().slice(0, 10) };
   const flags = { '--backup-root': 'backupRoot', '--date': 'date' };
 
   for (let index = 0; index < argv.length; index += 1) {

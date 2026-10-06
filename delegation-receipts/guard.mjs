@@ -46,7 +46,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { abandonmentsFor, DEFAULT_STATE_DIR } from './abandon.mjs';
+import { abandonmentsFor, defaultStateDir } from './abandon.mjs';
 import { delegationsInFinalTurn } from './turn-delegations.mjs';
 import { unlaunchedDelegations } from './unlaunched.mjs';
 
@@ -92,7 +92,7 @@ function note(stateDir, record) {
  * @es Las delegaciones que el turno debe, o `undefined` si la pregunta no tiene respuesta honesta.
  * `undefined` NO es «ninguna»: quien llama debe dejar pasar, nunca leerlo como turno limpio.
  */
-export function owedBy(payload, stateDir = DEFAULT_STATE_DIR) {
+export function owedBy(payload, stateDir = defaultStateDir()) {
   // No second opinion on whether the transcript is readable: `delegationsInFinalTurn` owns that
   // question and answers `undefined` for a missing path, an unreadable file and a path that is not a
   // path alike. Re-asking it here would be a second answer that can drift from the first.
@@ -144,7 +144,7 @@ function reason(owed, sessionId) {
   ].join('\n');
 }
 
-export function main(payload, stateDir = DEFAULT_STATE_DIR, now = Date.now()) {
+export function main(payload, stateDir = defaultStateDir(), now = Date.now()) {
   // Already raised once this turn: never raise it twice.
   if (payload?.stop_hook_active === true) return;
 
@@ -192,7 +192,7 @@ export function evaluate(raw) {
   } catch (error) {
     // A guard that throws must never wedge a session — but it must not do so invisibly either.
     // @es Un guard que peta jamás debe atascar la sesión, pero tampoco callar.
-    note(DEFAULT_STATE_DIR, { event: 'malfunction', error: error instanceof Error ? error.message : String(error), rawLength: raw.length });
+    note(defaultStateDir(), { event: 'malfunction', error: error instanceof Error ? error.message : String(error), rawLength: raw.length });
 
     return undefined;
   }

@@ -24,6 +24,13 @@ import { payloadFor } from '../hook-payloads/payloads.mjs';
 import { alternativesOf } from '../hook-dispatch/manifest.mjs';
 import { evaluate as evaluateGuard } from './guard.mjs';
 import { REFUSAL_HEADLINE, reason } from './reason.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('worker-delegation-guard');
 
 const ROOT = path.join(import.meta.dirname, '..');
 const SESSION = 'worker-delegation-guard-selftest';

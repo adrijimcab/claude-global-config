@@ -29,20 +29,22 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { stateDir } from '../hook-state/locations.mjs';
 import { pathspecCommitCommand } from './commit-advice.mjs';
 import { decide } from './decide.mjs';
 import { recordUnexplained } from './pending-ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const STATE_DIR = path.join(HERE, 'state');
-const REFUSALS = path.join(STATE_DIR, 'refusals.jsonl');
+/** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
+const stateDirectory = () => stateDir('config-sync-guard');
+const refusalsFile = () => path.join(stateDirectory(), 'refusals.jsonl');
 const DISMISS_CLI = path.join(HERE, 'dismiss.mjs');
 
 /** Appends one line, or gives up silently: a journal that cannot be written costs evidence, never a decision. @es Añade una línea o desiste en silencio. */
 function journal(record) {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
-    appendFileSync(REFUSALS, `${JSON.stringify(record)}\n`, 'utf8');
+    mkdirSync(stateDirectory(), { recursive: true });
+    appendFileSync(refusalsFile(), `${JSON.stringify(record)}\n`, 'utf8');
   } catch {
     /* a journal is evidence, never a precondition */
   }

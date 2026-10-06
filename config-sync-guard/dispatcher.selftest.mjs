@@ -19,6 +19,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { dispatch } from '../hook-dispatch/dispatch.mjs';
 import { agentRecords, liveAgentWrites } from './attribution.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('config-sync-guard');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.join(HERE, 'guard.mjs');

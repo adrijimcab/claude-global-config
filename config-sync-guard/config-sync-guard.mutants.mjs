@@ -16,6 +16,9 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
+/** The guard's folder, relative to the tree its sandbox copies. @es La carpeta del guard, relativa al árbol que copia el sandbox. */
+const SELF = path.basename(HERE);
+
 const MUTANTS = [
   ['the loop bound is gone: a retry is judged again instead of passing through', 'decide.mjs', 'if (payload?.stop_hook_active === true) return undefined;', ''],
   ['a missing repo stops being reported as missing, so it falls through to being measured as if present', 'decide.mjs', "if (!repoExists(repo)) return { repo, state: 'missing' };", ''],
@@ -113,10 +116,12 @@ const MUTANTS = [
 ];
 
 const survivors = runMutants({
-  fleetRoot: HERE,
-  paths: ['decide.mjs', 'guard.mjs', 'status.mjs', 'attribution.mjs', 'transcript-writes.mjs', 'shell-windows.mjs', 'path-ownership.mjs', 'path-mtime.mjs', 'pending-ledger.mjs', 'unpushed-commits.mjs', 'commit-advice.mjs', 'repos.mjs', 'dismiss.mjs', 'fingerprint.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'],
-  selftest: 'selftest.mjs',
-  mutants: MUTANTS,
+  // The tree above the guard, so the sandbox also holds the state-location module the guard imports.
+  // @es El árbol por encima del guard, para que el sandbox tenga también el módulo de ubicaciones que importa.
+  fleetRoot: path.dirname(HERE),
+  paths: [...['decide.mjs', 'guard.mjs', 'status.mjs', 'attribution.mjs', 'transcript-writes.mjs', 'shell-windows.mjs', 'path-ownership.mjs', 'path-mtime.mjs', 'pending-ledger.mjs', 'unpushed-commits.mjs', 'commit-advice.mjs', 'repos.mjs', 'dismiss.mjs', 'fingerprint.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'].map((file) => `${SELF}/${file}`), 'hook-state', 'bilingual-output'],
+  selftest: `${SELF}/selftest.mjs`,
+  mutants: MUTANTS.map(([label, file, original, replacement]) => [label, `${SELF}/${file}`, original, replacement]),
   crashKills: 'fail'
 });
 

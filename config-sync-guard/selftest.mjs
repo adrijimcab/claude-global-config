@@ -31,6 +31,13 @@ import { CLOCK_TOLERANCE_MS, shellWindowsIn, withinWindow } from './shell-window
 import { parseStatusPorcelain } from './status.mjs';
 import { parseAheadLog } from './unpushed-commits.mjs';
 import { writtenPathsIn as writtenPathsOf } from './transcript-writes.mjs';
+import { isolateState, stateDir } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('config-sync-guard');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD_CLI = path.join(HERE, 'guard.mjs');
@@ -464,7 +471,7 @@ check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
 // shim's OWN wiring (JSON parsing, block formatting, the journal write), not just `decide()` in
 // isolation. See `guard.mjs`'s own docblock for why this seam exists and why production never uses it.
 {
-  const journalPath = path.join(HERE, 'state', 'refusals.jsonl');
+  const journalPath = path.join(stateDir('config-sync-guard'), 'refusals.jsonl');
   const journalledFor = (session) => (existsSync(journalPath) ? readFileSync(journalPath, 'utf8').split('\n').filter((line) => line.includes(session)).length : 0);
   const session = `selftest-evaluate-${String(process.pid)}-${String(Date.now())}`;
   const before = journalledFor(session);

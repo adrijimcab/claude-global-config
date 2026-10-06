@@ -63,7 +63,8 @@ const survivors = runMutants({
   fleetRoot: FLEET_ROOT,
   paths: [
     ...['decide.mjs', 'guard.mjs', 'markers.mjs', 'master-save.mjs', 'master-update.mjs', 'state.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'].map((file) => `${THIS_DIRECTORY}/${file}`),
-    'backlog-owner-guard/resolve-topic-key.mjs'
+    'backlog-owner-guard/resolve-topic-key.mjs',
+    'hook-state', 'bilingual-output'
   ],
   selftest: `${THIS_DIRECTORY}/selftest.mjs`,
   mutants: MUTANTS.map(([label, file, original, replacement]) => [label, `${THIS_DIRECTORY}/${file}`, original, replacement])

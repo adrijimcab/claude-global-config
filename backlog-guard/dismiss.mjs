@@ -17,9 +17,9 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { STATE_DIR } from './state.mjs';
+import { stateDirectory } from './state.mjs';
 
-const DISMISSALS_FILE = path.join(STATE_DIR, 'dismissals.jsonl');
+const dismissalsFile = () => path.join(stateDirectory(), 'dismissals.jsonl');
 
 /** The shortest reason accepted, the same floor `failure-capture`/`handback` dismiss commands apply. @es El motivo más corto aceptado. */
 export const MINIMUM_REASON_LENGTH = 25;
@@ -67,9 +67,9 @@ export function commandDismiss(args, { append = appendFileSync, mkdir = mkdirSyn
   if (problems.length > 0) return { ok: false, problems };
 
   try {
-    mkdir(STATE_DIR, { recursive: true });
+    mkdir(stateDirectory(), { recursive: true });
     append(
-      DISMISSALS_FILE,
+      dismissalsFile(),
       `${JSON.stringify({ at: new Date().toISOString(), session: session ?? 'unknown', marker: marker ?? 'unknown', reason })}\n`,
       'utf8'
     );

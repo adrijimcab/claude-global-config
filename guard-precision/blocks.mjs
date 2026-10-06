@@ -26,11 +26,11 @@
  * ningún bloqueo es HUÉRFANA: se lista, nunca se cuenta.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { KINDS, journalPath } from '../hook-state/journal.mjs';
-import { assertMechanism, claudeHome, stateDir } from '../hook-state/locations.mjs';
+import { mechanismsWithState, stateDir } from '../hook-state/locations.mjs';
 
 /** The label of a block a human judged wrong. @es La etiqueta de un bloqueo que una persona juzgó erróneo. */
 export const FALSE_LABEL = 'false';
@@ -41,28 +41,13 @@ export const CORRECT_LABEL = 'correct';
 /** The label each outcome kind gives its block. @es La etiqueta que cada tipo de desenlace da a su bloqueo. */
 const LABEL_OF_KIND = { dismissal: FALSE_LABEL, 'false-positive-report': FALSE_LABEL, 'true-positive-report': CORRECT_LABEL };
 
-const isPlainName = (name) => {
-  try {
-    assertMechanism(name);
-
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-/** The mechanisms that have a state directory, sorted. @es Los mecanismos con directorio de estado, ordenados. */
-export function mechanismNames(readDirectory) {
-  const root = process.env.HOOK_STATE_DIR ? path.resolve(process.env.HOOK_STATE_DIR) : claudeHome();
-
-  if (!existsSync(root)) return [];
-
-  return readDirectory(root, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && isPlainName(entry.name))
-    .map((entry) => entry.name)
-    .filter((name) => existsSync(stateDir(name)))
-    .sort();
-}
+/**
+ * The mechanisms that have a state directory, sorted: the listing of the one state-location module, so the report
+ * and the module can never disagree on where the journals are.
+ * @es Los mecanismos con directorio de estado, ordenados: el listado del único módulo de ubicaciones, así el
+ * informe y el módulo nunca discrepan sobre dónde están los journals.
+ */
+export const mechanismNames = (readDirectory) => mechanismsWithState(readDirectory);
 
 /** The parsed line, or undefined when it is not JSON. @es La línea parseada, o undefined si no es JSON. */
 function parse(line) {

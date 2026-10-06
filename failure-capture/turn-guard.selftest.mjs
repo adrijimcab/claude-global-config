@@ -3,6 +3,8 @@
  * Selftest de `turn-guard.mjs`, que hasta el 2026-09-29 no tenía ninguno (`guard-that-cannot-go-red`).
  * Corre una COPIA de la guardia en un directorio temporal, así el estado vivo (`state/`) no se toca, y
  * exige el mismo veredicto por los dos caminos: como proceso propio y dentro del dispatcher (`evaluate`).
+ * Cada copia vive en su propio home de Claude construido (`<mundo>/failure-capture/`, con el módulo de
+ * ubicaciones al lado) y resuelve su estado por `HOOK_CLAUDE_HOME`, así que su `state/` es el de la copia.
  *
  *   bloquea : marcador de corrección sin nada registrado; también con BOM de PowerShell.
  *   deja    : sin marcador, mensaje vacío, `stop_hook_active`, dentro del cooldown, con una captura ya
@@ -10,12 +12,16 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+import { CLAUDE_HOME_VARIABLE, STATE_ROOT_VARIABLE, isolateState } from '../hook-state/locations.mjs';
+import { provisionLoop } from './fixture-loop.mjs';
+
+isolateState('turn-guard');
+
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'turn-guard-selftest-'));
 let passed = 0;
 const failures = [];
@@ -25,19 +31,21 @@ const check = (name, condition, detail = '') => {
   else failures.push(`${name}${detail === '' ? '' : ` — ${detail}`}`);
 };
 
-/** Una copia nueva de la guardia, con su propio `state/`. */
+/** Una copia nueva de la guardia, en su propio home de Claude, con su propio `state/`. */
 function world(name) {
-  const dir = path.join(scratch, name);
-  mkdirSync(dir, { recursive: true });
-  for (const file of ['turn-guard.mjs', 'markers.mjs', 'project.mjs']) copyFileSync(path.join(HERE, file), path.join(dir, file));
+  const dir = path.join(scratch, name, 'failure-capture');
+  provisionLoop(dir, (file) => ['turn-guard.mjs', 'markers.mjs', 'project.mjs'].includes(file));
   return dir;
 }
+
+/** El entorno de la copia `dir`: su home de Claude, sin raíz de estado. */
+const homeOf = (dir) => ({ [CLAUDE_HOME_VARIABLE]: path.dirname(dir), [STATE_ROOT_VARIABLE]: '' });
 
 const payload = (message, extra = {}) => JSON.stringify({ hook_event_name: 'Stop', session_id: 'sesion-a', stop_hook_active: false, last_assistant_message: message, ...extra });
 const MARKED = 'Me equivoqué: el número era falso.';
 
 function standalone(dir, raw) {
-  const run = spawnSync(process.execPath, [path.join(dir, 'turn-guard.mjs')], { input: raw, encoding: 'utf8' });
+  const run = spawnSync(process.execPath, [path.join(dir, 'turn-guard.mjs')], { input: raw, encoding: 'utf8', env: { ...process.env, ...homeOf(dir) } });
   const text = run.stdout.trim();
   return { status: run.status, blocked: text !== '' && JSON.parse(text).decision === 'block' };
 }
@@ -45,7 +53,16 @@ function standalone(dir, raw) {
 
 async function inProcess(dir, raw) {
   const { evaluate } = await import(`${pathToFileURL(path.join(dir, 'turn-guard.mjs')).href}?${Date.now()}-${Math.random()}`);
-  return evaluate(raw)?.decision === 'block';
+  const saved = { ...process.env };
+  Object.assign(process.env, homeOf(dir));
+  try {
+    return evaluate(raw)?.decision === 'block';
+  } finally {
+    for (const key of [CLAUDE_HOME_VARIABLE, STATE_ROOT_VARIABLE]) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
 }
 
 try {

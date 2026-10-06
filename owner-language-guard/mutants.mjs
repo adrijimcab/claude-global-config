@@ -79,7 +79,7 @@ const { runMutants } = await import(pathToFileURL(RUNNER).href);
 
 const survivors = runMutants({
   fleetRoot: path.resolve(import.meta.dirname, '..'),
-  paths: [G],
+  paths: [G, 'hook-state', 'bilingual-output'],
   selftest: `${G}/selftest.mjs`,
   mutants: MUTANTS,
   crashKills: 'fail',

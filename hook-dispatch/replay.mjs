@@ -28,6 +28,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { CLAUDE_HOME_VARIABLE } from '../hook-state/locations.mjs';
 import { runLatencyCli } from './latency.mjs';
 import { labelOf, loadManifest } from './manifest.mjs';
 import { mergeOutputs } from './merge.mjs';
@@ -150,7 +151,7 @@ async function oldPath(guards, event, raw, tool) {
 
 async function newPath(raw) {
   // El dispatcher registra los bloqueos en el estado de cada guardia: bajo el espejo B, nunca en el home vivo.
-  const env = NEW_HOME === undefined ? process.env : { ...process.env, HOOK_DISPATCH_HOME: NEW_HOME, HOOK_CLAUDE_HOME: path.join(NEW_HOME, '.claude') };
+  const env = NEW_HOME === undefined ? process.env : { ...process.env, HOOK_DISPATCH_HOME: NEW_HOME, [CLAUDE_HOME_VARIABLE]: path.join(NEW_HOME, '.claude') };
   const { stdout, code } = await run([path.join(HERE, 'dispatch.mjs'), manifestFile], raw, env);
 
   return { output: parse(stdout), code };

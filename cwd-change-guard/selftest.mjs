@@ -33,6 +33,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('cwd-change-guard');
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const { payloadFor } = await import(pathToFileURL(path.join(HERE, '..', 'hook-payloads', 'payloads.mjs')).href);
 const { evaluate, refusalText } = await import(pathToFileURL(path.join(HERE, 'guard.mjs')).href);

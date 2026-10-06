@@ -20,11 +20,12 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stateDir } from '../hook-state/locations.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const STATE_DIR = path.join(HERE, 'state');
+/** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
+export const stateDirectory = () => stateDir('backlog-guard');
 
-const statePathFor = (sessionId) => path.join(STATE_DIR, `${sessionId || 'unknown'}.json`);
+const statePathFor = (sessionId) => path.join(stateDirectory(), `${sessionId || 'unknown'}.json`);
 
 /** The stored `{ offset }` for `sessionId`, or `undefined` on first sighting / any read failure. @es El `{ offset }` guardado de `sessionId`, o `undefined`. */
 export function readOffsetState(sessionId) {
@@ -38,7 +39,7 @@ export function readOffsetState(sessionId) {
 /** Persists `{ offset }` for `sessionId`. Never throws: state is an optimisation, never a precondition. @es Persiste `{ offset }`. Nunca lanza. */
 export function writeOffsetState(sessionId, state) {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
+    mkdirSync(stateDirectory(), { recursive: true });
     writeFileSync(statePathFor(sessionId), JSON.stringify(state), 'utf8');
   } catch {
     /* state is an optimisation, never a precondition */

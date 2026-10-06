@@ -18,7 +18,7 @@ import { evaluate } from './guard.mjs';
 const { check, finish } = suite();
 const root = tempDir('landing');
 
-process.env.FLEET_KIT_STATE = path.join(root, 'state');
+process.env.HOOK_STATE_DIR = path.join(root, 'state');
 
 /** The guard's verdict for a line: 'deny', 'advise' or 'allow'. @es El veredicto de la guarda para una línea. */
 async function verdictOf(command, cwd, tool = 'Bash') {
@@ -92,7 +92,7 @@ try {
   check('a repository without config says nothing', await verdictOf('git commit -m x', elsewhere), 'allow');
 
   check('a malformed payload fails open', await evaluate('{not json'), undefined);
-  check('the malfunction is journaled', existsSync(path.join(root, 'state', 'landing-guard', 'malfunctions.jsonl')), true);
+  check('the malfunction is journaled', existsSync(path.join(root, 'state', 'fleet-kit', 'landing-guard', 'malfunctions.jsonl')), true);
 } finally {
   cleanup(root);
 }

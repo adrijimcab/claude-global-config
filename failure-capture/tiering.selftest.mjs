@@ -19,7 +19,14 @@ import path from 'node:path';
 import { holdsWholeLine, proveConservation } from './conservation.mjs';
 import { appendEvidence, evidenceFile, readEvidence } from './evidence.mjs';
 import { evidenceKeyOf, evidenceNameOf, isTiered, isValidKey, minimalStub, parseEntry, parseStub, readMarker, pointerAt, splitRule, tieredLine } from './ledger-line.mjs';
-import { provisionLoop } from './fixture-loop.mjs';
+import { provisionLoop, worldEnv } from './fixture-loop.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('failure-capture');
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'tiering-selftest-'));
 let passed = 0;
@@ -211,7 +218,7 @@ function capture(target, key, extra) {
   const args = ['capture', '--key', key, '--scope', 'global', '--actor', 'orchestrator', ...extra];
 
   try {
-    const out = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), ...args], { cwd: target.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, HOME: target.home, USERPROFILE: target.home }, timeout: 60_000 });
+    const out = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), ...args], { cwd: target.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: worldEnv(target.home, { loop: target.loop }), timeout: 60_000 });
 
     return { status: 0, out };
   } catch (error) {

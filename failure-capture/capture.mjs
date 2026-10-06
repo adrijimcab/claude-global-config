@@ -41,6 +41,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { stateDir } from '../hook-state/locations.mjs';
 import { closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
 import { adviseOnBudget } from './budget-advisory.mjs';
 import { budgetVerdict } from './budget-verdict.mjs';
@@ -77,15 +78,16 @@ const speaker = makeSpeaker({ ...CAPTURE_MESSAGES, ...PROMOTE_MESSAGES });
 // valores derivados de él, abajo, los fija `bindLoopContext` para los comandos que leen el proyecto, nunca al
 // cargar este fichero: una configuración inválida debe fallar solo a esos comandos.
 let PROJECT;
-const STATE_DIR = path.join(HERE, 'state');
-const SPOOL_DIR = path.join(STATE_DIR, 'spool');
-const LOCK_FILE = path.join(STATE_DIR, 'ledger.lock');
-const INCIDENTS = path.join(STATE_DIR, 'incidents.jsonl');
-const DISMISSALS = path.join(STATE_DIR, 'dismissals.jsonl');
-const LAST_CAPTURE = path.join(STATE_DIR, 'last-capture.json');
+/** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
+const stateDirectory = () => stateDir('failure-capture');
+const spoolDir = () => path.join(stateDirectory(), 'spool');
+const lockFile = () => path.join(stateDirectory(), 'ledger.lock');
+const incidentsFile = () => path.join(stateDirectory(), 'incidents.jsonl');
+const dismissalsFile = () => path.join(stateDirectory(), 'dismissals.jsonl');
+const lastCaptureFile = () => path.join(stateDirectory(), 'last-capture.json');
 // Read-only since `ledger-tiering-budget`: the record of promotions made by the OLD tool (`status` honours it).
 // @es Solo lectura desde `ledger-tiering-budget`: el registro de promociones de la herramienta ANTIGUA.
-const PROMOTED = path.join(STATE_DIR, 'promoted.md');
+const promotedFile = () => path.join(stateDirectory(), 'promoted.md');
 
 // One ledger per scope (`ledgers.mjs`): a project's lessons never travel to every other project.
 // @es Un ledger por alcance: las lecciones de un proyecto no viajan a los demás.
@@ -165,7 +167,7 @@ function today() {
 }
 
 function ensureDirs() {
-  mkdirSync(SPOOL_DIR, { recursive: true });
+  mkdirSync(spoolDir(), { recursive: true });
 }
 
 function readFileOr(file, fallback) {
@@ -199,8 +201,8 @@ function ledgerKeys() {
 /** Writes one spool entry atomically: temp file then rename. @es Escribe una entrada de spool atómicamente: temporal y luego rename. */
 function spool(entry) {
   const name = `${String(Date.now())}-${String(process.pid)}-${Math.random().toString(36).slice(2, 10)}.json`;
-  const temp = path.join(SPOOL_DIR, `.${name}.tmp`);
-  const final = path.join(SPOOL_DIR, name);
+  const temp = path.join(spoolDir(), `.${name}.tmp`);
+  const final = path.join(spoolDir(), name);
 
   writeFileSync(temp, JSON.stringify(entry), 'utf8');
   renameSync(temp, final);
@@ -245,17 +247,17 @@ function ledgerCache() {
 function reconcile() {
   ensureDirs();
 
-  const pending = readdirSync(SPOOL_DIR).filter((f) => f.endsWith('.json') && !f.startsWith('.'));
+  const pending = readdirSync(spoolDir()).filter((f) => f.endsWith('.json') && !f.startsWith('.'));
 
   if (pending.length === 0) return { folded: [], deferred: 0 };
 
-  const outcome = withLock(LOCK_FILE, () => {
+  const outcome = withLock(lockFile(), () => {
     const folded = [];
     const ledgersOf = ledgerCache();
     const touched = new Set();
 
     for (const file of pending.sort()) {
-      const full = path.join(SPOOL_DIR, file);
+      const full = path.join(spoolDir(), file);
       let entry;
 
       try {
@@ -298,7 +300,7 @@ function reconcile() {
         folded.push({ ...entry, count, recurrence: true });
       }
 
-      appendFileSync(INCIDENTS, `${JSON.stringify(entry)}\n`, 'utf8');
+      appendFileSync(incidentsFile(), `${JSON.stringify(entry)}\n`, 'utf8');
       unlinkSync(full);
     }
 
@@ -313,7 +315,7 @@ function reconcile() {
 /** Stamps that this session recorded something, so the turn guard can see it deterministically. @es Sella que esta sesión registró algo, para que el guard lo vea de forma determinista. */
 function stamp(sessionId, kind) {
   ensureDirs();
-  writeFileSync(LAST_CAPTURE, JSON.stringify({ session: sessionId ?? 'unknown', kind, at: Date.now() }), 'utf8');
+  writeFileSync(lastCaptureFile(), JSON.stringify({ session: sessionId ?? 'unknown', kind, at: Date.now() }), 'utf8');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -497,7 +499,7 @@ function promotionInstructions(key, target) {
 function incidentsFor(key) {
   const found = [];
 
-  for (const line of readFileOr(INCIDENTS, '').split('\n')) {
+  for (const line of readFileOr(incidentsFile(), '').split('\n')) {
     if (line.length === 0) continue;
 
     try {
@@ -641,7 +643,7 @@ function commandPromote(args) {
   // line another writer added while this one waited, and would carry an out-of-date recurrence counter.
   // @es El ledger se lee solo con el lock ya tomado: una copia leída antes se reescribiría encima de las
   // líneas que otro escritor añadiera mientras este esperaba, y llevaría un contador de recurrencia viejo.
-  const collapsed = withLock(LOCK_FILE, () => {
+  const collapsed = withLock(lockFile(), () => {
     const ledgers = readLedgers(LEDGERS);
     const found = locateKey(ledgers, key, readMarker);
 
@@ -669,7 +671,7 @@ function commandPromote(args) {
     }
 
     writeLedger(ledger);
-    appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, scope: ledger.scope, faces: facesByFile({ files: contractFilesOf(target, key), key, read: (file) => readFileOr(file, '') }) }))}\n`, 'utf8');
+    appendFileSync(incidentsFile(), `${JSON.stringify(closureRecord({ key, closure, verification, target, scope: ledger.scope, faces: facesByFile({ files: contractFilesOf(target, key), key, read: (file) => readFileOr(file, '') }) }))}\n`, 'utf8');
 
     return stub;
   });
@@ -712,7 +714,7 @@ function commandDismiss(args) {
   }
 
   ensureDirs();
-  appendFileSync(DISMISSALS, `${JSON.stringify({ marker: marker ?? 'unknown', reason, session: session ?? 'unknown', at: new Date().toISOString() })}\n`, 'utf8');
+  appendFileSync(dismissalsFile(), `${JSON.stringify({ marker: marker ?? 'unknown', reason, session: session ?? 'unknown', at: new Date().toISOString() })}\n`, 'utf8');
   stamp(session, 'dismiss');
   speaker.say('dismiss.done');
 
@@ -723,8 +725,8 @@ function commandStatus() {
   const keys = ledgerKeys();
   // The incident log also carries `promotion` closure records; they are not incidents and are not counted as such.
   // @es El registro de incidentes también lleva registros de cierre `promotion`; no son incidentes y no se cuentan.
-  const incidents = readFileOr(INCIDENTS, '').split('\n').filter((l) => l.length > 0 && !l.includes('"kind":"promotion"')).length;
-  const dismissals = readFileOr(DISMISSALS, '').split('\n').filter((l) => l.length > 0).length;
+  const incidents = readFileOr(incidentsFile(), '').split('\n').filter((l) => l.length > 0 && !l.includes('"kind":"promotion"')).length;
+  const dismissals = readFileOr(dismissalsFile(), '').split('\n').filter((l) => l.length > 0).length;
   for (const ledger of readLedgers(LEDGERS)) {
     const bytes = ledger.lines === undefined ? 0 : Buffer.byteLength(ledger.lines.join('\n'));
 
@@ -744,7 +746,7 @@ function commandStatus() {
   // @es Lo que aterrizó se lee ahora del propio ledger: una línea `[promoted]` es el muñón que deja `promote`
   // (el texto completo está en el almacén de evidencia). `state/promoted.md`, que `promote` ya no escribe,
   // se sigue LEYENDO, para que una promoción registrada por la herramienta antigua siga contando.
-  const promoted = readFileOr(PROMOTED, '');
+  const promoted = readFileOr(promotedFile(), '');
   const stubbed = new Set(readLedgers(LEDGERS).flatMap((ledger) => (ledger.lines ?? []).filter((line) => line.startsWith('- [promoted] ')).map((line) => readMarker(line)?.key)));
   const due = [...keys].filter(([key, count]) => count >= PROMOTION_THRESHOLD && !stubbed.has(key) && !promoted.includes(` — ${key} -> `));
 
@@ -955,7 +957,7 @@ function commandRoute(args) {
 
   ensureDirs();
 
-  const outcome = withLock(LOCK_FILE, route);
+  const outcome = withLock(lockFile(), route);
 
   if (!outcome.held) {
     speaker.complain('route.locked');
@@ -1024,7 +1026,7 @@ function commandInit() {
 const loadLedgers = () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined);
 
 /** Runs the condense over this project's ledgers, reading them under the ledger lock. @es Ejecuta el condense sobre los ledgers de este proyecto, leyéndolos bajo el lock del ledger. */
-const condenseLedgers = ({ keyMap, write }) => runCondense({ load: loadLedgers, keyMap, write, date: today(), runId: newRunId(), lockFile: LOCK_FILE, preImageRoot: path.join(STATE_DIR, 'condense') });
+const condenseLedgers = ({ keyMap, write }) => runCondense({ load: loadLedgers, keyMap, write, date: today(), runId: newRunId(), lockFile: lockFile(), preImageRoot: path.join(stateDirectory(), 'condense') });
 
 function commandCondense(args) {
   let keyMap = [];
@@ -1060,7 +1062,7 @@ function commandCondense(args) {
 function commandSupersede(args) {
   ensureDirs();
 
-  const outcome = runSupersede({ load: loadLedgers, key: args.key, rule: args.rule, by: args.by, date: today(), lockFile: LOCK_FILE });
+  const outcome = runSupersede({ load: loadLedgers, key: args.key, rule: args.rule, by: args.by, date: today(), lockFile: lockFile() });
 
   for (const line of describeSupersede(outcome)) (outcome.status === 0 ? speaker.data : speaker.dataError)(line);
 

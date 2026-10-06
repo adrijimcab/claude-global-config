@@ -30,12 +30,13 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { stateDir } from '../hook-state/locations.mjs';
 import { measureFingerprint } from './fingerprint.mjs';
 import { declaredRepos } from './repos.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const STATE_DIR = path.join(HERE, 'state');
-const DISMISSALS_FILE = path.join(STATE_DIR, 'dismissals.jsonl');
+/** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
+const stateDirectory = () => stateDir('config-sync-guard');
+const dismissalsFile = () => path.join(stateDirectory(), 'dismissals.jsonl');
 
 /** The shortest reason accepted, the same floor every sibling dismiss command applies. @es El motivo más corto aceptado. */
 export const MINIMUM_REASON_LENGTH = 25;
@@ -52,7 +53,7 @@ export function readDismissals({ read = readFileSync } = {}) {
   let raw;
 
   try {
-    raw = read(DISMISSALS_FILE, 'utf8');
+    raw = read(dismissalsFile(), 'utf8');
   } catch {
     return [];
   }
@@ -127,8 +128,8 @@ export function commandDismiss(args, { append = appendFileSync, mkdir = mkdirSyn
   }
 
   try {
-    mkdir(STATE_DIR, { recursive: true });
-    append(DISMISSALS_FILE, `${JSON.stringify({ at: new Date().toISOString(), session: session ?? 'unknown', repo: repoName, reason, fingerprint })}\n`, 'utf8');
+    mkdir(stateDirectory(), { recursive: true });
+    append(dismissalsFile(), `${JSON.stringify({ at: new Date().toISOString(), session: session ?? 'unknown', repo: repoName, reason, fingerprint })}\n`, 'utf8');
   } catch (error) {
     return { ok: false, problems: [`could not write the dismissal log: ${error instanceof Error ? error.message : String(error)}`] };
   }

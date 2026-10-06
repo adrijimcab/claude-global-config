@@ -41,9 +41,10 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stateDir } from '../hook-state/locations.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const STATE_DIR = join(HERE, 'state');
+/** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
+const stateDirectory = () => stateDir('engram-persistence');
 
 /**
  * The literal that marks a save in the transcript. A tool name, not a phrase: prose about saving is
@@ -53,7 +54,7 @@ const STATE_DIR = join(HERE, 'state');
  */
 const SAVE_MARKERS = ['mem_save', 'mem_session_summary'];
 
-const statePathFor = (sessionId) => join(STATE_DIR, `${sessionId || 'unknown'}.json`);
+const statePathFor = (sessionId) => join(stateDirectory(), `${sessionId || 'unknown'}.json`);
 
 function readState(sessionId) {
   try {
@@ -65,7 +66,7 @@ function readState(sessionId) {
 
 function writeState(sessionId, state) {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
+    mkdirSync(stateDirectory(), { recursive: true });
     writeFileSync(statePathFor(sessionId), JSON.stringify(state), 'utf8');
   } catch {
     /* state is an optimisation, never a precondition */
@@ -187,9 +188,9 @@ function decide(payload) {
   }
 
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
+    mkdirSync(stateDirectory(), { recursive: true });
     appendFileSync(
-      join(STATE_DIR, 'refusals.jsonl'),
+      join(stateDirectory(), 'refusals.jsonl'),
       `${JSON.stringify({ at: new Date().toISOString(), session: sessionId, from: state.head, to: head, commits: subjects.length })}\n`,
       'utf8'
     );

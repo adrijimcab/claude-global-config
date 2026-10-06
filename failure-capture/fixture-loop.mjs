@@ -3,25 +3,46 @@
  * shared `bilingual-output` modules that `capture.mjs` imports from its sibling directory, so a sandboxed
  * `capture.mjs` resolves the same imports it has in the real tree. A shared module the copied code imports
  * but the sandbox lacks is reported by name, here, instead of surfacing as a crash inside a child process.
+ * The state-location module (`hook-state/locations.mjs` and the message table it speaks through) is copied
+ * beside them, so the copy resolves its state the way the real loop does; `worldEnv` is the environment a
+ * process of the world runs under, so that resolution lands in the world's own home.
  *
  * @es Aprovisiona la copia del lazo failure-capture de un fixture para un selftest: los módulos del propio
  * lazo más los módulos compartidos de `bilingual-output` que `capture.mjs` importa de su directorio hermano,
  * de modo que un `capture.mjs` en sandbox resuelve los mismos imports que en el árbol real. Un módulo
  * compartido que el código copiado importa pero el sandbox no tiene se informa por su nombre, aquí, en vez de
- * aparecer como un fallo dentro de un proceso hijo.
+ * aparecer como un fallo dentro de un proceso hijo. El módulo de ubicaciones de estado (`hook-state/locations.mjs`
+ * y su tabla de mensajes) se copia al lado, así la copia resuelve su estado como el lazo real; `worldEnv` es el
+ * entorno de un proceso del mundo, para que esa resolución caiga en el home del propio mundo.
  */
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { CLAUDE_HOME_VARIABLE, STATE_ROOT_VARIABLE } from '../hook-state/locations.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SHARED_DIRECTORY = 'bilingual-output';
+/** The state-location module and the message table it imports, by name. @es El módulo de ubicaciones y su tabla. */
+const STATE_DIRECTORY = 'hook-state';
+const STATE_MODULES = new Set(['locations.mjs', 'message-table.mjs']);
 /** An import statement (a line that starts with `import`), never a string that merely mentions one. @es Una sentencia import (línea que empieza por `import`), nunca una cadena que solo la menciona. */
 const SHARED_IMPORT = /^import [^\n]*from '\.\.\/bilingual-output\/([A-Za-z0-9._-]+\.mjs)'/gm;
 
-/** The real tree's two source directories. @es Los dos directorios de origen del árbol real. */
-const REAL_SOURCES = { loop: HERE, shared: path.join(HERE, '..', SHARED_DIRECTORY) };
+/** The real tree's source directories. @es Los directorios de origen del árbol real. */
+const REAL_SOURCES = { loop: HERE, shared: path.join(HERE, '..', SHARED_DIRECTORY), state: path.join(HERE, '..', STATE_DIRECTORY) };
+
+/**
+ * The environment a process of a constructed world runs under: `home` is the user's home, the Claude home is
+ * the directory that holds the copied `loop` (`<home>/.claude` unless the world put the loop elsewhere) and no
+ * state root is set, so the copy keeps its state in `<loop>/state`, the world's own, whatever the calling
+ * process was isolated to. `base` is the environment it starts from.
+ * @es El entorno de un proceso de un mundo construido: `home` es el home del usuario, el home de Claude es el
+ * directorio que contiene el `loop` copiado y no hay raíz de estado, así la copia guarda su estado en
+ * `<loop>/state`, el del mundo, sea cual sea el aislamiento del proceso llamante.
+ */
+export const worldEnv = (home, { loop = path.join(home, '.claude', 'failure-capture'), base = process.env } = {}) => ({ ...base, HOME: home, USERPROFILE: home, [CLAUDE_HOME_VARIABLE]: path.dirname(loop), [STATE_ROOT_VARIABLE]: '' });
 
 /** Copies every `.mjs` of `from` that `accept` keeps into `to`. @es Copia a `to` cada `.mjs` de `from` que `accept` conserva. */
 function copyModules(from, to, accept) {
@@ -55,6 +76,7 @@ export function provisionLoop(loop, accept = () => true, sources = REAL_SOURCES)
 
   copyModules(sources.loop, loop, accept);
   copyModules(sources.shared, shared, (file) => !file.includes('selftest') && !file.includes('mutants'));
+  copyModules(sources.state ?? REAL_SOURCES.state, path.join(loop, '..', STATE_DIRECTORY), (file) => STATE_MODULES.has(file));
 
   const missing = missingSharedModules(loop, shared);
 

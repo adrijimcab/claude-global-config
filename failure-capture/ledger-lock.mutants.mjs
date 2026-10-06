@@ -47,7 +47,7 @@ const MUTANTS = [
   ['the lock is released only when the work fails', LOCK, RELEASE_ALWAYS, '} catch (error) {\n    releaseLock(lockFile);\n    throw error;\n  }'],
 
   // --- the fold that takes it
-  ['the fold takes some other lock, so a held ledger lock is ignored', COMMAND, 'const outcome = withLock(LOCK_FILE, () => {', "const outcome = withLock(path.join(STATE_DIR, 'other.lock'), () => {"],
+  ['the fold takes some other lock, so a held ledger lock is ignored', COMMAND, 'const outcome = withLock(lockFile(), () => {', "const outcome = withLock(path.join(stateDirectory(), 'other.lock'), () => {"],
   ['a refused fold reports no waiting entries', COMMAND, ': { folded: [], deferred: pending.length };', ': { folded: [], deferred: 0 };'],
   ['a refused fold is reported as a fold that found nothing', COMMAND, 'return outcome.held ? { folded: outcome.value, deferred: 0 } : { folded: [], deferred: pending.length };', 'return { folded: outcome.value ?? [], deferred: 0 };'],
   ['the refusal to fold loses its Spanish half', COMMAND, "speaker.say('capture.deferred', { count: deferred });", "console.log('RECORDED (spooled) — the ledger is locked by another writer; ' + String(deferred) + ' entr(y/ies) will fold on the next capture. Nothing is lost.');"],
@@ -55,7 +55,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'bilingual-output', 'mutation-proof'],
+  paths: ['failure-capture', 'bilingual-output', 'mutation-proof', 'hook-state'],
   selftest: 'failure-capture/ledger-lock.selftest.mjs',
   mutants: MUTANTS,
 });

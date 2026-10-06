@@ -18,6 +18,13 @@ import { EXIT, runDiffCoverage } from './diff-coverage.mjs';
 import { builtinMirrorProblem, karmaConfigSource } from './karma/karma-config.mjs';
 import { karmaRunProblem } from './karma/karma-run.mjs';
 import { decideKarmaRun, parseKarmaSummary } from './karma/karma-summary.mjs';
+import { isolateState } from '../../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('diff-coverage');
 
 const { check, finish } = suite();
 const project = { name: 'app', sourceRoot: 'web/src/', extensions: ['.ts'], excludeSuffixes: ['.spec.ts'], excludeSegments: ['/testing/'], karma: { workspace: 'web', ngProject: 'app', baseConfig: 'angular-builtin' } };

@@ -29,7 +29,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['stash-watch', 'mutation-proof'],
+  paths: ['stash-watch', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'stash-watch/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

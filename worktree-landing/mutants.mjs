@@ -72,7 +72,7 @@ process.env.WORKTREE_LANDING_SELFTEST_FAIL_FAST = '1';
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['worktree-landing', 'mutation-proof'],
+  paths: ['worktree-landing', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'worktree-landing/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

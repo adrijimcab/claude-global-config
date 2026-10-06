@@ -23,19 +23,20 @@ import { appendFileSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { stateDir } from '../hook-state/locations.mjs';
 import { describeBlocks, recordBlocks } from './block-journal.mjs';
 import { appliesTo, loadManifest } from './manifest.mjs';
 import { mergeOutputs } from './merge.mjs';
 import { parsePayload } from './payload.mjs';
 import { runGuard } from './run-guard.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ERRORS = path.join(HERE, 'state', 'errors.jsonl');
+/** The dispatcher's own malfunctions, resolved at each call through the one state-location module. @es Los fallos propios del dispatcher, resueltos en cada llamada por el único módulo de ubicaciones. */
+const errorsFile = () => path.join(stateDir('hook-dispatch'), 'errors.jsonl');
 
 function journal(entry) {
   try {
-    mkdirSync(path.dirname(ERRORS), { recursive: true });
-    appendFileSync(ERRORS, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`);
+    mkdirSync(path.dirname(errorsFile()), { recursive: true });
+    appendFileSync(errorsFile(), `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`);
   } catch {
     // Perder una línea del diario pierde evidencia, nunca una decisión.
   }

@@ -62,7 +62,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['backlog-owner-guard', 'backlog-guard', 'hook-caller'],
+  paths: ['backlog-owner-guard', 'backlog-guard', 'hook-caller', 'hook-state', 'bilingual-output'],
   selftest: 'backlog-owner-guard/selftest.mjs',
   mutants: MUTANTS
 });

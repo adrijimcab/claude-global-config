@@ -39,6 +39,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isCampaignFile, planCampaign } from './campaign-plan.mjs';
 import { VERDICT_VOCABULARY, decidingModules } from './deciding-modules.mjs';
 import { exitCodeOf, listPopulation, renderScope, scopeOf } from './scope.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('mutation-proof');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SIBLINGS = ['scope.mjs', 'campaign-plan.mjs', 'deciding-modules.mjs'];

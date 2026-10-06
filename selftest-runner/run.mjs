@@ -11,20 +11,33 @@
  * ends, so a long run is watchable; the summary line comes last. Streaming changes WHEN lines appear, never
  * which lines, their order, or the exit code.
  *
+ * ISOLATION AND THE LEAK DETECTOR. Each selftest runs with a fresh, empty `HOOK_STATE_DIR` of its own, removed
+ * when it ends, so every module that resolves its state through `hook-state/locations.mjs` writes there and a
+ * selftest never sees the state another one left. The live state (`leaks.mjs` says which directories) is
+ * snapshotted before and after each selftest; any file created, changed or removed there turns that selftest RED,
+ * whatever its exit code, with the offending paths.
+ *
  * @es Ejecuta todos los selftests del repositorio y da UN veredicto: 0 todo verde, 1 alguno rojo, 2 no
  * medido. La línea GREEN o RED de cada selftest (y, si es RED, su salida) se imprime en cuanto ese selftest
  * termina, para poder seguir una corrida larga; el resumen va al final. El flujo cambia CUÁNDO aparecen las
  * líneas, nunca cuáles, su orden ni el código de salida. Cada selftest corre en su propio proceso y con su
  * directorio como cwd. No hay opción de filtro, salto ni corte al primer fallo, a propósito: un subconjunto elegido no es un veredicto del repositorio, y
  * un selftest rojo de partida se informa ROJO, nunca se omite. Para uno solo, se invoca con node.
+ * AISLAMIENTO Y DETECTOR DE FUGAS: cada selftest corre con su propio `HOOK_STATE_DIR` nuevo y vacío, que se
+ * borra al acabar, así todo módulo que resuelve por `locations.mjs` escribe ahí y ningún selftest ve el estado
+ * que dejó otro. El estado vivo (`leaks.mjs` dice qué directorios) se fotografía antes y después de cada
+ * selftest; cualquier fichero creado, cambiado o borrado ahí lo pone ROJO, sea cual sea su salida, con las rutas.
  */
 
 import { spawnSync } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { STATE_ROOT_VARIABLE } from '../hook-state/locations.mjs';
 import { DiscoveryError, discoverSelftests } from './discovery.mjs';
+import { leaksBetween, snapshotLiveState } from './leaks.mjs';
 import { writeLineSync } from './stream.mjs';
 
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
@@ -34,10 +47,27 @@ const EXIT_NOT_MEASURED = 2;
 const OUTPUT_LIMIT_BYTES = 64 * 1024 * 1024;
 
 /**
- * Runs one selftest. Returns why it is red, or null when it is green.
- * @es Ejecuta un selftest. Devuelve por qué está rojo, o null si está verde.
+ * Runs one selftest under its own fresh state home, removed afterwards. Returns why it is red (its exit) and the
+ * live state it touched; `failure` is null when it exited green.
+ * @es Ejecuta un selftest con su propio home de estado nuevo, que se borra después. Devuelve por qué está rojo
+ * (su salida) y el estado vivo que tocó; `failure` es null si salió en verde.
  */
 function runOne({ root, entry, timeoutMs, spawn }) {
+  const stateHome = mkdtempSync(path.join(tmpdir(), 'selftest-state-'));
+  try {
+    const before = snapshotLiveState(root);
+    const failure = exitOf({ root, entry, timeoutMs, spawn, stateHome });
+    return { failure, leaks: leaksBetween(before, snapshotLiveState(root)) };
+  } finally {
+    rmSync(stateHome, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Runs one selftest with `HOOK_STATE_DIR` at `stateHome`. Returns why it is red, or null when it is green.
+ * @es Ejecuta un selftest con `HOOK_STATE_DIR` en `stateHome`. Devuelve por qué está rojo, o null si está verde.
+ */
+function exitOf({ root, entry, timeoutMs, spawn, stateHome }) {
   const file = path.join(root, entry.path);
   try {
     statSync(file);
@@ -49,6 +79,7 @@ function runOne({ root, entry, timeoutMs, spawn }) {
     encoding: 'utf8',
     timeout: timeoutMs,
     maxBuffer: OUTPUT_LIMIT_BYTES,
+    env: { ...process.env, [STATE_ROOT_VARIABLE]: stateHome },
   });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   if (result.error?.code === 'ETIMEDOUT') {
@@ -109,13 +140,19 @@ export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spa
   let green = 0;
   for (const entry of discovered.entries) {
     const label = entry.untracked ? ' UNTRACKED' : '';
-    const failure = runOne({ root: discovered.root, entry, timeoutMs, spawn });
-    if (failure === null) {
+    const { failure, leaks } = runOne({ root: discovered.root, entry, timeoutMs, spawn });
+    if (failure === null && leaks.length === 0) {
       green += 1;
       emit(`GREEN  ${entry.path} (exit 0)${label}`);
       continue;
     }
-    emit(`RED    ${entry.path} (exit ${failure.exit})${label}`);
+    const leaked = leaks.length === 0 ? '' : ', leaked into the live state';
+    emit(`RED    ${entry.path} (exit ${failure === null ? 0 : failure.exit}${leaked})${label}`);
+    if (leaks.length > 0) {
+      emit(`    wrote ${leaks.length} path(s) of the live state @es escribió ${leaks.length} ruta(s) del estado vivo:`);
+      emit(...leaks.map((leak) => `    ${leak.change} ${leak.path}`));
+    }
+    if (failure === null) continue;
     if (failure.reason !== '') emit(`    ${failure.reason}`);
     emit(...indent(failure.output));
   }

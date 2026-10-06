@@ -49,13 +49,17 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { stateDir as stateDirOf } from '../hook-state/locations.mjs';
 import { describeStashes } from './report.mjs';
 import { stashInventory } from './stashes.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-
-/** Where the guard keeps what each session has been shown, and its own evidence. @es Estado y evidencia del guard. */
-export const DEFAULT_STATE_DIR = path.join(HERE, 'state');
+/**
+ * Where the guard keeps what each session has been shown, and its own evidence, resolved at each call through
+ * the one state-location module (a selftest redirects it with `HOOK_STATE_DIR`).
+ * @es Estado y evidencia del guard, resueltos en cada llamada por el único módulo de ubicaciones (un selftest
+ * lo redirige con `HOOK_STATE_DIR`).
+ */
+export const defaultStateDir = () => stateDirOf('stash-watch');
 
 const noticedPath = (stateDir) => path.join(stateDir, 'noticed.json');
 
@@ -125,7 +129,7 @@ export function reason(stashes, now = Date.now()) {
  * Decides one `Stop` event. Returns the hook output object, or `undefined` to allow silently.
  * @es Decide un evento `Stop`. Devuelve la salida del hook, o `undefined` para dejar pasar.
  */
-export function decide(payload, { repoRoot = repositoryOf(payload), stateDir = DEFAULT_STATE_DIR, now = Date.now() } = {}) {
+export function decide(payload, { repoRoot = repositoryOf(payload), stateDir = defaultStateDir(), now = Date.now() } = {}) {
   // Already refused once in this stop sequence: never twice.
   if (payload?.stop_hook_active === true) return undefined;
 
@@ -169,14 +173,6 @@ export function decide(payload, { repoRoot = repositoryOf(payload), stateDir = D
 }
 
 /**
- * The state directory for a hook process: `STASH_WATCH_STATE_DIR` when set, so the selftest can drive
- * the real shim end to end without writing into the live state; the module's own `state/` otherwise.
- * @es El directorio de estado del proceso: la variable permite al selftest ejecutar el shim real sin
- * tocar el estado vivo.
- */
-const stateDirOfProcess = () => process.env.STASH_WATCH_STATE_DIR ?? DEFAULT_STATE_DIR;
-
-/**
  * La salida de hook para un payload crudo, o `undefined` si el turno puede terminar. Exportada para que
  * `~/.claude/hook-dispatch/dispatch.mjs` la corra en su propio proceso. Un fallo propio deja pasar y
  * queda anotado.
@@ -186,9 +182,9 @@ export function evaluate(raw) {
     // PowerShell 5.1 prepends a BOM when it pipes a string into a native process; `JSON.parse`
     // rejects it, which would read as a clean stack.
     // @es PowerShell 5.1 antepone un BOM que `JSON.parse` rechaza.
-    return decide(JSON.parse(raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw), { stateDir: stateDirOfProcess() });
+    return decide(JSON.parse(raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw), { stateDir: defaultStateDir() });
   } catch (error) {
-    note(stateDirOfProcess(), { event: 'malfunction', stage: 'payload', error: error instanceof Error ? error.message : String(error), rawLength: raw.length });
+    note(defaultStateDir(), { event: 'malfunction', stage: 'payload', error: error instanceof Error ? error.message : String(error), rawLength: raw.length });
 
     return undefined;
   }

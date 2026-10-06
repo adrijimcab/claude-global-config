@@ -21,6 +21,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { journalCounts, registryCounts } from './counts.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('baseline-record');
 
 let passed = 0;
 const failures = [];

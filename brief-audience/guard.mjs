@@ -50,15 +50,16 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { stateDir } from '../hook-state/locations.mjs';
 import { inspectPayload } from './audience.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const STATE_DIR = join(HERE, 'state');
+/** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
+const stateDirectory = () => stateDir('brief-audience');
 
 function journal(entry) {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
-    appendFileSync(join(STATE_DIR, 'refusals.jsonl'), `${JSON.stringify(entry)}\n`, 'utf8');
+    mkdirSync(stateDirectory(), { recursive: true });
+    appendFileSync(join(stateDirectory(), 'refusals.jsonl'), `${JSON.stringify(entry)}\n`, 'utf8');
   } catch {
     /* the journal is evidence, never a precondition: its failure must not change the decision */
   }

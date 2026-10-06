@@ -19,6 +19,14 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { worldEnv } from './fixture-loop.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('failure-capture');
 
 const CAPTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'capture.mjs');
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'budget-command-selftest-')));
@@ -50,7 +58,7 @@ function world({ homeText, projectText, config, extra = {} }) {
 
 /** Runs `budget` with the world's home, walking no higher than the scratch directory (the real home is an ancestor of the temp directory); `{ status, out, err }`. @es Ejecuta `budget` con el home del mundo, sin subir más que el directorio temporal (el home real es ancestro del temporal). */
 function budget(target, args = [], cwd = target.project) {
-  const answer = spawnSync(process.execPath, [CAPTURE, 'budget', ...args, '--ceiling', scratch], { cwd, encoding: 'utf8', env: { ...process.env, HOME: target.home, USERPROFILE: target.home }, timeout: 60_000 });
+  const answer = spawnSync(process.execPath, [CAPTURE, 'budget', ...args, '--ceiling', scratch], { cwd, encoding: 'utf8', env: worldEnv(target.home), timeout: 60_000 });
 
   return { status: answer.status, out: answer.stdout.split('\n'), err: answer.stderr };
 }

@@ -128,14 +128,11 @@ const MUTANTS = [
   ['a mechanism with no journal file is listed', R, '.filter(({ read }) => read.records.length + Object.keys(read.unclassifiedFiles).length > 0)', ''],
   ['a mechanism with only legacy lines is not listed', R, 'read.records.length + Object.keys(read.unclassifiedFiles).length > 0', 'read.records.length > 0'],
   ['a mechanism with only v2 records is not listed', R, 'read.records.length + Object.keys(read.unclassifiedFiles).length > 0', 'Object.keys(read.unclassifiedFiles).length > 0'],
-  ['an absent root is an error', B, 'if (!existsSync(root)) return [];', ''],
-  ['the Claude home is read even when HOOK_STATE_DIR is set', B, 'process.env.HOOK_STATE_DIR ? path.resolve(process.env.HOOK_STATE_DIR) : claudeHome()', 'claudeHome()'],
-  ['HOOK_STATE_DIR is read even when it is not set', B, 'process.env.HOOK_STATE_DIR ? path.resolve(process.env.HOOK_STATE_DIR) : claudeHome()', 'path.resolve(process.env.HOOK_STATE_DIR ?? claudeHome())'],
-  ['a file in the root is read as a mechanism', B, 'entry.isDirectory() && ', ''],
-  ['a name that is not plain is read as a mechanism', B, 'entry.isDirectory() && isPlainName(entry.name)', 'entry.isDirectory()'],
-  ['no name is plain', B, '    assertMechanism(name);\n\n    return true;', '    assertMechanism(name);\n\n    return false;'],
-  ['a directory without a state directory is read', B, '.filter((name) => existsSync(stateDir(name)))', ''],
-  ['the mechanisms are not sorted', B, '.filter((name) => existsSync(stateDir(name)))\n    .sort();', '.filter((name) => existsSync(stateDir(name)));'],
+  // The listing itself (absent root, HOOK_STATE_DIR or the home, plain names, a directory without state, the
+  // order) is decided by `hook-state/locations.mjs` `mechanismsWithState`, and broken in its own campaign.
+  // @es El listado lo decide `mechanismsWithState` de `locations.mjs`, y se rompe en su propia campaña.
+  ['the report lists no mechanism at all', B, 'export const mechanismNames = (readDirectory) => mechanismsWithState(readDirectory);', 'export const mechanismNames = () => [];'],
+  ['the report ignores the reader it is given', B, 'export const mechanismNames = (readDirectory) => mechanismsWithState(readDirectory);', "export const mechanismNames = () => mechanismsWithState(() => []);"],
 
   // --- the table ---
   ['the percent is not a percentage', R, '(fraction * 100).toFixed(1)', '(fraction).toFixed(1)'],

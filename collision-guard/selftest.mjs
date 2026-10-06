@@ -32,13 +32,20 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ERRORS } from './guard.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+import { errorsFile } from './guard.mjs';
+
+// Every guard this selftest spawns keeps its state in a temp directory: never the live one a real session
+// reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza guarda su estado en un directorio temporal: nunca en el vivo que
+// lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('collision-guard');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.join(HERE, 'guard.mjs');
 
 /** How many malfunctions this guard had recorded BEFORE this run, so the assertion below is a DELTA. @es Cuántos fallos había ANTES. */
-const errorsBefore = existsSync(ERRORS) ? readFileSync(ERRORS, 'utf8').split('\n').filter((line) => line.length > 0).length : 0;
+const errorsBefore = existsSync(errorsFile()) ? readFileSync(errorsFile(), 'utf8').split('\n').filter((line) => line.length > 0).length : 0;
 
 let passed = 0;
 const failures = [];
@@ -192,7 +199,7 @@ for (const [label, input] of [['garbage', 'NOT JSON AT ALL'], ['empty', ''], ['B
 //     @es NADA SE DEGRADÓ EN SILENCIO: si algún veredicto vino de un crash y no de una decisión, este
 //     delta no es cero.
 {
-  const after = existsSync(ERRORS) ? readFileSync(ERRORS, 'utf8').split('\n').filter((line) => line.length > 0).length : 0;
+  const after = existsSync(errorsFile()) ? readFileSync(errorsFile(), 'utf8').split('\n').filter((line) => line.length > 0).length : 0;
 
   check('the guard recorded no malfunction of its own across every case above', after - errorsBefore, 0);
 }

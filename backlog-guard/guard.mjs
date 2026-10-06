@@ -36,16 +36,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { decide } from './decide.mjs';
-import { STATE_DIR } from './state.mjs';
+import { stateDirectory } from './state.mjs';
 
-const REFUSALS = path.join(STATE_DIR, 'refusals.jsonl');
+const refusalsFile = () => path.join(stateDirectory(), 'refusals.jsonl');
 const DISMISS_CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dismiss.mjs');
 
 /** Appends one line, or gives up silently: a journal that cannot be written costs evidence, never a decision. @es Añade una línea o desiste en silencio. */
 function journal(record) {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
-    appendFileSync(REFUSALS, `${JSON.stringify(record)}\n`, 'utf8');
+    mkdirSync(stateDirectory(), { recursive: true });
+    appendFileSync(refusalsFile(), `${JSON.stringify(record)}\n`, 'utf8');
   } catch {
     /* a journal is evidence, never a precondition */
   }

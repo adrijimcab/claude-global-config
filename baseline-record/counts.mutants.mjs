@@ -59,7 +59,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['baseline-record', 'journal-backup'],
+  paths: ['baseline-record', 'journal-backup', 'hook-state', 'bilingual-output'],
   selftest: 'baseline-record/counts.selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',
