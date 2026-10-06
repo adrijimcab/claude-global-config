@@ -1,9 +1,5 @@
 # Verification contract — binding, every turn, every session
 
-Two failures on 2026-07-14 (minutes apart) shared ONE root cause: an **absolute/negative claim about
-the system was asserted from reasoning and memory, with zero verification, when a single search would
-have refuted it**. Both were wrong.
-
 The following is not advice. It is the contract.
 
 ## 1. Never assert what you have not verified
@@ -18,7 +14,7 @@ If you have not verified it and cannot right now, you may still speak — but yo
 
 ## 2. Negative and absolute claims require a search that would have found the thing
 
-This is the exact class that failed. A claim of the form "there is no X", "we don't have X",
+A claim of the form "there is no X", "we don't have X",
 "nothing would have caught X", "X doesn't exist", "it never/always does X", "X is impossible"
 **may not be uttered** until you have run the search that WOULD have located X and it came back
 empty. State the search you ran.
