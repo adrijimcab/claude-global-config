@@ -59,15 +59,21 @@ const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 export const RESUMABLE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Share of the NEW errand's significant words that must already appear in a prior agent's description
- * before this refuses. Not a similarity score with a pleasing name: it is the point at which "this is
- * the same errand, phrased differently" stops being deniable. High enough that unrelated work passes,
- * low enough that a re-wording does not slip through.
- * @es Proporción de palabras significativas del encargo NUEVO que ya deben aparecer en la descripción
- * de un agente previo. Alta para que pase el trabajo no relacionado; baja para que un reformulado no
- * se cuele.
+ * Share of the SMALLER errand's identifying words that must appear in the other before this refuses: all
+ * of them. "The same errand, phrased differently" means one description is the other plus qualifiers;
+ * the moment EACH side carries a word the other lacks, they name two objects of one verb — the siblings
+ * of a fan-out («Port the table component» / «Port the dialog component»), or a verifier beside the
+ * writer — and refusing the second for the first's transcript is the false refusal that gets a guard
+ * switched off. This was 0.6, which let three shared words of four through; no real re-wording measured
+ * here ever needed less than containment, because a re-dispatch ADDS words, it does not swap them.
+ * @es Proporción de las palabras identificativas del encargo MENOR que deben aparecer en el otro para
+ * rechazar: todas. «El mismo encargo, con otras palabras» es una descripción que es la otra más
+ * calificativos; en cuanto CADA lado lleva una palabra que falta en el otro, nombran dos objetos del mismo
+ * verbo (los hermanos de un reparto, un verificador junto al escritor) y rechazar al segundo por el
+ * transcript del primero es el rechazo falso que acaba apagando un guard. Era 0.6; un re-despacho AÑADE
+ * palabras, no las cambia.
  */
-export const OVERLAP_THRESHOLD = 0.6;
+export const OVERLAP_THRESHOLD = 1;
 
 /**
  * Words that carry no errand. Kept deliberately short: every entry here is a word this guard becomes
@@ -141,6 +147,18 @@ export function canonicalWord(word) {
   return isPlural ? expanded.slice(0, -1) : expanded;
 }
 
+/** The shortest word that can carry an errand; a number carries one at any length. @es La palabra más corta que puede llevar un encargo; un número lo lleva con cualquier longitud. */
+const MIN_WORD_LENGTH = 4;
+
+/**
+ * Whether a token is a number, which is an OBJECT however short: «Reopen tasks 89 127 129» names its
+ * errand by its numbers alone, and a length filter that drops them makes every batch of «Reopen tasks»
+ * the same label.
+ * @es Si un token es un número, que es un OBJETO por corto que sea: «Reopen tasks 89 127 129» nombra su
+ * encargo solo con los números, y un filtro de longitud que los quita hace que todo lote sea la misma etiqueta.
+ */
+const isNumber = (token) => token.length > 0 && [...token].every((character) => character >= '0' && character <= '9');
+
 /**
  * The words a description is actually ABOUT. Split on anything that is not a letter or a digit — never
  * a regex (M5): a regex that fails to match SKIPS silently, and a guard whose scan quietly empties is
@@ -158,7 +176,7 @@ export function significantWords(text) {
   // @es El filtro juzga la palabra TAL CUAL se escribió; plegar solo cambia la grafía de una palabra
   // conservada. Plegar antes convertía `tasks` en la palabra de ruido `task` y vaciaba un encargo real.
   const flush = () => {
-    if (current.length >= 4 && !NOISE.has(current)) words.add(canonicalWord(current));
+    if ((current.length >= MIN_WORD_LENGTH || isNumber(current)) && !NOISE.has(current)) words.add(canonicalWord(current));
 
     current = '';
   };

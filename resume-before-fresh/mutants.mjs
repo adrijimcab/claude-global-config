@@ -29,6 +29,9 @@ const MUTANTS = [
   ['any label identical in size counts as the same label', G, 'left.size === right.size && [...left].every((word) => right.has(word))', 'left.size === right.size'],
   ['one shared word is enough to refuse', G, 'const overlaps = shared >= 2 && ratio >= OVERLAP_THRESHOLD;', 'const overlaps = shared >= 1;'],
   ['the overlap ratio is ignored, so two shared words refuse anything', G, 'const overlaps = shared >= 2 && ratio >= OVERLAP_THRESHOLD;', 'const overlaps = shared >= 2;'],
+  ['two errands that each carry a word the other lacks are the same errand again (the fan-out siblings)', G, 'export const OVERLAP_THRESHOLD = 1;', 'export const OVERLAP_THRESHOLD = 0.6;'],
+  ['numbers shorter than a word are dropped from the errand again (every batch of tasks is one label)', G, '(current.length >= MIN_WORD_LENGTH || isNumber(current))', '(current.length >= MIN_WORD_LENGTH)'],
+  ['every short token counts as a number, so connecting words become errand words', G, "token.length > 0 && [...token].every((character) => character >= '0' && character <= '9')", 'token.length > 0'],
   ['an agent older than the window is offered', G, '    if (now - lastWrite > RESUMABLE_WINDOW_MS) continue;\n', ''],
   ['a record from another project is offered', G, 'if (projectSlug(record.project) !== slug) continue;', ''],
   ['an agent whose worktree was removed is offered', G, '    if (recordedWorktree.length > 0 && !existsSync(recordedWorktree)) continue;\n', '']

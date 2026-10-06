@@ -129,7 +129,13 @@ const records = [
   record({ id: 'agent-aOTHERINVALID00', description: 'Compress the carousel hero imagery', lastRecord: OTHER_INVALID_REQUEST_RECORD }),
   record({ id: 'agent-aQUOTEDTEXT0000', description: 'Explain the tooltip positioning fallback', lastRecord: QUOTED_TEXT_RECORD }),
   record({ id: 'agent-aOTHERCLASS0000', description: 'Profile the datepicker overlay repaint', lastRecord: OTHER_CLASS_RECORD }),
-  record({ id: 'agent-aUNFLAGGED00000', description: 'Document the stepper keyboard contract', lastRecord: UNFLAGGED_RECORD })
+  record({ id: 'agent-aUNFLAGGED00000', description: 'Document the stepper keyboard contract', lastRecord: UNFLAGGED_RECORD }),
+  // SIBLINGS of one fan-out: the same verb and the same generic noun, each on its own object. The first
+  // sibling's record exists when the second is dispatched, so each of these is the "prior" of its twin.
+  // @es HERMANOS de un mismo reparto: mismo verbo y mismo sustantivo genérico, cada uno sobre su objeto.
+  record({ id: 'agent-aPORTTABLE00000', description: 'Port the table component to signals' }),
+  record({ id: 'agent-aMIGRATEUSERS00', description: 'Migrate users controller tests' }),
+  record({ id: 'agent-aFIXCAROUSEL000', description: 'Fix failing carousel specs' })
 ];
 
 const cases = [
@@ -169,6 +175,28 @@ const cases = [
   ['refuse', 'Explain the tooltip positioning fallback', 'NEAR MISS: the context-length text in a normal answer, no error flag'],
   ['refuse', 'Profile the datepicker overlay repaint', 'NEAR MISS: the measured record with another error class'],
   ['refuse', 'Document the stepper keyboard contract', 'NEAR MISS: the measured record without its API-error flag'],
+
+  // --- SIBLINGS ARE NOT THE SAME ERRAND, added 2026-10-06. Two descriptions that each carry a word the
+  // other lacks name two OBJECTS of the same verb; refusing the second sibling of a fan-out for the first
+  // one's transcript is the false refusal that teaches people to switch the guard off. One errand is the
+  // other PLUS qualifiers — that is a re-wording, and stays refused.
+  // @es LOS HERMANOS NO SON EL MISMO ENCARGO. Dos descripciones que llevan cada una una palabra que falta
+  // en la otra nombran dos OBJETOS del mismo verbo; un encargo que es el otro MÁS calificativos es un
+  // reformulado y se sigue rechazando.
+  ['pass', 'Port the dialog component to signals', 'FAN-OUT: same verb and noun as a stopped sibling, another object'],
+  ['pass', 'Migrate orders controller tests', 'FAN-OUT: three of four words shared with a stopped sibling, another object'],
+  ['pass', 'Verify carousel specs fix', 'another role on the same object: neither errand contains the other'],
+  ['refuse', 'Port the table component to signals and add the stories', 'a re-wording: the stopped errand plus a qualifier'],
+  ['refuse', 'Fix failing carousel specs on the hero slide', 'a re-wording: the stopped errand plus a qualifier'],
+
+  // --- NUMBERS ARE THE OBJECT, added 2026-10-06. «tasks 89 127 129» was a REAL errand whose only objects
+  // are its numbers; they are shorter than any word the filter keeps, so two different batches read as
+  // the same label.
+  // @es LOS NÚMEROS SON EL OBJETO. «tasks 89 127 129» era un encargo REAL cuyos únicos objetos son sus
+  // números, más cortos que cualquier palabra que el filtro conserva.
+  ['pass', 'Reopen tasks 130 131', 'a different batch of numbers is a different errand'],
+  ['pass', 'Reopen tasks 89 127 130', 'one different number is a different errand'],
+  ['refuse', 'Reopen tasks 89 127 129 130', 'the same numbers plus one more is the same errand, extended'],
   ['refuse', 'Refresh the visual regression baselines', 'a normal completion: resumable, still offered'],
   ['refuse', 'Trace the demo crawler timeout', 'failed for ANOTHER reason (server error): resumable, still offered']
 ];
@@ -241,6 +269,16 @@ for (const [expected, description, label] of cases) {
   checked += 1; if (!ok) failures += 1;
 
   console.log(`${ok ? 'PASS' : 'FAIL'}  significant words drop noise and punctuation  [${[...words].join(' ')}]`);
+}
+
+{
+  const words = significantWords('Reopen tasks 89 127 129 in v2 to a1');
+  // Numbers are kept at any length; a short word and a short mixed token are not.
+  const ok = words.has('89') && words.has('127') && words.has('129') && words.has('reopen') && !words.has('v2') && !words.has('a1') && !words.has('to') && !words.has('in');
+
+  checked += 1; if (!ok) failures += 1;
+
+  console.log(`${ok ? 'PASS' : 'FAIL'}  numbers are errand words at any length, short words and mixed tokens are not  [${[...words].join(' ')}]`);
 }
 
 {
