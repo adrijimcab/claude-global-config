@@ -57,7 +57,12 @@ const MUTANTS = [
   ['the manifest is not inspected', T, 'problems.push(...manifestProblems(manifest, dependencies, path.basename(dir)));', ''],
   ['the manifest is read against another stack', T, 'path.basename(dir)', "'toolchain'"],
   ['a kit without a toolchains folder is read', T, 'if (!existsSync(base)) return [];', ''],
-  ['the stack filter is ignored by toolchain discovery', T, 'stack === undefined || name === stack', 'true'],
+  ['the stack filter is ignored by toolchain discovery', T, 'stack === undefined || stackOfToolchain(name) === stack', 'true'],
+  ['a per-major toolchain is not found by its stack', T, 'stack === undefined || stackOfToolchain(name) === stack', 'stack === undefined || name === stack'],
+  ['a toolchain matches any stack it starts with', T, 'stackOfToolchain(name) === stack', 'name.startsWith(stack)'],
+  ['a toolchain is listed by its stack instead of its id', T, '.map((name) => ({ stack: name, dir: toolchainOf(root, name) }))', '.map((name) => ({ stack: stackOfToolchain(name), dir: toolchainOf(root, name) }))'],
+  ['any trailing suffix is a major', L, "id.replace(/-\\d+$/, '')", "id.replace(/-[^-]+$/, '')"],
+  ['a major is dropped anywhere in the id', L, "id.replace(/-\\d+$/, '')", "id.replace(/-\\d+/, '')"],
   ['a plain file counts as a toolchain', T, '.filter((entry) => entry.isDirectory())', '.filter(() => true)'],
   ['a command that runs no package is checked', T, 'if (tool === undefined) return [];', ''],
   ['a stack without a toolchain is read as declaring nothing', T, "if (!existsSync(toolchainDir)) return [{ id: 'no-toolchain' }];", ''],
@@ -67,9 +72,10 @@ const MUTANTS = [
   ['the launcher is found only under forward slashes', L, '.split(/[\\\\/]/)', ".split('/')"],
   ['the launcher is not required to run under node', L, "program !== 'node' || ", ''],
   ['the launcher file is renamed', L, "const LAUNCHER = 'run-tool.mjs';", "const LAUNCHER = 'launch.mjs';"],
-  ['a --cwd folder is read as the package', L, "rest[0] === '--cwd' ? rest[2] : rest[0]", 'rest[0]'],
-  ['the package is read one place too early after --cwd', L, "rest[0] === '--cwd' ? rest[2] : rest[0]", "rest[0] === '--cwd' ? rest[1] : rest[0]"],
-  ['the package is read after --cwd even without it', L, "rest[0] === '--cwd' ? rest[2] : rest[0]", 'rest[2]'],
+  ['a --cwd folder is read as the package', L, "const at = rest[0] === '--cwd' ? 2 : 0;", 'const at = 0;'],
+  ['the package is read one place too early after --cwd', L, "const at = rest[0] === '--cwd' ? 2 : 0;", "const at = rest[0] === '--cwd' ? 1 : 0;"],
+  ['the package is read after --cwd even without it', L, "const at = rest[0] === '--cwd' ? 2 : 0;", 'const at = 2;'],
+  ['the arguments start at the package', L, 'args: rest.slice(at + 1)', 'args: rest.slice(at)'],
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

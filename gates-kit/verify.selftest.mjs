@@ -100,8 +100,8 @@ function gateWithEmptyFolder(removed, folder) {
   return problemsIn(dir);
 }
 
-function runCli(args) {
-  const run = spawnSync(process.execPath, [VERIFY, ...args], { encoding: 'utf8' });
+function runCli(args, env = {}) {
+  const run = spawnSync(process.execPath, [VERIFY, ...args], { encoding: 'utf8', env: { ...process.env, GATES_KIT_TOOLCHAIN: '', ...env } });
 
   return { status: run.status, lines: `${run.stdout}${run.stderr}`.split('\n').filter((line) => line.trim() !== '') };
 }
@@ -250,7 +250,7 @@ function buildToolchain(root, stack, { dependencies = { eslint: '9.39.4' }, lock
   if (lock) writeFileSync(path.join(dir, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }));
 }
 
-const LAUNCHED = JSON.stringify({ command: ['node', '../../run-tool.mjs', 'eslint', 'eslint', '{target}'] });
+const LAUNCHED = JSON.stringify({ command: ['node', '../../run-tool.mjs', 'eslint', 'eslint', '--format', 'stylish', '{target}'] });
 const coupledKit = freshRoot();
 
 buildGate(coupledKit, 'angular', 'g', { 'gate.json': LAUNCHED });
@@ -322,6 +322,82 @@ check('a launched gate is read against the toolchain of its own stack', unwiredR
 check('the toolchain of another stack does not satisfy a gate', unwiredRun.lines.some((line) => line.includes('gate unwired/g: REFUSED')));
 check('every toolchain problem id has a message', ['missing-manifest', 'invalid-manifest', 'missing-lockfile', 'invalid-lockfile', 'no-dependencies', 'range-version', 'unexpected-section', 'not-private', 'bad-name', 'lock-out-of-sync', 'lock-missing-package', 'lock-version-mismatch', 'tool-not-declared', 'no-toolchain'].every((id) => MESSAGES[`problem.${id}`] !== undefined));
 check('every toolchain line carries its @es half', [...tools.lines, ...goodOnly.lines, ...brokenOnly.lines].every((line) => line.includes(' @es ')));
+
+// The reporter and quiet rules over a gate command, as the verifier reports them.
+const commandOf = (args) => JSON.stringify({ command: ['node', '../../run-tool.mjs', ...args] });
+const ruled = freshRoot();
+/** The command-rule problems of a gate of `ruled`. @es Los problemas de reglas de comando de un gate. */
+const ruleIds = (gateJson) => coupling(ruled, 's', { 'gate.json': gateJson }).filter((id) => /^(reporter|quiet)-/.test(id)).join();
+
+buildToolchain(ruled, 's', { dependencies: { eslint: '9.39.4', mystery: '1.0.0' } });
+
+check('a launched eslint without --format is refused as reporter-not-pinned', ruleIds(commandOf(['eslint', 'eslint', '{target}'])) === 'reporter-not-pinned:eslint --format');
+check('a launched eslint with --quiet is refused as quiet-flag', ruleIds(commandOf(['eslint', 'eslint', '--format', 'stylish', '--quiet', '{target}'])) === 'quiet-flag:eslint --quiet');
+check('a launched package with no decided reporter is refused', ruleIds(commandOf(['mystery', 'mystery', '{target}'])) === 'reporter-unknown:mystery');
+check('every command-rule problem id has a message', ['reporter-not-pinned', 'reporter-unknown', 'quiet-flag'].every((id) => MESSAGES[`problem.${id}`] !== undefined));
+
+// A stack with one toolchain per major: --toolchain picks one, a gate another sibling serves is not applicable.
+const VITEST_LAUNCHED = commandOf(['vitest', 'vitest', 'run', '--reporter', 'default', '{target}']);
+const perMajor = freshRoot();
+
+writeFileSync(path.join(perMajor, 'run-tool.mjs'), STUB_LAUNCHER);
+buildGate(perMajor, 'fw', 'lint', { 'gate.json': LAUNCHED });
+buildGate(perMajor, 'fw', 'test', { 'gate.json': VITEST_LAUNCHED });
+buildToolchain(perMajor, 'fw-1', { dependencies: { eslint: '9.39.4' } });
+buildToolchain(perMajor, 'fw-2', { dependencies: { eslint: '10.12.0', vitest: '5.0.3' } });
+
+const majorOne = runCli(['--root', perMajor, '--toolchain', 'fw-1']);
+const majorTwo = runCli(['--root', perMajor, '--toolchain', 'fw-2']);
+
+check('a gate another toolchain of the stack serves is not applicable, and the run exits 0', majorOne.status === 0 && majorOne.lines.some((line) => line.includes('gate fw/test: not applicable on toolchain fw-1') && line.includes('vitest')));
+check('a not-applicable gate is not counted as correct', majorOne.lines.some((line) => line.includes('1 of 1 gate(s) correct')) && majorOne.lines.some((line) => line.includes('1 gate(s) not applicable on toolchain fw-1')));
+check('--toolchain verifies only that toolchain', majorOne.lines.some((line) => line.includes('toolchain fw-1')) && !majorOne.lines.some((line) => line.includes('toolchain fw-2')));
+check('every gate runs on the toolchain that declares all their packages', majorTwo.status === 0 && majorTwo.lines.some((line) => line.includes('2 of 2 gate(s) correct')) && !majorTwo.lines.some((line) => line.includes('not applicable')));
+check('without --toolchain a per-major stack has no toolchain of its name', runCli(['--root', perMajor, '--stack', 'fw']).lines.some((line) => line.includes('--toolchain <id>')));
+check('--stack discovers every per-major toolchain of the stack', ['fw-1', 'fw-2'].every((id) => runCli(['--root', perMajor, '--stack', 'fw']).lines.some((line) => line.includes(`toolchain ${id}:`))));
+check('an unknown toolchain exits 2', runCli(['--root', perMajor, '--toolchain', 'fw-9']).status === 2);
+check('a --stack that does not hold the toolchain exits 2', runCli(['--root', perMajor, '--stack', 'other', '--toolchain', 'fw-1']).status === 2);
+check('a --stack that holds the toolchain is accepted', runCli(['--root', perMajor, '--stack', 'fw', '--toolchain', 'fw-1']).status === 0);
+
+const installedOne = path.join(perMajor, 'toolchains', 'fw-1');
+const mismatch = runCli(['--root', perMajor, '--toolchain', 'fw-2'], { GATES_KIT_TOOLCHAIN: installedOne });
+
+check('an installed toolchain other than the chosen one stops the run with 2', mismatch.status === 2 && mismatch.lines.some((line) => line.includes('gates-kit-fw-1-toolchain') && line.includes('fw-2')));
+check('the installed toolchain that matches lets the run go on', runCli(['--root', perMajor, '--toolchain', 'fw-1'], { GATES_KIT_TOOLCHAIN: installedOne }).status === 0);
+check('an installed folder without a manifest is a mismatch', runCli(['--root', perMajor, '--toolchain', 'fw-1'], { GATES_KIT_TOOLCHAIN: freshRoot() }).status === 2);
+
+const servedNowhere = freshRoot();
+
+buildGate(servedNowhere, 'fw', 'test', { 'gate.json': VITEST_LAUNCHED });
+buildToolchain(servedNowhere, 'fw-1', { dependencies: { eslint: '9.39.4' } });
+buildToolchain(servedNowhere, 'fw-2', { dependencies: { eslint: '10.12.0' } });
+
+check('a package no toolchain of the stack declares stays refused', runCli(['--root', servedNowhere, '--toolchain', 'fw-1']).status === 1);
+
+const staticKit = freshRoot();
+
+buildGate(staticKit, 'fw', 'test', { 'gate.json': commandOf(['vitest', 'vitest', 'run', '{target}']), 'config.mjs': "a: 'off'\n" });
+buildToolchain(staticKit, 'fw-1', { dependencies: { eslint: '9.39.4' } });
+buildToolchain(staticKit, 'fw-2', { dependencies: { vitest: '5.0.3' } });
+
+const staticRun = runCli(['--root', staticKit, '--toolchain', 'fw-1']);
+
+check('a not-applicable gate still reports its config and command problems', staticRun.status === 1 && staticRun.lines.some((line) => line.includes('gate fw/test: REFUSED (2 problem(s))')));
+check('a not-applicable gate is verified without running', (() => {
+  const dir = buildGate(freshRoot(), 'fw', 'g', { 'gate.json': VITEST_LAUNCHED });
+  const result = verifyGate({ stack: 'fw', name: 'g', dir, toolchain: path.join(perMajor, 'toolchains', 'fw-1'), siblings: [path.join(perMajor, 'toolchains', 'fw-1'), path.join(perMajor, 'toolchains', 'fw-2')] });
+
+  return result.notApplicable === 'vitest' && result.problems.length === 0;
+})());
+check('the chosen toolchain alone among the siblings does not make a gate not applicable', (() => {
+  const dir = buildGate(freshRoot(), 'fw', 'g', { 'gate.json': VITEST_LAUNCHED });
+  const one = path.join(perMajor, 'toolchains', 'fw-1');
+  const result = verifyGate({ stack: 'fw', name: 'g', dir, toolchain: one, siblings: [one] });
+
+  return result.notApplicable === undefined && result.problems.map((problem) => problem.id).join() === 'tool-not-declared';
+})());
+check('discovery points every gate at the chosen toolchain', discoverGates(perMajor, 'fw', 'fw-2').every((gate) => gate.toolchain === path.join(perMajor, 'toolchains', 'fw-2')));
+check('every per-major line carries its @es half', [...majorOne.lines, ...majorTwo.lines, ...mismatch.lines, ...staticRun.lines].every((line) => line.includes(' @es ')));
 
 for (const root of roots) rmSync(root, { recursive: true, force: true });
 

@@ -1,0 +1,18 @@
+{
+  "name": "gates-kit-angular-19-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned toolchain the Angular gates run on for an Angular 19 project (TypeScript, angular-eslint and the only test runner that major supports, Karma with Jasmine); install it once into a directory outside every repository.",
+  "dependencies": {
+    "angular-eslint": "19.8.1",
+    "dependency-cruiser": "18.5.0",
+    "eslint": "9.39.5",
+    "jasmine-core": "5.6.0",
+    "karma": "6.4.4",
+    "karma-chrome-launcher": "3.2.0",
+    "karma-coverage": "2.2.1",
+    "karma-jasmine": "5.1.0",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.71.1"
+  }
+}

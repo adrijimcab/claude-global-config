@@ -21,4 +21,4 @@ fallando, así que un gate nunca "pasa" mutando el árbol que juzga. Las directi
 
 ## Toolchain
 
-`GATES_KIT_TOOLCHAIN` as in `ts-strict-type-checked` (typescript-eslint 8.57.1, eslint 9.39.4).
+`GATES_KIT_TOOLCHAIN` as in `ts-strict-type-checked` (typescript-eslint 8.71.1 with eslint 9.39.5 or 10.12.0, per `toolchains/angular-<major>`). The lint gates never pass `--quiet` (refused by `gate-command-rules.mjs`): it would drop warnings and change what `--max-warnings 0` measures.

@@ -39,13 +39,16 @@ function subdirectories(dir) {
 
 /**
  * The gates under `root`, optionally of one stack, each `{ stack, name, dir, toolchain }` where `toolchain` is
- * the directory its stack's packages are installed from. @es Los gates bajo `root`, opcionalmente de un stack,
- * cada uno con `toolchain`, el directorio de donde se instalan los paquetes de su stack.
+ * the directory its packages are installed from: `toolchains/<toolchainId>/` when a toolchain id is given (a
+ * stack with one toolchain per major, such as `angular-21`), else `toolchains/<stack>/`.
+ * @es Los gates bajo `root`, opcionalmente de un stack, cada uno con `toolchain`, el directorio de donde se
+ * instalan sus paquetes: `toolchains/<toolchainId>/` si se da un id (un stack con una toolchain por major),
+ * si no `toolchains/<stack>/`.
  */
-export function discoverGates(root, stack) {
+export function discoverGates(root, stack, toolchainId) {
   const stacks = subdirectories(root).filter((name) => !NOT_STACKS.has(name) && (stack === undefined || name === stack));
 
-  return stacks.flatMap((name) => subdirectories(path.join(root, name)).map((gate) => ({ stack: name, name: gate, dir: path.join(root, name, gate), toolchain: toolchainOf(root, name) })));
+  return stacks.flatMap((name) => subdirectories(path.join(root, name)).map((gate) => ({ stack: name, name: gate, dir: path.join(root, name, gate), toolchain: toolchainOf(root, toolchainId ?? name) })));
 }
 
 /** The launcher script every gate runs its package through. @es El script lanzador por el que cada gate corre su paquete. */
@@ -57,11 +60,33 @@ const LAUNCHER = 'run-tool.mjs';
  * ejecuta con el lanzador (`--cwd <dir>` antes del paquete se salta), o `undefined` si el comando es otra cosa.
  */
 export function toolPackageOf(command) {
+  return launcherCallOf(command)?.tool;
+}
+
+/**
+ * The launcher call of a gate command, `{ tool, args }` where `args` are the arguments after the package (its
+ * binary first), or `undefined` when the command is not a launcher call naming a package.
+ * @es La llamada al lanzador de un comando de gate: el paquete y los argumentos tras él (primero su binario), o
+ * `undefined` si el comando no llama al lanzador con un paquete.
+ */
+export function launcherCallOf(command) {
   const [program, script, ...rest] = command;
 
   if (program !== 'node' || script?.split(/[\\/]/).at(-1) !== LAUNCHER) return undefined;
 
-  return rest[0] === '--cwd' ? rest[2] : rest[0];
+  const at = rest[0] === '--cwd' ? 2 : 0;
+  const tool = rest[at];
+
+  return tool === undefined ? undefined : { tool, args: rest.slice(at + 1) };
+}
+
+/**
+ * The stack a toolchain id belongs to: the id without a trailing `-<major>` (`angular-21` is of `angular`;
+ * `node-vitest` keeps its name, its suffix not being a number). @es El stack de una toolchain: el id sin un
+ * `-<major>` final.
+ */
+export function stackOfToolchain(id) {
+  return id.replace(/-\d+$/, '');
 }
 
 function hasContent(dir) {

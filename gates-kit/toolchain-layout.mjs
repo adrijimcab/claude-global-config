@@ -26,7 +26,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
-import { TOOLCHAINS_FOLDER, toolPackageOf, toolchainOf } from './gate-layout.mjs';
+import { TOOLCHAINS_FOLDER, stackOfToolchain, toolPackageOf, toolchainOf } from './gate-layout.mjs';
 
 /** One exact version, a prerelease allowed. @es Una versión exacta, prerelease permitido. */
 const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -41,13 +41,17 @@ function subdirectories(dir) {
   return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
 }
 
-/** The toolchains under `root`, optionally of one stack. @es Las toolchains bajo `root`, opcionalmente de un stack. */
+/**
+ * The toolchains under `root`, optionally of one stack (its own `toolchains/<stack>/` and every per-major
+ * `toolchains/<stack>-<major>/`), each `{ stack, dir }` where `stack` is the toolchain id.
+ * @es Las toolchains bajo `root`, opcionalmente de un stack (la suya y cada una por major), cada una con su id.
+ */
 export function discoverToolchains(root, stack) {
   const base = path.join(root, TOOLCHAINS_FOLDER);
 
   if (!existsSync(base)) return [];
 
-  return subdirectories(base).filter((name) => stack === undefined || name === stack).map((name) => ({ stack: name, dir: toolchainOf(root, name) }));
+  return subdirectories(base).filter((name) => stack === undefined || stackOfToolchain(name) === stack).map((name) => ({ stack: name, dir: toolchainOf(root, name) }));
 }
 
 /** The parsed JSON file, `undefined` when absent, `null` when it is not an object. @es El JSON leído; `undefined` ausente, `null` si no es un objeto. */

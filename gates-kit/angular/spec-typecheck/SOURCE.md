@@ -23,4 +23,4 @@ un spec que no compila.
 
 ## Toolchain
 
-`GATES_KIT_TOOLCHAIN` names the directory holding `node_modules` with `typescript` (measured with 5.5.4).
+`GATES_KIT_TOOLCHAIN` names the directory holding `node_modules` with `typescript` (measured with 5.8.3, 5.9.3 and 6.0.3, the pins of `toolchains/angular-19` to `angular-22`; `--pretty false` keeps the diagnostics one plain line each for a log reader).

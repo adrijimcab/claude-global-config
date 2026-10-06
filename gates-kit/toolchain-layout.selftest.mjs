@@ -26,7 +26,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { discoverGates, inspectGate, toolPackageOf } from './gate-layout.mjs';
+import { discoverGates, inspectGate, launcherCallOf, stackOfToolchain, toolPackageOf } from './gate-layout.mjs';
 import { discoverToolchains, gateToolProblems, inspectToolchain } from './toolchain-layout.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -169,6 +169,20 @@ check('discovery honours the stack filter', discovered(kit, 'beta').map((toolcha
 check('an unknown stack has no toolchain', discovered(kit, 'nope').length === 0);
 check('a kit without a toolchains folder has none', discovered(freshRoot()).length === 0);
 
+// A stack with one toolchain per major.
+const majors = freshRoot();
+
+for (const name of ['fw', 'fw-19', 'fw-22', 'fw-x', 'fwx-1', 'other-1']) build(majors, name);
+
+check('a stack discovers its own toolchain and every per-major one', discovered(majors, 'fw').map((toolchain) => toolchain.stack).join() === 'fw,fw-19,fw-22');
+check('a toolchain whose suffix is not a number is a stack of its own', discovered(majors, 'fw-x').map((toolchain) => toolchain.stack).join() === 'fw-x');
+check('a per-major toolchain is found by its stack, not by a longer prefix', discovered(majors, 'fwx').map((toolchain) => toolchain.stack).join() === 'fwx-1');
+check('a per-major toolchain names itself in the result', discovered(majors, 'other').every((toolchain) => toolchain.dir === path.join(majors, 'toolchains', 'other-1')));
+check('the stack of angular-21 is angular', stackOfToolchain('angular-21') === 'angular');
+check('node-vitest is its own stack', stackOfToolchain('node-vitest') === 'node-vitest');
+check('only a trailing major is dropped', stackOfToolchain('a-1-b') === 'a-1-b' && stackOfToolchain('a-1-22') === 'a-1');
+check('a plain stack is its own toolchain', stackOfToolchain('nest') === 'nest');
+
 // The package a gate command runs.
 check('the launcher call names its package', toolPackageOf(['node', '../../run-tool.mjs', 'eslint', 'eslint', '--max-warnings', '0']) === 'eslint');
 check('the launcher is found at any depth', toolPackageOf(['node', '../run-tool.mjs', 'typescript', 'tsc']) === 'typescript');
@@ -181,6 +195,9 @@ check('--cwd without a folder names no package', toolPackageOf(['node', '../../r
 check('--cwd after the package is the tool\'s own argument', toolPackageOf(['node', '../../run-tool.mjs', 'eslint', 'eslint', '--cwd', 'x']) === 'eslint');
 check('a launcher path with Windows separators is found', toolPackageOf(['node', '..\\..\\run-tool.mjs', 'eslint', 'eslint']) === 'eslint');
 check('a script merely ending in run-tool.mjs.bak is not the launcher', toolPackageOf(['node', 'run-tool.mjs.bak', 'eslint']) === undefined);
+check('the launcher call names the arguments after the package', JSON.stringify(launcherCallOf(['node', '../../run-tool.mjs', 'eslint', 'eslint', '--format', 'stylish'])) === '{"tool":"eslint","args":["eslint","--format","stylish"]}');
+check('the launcher call after --cwd starts its arguments after the package', JSON.stringify(launcherCallOf(['node', '../../run-tool.mjs', '--cwd', 'x', 'vitest', 'vitest', 'run'])) === '{"tool":"vitest","args":["vitest","run"]}');
+check('a command that is not a launcher call has none', launcherCallOf(['node', 'check.mjs', '{target}']) === undefined);
 
 // A gate against its stack's toolchain.
 const coupled = freshRoot();
@@ -198,7 +215,8 @@ check('an unreadable toolchain declares nothing', gateToolProblems(['node', '../
 // The live kit.
 const live = discoverToolchains(HERE);
 
-for (const stack of ['angular', 'nest', 'node-vitest']) check(`the live ${stack} toolchain exists`, live.some((toolchain) => toolchain.stack === stack));
+for (const id of ['angular-19', 'angular-20', 'angular-21', 'angular-22', 'nest', 'node-vitest']) check(`the live ${id} toolchain exists`, live.some((toolchain) => toolchain.stack === id));
+check('no generic angular toolchain is left beside the per-major ones', !live.some((toolchain) => toolchain.stack === 'angular'));
 
 for (const { stack, dir } of live) {
   const problems = inspectToolchain(dir);
@@ -212,9 +230,22 @@ for (const stack of ['angular', 'nest', 'node-vitest']) check(`the live ${stack}
 
 for (const { stack, name, dir } of liveGates) {
   const { gate } = inspectGate(dir);
-  const problems = gate === undefined ? [{ id: 'invalid-gate-json' }] : gateToolProblems(gate.command, path.join(HERE, 'toolchains', stack));
+  const family = discoverToolchains(HERE, stack);
+  const serving = gate === undefined ? [] : family.filter((toolchain) => gateToolProblems(gate.command, toolchain.dir).length === 0);
 
-  check(`the live gate ${stack}/${name} runs only packages its toolchain declares${problems.length === 0 ? '' : ` (${problems.map((problem) => `${problem.id}${problem.detail === undefined ? '' : `:${problem.detail}`}`).join(',')})`}`, problems.length === 0);
+  check(`the live gate ${stack}/${name} runs a package some toolchain of its stack declares (${family.length} toolchain(s), ${serving.length} serve it)`, gate !== undefined && family.length > 0 && serving.length > 0);
+}
+
+// Every live per-major toolchain serves the gates its test runners need, and nothing serves only by accident.
+const runnerGates = { karma: 'karma-coverage-caps', vitest: 'vitest-coverage-caps' };
+const servedBy = (gateName, id) => {
+  const { gate } = inspectGate(path.join(HERE, 'angular', gateName));
+
+  return gate !== undefined && gateToolProblems(gate.command, path.join(HERE, 'toolchains', id)).length === 0;
+};
+
+for (const [id, runners] of [['angular-19', ['karma']], ['angular-20', ['karma', 'vitest']], ['angular-21', ['karma', 'vitest']], ['angular-22', ['karma', 'vitest']]]) {
+  for (const [runner, gateName] of Object.entries(runnerGates)) check(`${id} ${runners.includes(runner) ? 'serves' : 'does not serve'} the ${runner} gate`, servedBy(gateName, id) === runners.includes(runner));
 }
 
 for (const root of roots) rmSync(root, { recursive: true, force: true });

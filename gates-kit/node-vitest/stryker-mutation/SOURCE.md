@@ -46,12 +46,18 @@ Stryker takes its project from the folder it runs in, so the command runs it fro
 (`run-tool.mjs --cwd {target}`) and names the config by its place beside the `pass/` and `fail/` folders. The
 working copy goes to the system temp directory (`tempDirName`), so a run leaves nothing in the fixture.
 
-## Why Vitest 3.2.7 and Stryker 10.0.0
+## Why Vitest 4.1.11 and Stryker 10.0.0
 
 Measured here (node 22.22.0): `@stryker-mutator/core` and `vitest-runner` 10.0.0 run the specs under Vitest
-3.2.7. Under Vitest 5.0.3 the same run reported "Ran 0.00 tests per mutant" and every mutant survived, and
-Vitest 4.1.11 could not be locked (npm 10.9.4 fails resolving its optional peers). The versions are the ones
-measured to work together.
+3.2.7 and, re-measured 2026-10-06, under Vitest 4.1.11 (pass: 5 killed of 5, "Ran 1.40 tests per mutant",
+exit 0; fail: 3 killed, 2 survived, score 60 under the break of 80, exit 1). Under Vitest 5.0.3 it still
+fails: an earlier run reported "Ran 0.00 tests per mutant", and the 2026-10-06 run listed the tests as run
+yet let every mutant of `pass/` survive (exit 1). Vitest 4.1.11, which npm 10.9.4 could not lock, is locked
+with npm 11.21.0. So the toolchain pins Vitest 4.1.11, the newest major measured to work with Stryker 10.0.0
+(still `latest`); raise it to 5 only with a Stryker measured to kill mutants under it.
+@es Medido: Stryker 10.0.0 ejecuta los specs con Vitest 3.2.7 y con 4.1.11 (re-medido el 2026-10-06); con
+Vitest 5.0.3 sigue fallando (todo mutante de `pass/` sobrevive). Vitest 4.1.11 se bloquea con npm 11.21.0. La
+toolchain fija la 4.1.11, la major más nueva medida que funciona con Stryker 10.0.0.
 
 ## Toolchain
 
