@@ -36,6 +36,15 @@ máquina del dueño vive en `checklists/host-backlog.md`.
 - A6 global — one state-location module for every path, per-selftest state home, leak detector, census,
   `rotate.mjs` (registries clean break; host apply = H1).
 - Premise-judging hooks — claim-guard "attributed premise" class + native Stop `prompt` hook + H8.
+- One mutation-proof engine (branches `mutation-owner` in b100, the global worktree branch): b100 owns
+  runner + `kill-kind.mjs` (assertion vs crash, `crashKills`) + scope/planner with selftests and campaigns;
+  `~/.claude` vendors all of it through `vendored/` (25 pinned modules); `fleet-kit/vendor/` and its second
+  record folded in (one `shell-command.mjs` hash). Scope rule: a hook entry that CALLS an imported verdict
+  helper decides (structural, one import deep) — G 44 -> 49 deciding, 0 gaps; orphan
+  `hooks/engram-title-guard.mjs` removed (superseded by the wired `engram-title-integrity/guard.mjs`).
+  Premise corrected: the queued item named resume-before-fresh and claim-guard as invisible; both were
+  already in scope (own `permissionDecision` / `decision: 'block'`, each with a campaign). The invisible ones
+  were fleet-kit orphan-work and worktree-tenancy (hook-io `deny()`), now demanded and covered.
 - Research: Angular 19/20/21/22 official docs (from angular/angular `adev/` sources) and gentle-ai upgrade
   (build, simulate sync in an emulated home, verdict, converge plan).
 
@@ -55,9 +64,6 @@ máquina del dueño vive en `checklists/host-backlog.md`.
   typescript-lsp at user scope.
 - Portability — Windows-only selftests (paths, drives, backslashes), config-sync-guard `C:\` hardcode;
   verify config-sync-guard ms float flake and the Stop-manifest test reading the real `~/.claude`.
-- One owner for the two divergent mutation-proof runners (global vs b100).
-- Verdicts emitted through a helper are invisible to the mutation scope check (resume-before-fresh,
-  claim-guard…).
 - 200-line instruction file recommendation (Claude Code warns above it).
 - Path-scoped rules from `~/.claude/rules/` inside subagents: unverified (host check, like H2).
 - Frontend JS/TS standards for ALL sessions and projects: `rules/fe-*.md` (path-scoped, < 200 lines),
