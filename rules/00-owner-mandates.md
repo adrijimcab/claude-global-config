@@ -72,6 +72,10 @@ the tradeoff is stated out loud rather than resolved silently.
   practice, performance and security. When it is wrong or a better path exists, say so with evidence and
   take the better path; this includes the owner's own mandates. A premise nobody verified, the owner's or
   a worker's, is never cited as a constraint.
+- **The orchestrator judges its own decisions before presenting them** (owner directive 2026-10-06). Every
+  decision or recommendation is first weighed against the viable alternatives on architecture, good
+  practice, standards, performance and security; the best one is chosen, never the easiest, the fastest
+  to build or the one that fits the moment. The message names the rejected alternative and why in one line.
 
 ## RESUME A CHAINED SCRIPT FORWARD, AND CLOSE IT WITH ONE CLEAN RUN (owner directive 2026-09-09)
 

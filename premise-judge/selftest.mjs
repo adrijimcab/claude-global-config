@@ -65,6 +65,7 @@ check('settings: its timeout is the pinned one', promptHooks[0]?.timeout, TIMEOU
 check('rubric: starts with its signature', PROMPT.startsWith(`${PROMPT_SIGNATURE}\n`), true);
 check('rubric: one $ and it is $ARGUMENTS', [PROMPT.split('$').length - 1, PROMPT.split('$ARGUMENTS').length - 1], [1, 1]);
 check('rubric: passes on stop_hook_active', PROMPT.includes('If the input field stop_hook_active is true, answer {"ok": true}.'), true);
+check('rubric: judges an own decision justified as the easier path while it names a better one', PROMPT.includes('(c) The message states its own decision or recommendation and justifies it as the easier'), true);
 check('rubric: never holds the literal marker', PROMPT.includes(MARKER), false);
 check('rubric: spells the marker in words', PROMPT.includes('starts with the word PREMISE-JUDGE followed by a colon'), true);
 check('rubric: the marker is what the words spell', MARKER, 'PREMISE-JUDGE:');

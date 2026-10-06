@@ -22,6 +22,7 @@ const LATENCY = 'premise-judge/latency.mjs';
 const MUTANTS = [
   // --- THE RUBRIC AND ITS WIRING.
   ['the rubric stops passing on stop_hook_active', PROMPT, "  '1. If the input field stop_hook_active is true, answer {\"ok\": true}.',\n", ''],
+  ['the rubric drops the own-decision case', PROMPT, '(c) The message states its own decision', '(x) The message states its own decision'],
   ['the rubric spells the marker literally', PROMPT, 'starts with the word PREMISE-JUDGE followed by a colon', 'starts with PREMISE-JUDGE:'],
   ['the rubric loses its signature line', PROMPT, '  PROMPT_SIGNATURE,\n', ''],
   ['the rubric drifts from the settings entry', PROMPT, 'and whenever you are unsure, answer', 'and when unsure, answer'],
