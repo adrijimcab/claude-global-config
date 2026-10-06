@@ -155,7 +155,7 @@ try {
   expect('sync exits 0 and names the count and the source', () => synced.status === 0 && synced.stdout.includes(`vendored ${VENDORED.length} module(s) from ${install.sourceRoot}`));
   expect('sync reports in both languages', () => bilingual(synced.stdout));
   expect('sync copies every module byte-identical under the install', () => VENDORED.every((relative) => sha256Of(path.join(install.claude, relative)) === sha256Of(path.join(install.sourceRoot, relative))));
-  expect('sync records the source root and every module in order', () => record.sourceRoot === install.sourceRoot && JSON.stringify(record.files.map((entry) => entry.path)) === JSON.stringify(VENDORED));
+  expect('sync records the source root home-relative, so the record never depends on the machine that synced, and every module in order', () => record.sourceRoot === '~/Desktop/Projects/b100-am-ui/.claude' && JSON.stringify(record.files.map((entry) => entry.path)) === JSON.stringify(VENDORED));
   expect('sync records the real hash of each copy', () => record.files.every((entry) => entry.sha256 === sha256Of(path.join(install.claude, entry.path))));
 
   const green = vendoredCli(install, 'check');

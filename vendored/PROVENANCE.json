@@ -1,10 +1,10 @@
 {
-  "sourceRoot": "C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui\\.claude",
-  "syncedAt": "2026-09-30T02:39:46.458Z",
+  "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
+  "syncedAt": "2026-10-06T15:54:41.099Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
-      "sha256": "b6f835b362c4029829f019d9bfb1c476fe07c38ccae00bade88dbd0004f62ee9"
+      "sha256": "901d6a7ef9b7c424ac1362f2004dffe28a66089af1ac03cb10e013723dbe2888"
     },
     {
       "path": "shell-command/git-invocations.mjs",

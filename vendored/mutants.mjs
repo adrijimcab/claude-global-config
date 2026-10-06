@@ -18,14 +18,14 @@ const VENDORED = 'vendored/vendored.mjs';
 const MUTANTS = [
   // --- WHERE: which roots the command line copies between.
   ['the copies land beside the script instead of under the install root', VENDORED, "const TARGET_ROOT = path.resolve(HERE, '..');", 'const TARGET_ROOT = HERE;'],
-  ['the reference fleet is looked up in the wrong folders', VENDORED, "path.join(os.homedir(), 'Desktop', 'Projects', 'b100-am-ui', '.claude')", "path.join(os.homedir(), 'Projects', 'Desktop', 'b100-am-ui', '.claude')"],
+  ['the reference fleet is looked up in the wrong folders', VENDORED, "Object.freeze(['Desktop', 'Projects', 'b100-am-ui', '.claude'])", "Object.freeze(['Projects', 'Desktop', 'b100-am-ui', '.claude'])"],
   ['the provenance record is written to another file', VENDORED, "path.join(HERE, 'PROVENANCE.json')", "path.join(HERE, 'PROVENANCE.txt')"],
 
   // --- SYNC: what it copies and what it records.
   ['sync copies nothing', VENDORED, 'copyFileSync(path.join(SOURCE_ROOT, relative), target);', "writeFileSync(target, '');"],
   ['sync does not create the folder of a nested module', VENDORED, '    mkdirSync(path.dirname(target), { recursive: true });\n', ''],
   ['sync records a made-up hash', VENDORED, 'return { path: relative, sha256: sha256Of(target) };', "return { path: relative, sha256: 'x' };"],
-  ['sync records the wrong source root', VENDORED, 'JSON.stringify({ sourceRoot: SOURCE_ROOT,', 'JSON.stringify({ sourceRoot: TARGET_ROOT,'],
+  ['sync records the wrong source root', VENDORED, 'JSON.stringify({ sourceRoot: SOURCE_ROOT_RECORDED,', 'JSON.stringify({ sourceRoot: SOURCE_ROOT,'],
   ['sync stops reporting in Spanish', VENDORED, ' @es ${files.length} módulo(s) vendorizado(s) desde ${SOURCE_ROOT}', ''],
 
   // --- CHECK: which findings fail it.

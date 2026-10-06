@@ -31,7 +31,12 @@ import { provenanceFindings, sha256Of } from '../fleet-kit/vendor/provenance.mjs
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TARGET_ROOT = path.resolve(HERE, '..');
-const SOURCE_ROOT = path.join(os.homedir(), 'Desktop', 'Projects', 'b100-am-ui', '.claude');
+const SOURCE_SEGMENTS = Object.freeze(['Desktop', 'Projects', 'b100-am-ui', '.claude']);
+const SOURCE_ROOT = path.join(os.homedir(), ...SOURCE_SEGMENTS);
+// The record names the source home-relative: an absolute path would change with whichever machine synced
+// (and leak its user name) while naming the same fleet. @es El registro nombra la fuente relativa al home:
+// una ruta absoluta cambiaría según la máquina que sincronizó (y filtraría su usuario) para la misma flota.
+const SOURCE_ROOT_RECORDED = ['~', ...SOURCE_SEGMENTS].join('/');
 const PROVENANCE_FILE = path.join(HERE, 'PROVENANCE.json');
 
 /** Relative paths under both roots. @es Rutas relativas bajo ambas raíces. */
@@ -55,7 +60,7 @@ function sync() {
     return { path: relative, sha256: sha256Of(target) };
   });
 
-  writeFileSync(PROVENANCE_FILE, `${JSON.stringify({ sourceRoot: SOURCE_ROOT, syncedAt: new Date().toISOString(), files }, null, 2)}\n`);
+  writeFileSync(PROVENANCE_FILE, `${JSON.stringify({ sourceRoot: SOURCE_ROOT_RECORDED, syncedAt: new Date().toISOString(), files }, null, 2)}\n`);
   process.stdout.write(`vendored ${files.length} module(s) from ${SOURCE_ROOT} @es ${files.length} módulo(s) vendorizado(s) desde ${SOURCE_ROOT}\n`);
 
   return 0;
