@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "SessionStart",
+      "matcher": "startup|resume|clear|compact"
+    }
+  ],
+  "why": "without it a session works from the newest Angular/TypeScript the model remembers instead of the version the project installs, so version-gated rules (OnPush default, zoneless, resource stability, Vitest default) and an end-of-life major go unnoticed; it re-injects the profile after /clear and compaction, which drop the earlier context."
+}

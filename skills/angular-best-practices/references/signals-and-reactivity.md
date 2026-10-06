@@ -55,11 +55,14 @@ fuente, pero que el usuario también puede sobreescribir localmente". Sustituye 
   sirve para mutaciones** (una mutación en curso podría abortarse a mitad).
 - `httpResource(url, options)`: especialización sobre `HttpClient` para GET con parseo JSON por
   defecto, soporta interceptores. `options.defaultValue` evita que el resultado sea `undefined`.
-- Estado (fetched 2026-09-29, `angular.dev/roadmap`): resource/httpResource, linkedSignal,
-  zoneless, incremental hydration, event replay y route-level render mode están en la categoría
-  "Production-ready" del roadmap oficial. **Ninguno de ellos existe en Angular 19.2** (el peer de
-  este repo) con ese nivel de estabilidad — confirmar la versión exacta de graduación antes de
-  recomendarlos en código sobre 19.x.
+- Status by major (measured 2026-10-06 in the angular/angular sources; detail in `../versions/`):
+  `linkedSignal` DP in 19, stable from 20.0; `resource`/`rxResource`/`httpResource` EXPERIMENTAL
+  in 19, 20 and 21, stable from 22.0; zoneless EXP in 19, stable from 20.2, default from 21.
+  In 20 the options were renamed (`request` → `params`, `rxResource` `loader` → `stream`).
+  @es Estado por major (medido el 2026-10-06 en las fuentes de angular/angular; detalle en
+  `../versions/`): `linkedSignal` DP en 19, estable desde 20.0; `resource`/`rxResource`/`httpResource`
+  EXPERIMENTALES en 19, 20 y 21, estables desde 22.0; zoneless EXP en 19, estable desde 20.2, por
+  defecto desde 21. En 20 se renombraron las opciones (`request` → `params`, `loader` → `stream`).
 
 ## input() / model() / output()
 

@@ -113,15 +113,17 @@ compilador). El patrón "branded type" simula nominalidad con una propiedad fant
 type UserId = string & { readonly __brand: 'UserId' };
 type ProductId = string & { readonly __brand: 'ProductId' };
 
-function toUserId(id: string): UserId {
-  return id as UserId; // única conversión permitida, centralizada en un constructor
+// Único punto de entrada: un predicado que valida y estrecha, sin `as` (el `type-assertion-guard`
+// global rechaza añadir aserciones de tipo).
+function isUserId(id: string): id is UserId {
+  return id.startsWith('u');
 }
 
 function getUser(id: UserId) { /* ... */ }
 
-getUser(toUserId('u1'));     // OK
-getUser('u1');               // Error: string no es UserId
-getUser('p1' as ProductId);  // Error: ProductId no es UserId, aunque ambos sean string
+const raw = 'u1';
+if (isUserId(raw)) getUser(raw); // OK: estrechado a UserId
+getUser('u1');                   // Error: string no es UserId
 ```
 
 Útil para IDs de distintas entidades, unidades de medida (`Meters`/`Feet`), o cualquier valor

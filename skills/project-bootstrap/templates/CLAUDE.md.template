@@ -1,0 +1,37 @@
+# <project name>
+
+<one sentence: what this repository is and who consumes it (app, library, API)>.
+
+## Stack (measured by `node ~/.claude/project-profile/profile.mjs`, <date>)
+
+- <Framework major.minor> · TypeScript <x.y> · <test runner> · ESLint <major> · <package manager>
+- <Angular only: builder, zone.js or zoneless, file naming style (`x.component.ts` or `x.ts`)>
+- Support: <active / LTS until <date> / EOL since <date>: update planned in <ticket or "not planned">>
+
+## Commands (from package.json; run from <root or subfolder>)
+
+- Install: `<npm ci | pnpm install --frozen-lockfile>`
+- Dev server: `<npm start>`
+- Unit tests (one file): `<command with a path>`
+- Lint (touched files): `<command>`
+- Type check: `<command>`
+- Full chain (once, at landing): `<the script named in .claude/AGENT-CONTRACT.md>`
+
+## Conventions this repository decided
+
+- <state management, folder layout, naming, i18n, styling system, only where they differ from
+  ~/.claude/rules/fe-*.md or need a project-specific value>
+- <the test runner stays <X>; a runner migration is its own change>
+
+## Boundaries
+
+- Never edit: <generated code, vendored folders, other teams' paths>.
+- Out-of-scope gaps go to `.claude/FINDINGS.jsonl` (`node ~/.claude/gates-kit/findings-register.mjs add`).
+- Agent contract: `.claude/AGENT-CONTRACT.md` (G1-G6).
+
+## Docs for this version
+
+- <Angular 21+: `node_modules/@angular/core/resources/best-practices.md` first, then
+  `~/.claude/skills/angular-best-practices/versions/v<major>.md`>
+- <Angular 19/20: `~/.claude/skills/angular-best-practices/versions/v<major>.md`>
+- <MCP: `.mcp.json` registers the Angular CLI server read-only and local-only (experimental per the docs)>

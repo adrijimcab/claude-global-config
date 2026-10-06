@@ -182,6 +182,12 @@
 !/gentle-ai-overlay/
 !/gentle-ai-overlay/**
 
+# What a JS/TS project is (framework and version, TypeScript, runners, package manager) and its SessionStart
+# line. Code and registration sidecar only. @es Qué es un proyecto JS/TS y su línea de SessionStart; solo código.
+!/project-profile/
+!/project-profile/*.mjs
+!/project-profile/*.json
+
 !/gentle-ai-sync-guard/
 !/gentle-ai-sync-guard/**
 
@@ -244,3 +250,6 @@
 # cache/, debug/, paste-cache/, scratch/   cachés, logs de debug por sesión, portapapeles pegado
 # *.jsonl, *.log, *.credentials.json, .last-*, *.swp, mcp-needs-auth-cache.json  estado/credenciales sueltos
 # .claude.json y sus backups viven FUERA de ~/.claude — nunca se referencian aquí
+
+# A crash mid-write of the overlay can leave its temp file; it is never content.
+*.overlay-tmp-*
