@@ -186,6 +186,13 @@ export function pointerKeyOf(line) {
 }
 
 /**
+ * The key a ledger line is filed under: the key of its marker, or else the key its evidence pointer names (a
+ * line shortened under an operator key carries no marker), or `undefined` for a line with neither.
+ * @es La clave bajo la que está archivada una línea del ledger: la de su marcador o, si no, la que nombra su puntero a la evidencia (una línea acortada con clave del operador no lleva marcador), o `undefined`.
+ */
+export const lineKeyOf = (line) => readMarker(line)?.key ?? pointerKeyOf(line);
+
+/**
  * Reads a minimal stub back: `{ date, key, mechanism, marker }`, `mechanism` being `undefined` for the
  * no-mechanism form; `undefined` for any other line.
  * @es Lee un muñón mínimo: `{ date, key, mechanism, marker }`; `undefined` para cualquier otra línea.

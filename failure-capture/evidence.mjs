@@ -16,8 +16,8 @@ import path from 'node:path';
 import { holdsWholeLine } from './conservation.mjs';
 import { isDate, isValidKey } from './ledger-line.mjs';
 
-/** Why a line is archived: shortened later, captured shortened, or promoted. @es Por qué se archiva una línea. */
-export const EVIDENCE_KINDS = ['condensed', 'captured', 'promoted'];
+/** Why a line is archived: shortened later, captured shortened, promoted, or superseded by a newer rule. @es Por qué se archiva una línea: acortada después, capturada ya acortada, promovida o sustituida por una regla más nueva. */
+export const EVIDENCE_KINDS = ['condensed', 'captured', 'promoted', 'superseded'];
 
 /** The evidence file of `key` for the ledger at `ledgerFile`; the key must already be valid. @es El fichero de evidencia de `key`; la clave debe ser válida. */
 export const evidenceFile = (ledgerFile, key) => path.join(path.dirname(ledgerFile), 'lessons', 'evidence', `${key}.md`);
