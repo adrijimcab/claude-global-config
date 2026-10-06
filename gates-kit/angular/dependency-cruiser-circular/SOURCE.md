@@ -22,6 +22,6 @@ se ocupa de la dirección entre capas.
 ## Toolchain
 
 `GATES_KIT_TOOLCHAIN` names the directory holding `node_modules` with `dependency-cruiser` 18.5.0 (pinned in
-`gates-kit/toolchains/angular/package.json`).
+`gates-kit/toolchains/angular-<major>/package.json`, every major).
 @es `GATES_KIT_TOOLCHAIN` indica el directorio con `node_modules` y `dependency-cruiser` 18.5.0 (fijado en
-`gates-kit/toolchains/angular/package.json`).
+`gates-kit/toolchains/angular-<major>/package.json`, en cada major).

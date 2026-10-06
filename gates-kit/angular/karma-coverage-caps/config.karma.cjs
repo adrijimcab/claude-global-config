@@ -21,7 +21,7 @@ module.exports = function (config) {
     plugins: ['karma-jasmine', 'karma-chrome-launcher', 'karma-coverage'],
     files: ['*.js'],
     preprocessors: { '!(*.spec).js': ['coverage'] },
-    reporters: ['progress', 'coverage'],
+    reporters: ['dots', 'coverage'],
     coverageReporter: {
       dir: path.join(os.tmpdir(), 'gates-kit-karma-coverage'),
       reporters: [{ type: 'text-summary' }],

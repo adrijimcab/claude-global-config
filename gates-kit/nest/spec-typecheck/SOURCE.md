@@ -36,3 +36,14 @@ decorator flags Nest requires.
 (`gates-kit/toolchains/nest/package.json`).
 @es `GATES_KIT_TOOLCHAIN` indica el directorio con `node_modules` y `typescript`
 (`gates-kit/toolchains/nest/package.json`).
+
+## TypeScript 6 (2026-10-06)
+
+With the toolchain on TypeScript 6.0.3 the former `"module": "commonjs", "moduleResolution": "node"` stopped
+the pass fixture with TS5107 ("moduleResolution=node10 is deprecated"). The config now uses
+`"module": "nodenext", "moduleResolution": "nodenext"`, what `@nestjs/schematics@12.0.6` writes for a new Nest
+12 project; `ignoreDeprecations` was not used, it would silence the compiler instead of fixing the config.
+Measured: pass exits 0, fail exits 2 with TS2345. `--pretty false` keeps each diagnostic one plain line.
+@es Con TypeScript 6.0.3 la config anterior paraba el fixture pass con TS5107. Ahora usa `nodenext`, lo que
+escribe `@nestjs/schematics@12.0.6` para un proyecto Nest 12 nuevo; no se usó `ignoreDeprecations`, que
+silenciaría el compilador en vez de arreglar la config. Medido: pass sale con 0, fail con 2 (TS2345).

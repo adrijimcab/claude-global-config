@@ -19,6 +19,6 @@ Runs the typescript-eslint `strict-type-checked` preset with type information (`
 ## Toolchain
 
 `GATES_KIT_TOOLCHAIN` names the directory holding `node_modules` with `eslint` and `typescript-eslint`
-(measured with typescript-eslint 8.57.1, eslint 9.39.4, typescript 5.5.4). Without it the launcher exits 3.
+(measured with typescript-eslint 8.71.1 on every `toolchains/angular-<major>`: eslint 9.39.5 with typescript 5.8.3 and 5.9.3, eslint 10.12.0 with typescript 5.9.3 and 6.0.3; `--format stylish` is named so the report a log reader sees does not depend on a default). Without it the launcher exits 3.
 @es `GATES_KIT_TOOLCHAIN` indica el directorio con `node_modules` (eslint y typescript-eslint). Sin él el
 lanzador sale con 3.

@@ -24,7 +24,11 @@ config que necesita a su propio árbol y la conecta a sus propios scripts/CI.
 | `fleet-kit-integration.md` | How a gate rolls out through `~/.claude/fleet-kit/` without ever going green by hiding a failure |
 | `gaps-manual-checklists.md` | Where no tool exists and a checklist (already in `~/.claude/checklists/`) is the only control |
 | `angular/`, `nest/`, `node-vitest/` | The executable gates of each stack: one folder per gate with its config, `pass/` and `fail/` fixtures, `SOURCE.md` and `gate.json` (the command). `verify.mjs` proves each one goes green on `pass/` and red on `fail/` |
-| `toolchains/<stack>/` | The pinned packages a stack's gates run on: a private `package.json` with exact versions and its `package-lock.json`. Install once outside every repository and point `GATES_KIT_TOOLCHAIN` at it |
+| `toolchains/<stack>/`, `toolchains/<stack>-<major>/` | The pinned packages a stack's gates run on: a private `package.json` with exact versions and its `package-lock.json`. Angular has one per major (`angular-19` ... `angular-22`: that major's TypeScript, angular-eslint, ESLint and both runners it supports); Nest and Node one each. Install once outside every repository and point `GATES_KIT_TOOLCHAIN` at it; verify a per-major one with `verify.mjs --toolchain <id>` |
+| `toolchain-for.mjs` | `toolchainFor(profile, hostNode)`: the toolchain id a project's REAL framework major and test runner need, or a stated refusal (unsupported major or runner, host Node outside the range); never a near toolchain |
+| `node-range.mjs` | Reads an `engines.node` range against a Node version (throws on what it cannot read) |
+| `angular-lint-rules.mjs` | The angular-eslint rules on per Angular major (`no-experimental`, `no-developer-preview`, `prefer-*` from the major whose guidance asks for them), used by `angular/angular-eslint-rules` |
+| `gate-command-rules.mjs` | Every gate command names its reporter (ESLint `--format`, `tsc --pretty false`, Vitest `--reporter`, Jest/Karma/Stryker `--reporters`, dependency-cruiser `--output-type`) so a log reader sees a stable report, and never passes `eslint --quiet` |
 | `run-tool.mjs` | The launcher every gate runs its package through: finds the binary under `GATES_KIT_TOOLCHAIN`, exits 3 rather than pass when it cannot |
 | `findings-register.mjs` | The per-repository findings register (`.claude/FINDINGS.jsonl`): append-only findings and closures with receipts; `list`, `validate`, `add`, `close`. Every `templates/<stack>/AGENT-CONTRACT.md` names its path |
 
@@ -38,7 +42,11 @@ config que necesita a su propio árbol y la conecta a sus propios scripts/CI.
 | `fleet-kit-integration.md` | Cómo se despliega un gate a través de `~/.claude/fleet-kit/` sin esconder nunca un fallo |
 | `gaps-manual-checklists.md` | Dónde no existe herramienta y un checklist (ya en `~/.claude/checklists/`) es el único control |
 | `angular/`, `nest/`, `node-vitest/` | Los gates ejecutables de cada stack: una carpeta por gate con su config, fixtures `pass/` y `fail/`, `SOURCE.md` y `gate.json` (el comando). `verify.mjs` prueba que cada uno sale en verde sobre `pass/` y en rojo sobre `fail/` |
-| `toolchains/<stack>/` | Los paquetes fijados sobre los que corren los gates de un stack: un `package.json` privado con versiones exactas y su `package-lock.json`. Se instala una vez fuera de todo repositorio y `GATES_KIT_TOOLCHAIN` apunta a él |
+| `toolchains/<stack>/`, `toolchains/<stack>-<major>/` | Los paquetes fijados sobre los que corren los gates de un stack: un `package.json` privado con versiones exactas y su `package-lock.json`. Angular tiene una por major (`angular-19` ... `angular-22`); Nest y Node una cada uno. Se instala una vez fuera de todo repositorio y `GATES_KIT_TOOLCHAIN` apunta a él; una por major se verifica con `verify.mjs --toolchain <id>` |
+| `toolchain-for.mjs` | `toolchainFor(profile, hostNode)`: el id de toolchain que piden la major REAL y el runner de tests del proyecto, o un rechazo explícito; nunca una toolchain cercana |
+| `node-range.mjs` | Lee un rango `engines.node` frente a una versión de Node (lanza ante lo que no puede leer) |
+| `angular-lint-rules.mjs` | Las reglas de angular-eslint activas por major de Angular, usadas por `angular/angular-eslint-rules` |
+| `gate-command-rules.mjs` | Todo comando de gate nombra su reporter, para que un lector de logs vea un informe estable, y nunca pasa `eslint --quiet` |
 | `run-tool.mjs` | El lanzador por el que cada gate corre su paquete: busca el binario bajo `GATES_KIT_TOOLCHAIN` y sale con 3 en vez de pasar si no puede |
 | `findings-register.mjs` | El registro de hallazgos por repositorio (`.claude/FINDINGS.jsonl`): hallazgos y cierres con recibos, solo se añade; `list`, `validate`, `add`, `close`. Cada `templates/<stack>/AGENT-CONTRACT.md` nombra su ruta |
 

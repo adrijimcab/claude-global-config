@@ -7,8 +7,8 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "target": "ES2022",
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "noEmit": true,
     "types": []
   }

@@ -1,0 +1,4 @@
+{
+  "command": ["node", "../../run-tool.mjs", "vitest", "vitest", "run", "--reporter", "default", "--root", "{target}", "--config", "{target}/../config.vitest.mjs"],
+  "timeoutMs": 300000
+}

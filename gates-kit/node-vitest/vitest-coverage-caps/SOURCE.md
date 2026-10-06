@@ -43,8 +43,9 @@ Measured with Vitest 3.2.7 (node 22.22.0): the coverage provider is looked up fr
 which is the fixture and holds no `node_modules`, so `provider: 'v8'` fails with "Failed to load url
 @vitest/coverage-v8". The config names the same package by its path in the toolchain instead
 (`provider: 'custom'` and `customProviderModule`), resolved from `GATES_KIT_TOOLCHAIN` as the lint configs do.
-Vitest 5.0.3 finds the provider next to itself, but Stryker's runner needs Vitest 3 (see `stryker-mutation`),
-and a toolchain holds one Vitest.
+Vitest 5.0.3 finds the provider next to itself, but Stryker's runner does not work under Vitest 5 (see
+`stryker-mutation`), and a toolchain holds one Vitest: it is 4.1.11, where the same config is measured green
+on `pass/` and red on `fail/` (2026-10-06).
 
 ## Toolchain
 

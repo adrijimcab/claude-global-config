@@ -19,13 +19,25 @@ AGENT-CONTRACT.md` G3): `eslint` and `typescript-eslint` (strict-type-checked li
 (`tsc --noEmit`), `vitest` with `@vitest/coverage-v8` (coverage caps; the provider is Vitest's own coverage
 package), `@stryker-mutator/core` with `@stryker-mutator/vitest-runner` (mutation testing).
 
-Vitest is 3.2.7, not the latest: Stryker 10.0.0's Vitest runner reported 0 tests run per mutant under Vitest 5.0.3, and Vitest 4.1.11
-could not be locked with npm 10.9.4 (measured; see `node-vitest/stryker-mutation/SOURCE.md`). Raise Vitest only
+Vitest is 4.1.11, not the latest: Stryker 10.0.0's Vitest runner lets every mutant survive under Vitest 5.0.3,
+and runs the specs under 4.1.11 (measured; see `node-vitest/stryker-mutation/SOURCE.md`). Raise Vitest only
 together with a Stryker whose runner is measured to run the specs.
 
-The lockfile was produced with `npm install --package-lock-only --ignore-scripts`.
+The lockfile: see Versions.
 
-@es Cada uno es una herramienta que el contrato del dueño para el stack ya nombra. Vitest es la 3.2.7, no la
-última: el runner de Vitest de Stryker 10.0.0 informó 0 tests ejecutados por mutante con Vitest 5.0.3, y Vitest 4.1.11 no se
-pudo bloquear con npm 10.9.4 (medido). Subir Vitest solo junto con un Stryker cuyo runner se mida que ejecuta
-los specs. El lockfile se generó con `npm install --package-lock-only --ignore-scripts`.
+@es Cada uno es una herramienta que el contrato del dueño para el stack ya nombra. Vitest es la 4.1.11, no la
+última: con Vitest 5.0.3 el runner de Stryker 10.0.0 deja sobrevivir todo mutante, con la 4.1.11 ejecuta los
+specs (medido). Subir Vitest solo junto con un Stryker cuyo runner se mida que ejecuta
+los specs. El lockfile: ver Versiones.
+
+## Versions (npm, 2026-10-06; latest stable only)
+
+ESLint 10.12.0 (`latest`; flat config only, which every gate config already is), typescript-eslint 8.71.1
+(`latest`; peers `typescript >=4.8.4 <6.1.0`), TypeScript 6.0.3: the newest TypeScript typescript-eslint
+accepts (TypeScript 7.0.2 is npm `latest` but outside that peer range); Vitest 4.1.11, not 5, because Stryker 10.0.0 is still `latest` (see above). The lockfile was produced with
+`npx npm@11.21.0 install --package-lock-only --ignore-scripts`, as the Angular toolchains' (npm 10 writes
+Angular locks `npm ci` refuses); `npm ci` with npm 10.9.4 installs it. Every package of the lockfile accepts
+Node `^22.18.0 || >=24.11.0` (`toolchainFor` refuses any other).
+@es ESLint 10.12.0, typescript-eslint 8.71.1 y TypeScript 6.0.3, el TypeScript más nuevo que admite
+typescript-eslint; Vitest 4.1.11 y no 5 porque Stryker 10.0.0 sigue siendo `latest`. El lockfile se generó con npm 11.21.0; `npm ci` con npm 10.9.4 lo instala. Todo
+paquete del lockfile acepta Node `^22.18.0 || >=24.11.0` (`toolchainFor` rechaza cualquier otro).

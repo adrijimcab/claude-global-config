@@ -4,9 +4,9 @@
   "private": true,
   "description": "Pinned toolchain the Nest gates run on; install it once into a directory outside every repository.",
   "dependencies": {
-    "eslint": "9.39.4",
+    "eslint": "10.12.0",
     "jest": "30.5.2",
-    "typescript": "5.5.4",
-    "typescript-eslint": "8.57.1"
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.1"
   }
 }

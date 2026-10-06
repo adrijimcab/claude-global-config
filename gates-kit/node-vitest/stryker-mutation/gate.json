@@ -1,4 +1,4 @@
 {
-  "command": ["node", "../../run-tool.mjs", "--cwd", "{target}", "@stryker-mutator/core", "stryker", "run", "{target}/../config.stryker.mjs"],
+  "command": ["node", "../../run-tool.mjs", "--cwd", "{target}", "@stryker-mutator/core", "stryker", "run", "--reporters", "clear-text", "{target}/../config.stryker.mjs"],
   "timeoutMs": 300000
 }

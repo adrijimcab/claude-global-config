@@ -22,7 +22,7 @@ ignorado ni permiso. El gate hermano `dependency-cruiser-circular` se ocupa de l
 ## Toolchain
 
 `GATES_KIT_TOOLCHAIN` names the directory holding `node_modules` with `dependency-cruiser` 18.5.0 (pinned in
-`gates-kit/toolchains/angular/package.json`; the package exposes no `./package.json` export, so `run-tool.mjs`
+`gates-kit/toolchains/angular-<major>/package.json`, every major; the package exposes no `./package.json` export, so `run-tool.mjs`
 reads the manifest from `<toolchain>/node_modules/<package>/package.json` directly).
 @es `GATES_KIT_TOOLCHAIN` indica el directorio con `node_modules` y `dependency-cruiser` 18.5.0 (fijado en
-`gates-kit/toolchains/angular/package.json`).
+`gates-kit/toolchains/angular-<major>/package.json`, en cada major).

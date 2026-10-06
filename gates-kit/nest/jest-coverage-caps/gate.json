@@ -1,4 +1,4 @@
 {
-  "command": ["node", "../../run-tool.mjs", "jest", "jest", "--projects", "config.jest.cjs", "--rootDir", "{target}", "--ci"],
+  "command": ["node", "../../run-tool.mjs", "jest", "jest", "--reporters", "default", "--projects", "config.jest.cjs", "--rootDir", "{target}", "--ci"],
   "timeoutMs": 300000
 }
