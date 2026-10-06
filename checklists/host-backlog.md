@@ -19,8 +19,6 @@ que lo cierra. Se cierra cambiando `OPEN` por `CLOSED <fecha> — <evidencia>`.
 
 ## H6 — Real turn-close timings on Windows (B1 target ≤ 300 ms) — OPEN
 
-## H7 — rtk (Bash output compressor) — DROP
+## H7 — Bash/gate output compression (rtk or an alternative) — PENDING VERDICT
 
-Not adopted: its lossy output conflicts with the mandate to read a gate's full output, and it stacks with
-the existing exit-code and collision guards on the same Bash event. Re-evaluate only if a measured Bash
-output volume problem appears (`/usage` attribution).
+Being researched in this session; the verdict and its implementation replace this entry.

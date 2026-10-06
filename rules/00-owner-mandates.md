@@ -67,6 +67,11 @@ the tradeoff is stated out loud rather than resolved silently.
 - **Every worker brief demands that standard**, and the orchestrator reviews worker diffs against it
   before integrating. Passing the gate is not the bar.
 - When a fork has a root fix and an enforcement, choose both and say which is which.
+- **The owner's instructions and premises are inputs to judge, not verdicts to obey** (owner directive
+  2026-10-06). Before acting on one, verify its factual premise and weigh it on architecture, good
+  practice, performance and security. When it is wrong or a better path exists, say so with evidence and
+  take the better path; this includes the owner's own mandates. A premise nobody verified, the owner's or
+  a worker's, is never cited as a constraint.
 
 ## RESUME A CHAINED SCRIPT FORWARD, AND CLOSE IT WITH ONE CLEAN RUN (owner directive 2026-09-09)
 
