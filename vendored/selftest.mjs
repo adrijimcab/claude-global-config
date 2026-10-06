@@ -9,12 +9,13 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { provenanceFindings, sha256Of } from '../fleet-kit/vendor/provenance.mjs';
+import { duplicateFinding, RECORD_FILE_NAME, undeclaredDuplicates } from './duplicates.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'vendored-selftest-'));
 const vendorRoot = path.join(root, 'vendor');
@@ -109,6 +110,7 @@ function installIn(base) {
   mkdirSync(path.join(claude, 'vendored'), { recursive: true });
   mkdirSync(path.join(claude, 'fleet-kit', 'vendor'), { recursive: true });
   copyFileSync(REAL_VENDORED, path.join(claude, 'vendored', 'vendored.mjs'));
+  copyFileSync(path.join(HERE, 'duplicates.mjs'), path.join(claude, 'vendored', 'duplicates.mjs'));
   copyFileSync(path.join(REAL_KIT_VENDOR, 'provenance.mjs'), path.join(claude, 'fleet-kit', 'vendor', 'provenance.mjs'));
   copyFileSync(path.join(REAL_KIT_VENDOR, 'sources.mjs'), path.join(claude, 'fleet-kit', 'vendor', 'sources.mjs'));
 
@@ -239,6 +241,93 @@ try {
   expect('every finding line is bilingual: edited, moved on, missing and absent source', () => ['EDITED IN THE KIT', 'SOURCE MOVED ON', 'MISSING IN THE KIT', 'source absent'].every((kind) => lines.some((line) => line.startsWith(kind) && bilingual(line))));
 
   expect('importing provenance.mjs runs no check: no output, exit 0', () => kitImported.status === 0 && kitImported.stdout === '');
+
+  // --- Part three: undeclared duplicates, a module byte-identical under both roots that nobody declared.
+  // @es Parte tres: duplicados sin declarar, un módulo idéntico bajo ambas raíces que nadie declaró.
+  const twinsIn = (name, files) => {
+    const base = path.join(cliRoot, name);
+
+    for (const [relative, installText, sourceText] of files) {
+      if (installText !== undefined) put(path.join(base, 'install'), relative, installText);
+      if (sourceText !== undefined) put(path.join(base, 'source'), relative, sourceText);
+    }
+
+    return { installRoot: path.join(base, 'install'), sourceRoot: path.join(base, 'source') };
+  };
+  const duplicatesOf = (roots, extra = {}) => {
+    try {
+      return undeclaredDuplicates({ ...roots, declared: [], ...extra });
+    } catch (error) {
+      return [`THREW ${error.message}`];
+    }
+  };
+  const same = 'export const same = 1;\n';
+  const pinningRecord = (...paths) => JSON.stringify({ files: paths.map((one) => ({ path: one, sha256: 'x' })) });
+
+  expect('a module byte-identical under both roots and declared nowhere is a duplicate', () => JSON.stringify(duplicatesOf(twinsIn('d-plain', [['a/twin.mjs', same, same]]))) === '["a/twin.mjs"]');
+  expect('duplicates are named with forward slashes, nested folders included, and sorted', () => JSON.stringify(duplicatesOf(twinsIn('d-nested', [['z/y/deep.mjs', same, same], ['a/first.mjs', same, same], ['m.mjs', same, same]]))) === '["a/first.mjs","m.mjs","z/y/deep.mjs"]');
+  expect('a declared module is never a duplicate', () => JSON.stringify(duplicatesOf(twinsIn('d-declared', [['a/one.mjs', same, same], ['a/two.mjs', same, same]]), { declared: ['a/one.mjs'] })) === '["a/two.mjs"]');
+  expect('copies that diverge on purpose are no finding', () => duplicatesOf(twinsIn('d-diverge', [['a/twin.mjs', same, 'export const same = 2;\n']])).length === 0);
+  expect('a module present under one root only is no finding, on either side', () => duplicatesOf(twinsIn('d-one-sided', [['a/mine.mjs', same, undefined], ['a/theirs.mjs', undefined, same]])).length === 0);
+  expect('only .mjs modules count: an identical .json, .md or .mjs.bak is no finding', () => duplicatesOf(twinsIn('d-kinds', [['a/data.json', same, same], ['a/notes.md', same, same], ['a/twin.mjs.bak', same, same], ['a/mjs', same, same]])).length === 0);
+  expect('an identical module under .git, node_modules or worktrees is no finding', () => duplicatesOf(twinsIn('d-skipped', [['.git/x.mjs', same, same], ['node_modules/x.mjs', same, same], ['worktrees/w/x.mjs', same, same], ['a/node_modules/x.mjs', same, same]])).length === 0);
+  expect('findings come out sorted whatever order the file system lists in', () => JSON.stringify(duplicatesOf(twinsIn('d-order', [['z.mjs', same, same], ['a.mjs', same, same], ['m.mjs', same, same]]), { walk: () => ['z.mjs', 'a.mjs', 'm.mjs'] })) === '["a.mjs","m.mjs","z.mjs"]');
+  expect('a folder named like a module is no module', () => duplicatesOf(twinsIn('d-folder', [['a/folder.mjs/inner.txt', same, same]])).length === 0);
+  expect('a malformed entry in a record does not hide the entries after it', () => duplicatesOf(twinsIn('d-malformed', [['kit/a/pinned.mjs', same, same], [`kit/${RECORD_FILE_NAME}`, '{"files":[null,{"path":3},{"path":"a/pinned.mjs"}]}', undefined]])).length === 0);
+  expect('a symbolic link in the reference fleet is no module (a platform that cannot make one has nothing to prove)', () => {
+    const roots = twinsIn('d-link', [['real.mjs', same, same]]);
+
+    try {
+      symlinkSync(path.join(roots.sourceRoot, 'real.mjs'), path.join(roots.sourceRoot, 'link.mjs'));
+    } catch {
+      return true;
+    }
+
+    put(roots.installRoot, 'link.mjs', same);
+
+    return JSON.stringify(duplicatesOf(roots)) === '["real.mjs"]';
+  });
+  expect('an absent reference fleet has no duplicates and never throws', () => JSON.stringify(duplicatesOf({ installRoot: twinsIn('d-absent', [['a/twin.mjs', same, undefined]]).installRoot, sourceRoot: path.join(cliRoot, 'd-absent', 'nowhere') })) === '[]');
+
+  // A module pinned by another provenance record (the kit's `fleet-kit/vendor`, whose record names each file
+  // relative to ITS folder) already has its provenance: the pin's own data excludes it, never a hand list.
+  // @es Un módulo fijado por OTRO registro de procedencia (el `fleet-kit/vendor` del kit, que nombra cada
+  // fichero relativo a SU carpeta) ya tiene su procedencia: lo excluyen los datos del propio registro.
+  expect('a module pinned by another provenance record, relative to that record\'s folder, is no finding', () => duplicatesOf(twinsIn('d-pinned', [['kit/vendor/a/pinned.mjs', same, same], [`kit/vendor/${RECORD_FILE_NAME}`, pinningRecord('a/pinned.mjs'), undefined]])).length === 0);
+  expect('a module the other record does NOT list is still a duplicate, and so is one only its folder name resembles', () => JSON.stringify(duplicatesOf(twinsIn('d-unlisted', [['kit/vendor/a/pinned.mjs', same, same], ['kit/vendor/a/other.mjs', same, same], ['a/other.mjs', same, same], [`kit/vendor/${RECORD_FILE_NAME}`, pinningRecord('a/pinned.mjs'), undefined]]))) === '["a/other.mjs","kit/vendor/a/other.mjs"]');
+  expect('a record pins relative to ITS folder: the same relative path elsewhere in the tree is no pinned module', () => JSON.stringify(duplicatesOf(twinsIn('d-relative', [['a/pinned.mjs', same, same], [`kit/${RECORD_FILE_NAME}`, pinningRecord('a/pinned.mjs'), undefined]]))) === '["a/pinned.mjs"]');
+  expect('this check\'s own record, which names its files relative to the install root, hides no duplicate', () => JSON.stringify(duplicatesOf(twinsIn('d-own', [['shell-command/twin.mjs', same, same], [`vendored/${RECORD_FILE_NAME}`, pinningRecord('shell-command/twin.mjs'), undefined]]))) === '["shell-command/twin.mjs"]');
+  expect('a record that cannot be read pins nothing and never crashes the check', () => JSON.stringify(duplicatesOf(twinsIn('d-corrupt', [['a/twin.mjs', same, same], [`kit/${RECORD_FILE_NAME}`, '{not json', undefined], [`kit2/${RECORD_FILE_NAME}`, '{"files":"no"}', undefined], [`kit3/${RECORD_FILE_NAME}`, '{"files":[null,{"path":3}]}', undefined]]))) === '["a/twin.mjs"]');
+  expect('the finding line names the module, what to do, and both languages', () => {
+    const line = duplicateFinding('a/twin.mjs');
+
+    return line.startsWith('DUPLICATED WITHOUT PROVENANCE  a/twin.mjs') && line.includes('declare it vendored or make the copies diverge on purpose') && line.includes(' @es DUPLICADO SIN PROCEDENCIA') && line.includes('declararlo vendorizado o hacer que las copias diverjan a propósito');
+  });
+
+  const twins = installIn(path.join(cliRoot, 'four'));
+
+  vendoredCli(twins, 'sync');
+  put(twins.sourceRoot, 'extra/twin.mjs', same);
+  put(twins.claude, 'extra/twin.mjs', same);
+
+  const twinned = vendoredCli(twins, 'check');
+  const twinnedLines = twinned.stdout.split('\n');
+
+  expect('check fails on a duplicate, names it, and counts it among the failures', () => twinned.status === 1 && twinnedLines.some((line) => line.startsWith('DUPLICATED WITHOUT PROVENANCE  extra/twin.mjs')) && twinned.stdout.includes(`provenance: ${VENDORED.length} vendored module(s), 1 failure(s)`));
+  expect('the duplicate line is bilingual', () => twinnedLines.some((line) => line.startsWith('DUPLICATED WITHOUT PROVENANCE') && bilingual(line)));
+
+  put(twins.claude, 'extra/twin.mjs', 'export const same = 2;\n');
+
+  expect('once the copies diverge on purpose the check is green', () => vendoredCli(twins, 'check').status === 0);
+
+  put(twins.claude, 'extra/twin.mjs', same);
+  put(twins.claude, 'extra/pinned/p.mjs', same);
+  put(twins.sourceRoot, 'extra/pinned/p.mjs', same);
+  writeFileSync(path.join(twins.claude, 'extra', RECORD_FILE_NAME), pinningRecord('pinned/p.mjs'));
+
+  const pinned = vendoredCli(twins, 'check');
+
+  expect('check excludes what another record pins, through that record\'s own data', () => !pinned.stdout.includes('extra/pinned/p.mjs') && pinned.stdout.includes('extra/twin.mjs'));
 } finally {
   rmSync(cliRoot, { recursive: true, force: true });
 }

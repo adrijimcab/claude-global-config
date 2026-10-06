@@ -14,12 +14,13 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const VENDORED = 'vendored/vendored.mjs';
+const DUPLICATES = 'vendored/duplicates.mjs';
 
 const MUTANTS = [
   // --- WHERE: which roots the command line copies between.
   ['the copies land beside the script instead of under the install root', VENDORED, "const TARGET_ROOT = path.resolve(HERE, '..');", 'const TARGET_ROOT = HERE;'],
   ['the reference fleet is looked up in the wrong folders', VENDORED, "Object.freeze(['Desktop', 'Projects', 'b100-am-ui', '.claude'])", "Object.freeze(['Projects', 'Desktop', 'b100-am-ui', '.claude'])"],
-  ['the provenance record is written to another file', VENDORED, "path.join(HERE, 'PROVENANCE.json')", "path.join(HERE, 'PROVENANCE.txt')"],
+  ['the provenance record is written to another file', VENDORED, 'path.join(HERE, RECORD_FILE_NAME)', "path.join(HERE, 'PROVENANCE.txt')"],
 
   // --- SYNC: what it copies and what it records.
   ['sync copies nothing', VENDORED, 'copyFileSync(path.join(SOURCE_ROOT, relative), target);', "writeFileSync(target, '');"],
@@ -33,6 +34,35 @@ const MUTANTS = [
   ['check never fails', VENDORED, 'return failures.length === 0 ? 0 : 1;', 'return 0;'],
   ['check prints failures before the notes', VENDORED, '[...notes, ...failures]', '[...failures, ...notes]'],
   ['check stops reporting in Spanish', VENDORED, ' @es procedencia: ${record.files.length} módulo(s) vendorizado(s), ${failures.length} fallo(s)', ''],
+
+  // --- UNDECLARED DUPLICATES: what `check` reports besides the declared modules.
+  ['check reports no duplicate', VENDORED, 'failures.push(duplicateFinding(relative))', 'void relative'],
+  ['check treats nothing as declared: every vendored module is a duplicate', VENDORED, 'declared: VENDORED })', 'declared: [] })'],
+  ['check looks for duplicates against itself instead of the reference fleet', VENDORED, 'installRoot: TARGET_ROOT, sourceRoot: SOURCE_ROOT, declared', 'installRoot: TARGET_ROOT, sourceRoot: TARGET_ROOT, declared'],
+  ['the duplicate finding stops saying what to do', DUPLICATES, ' — declare it vendored or make the copies diverge on purpose', ''],
+  ['the duplicate finding stops being bilingual', DUPLICATES, ' @es DUPLICADO SIN PROCEDENCIA: declararlo vendorizado o hacer que las copias diverjan a propósito', ''],
+  ['an absent reference fleet is walked and crashes', DUPLICATES, 'if (!existsSync(sourceRoot)) return [];', ''],
+  ['modules of every extension count as duplicates', DUPLICATES, 'relative.endsWith(MODULE_EXTENSION) && !declared', '!declared'],
+  ['a declared module is a duplicate too', DUPLICATES, ' && !declared.includes(relative)', ''],
+  ['a module missing from the install is read as a copy', DUPLICATES, 'existsSync(path.join(installRoot, relative)) && sha256Of', 'sha256Of'],
+  ['copies that diverge are duplicates too: the bytes are never compared', DUPLICATES, ' && sha256Of(path.join(installRoot, relative)) === sha256Of(path.join(sourceRoot, relative))', ''],
+  ['only copies that DIFFER are reported', DUPLICATES, 'sha256Of(path.join(installRoot, relative)) === sha256Of', 'sha256Of(path.join(installRoot, relative)) !== sha256Of'],
+  ['what another record pins is a duplicate too', DUPLICATES, "    .filter((relative) => !isPinnedElsewhere(installRoot, relative))\n", ''],
+  ['a record pins relative to the install root instead of its own folder', DUPLICATES, "parts.slice(depth).join('/'))) return true;", 'relative)) return true;'],
+  ['a record is read only at the install root', DUPLICATES, 'depth < parts.length - 1', 'depth < 1'],
+  ['a record in the folder of the module itself is not read', DUPLICATES, 'let depth = 0; depth < parts.length - 1', 'let depth = 0; depth < parts.length - 2'],
+  ['a record is read from the wrong folder: the module\'s own path', DUPLICATES, "recordPins(root, parts.slice(0, depth).join('/'),", "recordPins(root, parts.slice(0, depth + 1).join('/'),"],
+  ['a record that cannot be read crashes the check', DUPLICATES, '    return files.some((entry) => entry?.path === rest);\n  } catch {\n    return false;\n  }', '    return files.some((entry) => entry?.path === rest);\n  } catch (error) {\n    throw error;\n  }'],
+  ['an entry without a path crashes the check', DUPLICATES, 'entry?.path === rest', 'entry.path === rest'],
+  ['the findings are not sorted', DUPLICATES, "    .sort();\n", ';\n'],
+  ['the reference fleet is walked without descending into folders', DUPLICATES, 'if (entry.isDirectory() && !NOT_ITS_TREE.has(entry.name)) found.push(...filesUnder(root, relative));', 'if (false) found.push(...filesUnder(root, relative));'],
+  ['the .git folder is walked', DUPLICATES, "new Set(['.git', ", 'new Set(['],
+  ['the node_modules folder is walked', DUPLICATES, "'node_modules', ", ''],
+  ['the worktrees folder is walked', DUPLICATES, ", 'worktrees'", ''],
+  ['every folder is walked', DUPLICATES, '!NOT_ITS_TREE.has(entry.name)', 'true'],
+  ['every entry is a file, folders named like modules included', DUPLICATES, 'else if (entry.isFile())', 'else if (true)'],
+  ['a nested module is named without its folder', DUPLICATES, "const relative = folder === '' ? entry.name : `${folder}/${entry.name}`;", 'const relative = entry.name;'],
+  ['the record is looked for under another name', DUPLICATES, "export const RECORD_FILE_NAME = 'PROVENANCE.json';", "export const RECORD_FILE_NAME = 'PROVENANCE.txt';"],
 
   // --- THE COMMAND LINE: how it is dispatched.
   ['sync is never recognised', VENDORED, "if (command === 'sync') return sync();", "if (command === 'syncx') return sync();"],
