@@ -40,6 +40,12 @@ const MUTANTS = [
   ['a tally that is not (×N) is accepted', LINE, 'tally === undefined || tallyOf(`${String(tally)} `) === tally ? undefined', 'true ? undefined'],
   ['a non-numeric tally is read as a tally', LINE, '[...body.slice(2, close)].every((character) => DIGITS.includes(character)) ? body.slice(0, close + 1)', 'true ? body.slice(0, close + 1)'],
 
+  // --- the pointer is read by one function, the builder's own shape
+  ['a pointer is read where it does not start', LINE, 'if (!text.startsWith(lead, from)) return undefined;', 'if (false) return undefined;'],
+  ['a pointer under a key that is not valid is read', LINE, 'return isValidKey(key) ? { key, end: keyEnd + POINTER_END.length } : undefined;', 'return { key, end: keyEnd + POINTER_END.length };'],
+  ['a pointer that ends before the rule does is the rule\'s pointer', LINE, 'return pointer?.end === rule.length ? pointer.key : undefined;', 'return pointer?.key;'],
+  ['the file a pointer points at is not named by its key', LINE, 'export const evidenceNameOf = (key) => `${key}${POINTER_END}`;', 'export const evidenceNameOf = (key) => key;'],
+
   // --- the split is the single RULE: label, never a guess
   ['a body with two RULE: labels is split anyway', LINE, 'if (text.indexOf(RULE_LABEL, at + 1) !== -1) return refuse(', 'if (false) return refuse('],
   ['a body with no RULE: label is split anyway', LINE, 'if (at === -1) return refuse(', 'if (false) return refuse('],

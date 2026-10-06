@@ -21,6 +21,9 @@ export const RULE_LABEL = 'RULE: ';
 const HEAD_SEPARATOR = ' — ';
 const POINTER_LEAD = ' Evidence: lessons/evidence/';
 const POINTER_END = '.md';
+
+/** The evidence file a key's lines are archived in, by name: what a pointer to `key` points at. @es El fichero de evidencia donde se archivan las líneas de una clave, por nombre: a lo que apunta un puntero a `key`. */
+export const evidenceNameOf = (key) => `${key}${POINTER_END}`;
 const NO_MECHANISM = 'no mechanism';
 const DIGITS = '0123456789';
 
@@ -144,15 +147,34 @@ export function splitRule(body) {
   return { ok: true, tally, narrative: text.slice(0, at), rule: text.slice(at + RULE_LABEL.length) };
 }
 
+/**
+ * The evidence pointer `tieredLine` writes, read at `from` in `text` (the pointer proper, without the space
+ * that leads it): `{ key, end }` with `end` the index just past it, or `undefined` when `text` holds no
+ * pointer there or its key is not a valid one. The only reader of the pointer's shape, so whoever must tell
+ * a tool-written pointer from invented text asks here and cannot drift from the builder.
+ * @es El puntero a la evidencia que escribe `tieredLine`, leído en `from` dentro de `text` (el puntero en sí,
+ * sin el espacio que lo precede): `{ key, end }`, o `undefined` si no hay puntero ahí o su clave no es válida.
+ * El único lector de la forma del puntero: quien deba distinguir un puntero de la herramienta de un texto
+ * inventado pregunta aquí y no puede divergir del constructor.
+ */
+export function pointerAt(text, from) {
+  const lead = POINTER_LEAD.trimStart();
+
+  if (!text.startsWith(lead, from)) return undefined;
+
+  const keyStart = from + lead.length;
+  const keyEnd = text.indexOf(POINTER_END, keyStart);
+  const key = keyEnd === -1 ? '' : text.slice(keyStart, keyEnd);
+
+  return isValidKey(key) ? { key, end: keyEnd + POINTER_END.length } : undefined;
+}
+
 /** The key a rule tail points its evidence to, or `undefined` when it carries no valid pointer. @es La clave a la que apunta la evidencia de una cola de regla. */
 export function evidenceKeyOf(rule) {
   const at = rule.lastIndexOf(POINTER_LEAD);
+  const pointer = at === -1 ? undefined : pointerAt(rule, at + 1);
 
-  if (at === -1 || !rule.endsWith(POINTER_END)) return undefined;
-
-  const key = rule.slice(at + POINTER_LEAD.length, rule.length - POINTER_END.length);
-
-  return isValidKey(key) ? key : undefined;
+  return pointer?.end === rule.length ? pointer.key : undefined;
 }
 
 /**

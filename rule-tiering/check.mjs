@@ -31,7 +31,7 @@ function argumentsOf(argv) {
 
 async function main(argv) {
   const { repo, rev, file, after, evidence } = argumentsOf(argv);
-  const deficits = tieringVerdict({ before: beforeAt({ repo, rev, file }), after: textOf(after), evidence: evidenceIn(evidence), anchors: await anchorsFor({ repo, file }) });
+  const deficits = tieringVerdict({ before: beforeAt({ repo, rev, file }), after: textOf(after), evidence: evidenceIn(evidence, repo), anchors: await anchorsFor({ repo, file }) });
   const subject = `${file} at ${rev} -> ${after}`;
 
   if (deficits.length === 0) {

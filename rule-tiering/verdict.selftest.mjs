@@ -6,7 +6,8 @@
  * lost tilde, archived only as part of a longer line, archived across two evidence files; a blank line
  * removed; an added line that is a whole slice, a join of long slices, a join through a fixed label, an
  * invented word, a join of slices one character under the minimum; a RULE sentence kept, re-wrapped, cut; an
- * anchor kept, indented, never present; CRLF anywhere.
+ * anchor kept, indented, never present; CRLF anywhere; the evidence pointer failure-capture writes, with its
+ * evidence file present, absent, in another directory, followed by more text, under a key that is not one.
  *
  * @es Prueba del veredicto de escalonado: si un "después" propuesto de un fichero de reglas cargado conserva
  * su "antes". Cada fixture se construye aquí y cada expectativa se calcula a mano. Los estados: una línea
@@ -14,8 +15,12 @@
  * más larga, repartida en dos ficheros de evidencia; una línea en blanco quitada; una línea añadida que es un
  * trozo entero, una unión de trozos largos, una unión mediante etiqueta fija, una palabra inventada, una unión
  * de trozos un carácter por debajo del mínimo; una frase RULE conservada, re-envuelta, cortada; un ancla
- * conservada, sangrada, nunca presente; CRLF en cualquier sitio.
+ * conservada, sangrada, nunca presente; CRLF en cualquier sitio; el puntero a la evidencia que escribe
+ * failure-capture, con su fichero de evidencia presente, ausente, en otro directorio, seguido de más texto, bajo
+ * una clave que no lo es.
  */
+
+import { tieredLine } from '../failure-capture/ledger-line.mjs';
 
 import { folded, linesOf } from './instruction-text.mjs';
 import { ruleSentences } from './rule-sentences.mjs';
@@ -115,6 +120,28 @@ const crlf = (text) => text.split('\n').join('\r\n');
 check('CRLF in before, after and evidence changes nothing', kinds(tieringVerdict({ before: crlf(BEFORE), after: crlf([...KEPT, KEY_TWO].join('\n')), evidence: [{ name: 'e.md', text: crlf(`${NARRATIVE}\n${TILDE}\n`) }], anchors: ANCHORS })), []);
 check('every deficit message is bilingual', verdictOf(KEPT, []).every((deficit) => deficit.message.includes(' @es ')), true);
 check('a removed, unarchived, anchored RULE line reports all three', kinds(verdictOf(KEPT, [])), ['unarchived', 'unarchived', 'unarchived', 'rule-lost', 'anchor-lost']);
+
+// --- the evidence pointer failure-capture writes (the builder is the one the tool itself uses)
+const LEDGER_LINE = '- [global] 2026-06-30 — (×4) La lección de la señal: corregir el año → causa → RULE: nunca uses ñ sin verificar la tilde. <!--fc:signal-lesson#4-->';
+const TIERED_LINE = tieredLine({ scope: 'global', date: '2026-06-30', tally: '(×4)', rule: 'nunca uses ñ sin verificar la tilde.', key: 'signal-lesson', marker: '<!--fc:signal-lesson#4-->' }).line;
+const pointerVerdict = (after, evidence) => kinds(tieringVerdict({ before: `# Ledger\n${LEDGER_LINE}`, after: `# Ledger\n${after}`, evidence, anchors: [] }));
+const SIGNAL_EVIDENCE = [{ name: 'signal-lesson.md', text: `# e\n${LEDGER_LINE}\n` }];
+
+check('the tiered line failure-capture writes is conserved when the evidence file it points to holds the original', pointerVerdict(TIERED_LINE, SIGNAL_EVIDENCE), []);
+check('...a pointer to an evidence file that is not in the evidence set is invented', pointerVerdict(TIERED_LINE, [{ name: 'other.md', text: `${LEDGER_LINE}\n` }]), ['invented']);
+check('...a pointer into another directory is invented', pointerVerdict(TIERED_LINE.replace('lessons/evidence/', 'evidence/'), SIGNAL_EVIDENCE), ['invented']);
+check('...a pointer followed by more text is invented', pointerVerdict(TIERED_LINE.replace('.md <!--', '.md and more words nobody wrote <!--'), SIGNAL_EVIDENCE), ['invented']);
+check('...a pointer under a key that is not a key is invented, even with a file of that name', pointerVerdict(TIERED_LINE.replace('signal-lesson.md', 'Bad_Key.md'), [{ name: 'Bad_Key.md', text: `${LEDGER_LINE}\n` }]), ['invented']);
+
+// --- a pointer to a file of the evidence set, by its path from the repository (a moved section names where it went)
+const MOVED = [{ ...archive(NARRATIVE, TILDE)[0], path: 'rules/key.md' }];
+const movedVerdict = (pointer, evidence = MOVED) => kinds(verdictOf([...KEPT, KEY_TWO, pointer], evidence));
+
+check('an Evidence: pointer to the repository path of a file of the evidence set is conserved', movedVerdict('Evidence: rules/key.md'), []);
+check('...a pointer to a path that is not in the evidence set is invented', movedVerdict('Evidence: rules/other.md'), ['invented']);
+check('...a pointer followed by more text is invented', movedVerdict('Evidence: rules/key.md and a few words nobody wrote'), ['invented']);
+check('...a pointer with no label is invented', movedVerdict('rules/key.md'), ['invented']);
+check('...an evidence file with no path in the repository (a directory outside it) cannot be pointed to', movedVerdict('Evidence: rules/key.md', archive(NARRATIVE, TILDE)), ['invented']);
 
 process.stdout.write(`rule-tiering verdict selftest: ${passed} passed, ${failures.length} failed\n`);
 for (const failure of failures) process.stdout.write(`  FAIL ${failure}\n`);

@@ -21,6 +21,8 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const TEXT = 'rule-tiering/instruction-text.mjs';
 const RULES = 'rule-tiering/rule-sentences.mjs';
 const SLICE = 'rule-tiering/slice-join.mjs';
+const LEDGER = 'failure-capture/ledger-line.mjs';
+const POINTER = 'rule-tiering/evidence-pointer.mjs';
 const VERDICT = 'rule-tiering/tiering-verdict.mjs';
 
 const MUTANTS = [
@@ -55,6 +57,17 @@ const MUTANTS = [
   ['only the longest first slice is tried', SLICE, 'for (let to = from + MIN_SLICE; to <= end; to += 1) reached[to] = true;', 'if (end - from >= MIN_SLICE) reached[end] = true;'],
   ['an unreachable end passes', SLICE, 'return reached[target.length] ? undefined :', 'return true ? undefined :'],
   ['the uncovered text is the whole line', SLICE, 'target.slice(reached.lastIndexOf(true))', 'target'],
+
+  // --- the evidence pointer failure-capture writes
+  ['the pointer never counts as covered', SLICE, 'if (pointer !== undefined) reached[pointer] = true;', 'if (false) reached[pointer] = true;'],
+  ['a pointer covers the rest of the line', SLICE, 'reached[pointer] = true;', 'reached[target.length] = true;'],
+  ['the verdict gives the slice check no way to read a pointer', VERDICT, 'uncoveredText(line, source, wholeLines, pointerEnd)', 'uncoveredText(line, source, wholeLines)'],
+  ['a pointer counts without its evidence file', POINTER, 'if (pointer !== undefined && names.has(evidenceNameOf(pointer.key))) return pointer.end;', 'if (pointer !== undefined) return pointer.end;'],
+  ['the evidence file of a key is looked up by the bare key', POINTER, 'names.has(evidenceNameOf(pointer.key))', 'names.has(pointer.key)'],
+  ['a path pointer needs no label', POINTER, 'text.startsWith(`${LABEL}${path}`, from)', 'text.startsWith(path, from)'],
+  ['a path pointer covers the rest of the text', POINTER, 'from + LABEL.length + named.length', 'text.length'],
+  ['a pointer under a key that is not valid is read', LEDGER, 'return isValidKey(key) ? { key, end: keyEnd + POINTER_END.length } : undefined;', 'return { key, end: keyEnd + POINTER_END.length };'],
+  ['a pointer is read where it does not start', LEDGER, 'if (!text.startsWith(lead, from)) return undefined;', 'if (false) return undefined;'],
 
   // --- the verdict
   ['a removed blank line is a deficit', VERDICT, "if (line.trim() === '' || afterLines.includes(line) || archives", 'if (afterLines.includes(line) || archives'],
