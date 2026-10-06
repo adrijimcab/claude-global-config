@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "Stop"
+    }
+  ],
+  "why": "the native prompt Stop hook of premise-judge decides out of sight of every other hook; without this journal its blocks never reach guard-precision, and its false-block rate (H8) could not be measured."
+}

@@ -8,6 +8,7 @@
     "../../failure-capture/turn-guard.mjs",
     "../../engram-persistence/guard.mjs",
     "../../delegation-receipts/guard.mjs",
-    "../../stash-watch/guard.mjs"
+    "../../stash-watch/guard.mjs",
+    "../../premise-judge/journal-guard.mjs"
   ]
 }

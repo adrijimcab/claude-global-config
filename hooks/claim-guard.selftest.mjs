@@ -8,6 +8,10 @@
  *   bloquea : frase absoluta/negativa sin evidencia (español e inglés), con BOM de PowerShell.
  *   deja    : ya bloqueó en este turno, mensaje vacío, sin frase de riesgo, con evidencia de cada tipo,
  *             payload ilegible.
+ *
+ * Y la premisa atribuida: un caso que bloquea por cada patrón (inglés y español), «verificado» que no es
+ * recibo, cada recibo que sí lo es, y los negativos de precisión: la frase entre comillas o en código en
+ * línea (palabras de otro, no premisa propia), «como pediste» y «per your instructions».
  */
 
 import { spawnSync } from 'node:child_process';
@@ -101,6 +105,49 @@ expectVerdict('con ruta:línea como evidencia', payload('No existe otro caso, ve
 expectVerdict('con palabra de verificación', payload('No existe otro caso, verificado.'), false);
 expectVerdict('con bloque de salida pegado', payload('No existe otro caso:\n```\nsin coincidencias\n```'), false);
 
+// ATTRIBUTED PREMISES: one blocking case per pattern, each matched by that pattern alone, so a pattern that
+// stops matching turns its case green. @es PREMISAS ATRIBUIDAS: un caso que bloquea por patrón, casado solo por él.
+const PREMISES = [
+  ['premisa: «your rules require»', 'Your global rules require reading the full gate output, so I kept it.'],
+  ['premisa: «per your mandates»', 'Per your mandates, the worker must stay read-only.'],
+  ['premisa: «the owner wants»', 'The owner wants a single writer, so I serialized the edits.'],
+  ['premisa: «you said that»', 'You said that the hook runs on Windows only.'],
+  ['premisa: «the docs say»', 'The docs say prompt hooks default to a thirty second timeout.'],
+  ['premisa: «according to the documentation»', 'According to the documentation, prompt hooks are cheap.'],
+  ['premisa: «the worker\'s report says»', "The worker's report says the selftests are green."],
+  ['premisa: «the subagent reported»', 'The subagent reported a clean tree, so I merged it.'],
+  ['premisa: «according to the agent»', 'According to the agent, the cache is warm.'],
+  ['premisa: «tu mandato exige»', 'Tu mandato exige leer toda la salida del gate.'],
+  ['premisa: «según tus reglas»', 'Según tus reglas, el worker queda en solo lectura.'],
+  ['premisa: «el dueño quiere»', 'El dueño quiere un único escritor, así que serialicé las ediciones.'],
+  ['premisa: «el dueño pidió» (verbo con tilde final)', 'El dueño pidió un solo escritor.'],
+  ['premisa: «me dijiste que»', 'Me dijiste que el hook corre solo en Windows.'],
+  ['premisa: «la documentación dice»', 'La documentación dice que el timeout por defecto es de treinta segundos.'],
+  ['premisa: «según la documentación»', 'Según la documentación, los hooks de prompt son baratos.'],
+  ['premisa: «el informe del agente dice»', 'El informe del agente dice que los selftests están en verde.'],
+  ['premisa: «el subagente reportó»', 'El subagente reportó un árbol limpio, así que lo integré.'],
+  ['premisa: «según el worker»', 'Según el worker, la caché está caliente.'],
+];
+
+for (const [name, message] of PREMISES) expectVerdict(`${name} sin evidencia bloquea`, payload(message), true);
+
+expectVerdict('premisa: «verificado» no es recibo', payload('Tu mandato exige leer toda la salida, verificado.'), true);
+expectVerdict('premisa: una cita corta no es recibo', payload('Dijiste «léelo todo», y tu mandato exige leer toda la salida.'), true);
+
+expectVerdict('premisa con ruta del fichero de reglas', payload('Tu mandato exige leer toda la salida (rules/00-owner-mandates.md).'), false);
+expectVerdict('premisa con fichero:línea', payload('Your rules require it, see mandates:67.'), false);
+expectVerdict('premisa con comando mostrado', payload('Your rules require it: `rg -n require rules` lists it.'), false);
+expectVerdict('premisa con código de salida', payload('The subagent reported a clean tree, exit code 0.'), false);
+expectVerdict('premisa con URL', payload('The docs say thirty seconds: https://code.claude.com/docs/en/hooks'), false);
+expectVerdict('premisa con bloque de salida', payload('Tus reglas exigen esto:\n```\nsalida del comando\n```'), false);
+expectVerdict('premisa con cita larga', payload('Tu mandato exige juzgar: «Las premisas se juzgan antes de actuar».'), false);
+expectVerdict('premisa con cita en bloque', payload('Tu mandato exige esto:\n> se juzga antes de actuar'), false);
+expectVerdict('premisa repetida entre comillas no es propia', payload('Tu frase fue «tu mandato dice», y la tomé como pregunta.'), false);
+expectVerdict('premisa en código en línea no es propia', payload('El literal `your rules require` aparece en el fixture.'), false);
+expectVerdict('«como pediste» no es una premisa', payload('Hecho, como pediste.'), false);
+expectVerdict('«per your instructions» no es una premisa', payload('Per your instructions, I created the branch.'), false);
+expectVerdict('premisa tras un bloqueo en este turno', payload('Tu mandato exige leer todo.', { stop_hook_active: true }), false);
+
 // The block's CONTENT, not only its existence. @es El CONTENIDO del bloqueo, no solo que exista.
 const blocked = evaluate(payload('Eso no existe en el repo.'));
 const check = (ok, label) => (ok ? passed++ : failures.push(label));
@@ -109,6 +156,24 @@ check(blocked?.reason?.includes('"no existe"') === true, 'la razón nombra la fr
 check(blocked?.hookSpecificOutput?.hookEventName === 'Stop', 'el contexto adicional se declara del evento Stop');
 check(blocked?.hookSpecificOutput?.additionalContext?.includes('CLAIM GUARD TRIPPED on the phrase: "no existe"') === true, 'el contexto adicional repite la frase que disparó');
 check(blocked?.hookSpecificOutput?.additionalContext?.includes('at most once per turn') === true, 'el contexto adicional avisa de que dispara a lo sumo una vez');
+
+const premiseBlock = evaluate(payload('Tu mandato exige leer toda la salida del gate.'));
+const premiseContext = premiseBlock?.hookSpecificOutput?.additionalContext ?? '';
+
+check(premiseBlock?.reason?.includes('attributed premise ("Tu mandato exige")') === true, 'la razón de la premisa nombra la frase que disparó');
+check(premiseBlock?.reason?.includes('@es Premisa atribuida ("Tu mandato exige")') === true, 'la razón de la premisa es bilingüe');
+check(premiseContext.includes('CLAIM GUARD TRIPPED on the attributed premise: "Tu mandato exige"') === true, 'el contexto de la premisa repite la frase que disparó');
+check(premiseContext.includes('rules/00-owner-mandates.md') === true, 'el contexto de la premisa cita la regla');
+check(premiseContext.endsWith('at most once per turn — it will not fire again after this pass.'), 'el contexto de la premisa avisa de que dispara a lo sumo una vez');
+
+const outsideCode = evaluate(payload('El literal `tu mandato exige` sale, y tu regla dice otra cosa.'));
+
+check(outsideCode?.reason?.includes('premise ("tu regla dice")') === true, 'la frase nombrada es la de la prosa, no la del código en línea');
+
+const both = evaluate(payload('There is no guard for it, and your rules require one.'));
+
+check(both?.reason?.includes('claim ("There is no")') === true && both?.reason?.includes('premise ("your rules require")') === true, 'con las dos clases, el único bloqueo nombra las dos');
+check((both?.hookSpecificOutput?.additionalContext ?? '').includes('CLAIM GUARD TRIPPED on the phrase: "There is no"') && (both?.hookSpecificOutput?.additionalContext ?? '').includes('on the attributed premise: "your rules require"'), 'con las dos clases, el contexto lleva las dos');
 
 for (const failure of failures) console.log(`FAIL ${failure}`);
 console.log(`${passed}/${passed + failures.length} passed`);
