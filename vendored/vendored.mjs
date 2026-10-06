@@ -47,7 +47,13 @@ export const VENDORED = Object.freeze([
   'agent-liveness/liveness.mjs',
   'toolchain-guard/tree-tenancy.mjs',
   'toolchain-guard/package-manager-mutations.mjs',
-  'brief-tenancy/tenancy-declaration.mjs'
+  'brief-tenancy/tenancy-declaration.mjs',
+  'mutation-proof/campaign-plan.mjs',
+  'mutation-proof/deciding-modules.mjs',
+  'mutation-proof/scope.mjs',
+  'mutation-proof/scope.selftest.mjs',
+  'mutation-proof/scope.mutants.mjs',
+  'mutation-proof/scope-repository.selftest.mjs'
 ]);
 
 function sync() {

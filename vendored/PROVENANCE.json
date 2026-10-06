@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-06T15:54:41.099Z",
+  "syncedAt": "2026-10-06T18:58:10.735Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -29,6 +29,30 @@
     {
       "path": "brief-tenancy/tenancy-declaration.mjs",
       "sha256": "e76e0f8f9d4dcd87c7941580fbe754a764ff0f1cc9d1572a0beb3d536ce6f982"
+    },
+    {
+      "path": "mutation-proof/campaign-plan.mjs",
+      "sha256": "46883af3f837b5ff53da9296134de15dd3fa7ed0dc19dfcfa68a9542ff5c71dc"
+    },
+    {
+      "path": "mutation-proof/deciding-modules.mjs",
+      "sha256": "671d24eac940392f6a17ac1b0d538d32ca4b0d5208b02a2dea584d17789dc968"
+    },
+    {
+      "path": "mutation-proof/scope.mjs",
+      "sha256": "d883de5f8ac00dc071958574d96e8d59a751fc84bb9826abfe0eceef5641950a"
+    },
+    {
+      "path": "mutation-proof/scope.selftest.mjs",
+      "sha256": "6a461cbe3cd8be7cee889ff2432969a7e781d9b22a6a487f3efb348d2558b27c"
+    },
+    {
+      "path": "mutation-proof/scope.mutants.mjs",
+      "sha256": "de4d140ecc3d2bb3df70c1f36bb0147051767af91925918b4dcbd83375348fb1"
+    },
+    {
+      "path": "mutation-proof/scope-repository.selftest.mjs",
+      "sha256": "3235c422bd1cedab588ae621d2cdefe26a2257073fd5228b695e4f603412de0f"
     }
   ]
 }
