@@ -21,7 +21,14 @@ import { appendEvidence } from './evidence.mjs';
 import { HEADER } from './ledgers.mjs';
 import { FAT_MECHANISM, FAT_NONE, HOOKS_KEY, KEYED, MARKERLESS, PROJECT_KEY, PROJECT_LINE, PROJECT_MARKERLESS, SHORT_KEYED, SHORT_MARKERLESS, SHORT_PROJECT, SHORT_PROJECT_MARKERLESS, STUB_MECHANISM, STUB_NONE, TIERED_BARE, TWO_LABELS } from './condense-fixtures.mjs';
 import { readMarker } from './ledger-line.mjs';
-import { provisionLoop } from './fixture-loop.mjs';
+import { provisionLoop, worldEnv } from './fixture-loop.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('failure-capture');
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'condense-selftest-'));
 let passed = 0;
@@ -59,7 +66,7 @@ function world(name, lines) {
 /** Runs `condense` in a world: `{ status, out }`. @es Ejecuta `condense` en un mundo. */
 function condense(target, extra = []) {
   try {
-    const out = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'condense', ...extra], { cwd: target.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, HOME: target.home, USERPROFILE: target.home }, timeout: 60_000 });
+    const out = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'condense', ...extra], { cwd: target.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: worldEnv(target.home, { loop: target.loop }), timeout: 60_000 });
 
     return { status: 0, out };
   } catch (error) {
@@ -242,7 +249,7 @@ function withDeps(name, deps) {
 
   writeFileSync(target.lock, '');
 
-  const child = spawn(process.execPath, [path.join(target.loop, 'capture.mjs'), 'condense', '--write'], { cwd: target.repo, stdio: 'ignore', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
+  const child = spawn(process.execPath, [path.join(target.loop, 'capture.mjs'), 'condense', '--write'], { cwd: target.repo, stdio: 'ignore', env: worldEnv(target.home, { loop: target.loop }) });
   const closed = new Promise((resolve) => child.on('close', resolve));
 
   await new Promise((resolve) => setTimeout(resolve, 1200));

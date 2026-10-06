@@ -26,6 +26,13 @@ import { decide } from './decide.mjs';
 import { evaluate } from './guard.mjs';
 import { findPendingMarker, PENDING_MARKERS } from './markers.mjs';
 import { hasMasterBacklogSave, isMasterBacklogTopicKey, topicKeyValuesIn } from './master-save.mjs';
+import { isolateState, stateDir } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('backlog-guard');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD_CLI = path.join(HERE, 'guard.mjs');
@@ -372,7 +379,7 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
 
   const verdictOf = (run) => `${String(run.code)}/${run.out.includes('"decision":"block"') ? 'deny' : 'allow'}`;
   const degradedJournalledFor = () => {
-    const journalFile = path.join(HERE, 'state', 'refusals.jsonl');
+    const journalFile = path.join(stateDir('backlog-guard'), 'refusals.jsonl');
 
     return existsSync(journalFile) ? readFileSync(journalFile, 'utf8').split('\n').filter((line) => line.includes(sessionId) && line.includes('"store-unreadable"')).length : 0;
   };
@@ -391,7 +398,7 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
 
   // Turn 2: a pending phrase NOW, but the only save in the whole file sits BEFORE the offset the
   // housekeeping turn just recorded — this turn's own window never sees it -> block.
-  const journalPath = path.join(HERE, 'state', 'refusals.jsonl');
+  const journalPath = path.join(stateDir('backlog-guard'), 'refusals.jsonl');
   const journalledFor = () => (existsSync(journalPath) ? readFileSync(journalPath, 'utf8').split('\n').filter((line) => line.includes(sessionId)).length : 0);
   const journalBefore = journalledFor();
 

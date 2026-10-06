@@ -24,10 +24,12 @@ const MUTANTS = [
   // --- population ---
   ['only incidents.jsonl is backed up (a hand list in disguise)', B, "entry.isFile() && entry.name.endsWith('.jsonl')", "entry.isFile() && entry.name === 'incidents.jsonl'"],
   ['every file of a state directory is backed up, not only journals', B, "entry.isFile() && entry.name.endsWith('.jsonl')", 'entry.isFile()'],
-  ['only the failure-capture directory is searched for state', B, 'entry.isDirectory() && lstatSync(', "entry.name === 'failure-capture' && lstatSync("],
+  ['only the failure-capture directory is searched for state', B, 'stateDirsUnder(home).map(', "stateDirsUnder(home).filter(({ mechanism }) => mechanism === 'failure-capture').map("],
+  ['the home of the command line is not the Claude home', B, 'const options = { home: claudeHome(), backupRoot:', "const options = { home: path.join(homedir(), '.claude-home'), backupRoot:"],
   ['journals below a subdirectory of state/ are not found (depth rule)', B, 'if (entry.isDirectory()) return journalsUnder(entryPath);', 'if (entry.isDirectory()) return [];'],
   ['the walk follows a link or junction inside state/ (link rule)', B, 'if (entry.isDirectory()) return journalsUnder(entryPath);', 'if (entry.isDirectory() || entry.isSymbolicLink()) return journalsUnder(entryPath);'],
-  ['a state/ directory that is itself a link is followed (state link rule)', B, "{ throwIfNoEntry: false })?.isDirectory() === true", '{ throwIfNoEntry: false }) !== undefined'],
+  // A `state/` that is itself a link is not followed: decided by `hook-state/locations.mjs` `stateDirsUnder`,
+  // broken in that module's campaign. @es Lo decide `stateDirsUnder`; se rompe en su propia campaña.
   ['the population comes out in reverse order', B, "path.relative(home, file).split(path.sep).join('/'))\n    .sort();", "path.relative(home, file).split(path.sep).join('/'))\n    .sort().reverse();"],
 
   // --- the copy ---
@@ -75,7 +77,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['journal-backup'],
+  paths: ['journal-backup', 'hook-state', 'bilingual-output'],
   selftest: 'journal-backup/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

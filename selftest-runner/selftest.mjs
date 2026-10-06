@@ -16,15 +16,24 @@
  *     before the next one starts, in process (the `onLine` hook) and through the real command line (a
  *     handshake: the second selftest only passes once the parent has SEEN the first one's line).
  *   - HOW A LINE IS WRITTEN: whole, with its newline, across partial writes and a pipe that is momentarily full.
+ *   - WHERE A SELFTEST'S STATE GOES: a fresh, empty `HOOK_STATE_DIR` per selftest, never shared, removed after.
+ *   - WHAT IS A LEAK: a file of the live state (the constructed Claude home's `<m>/state`, the tree's own
+ *     `<m>/state`, the runner's own `HOOK_STATE_DIR`) created, changed (even at the same size) or removed, also
+ *     inside a state directory the selftest created; RED whatever the exit, each path named, in order. NOT a
+ *     leak: reading the live state, writing outside a state directory, writing through a link out of one.
  *
  * @es Auto-test del runner de selftests de todo el repositorio, contra repos git CONSTRUIDOS aquí. Estados:
  * qué ficheros son selftests (patrones, casi-aciertos, sin seguir, ignorados directos o a profundidad 3),
  * qué raíz (absoluta, relativa, subdirectorio, no repo, nada descubierto), cómo termina uno (verde, salida
  * no cero, señal, timeout, fichero ausente) y qué puede elegir el operador (nada: se rechaza todo filtro).
+ * Y dónde va el estado de cada selftest (un `HOOK_STATE_DIR` nuevo y vacío por selftest, nunca compartido,
+ * borrado después) y qué es una fuga (un fichero del estado vivo creado, cambiado aunque sea al mismo tamaño o
+ * borrado: ROJO sea cual sea la salida, con cada ruta en orden); leer, escribir fuera de un directorio de
+ * estado o a través de un enlace que sale de él no lo es.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +41,13 @@ import { fileURLToPath } from 'node:url';
 import { discoverSelftests } from './discovery.mjs';
 import { runSelftests } from './run.mjs';
 import { writeLineSync } from './stream.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('selftest-runner');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RUN = path.join(HERE, 'run.mjs');
@@ -94,6 +110,22 @@ function repo({ tracked = {}, loose = {}, ignore = '' }) {
 function cli(cwd, ...args) {
   return spawnSync(process.execPath, [RUN, ...args], { cwd, encoding: 'utf8' });
 }
+
+/**
+ * Runs the real runner over `root` with a constructed Claude home and no `HOOK_STATE_DIR` of its own, unless
+ * `extra` sets one; `LEAK_TARGET` tells a fixture selftest which path to write.
+ * @es Ejecuta el runner real con un home de Claude construido y sin `HOOK_STATE_DIR` propio, salvo que `extra` lo fije.
+ */
+function cliIn(root, home, extra = {}) {
+  const env = { ...process.env, HOOK_CLAUDE_HOME: home, ...extra };
+
+  if (extra.HOOK_STATE_DIR === undefined) delete env.HOOK_STATE_DIR;
+
+  return spawnSync(process.execPath, [RUN, '--root', root], { cwd: root, encoding: 'utf8', env });
+}
+
+/** A fixture selftest that runs `body` against the path in `LEAK_TARGET`. @es Un selftest de fixture que actúa sobre `LEAK_TARGET`. */
+const touching = (body) => `import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';\nimport path from 'node:path';\nconst target = process.env.LEAK_TARGET;\n${body}\nprocess.exit(0);\n`;
 
 /** Discovered paths, an untracked one marked with `*`. @es Rutas descubiertas; las sin seguir llevan `*`. */
 function found(root) {
@@ -302,6 +334,87 @@ const alwaysFull = () => {
 };
 const gaveUp = written((chunks, fd, bytes, offset, length) => alwaysFull(chunks, fd, bytes, offset, length), 'never accepted', { retries: 3 });
 check(gaveUp.error?.code === 'EAGAIN' && attempts === 4, `a pipe that never drains is given up on after the bounded retries, raising EAGAIN: attempts ${attempts}`);
+
+// ── Isolation: a fresh state home per selftest ───────────────────────────────────────────────────
+// `a` records the state home it was given and leaves a file in it; `b` must get a different, empty one.
+// @es `a` anota el home de estado que recibió y deja un fichero; `b` debe recibir otro, vacío.
+const claudeHomeOf = () => {
+  const home = bareDir();
+  mkdirSync(path.join(home, 'guard-x', 'state', 'nested'), { recursive: true });
+  writeFileSync(path.join(home, 'guard-x', 'state', 'nested', 'journal.jsonl'), '{"line":1}\n');
+  mkdirSync(path.join(home, 'projects'), { recursive: true });
+  return home;
+};
+const isolatedHome = claudeHomeOf();
+const isolation = repo({
+  tracked: {
+    'a/selftest.mjs': "import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';\nimport path from 'node:path';\nconst home = process.env.HOOK_STATE_DIR;\nif (!home || !path.isAbsolute(home) || !existsSync(home) || readdirSync(home).length !== 0) process.exit(3);\nwriteFileSync('seen.txt', home);\nmkdirSync(path.join(home, 'guard-x'), { recursive: true });\nwriteFileSync(path.join(home, 'guard-x', 'journal.jsonl'), 'from a');\n",
+    'b/selftest.mjs': "import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';\nimport path from 'node:path';\nconst home = process.env.HOOK_STATE_DIR;\nconst theirs = readFileSync(path.join('..', 'a', 'seen.txt'), 'utf8');\nwriteFileSync('seen.txt', home);\nprocess.exit(home && home !== theirs && existsSync(home) && readdirSync(home).length === 0 ? 0 : 4);\n",
+  },
+});
+const isolated = cliIn(isolation, isolatedHome);
+check(isolated.status === 0 && isolated.stdout.includes('2/2 green'), `each selftest gets its own fresh, empty HOOK_STATE_DIR: ${isolated.status} ${isolated.stdout}`);
+const givenHomes = ['a', 'b'].map((name) => (existsSync(path.join(isolation, name, 'seen.txt')) ? readFileSync(path.join(isolation, name, 'seen.txt'), 'utf8') : ''));
+check(givenHomes.every((home) => home !== '' && !existsSync(home)), `each state home is removed when its selftest ends: ${givenHomes}`);
+check(givenHomes.every((home) => !home.startsWith(isolatedHome) && !home.startsWith(isolation)), 'a state home is neither in the live Claude home nor in the tree');
+
+// ── Leaks: the live state written by a selftest turns it RED ─────────────────────────────────────
+const leakCase = (body, target, extra = {}) => {
+  const home = extra.home ?? claudeHomeOf();
+  const tree = repo({ tracked: { 'a/selftest.mjs': touching(body) } });
+  const resolved = typeof target === 'function' ? target({ home, tree }) : target;
+  const run = cliIn(tree, home, { LEAK_TARGET: resolved, ...(extra.env ?? {}) });
+  return { ...run, home, tree, target: resolved };
+};
+const journalIn = ({ home }) => path.join(home, 'guard-x', 'state', 'nested', 'journal.jsonl');
+
+const appended = leakCase("appendFileSync(target, 'more\\n');", journalIn);
+check(appended.status === 1 && appended.stdout.includes('RED    a/selftest.mjs (exit 0, leaked into the live state)'), `a selftest that exits 0 but appends to a live journal is RED: ${appended.status} ${appended.stdout}`);
+check(appended.stdout.includes(`    changed ${appended.target}`), `the changed live file is named: ${appended.stdout}`);
+check(appended.stdout.includes('of the live state @es ') && appended.stdout.includes('0/1 green'), 'the leak report is bilingual and the summary counts the selftest red');
+
+const sameSize = leakCase("writeFileSync(target, '{\"line\":2}\\n');", journalIn);
+check(sameSize.status === 1 && sameSize.stdout.includes(`    changed ${sameSize.target}`), `a rewrite at the same size is a change: ${sameSize.stdout}`);
+
+const removed = leakCase('rmSync(target);', journalIn);
+check(removed.status === 1 && removed.stdout.includes(`    removed ${removed.target}`), `a removed live file is named: ${removed.stdout}`);
+
+const created = leakCase("mkdirSync(path.dirname(target), { recursive: true });\nwriteFileSync(target, 'x');", ({ home }) => path.join(home, 'guard-new', 'state', 'refusals.jsonl'));
+const createdDir = path.join(created.home, 'guard-new', 'state');
+check(created.status === 1 && created.stdout.includes(`    created ${createdDir}\n    created ${created.target}`), `a state directory the selftest created is a leak, every path named in order: ${created.stdout}`);
+
+const ownTree = leakCase("mkdirSync(path.dirname(target), { recursive: true });\nwriteFileSync(target, 'x');", ({ tree }) => path.join(tree, 'guard-y', 'state', 'refusals.jsonl'));
+check(ownTree.status === 1 && ownTree.stdout.includes(`    created ${ownTree.target}`), `a state directory the selftest created in the tree is a leak too: ${ownTree.stdout}`);
+const treeHome = claudeHomeOf();
+const treeWithState = repo({ tracked: { 'a/selftest.mjs': touching("appendFileSync(target, 'x');"), 'guard-y/state/refusals.jsonl': 'old\n' } });
+const treeLeak = cliIn(treeWithState, treeHome, { LEAK_TARGET: path.join(treeWithState, 'guard-y', 'state', 'refusals.jsonl') });
+check(treeLeak.status === 1 && treeLeak.stdout.includes(`    changed ${path.join(treeWithState, 'guard-y', 'state', 'refusals.jsonl')}`), `a write into the tree's own <m>/state is a leak: ${treeLeak.stdout}`);
+
+const outerRoot = bareDir();
+writeFileSync(path.join(outerRoot, 'outer.jsonl'), 'outer\n');
+const underOuter = leakCase("appendFileSync(target, 'x');", path.join(outerRoot, 'outer.jsonl'), { env: { HOOK_STATE_DIR: outerRoot } });
+check(underOuter.status === 1 && underOuter.stdout.includes(`    changed ${path.join(outerRoot, 'outer.jsonl')}`), `a runner under its own HOOK_STATE_DIR watches that root: ${underOuter.stdout}`);
+
+const failedAndLeaked = leakCase("appendFileSync(target, 'x');\nconsole.log('BOOM-MARK');\nprocess.exit(1);", journalIn);
+check(failedAndLeaked.stdout.includes('RED    a/selftest.mjs (exit 1, leaked into the live state)') && failedAndLeaked.stdout.includes('BOOM-MARK') && failedAndLeaked.stdout.includes(`    changed ${failedAndLeaked.target}`), `a red selftest that also leaked reports both: ${failedAndLeaked.stdout}`);
+
+// A removal that sorts BEFORE a creation: found in the opposite order, so only a sort lists them right.
+// @es Un borrado que ordena ANTES que una creación: se encuentran al revés, así que solo un orden los lista bien.
+const twoLeaks = leakCase("rmSync(target);\nappendFileSync(path.join(path.dirname(path.dirname(target)), 'z-last.jsonl'), 'x');", journalIn);
+const order = [twoLeaks.stdout.indexOf(`removed ${twoLeaks.target}`), twoLeaks.stdout.indexOf(`created ${path.join(twoLeaks.home, 'guard-x', 'state', 'z-last.jsonl')}`)];
+check(order[0] > 0 && order[1] > order[0], `the leaked paths are listed in path order: ${order}`);
+
+// NOT leaks: reading, writing outside a state directory, writing through a link that leaves one.
+// @es NO son fugas: leer, escribir fuera de un directorio de estado, escribir por un enlace que sale de él.
+const reading = leakCase("readFileSync(target, 'utf8');", journalIn);
+check(reading.status === 0 && reading.stdout.includes('1/1 green'), `reading the live state is not a leak: ${reading.stdout}`);
+const elsewhere = leakCase("writeFileSync(target, 'x');", ({ home }) => path.join(home, 'projects', 'transcript.jsonl'));
+check(elsewhere.status === 0, `a write outside every state directory is not a leak: ${elsewhere.stdout}`);
+const linkedHome = claudeHomeOf();
+const outsideLink = bareDir();
+symlinkSync(outsideLink, path.join(linkedHome, 'guard-x', 'state', 'linked'), 'junction');
+const throughLink = leakCase("writeFileSync(target, 'x');", path.join(outsideLink, 'beyond.jsonl'), { home: linkedHome });
+check(throughLink.status === 0, `a write through a link out of a state directory is not followed: ${throughLink.stdout}`);
 
 // ── Nothing to filter with ───────────────────────────────────────────────────────────────────────
 const filtered = cli(allGreen, '--root', allGreen, '--only', 'a/selftest.mjs');

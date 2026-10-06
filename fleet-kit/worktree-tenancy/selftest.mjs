@@ -15,7 +15,7 @@ import { evaluate, tenancyRefusals } from './guard.mjs';
 const { check, finish } = suite();
 const root = tempDir('tenancy');
 
-process.env.FLEET_KIT_STATE = path.join(root, 'state');
+process.env.HOOK_STATE_DIR = path.join(root, 'state');
 
 try {
   const repository = makeRepository(root);

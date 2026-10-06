@@ -11,7 +11,8 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { provisionLoop } from './fixture-loop.mjs';
+import { stateDirIn } from '../hook-state/locations.mjs';
+import { provisionLoop, worldEnv } from './fixture-loop.mjs';
 
 /** The lesson text every driven capture carries (40+ characters, states its RULE). @es El texto de lección de cada captura. */
 export const lessonFor = (key) => `what went wrong for ${key} -> root cause -> RULE: do it right every time`;
@@ -41,19 +42,21 @@ export function makeCaptureWorld({ scratch, name, config = { scope: 'demo' }, fi
   const repo = path.join(root, 'repo');
   const loop = path.join(home, '.claude', 'failure-capture');
 
-  mkdirSync(path.join(loop, 'state'), { recursive: true });
+  const state = stateDirIn(path.join(home, '.claude'), 'failure-capture');
+
+  mkdirSync(state, { recursive: true });
 
   provisionLoop(loop, (file) => !file.includes('selftest') && !file.includes('mutants'));
 
   writeFiles(root, { 'repo/.claude/CLAUDE.md': '# Project instructions\n', 'repo/.claude/failure-capture.json': JSON.stringify(config), 'home/.claude/rules/promoted-rules.md': '# Contract\n', ...files });
 
   const run = (args, { cwd = repo } = {}) => {
-    const answer = spawnSync(process.execPath, [path.join(loop, 'capture.mjs'), ...args, ...(args[0] === 'capture' ? ['--ceiling', scratch] : [])], { cwd, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home }, timeout: 120_000 });
+    const answer = spawnSync(process.execPath, [path.join(loop, 'capture.mjs'), ...args, ...(args[0] === 'capture' ? ['--ceiling', scratch] : [])], { cwd, encoding: 'utf8', env: worldEnv(home), timeout: 120_000 });
 
     return { status: answer.status, out: `${answer.stdout}${answer.stderr}` };
   };
 
-  return { home, repo, ledger: path.join(home, '.claude', 'lessons-ledger.md'), incidents: path.join(loop, 'state', 'incidents.jsonl'), run };
+  return { home, repo, ledger: path.join(home, '.claude', 'lessons-ledger.md'), incidents: path.join(state, 'incidents.jsonl'), run };
 }
 
 /**

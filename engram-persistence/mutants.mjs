@@ -46,7 +46,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['engram-persistence', 'mutation-proof'],
+  paths: ['engram-persistence', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'engram-persistence/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

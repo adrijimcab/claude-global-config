@@ -31,19 +31,24 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+import { stateDir as stateDirOf } from '../hook-state/locations.mjs';
 
-/** Where abandonments are kept. Taken as a parameter so a self-test can drive a scratch store rather than the fleet's own. @es Dónde se guardan; parametrizado para que el auto-test use un almacén de pruebas. */
-export const DEFAULT_STATE_DIR = path.join(HERE, 'state');
+/**
+ * Where abandonments are kept, resolved at each call through the one state-location module. Also taken as a
+ * parameter so a self-test can drive a scratch store rather than the fleet's own.
+ * @es Dónde se guardan, resuelto en cada llamada por el único módulo de ubicaciones; parametrizado además
+ * para que el auto-test use un almacén de pruebas.
+ */
+export const defaultStateDir = () => stateDirOf('delegation-receipts');
 
-export const recordPath = (stateDir = DEFAULT_STATE_DIR) => path.join(stateDir, 'abandoned.jsonl');
+export const recordPath = (stateDir = defaultStateDir()) => path.join(stateDir, 'abandoned.jsonl');
 
 /**
  * The abandonments recorded for one session. Unreadable store, unparseable line: none — this feeds a
  * guard that must fail open, so it never throws.
  * @es Los abandonos de una sesión. Nunca lanza: alimenta un guard que debe fallar abriendo.
  */
-export function abandonmentsFor(sessionId, stateDir = DEFAULT_STATE_DIR) {
+export function abandonmentsFor(sessionId, stateDir = defaultStateDir()) {
   let raw;
 
   try {
@@ -70,7 +75,7 @@ export function abandonmentsFor(sessionId, stateDir = DEFAULT_STATE_DIR) {
 }
 
 /** Writes one abandonment. Throws on a store it cannot write, because a silent failure here would read exactly like a recorded escape. @es Escribe un abandono; falla ruidosamente, porque un fallo silencioso parecería un abandono registrado. */
-export function recordAbandonment({ session, reason, at = new Date().toISOString() }, stateDir = DEFAULT_STATE_DIR) {
+export function recordAbandonment({ session, reason, at = new Date().toISOString() }, stateDir = defaultStateDir()) {
   mkdirSync(stateDir, { recursive: true });
   appendFileSync(recordPath(stateDir), `${JSON.stringify({ at, session, reason })}\n`, 'utf8');
 

@@ -36,7 +36,7 @@ const MUTANTS = [
 
   // --- route --stubs: the command
   ['route writes without --write', COMMAND, "if (args.write !== true) {\n      speaker.say('route.dry'", "if (false) {\n      speaker.say('route.dry'"],
-  ['route --write takes no lock', COMMAND, 'const outcome = withLock(LOCK_FILE, route);', 'const outcome = { held: true, value: route() };'],
+  ['route --write takes no lock', COMMAND, 'const outcome = withLock(lockFile(), route);', 'const outcome = { held: true, value: route() };'],
   ['a locked ledger is not reported', COMMAND, "if (!outcome.held) {\n    speaker.complain('route.locked');", "if (false) {\n    speaker.complain('route.locked');"],
   ['route with several things to route does them all', COMMAND, 'if ([stubs, headers, lesson].filter(Boolean).length !== 1) {', 'if ([stubs, headers, lesson].filter(Boolean).length === 0) {'],
   ['a project ledger is given the home header', COMMAND, 'scopes.includes(ledger.scope) && ledger.lines !== undefined', 'ledger.lines !== undefined'],
@@ -144,7 +144,7 @@ const PURE_MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'bilingual-output', 'mutation-proof'], selftest, mutants });
+const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest, mutants });
 const survivors = campaign('failure-capture/routing.selftest.mjs', MUTANTS) + campaign('failure-capture/areas.selftest.mjs', AREA_MUTANTS) + campaign('failure-capture/rule-block.selftest.mjs', BLOCK_MUTANTS) + campaign('failure-capture/ledger-route.selftest.mjs', PURE_MUTANTS);
 
 process.exit(survivors === 0 ? 0 : 1);

@@ -17,7 +17,7 @@ import { evaluate } from './guard.mjs';
 const { check, finish } = suite();
 const root = tempDir('handback');
 
-process.env.FLEET_KIT_STATE = path.join(root, 'state');
+process.env.HOOK_STATE_DIR = path.join(root, 'state');
 
 try {
   const repository = makeRepository(root);

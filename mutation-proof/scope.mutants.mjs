@@ -172,7 +172,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['mutation-proof'],
+  paths: ['mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'mutation-proof/scope.selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

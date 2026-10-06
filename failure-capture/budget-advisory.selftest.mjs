@@ -26,7 +26,14 @@ import { adviseOnBudget } from './budget-advisory.mjs';
 import { KEYED, SHORT_KEYED } from './condense-fixtures.mjs';
 import { holdsWholeLine } from './conservation.mjs';
 import { HEADER } from './ledgers.mjs';
-import { provisionLoop } from './fixture-loop.mjs';
+import { provisionLoop, worldEnv } from './fixture-loop.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('failure-capture');
 
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'budget-advisory-selftest-')));
 let passed = 0;
@@ -67,7 +74,7 @@ const LESSON ='A constructed lesson about the advisory -> root cause -> RULE: me
 
 /** Captures one lesson in a world; `{ status, out, err }`. @es Captura una lección en un mundo. */
 function capture(target, extra = ['--key', 'fresh-lesson-key', '--scope', 'global', '--actor', 'orchestrator', '--lesson', LESSON]) {
-  const answer = spawnSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'capture', ...extra, '--ceiling', scratch], { cwd: target.repo, encoding: 'utf8', env: { ...process.env, HOME: target.home, USERPROFILE: target.home }, timeout: 120_000 });
+  const answer = spawnSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'capture', ...extra, '--ceiling', scratch], { cwd: target.repo, encoding: 'utf8', env: worldEnv(target.home, { loop: target.loop }), timeout: 120_000 });
 
   return { status: answer.status, out: answer.stdout.split('\n'), err: answer.stderr };
 }

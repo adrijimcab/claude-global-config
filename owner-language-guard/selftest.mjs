@@ -27,6 +27,14 @@ import path from 'node:path';
 import { decide } from './decide.mjs';
 import { evaluate } from './evaluate.mjs';
 import { readTurnTexts, turnTextsFromLines } from './turn.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+import { provisionStateModule, sandboxEnv } from '../hook-state/sandbox.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('owner-language-guard');
 
 const HERE = import.meta.dirname;
 const STOP_PAYLOAD = JSON.parse(readFileSync(path.join(HERE, 'fixtures', 'stop-payload.constructed.json'), 'utf8')).payload;
@@ -183,13 +191,17 @@ try {
   check('evaluate: transcript inexistente queda registrado como problema', evaluate(payload({ transcript_path: path.join(scratch, 'nope.jsonl') })).problems.length, 1);
 
   // ── 5. el CLI como proceso, en una copia aislada ─────────────────────────────────────────────────
-  const copy = path.join(scratch, 'guard-copy');
+  // The copy lives in a constructed Claude home with the state-location module beside it, so its `state/` is
+  // the copy's own. @es La copia vive en un home construido con el módulo de ubicaciones al lado.
+  const copyHome = path.join(scratch, 'claude-home');
+  const copy = path.join(copyHome, 'owner-language-guard');
 
-  mkdirSync(copy);
+  mkdirSync(copy, { recursive: true });
+  provisionStateModule(copyHome);
 
   for (const file of ['guard.mjs', 'evaluate.mjs', 'decide.mjs', 'language.mjs', 'prose.mjs', 'turn.mjs']) copyFileSync(path.join(HERE, file), path.join(copy, file));
 
-  const run = (stdin) => spawnSync(process.execPath, [path.join(copy, 'guard.mjs')], { input: stdin, encoding: 'utf8' });
+  const run = (stdin) => spawnSync(process.execPath, [path.join(copy, 'guard.mjs')], { input: stdin, encoding: 'utf8', env: sandboxEnv(copyHome) });
 
   const broken = run('{esto no es json');
   check('cli: payload roto sale con 0', broken.status, 0);

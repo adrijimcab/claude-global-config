@@ -248,7 +248,7 @@ if (loaded !== undefined) {
   mkdirSync(failRoot, { recursive: true });
   writeFileSync(path.join(failRoot, 'folder-one'), 'a file where the state directory of folder-one should be');
 
-  const errorFiles = [path.join(HERE, 'state', 'errors.jsonl'), path.join(failRoot, 'hook-dispatch', 'errors.jsonl')];
+  const errorFiles = [path.join(stateDir('hook-dispatch'), 'errors.jsonl'), path.join(failRoot, 'hook-dispatch', 'errors.jsonl')];
   const linesOf = (file) => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((line) => line !== '') : []);
   const countsBefore = errorFiles.map((file) => linesOf(file).length);
   const unwritable = run(shell, toolPayload('bad'), { HOOK_STATE_DIR: failRoot });

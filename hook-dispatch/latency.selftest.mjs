@@ -23,6 +23,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ACTIVE_WINDOW_MS, buildStopPayload, FINISHED_HORIZON_MS, measureStop, medianOf, percentile95, repoState, RUN_TIMEOUT_MS, runDispatcher, runLatencyCli as unsafeCli, scenarioOf, timeRuns, transcriptCensus } from './latency.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('hook-dispatch');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 

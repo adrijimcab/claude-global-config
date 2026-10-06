@@ -39,10 +39,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { stateDir } from '../hook-state/locations.mjs';
 import { inspectCommand } from './detect.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const STATE_DIR = path.join(HERE, 'state');
+/** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
+const stateDirectory = () => stateDir('eval-guard');
 const BYTE_ORDER_MARK = 0xfe_ff;
 const MAX_REPORTED_FINDINGS = 6;
 
@@ -53,8 +54,8 @@ function allow() {
 
 function record(file, entry) {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
-    appendFileSync(path.join(STATE_DIR, file), `${JSON.stringify(entry)}\n`, 'utf8');
+    mkdirSync(stateDirectory(), { recursive: true });
+    appendFileSync(path.join(stateDirectory(), file), `${JSON.stringify(entry)}\n`, 'utf8');
   } catch {
     /* the journal is evidence, not a precondition: never let its failure change the decision */
   }

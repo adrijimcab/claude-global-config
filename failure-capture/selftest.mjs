@@ -37,7 +37,14 @@ import path from 'node:path';
 
 import { contractFileId } from './closure.mjs';
 import { holdsWholeLine } from './conservation.mjs';
-import { provisionLoop } from './fixture-loop.mjs';
+import { provisionLoop, worldEnv } from './fixture-loop.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('failure-capture');
 
 const KEY = 'lesson-under-test';
 const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
@@ -155,7 +162,7 @@ function promote(target, extraArgs) {
       cwd: target.repo,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, HOME: target.home, USERPROFILE: target.home },
+      env: worldEnv(target.home, { loop: target.loop }),
       timeout: 60_000,
     });
   } catch (error) {
@@ -253,7 +260,7 @@ refused(
 
   write(target.loop, { 'state/ledger.lock': '' });
 
-  const child = spawn(process.execPath, [path.join(target.loop, 'capture.mjs'), 'promote', '--key', KEY, '--mechanism', '.claude/good-guard/guard.mjs'], { cwd: target.repo, stdio: 'ignore', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
+  const child = spawn(process.execPath, [path.join(target.loop, 'capture.mjs'), 'promote', '--key', KEY, '--mechanism', '.claude/good-guard/guard.mjs'], { cwd: target.repo, stdio: 'ignore', env: worldEnv(target.home, { loop: target.loop }) });
   const closed = new Promise((resolve) => child.on('close', resolve));
 
   await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -405,7 +412,7 @@ refused(
 
   // A closure record shares the incident log; `status` must still count incidents, not closures.
   // @es Un registro de cierre comparte el log; `status` debe seguir contando incidentes, no cierres.
-  const status = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
+  const status = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: worldEnv(target.home, { loop: target.loop }) });
 
   check('...and status counts the one incident, not the closure record beside it', status.includes('incidents recorded: 1'), status);
   check('...and status no longer lists the promoted lesson as due: the stub in the ledger says it landed', !status.includes('PROMOTION DUE'), status);
@@ -416,7 +423,7 @@ refused(
   // promotion recorded by the OLD tool in `state/promoted.md` is still honoured, read-only.
   // @es El mismo ledger ANTES de promover debe una promoción, así la aserción anterior no es vacía; y una
   // promoción registrada por la herramienta ANTIGUA en `state/promoted.md` se sigue respetando.
-  const statusOf = (target) => execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
+  const statusOf = (target) => execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: worldEnv(target.home, { loop: target.loop }) });
   const before = world('status-due');
   const legacy = world('status-legacy');
 
@@ -463,7 +470,7 @@ refused(
     execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'capture', '--key', key, '--scope', scope, '--actor', 'orchestrator', '--lesson', `what went wrong for ${key} -> root cause -> RULE: do it right`], {
       cwd: target.repo,
       encoding: 'utf8',
-      env: { ...process.env, HOME: target.home, USERPROFILE: target.home },
+      env: worldEnv(target.home, { loop: target.loop }),
     });
   const read = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
   const homeLedger = () => read(path.join(target.home, '.claude', 'lessons-ledger.md'));
@@ -483,7 +490,7 @@ refused(
   capture('project-only-lesson', 'global');
   check('alcance: la recurrencia de una clave del proyecto se suma EN EL PROYECTO aunque llegue con alcance global', repoLedger().includes('<!--fc:project-only-lesson#2-->') && !homeLedger().includes('project-only-lesson'), repoLedger());
 
-  const keys = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'keys'], { cwd: target.repo, encoding: 'utf8', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
+  const keys = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'keys'], { cwd: target.repo, encoding: 'utf8', env: worldEnv(target.home, { loop: target.loop }) });
   check('alcance: `keys` lista las claves de LOS DOS ledgers', keys.includes('project-only-lesson') && keys.includes('global-new-lesson') && keys.includes(KEY), keys);
 }
 
@@ -496,13 +503,13 @@ refused(
   const run = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'promote', '--key', 'project-promoted', '--no-mechanism', REASON], {
     cwd: target.repo,
     encoding: 'utf8',
-    env: { ...process.env, HOME: target.home, USERPROFILE: target.home },
+    env: worldEnv(target.home, { loop: target.loop }),
   });
   const repoLedger = readFileSync(path.join(target.repo, '.claude', 'lessons-ledger.md'), 'utf8');
 
   check('alcance: promover una clave del ledger del PROYECTO colapsa SU línea, en SU archivo', repoLedger.includes('[promoted]') && repoLedger.includes('project-promoted'), `${run}\n${repoLedger}`);
 
-  const projectStatus = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: { ...process.env, HOME: target.home, USERPROFILE: target.home } });
+  const projectStatus = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: worldEnv(target.home, { loop: target.loop }) });
 
   check('alcance: ...y `status` ve el muñón del ledger del PROYECTO: la clave ya no está pendiente', projectStatus.includes('keyed lessons') && !projectStatus.includes('project-promoted (2x)'), projectStatus);
 
@@ -522,7 +529,7 @@ refused(
 {
   const target = world('session-stamp');
   const { CLAUDE_CODE_SESSION_ID: _inherited, ...envWithoutSession } = process.env;
-  const baseEnv = { ...envWithoutSession, HOME: target.home, USERPROFILE: target.home };
+  const baseEnv = worldEnv(target.home, { loop: target.loop, base: envWithoutSession });
   const captureAs = (key, session) =>
     execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'capture', '--key', key, '--scope', 'global', '--actor', 'orchestrator', '--lesson', `what went wrong for ${key} -> root cause -> RULE: stamp the session`], {
       cwd: target.repo,

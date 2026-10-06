@@ -22,7 +22,14 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { projectOf } from './project.mjs';
-import { provisionLoop } from './fixture-loop.mjs';
+import { provisionLoop, worldEnv } from './fixture-loop.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('failure-capture');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The REAL path: Windows hands out the 8.3 spelling of the temp dir, and the loop reports real paths.
@@ -70,7 +77,7 @@ function makeHome(name) {
 
 /** Runs the CLI in `cwd` under `home`. @returns `{ status, out }`. @es Corre el CLI en `cwd` bajo `home`. */
 function run({ home, cli }, cwd, ...args) {
-  const result = spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home } });
+  const result = spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8', env: worldEnv(home) });
 
   return { status: result.status, out: `${result.stdout}${result.stderr}` };
 }
@@ -127,7 +134,7 @@ try {
 
   write(outside, { 'file.txt': 'x\n' });
   writeFileSync(probe, `import { projectOf } from ${JSON.stringify(pathToFileURL(path.join(HERE, 'project.mjs')).href)};\nprocess.stdout.write(JSON.stringify(projectOf(process.cwd())?.root ?? null));\n`);
-  const escaped = spawnSync(process.execPath, [probe], { cwd: outside, encoding: 'utf8', env: { ...process.env, HOME: world.home, USERPROFILE: world.home } });
+  const escaped = spawnSync(process.execPath, [probe], { cwd: outside, encoding: 'utf8', env: worldEnv(world.home) });
   equal('a cwd outside a fixture HOME never resolves to the account\'s real home', escaped.stdout, 'null');
   equal('a top-level project: scope is the folder name by default', projectOf(path.join(app, 'src'))?.scope, 'app');
   equal('...its ledger is its own .claude/lessons-ledger.md', projectOf(app)?.ledgerFile, path.join(app, '.claude', 'lessons-ledger.md'));

@@ -19,6 +19,9 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INSTALL = path.resolve(KIT, '..');
 const KIT_FOLDER = path.basename(KIT);
 
+/** The non-vendored folders outside the kit a kit module imports (the state-location module and its bilingual output). @es Las carpetas de fuera del kit que importa un módulo del kit. */
+const SHARED_PATHS = ['hook-state', 'bilingual-output'];
+
 /** Every kit folder a selftest can reach through its imports. @es Cada carpeta del kit alcanzable desde un selftest. */
 export const KIT_PATHS = ['config', 'lib', 'testing', 'diff-coverage', 'gate-run', 'landing-guard', 'worktree-tenancy', 'orphan-work', 'handback'];
 
@@ -30,7 +33,7 @@ const inKit = (relative) => `${KIT_FOLDER}/${relative}`;
 export function runCampaign(selftest, mutants) {
   const survivors = runMutants({
     fleetRoot: INSTALL,
-    paths: [...KIT_PATHS.map(inKit), ...VENDORED_PATHS],
+    paths: [...KIT_PATHS.map(inKit), ...VENDORED_PATHS, ...SHARED_PATHS],
     selftest: inKit(selftest),
     mutants: mutants.map(([label, file, original, replacement]) => [label, inKit(file), original, replacement])
   });

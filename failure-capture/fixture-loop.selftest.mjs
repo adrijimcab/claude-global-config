@@ -17,7 +17,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { provisionLoop } from './fixture-loop.mjs';
+import { provisionLoop, worldEnv } from './fixture-loop.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('failure-capture');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SHARED = path.join(HERE, '..', 'bilingual-output');
@@ -45,7 +52,7 @@ try {
   equal('the shared modules are copied whatever the filter keeps', mjsOf(path.join(filtered, '..', 'bilingual-output')), ['message.mjs', 'speaker.mjs']);
 
   const home = path.join(scratch, 'everything');
-  const run = spawnSync(process.execPath, [path.join(everything, 'capture.mjs'), 'keys'], { cwd: home, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home }, timeout: 120_000 });
+  const run = spawnSync(process.execPath, [path.join(everything, 'capture.mjs'), 'keys'], { cwd: home, encoding: 'utf8', env: worldEnv(home), timeout: 120_000 });
 
   equal('a sandboxed capture.mjs resolves its shared imports', `${run.stderr}${run.stdout}`.includes('ERR_MODULE_NOT_FOUND'), false);
   equal('...and prints through the speaker', run.stdout.includes(' @es '), true);

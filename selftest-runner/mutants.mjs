@@ -17,6 +17,7 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const DISCOVERY = 'selftest-runner/discovery.mjs';
 const RUN = 'selftest-runner/run.mjs';
 const STREAM = 'selftest-runner/stream.mjs';
+const LEAKS = 'selftest-runner/leaks.mjs';
 
 const MUTANTS = [
   // Which files are selftests / Qué ficheros son selftests
@@ -68,13 +69,34 @@ const MUTANTS = [
   ['the retry bound is off by one', STREAM, 'refusals > retries', 'refusals >= retries'],
   ['the line goes to stderr instead of stdout', STREAM, 'fd = 1,', 'fd = 2,'],
 
+  // Where a selftest's state goes / Dónde va el estado de un selftest
+  ['the child is not given a state home of its own, so it writes wherever it resolves', RUN, '    env: { ...process.env, [STATE_ROOT_VARIABLE]: stateHome },\n', ''],
+  ['every selftest shares one state home', RUN, "const stateHome = mkdtempSync(path.join(tmpdir(), 'selftest-state-'));", "const stateHome = path.join(tmpdir(), 'selftest-state-shared');"],
+  ['the state home is left behind', RUN, '    rmSync(stateHome, { recursive: true, force: true });\n', ''],
+  // What is a leak / Qué es una fuga
+  ['a selftest that leaked but exited 0 is green', RUN, 'if (failure === null && leaks.length === 0) {', 'if (failure === null) {'],
+  ['the leaked paths are not printed', RUN, "      emit(...leaks.map((leak) => `    ${leak.change} ${leak.path}`));\n", ''],
+  ['a leak is not named as one in the RED line', RUN, "const leaked = leaks.length === 0 ? '' : ', leaked into the live state';", "const leaked = '';"],
+  ['the second snapshot is the first one again', RUN, 'return { failure, leaks: leaksBetween(before, snapshotLiveState(root)) };', 'return { failure, leaks: leaksBetween(before, before) };'],
+  ['the snapshot is taken after the selftest, so nothing differs', RUN, '    const before = snapshotLiveState(root);\n    const failure = exitOf({ root, entry, timeoutMs, spawn, stateHome });', '    const failure = exitOf({ root, entry, timeoutMs, spawn, stateHome });\n    const before = snapshotLiveState(root);'],
+  ['the Claude home is not watched', LEAKS, 'const homes = [claudeHome(), path.resolve(treeRoot)];', 'const homes = [path.resolve(treeRoot)];'],
+  ['the tree under test is not watched', LEAKS, 'const homes = [claudeHome(), path.resolve(treeRoot)];', 'const homes = [claudeHome()];'],
+  ["the runner's own HOOK_STATE_DIR is not watched", LEAKS, '  if (process.env[STATE_ROOT_VARIABLE]) directories.push(stateRoot());\n', ''],
+  ['a link out of the live state is followed', LEAKS, "import { lstatSync, readdirSync } from 'node:fs';", "import { statSync as lstatSync, readdirSync } from 'node:fs';"],
+  ['only the top of a state directory is recorded', LEAKS, '  for (const name of readdirSync(directory)) record(path.join(directory, name), into);\n', ''],
+  ['a rewrite at the same size is not a change', LEAKS, 'return `${stats.size}:${stats.mtimeMs}`;', 'return `${stats.size}`;'],
+  ['a created file is not a leak', LEAKS, "    if (!before.has(entry)) leaks.push({ path: entry, change: 'created' });\n    else if", '    if (!before.has(entry)) continue;\n    else if'],
+  ['a changed file is not a leak', LEAKS, "    else if (before.get(entry) !== signature) leaks.push({ path: entry, change: 'changed' });\n", ''],
+  ['a removed file is not a leak', LEAKS, "    if (!after.has(entry)) leaks.push({ path: entry, change: 'removed' });", '    void entry;'],
+  ['the leaks are not sorted', LEAKS, 'return leaks.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));', 'return leaks;'],
+
   // What the operator can choose / Lo que puede elegir el operador
   ['an option after `--root <dir>` is accepted, so a filter can be passed', RUN, "if (argv.length === 2 && argv[0] === '--root') return { root: argv[1] };", "if (argv[0] === '--root') return { root: argv[1] };"],
 ];
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['selftest-runner', 'mutation-proof'],
+  paths: ['selftest-runner', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'selftest-runner/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

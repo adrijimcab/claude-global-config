@@ -26,6 +26,14 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('brief-audience');
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GUARD = join(HERE, 'guard.mjs');
 const { payloadFor } = await import(pathToFileURL(join(HERE, '..', 'hook-payloads', 'payloads.mjs')).href);

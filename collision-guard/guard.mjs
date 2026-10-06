@@ -26,14 +26,15 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { stateDir } from '../hook-state/locations.mjs';
 import { lossyResolutions } from './conflict.mjs';
 import { sideTakings } from './side-taking.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REFUSALS = path.join(HERE, 'state', 'refusals.jsonl');
+/** The refusals journal, resolved at each call through the one state-location module. @es El diario de negativas, resuelto en cada llamada por el único módulo de ubicaciones. */
+const refusalsFile = () => path.join(stateDir('collision-guard'), 'refusals.jsonl');
 
 /** Where a malfunction of this guard is COUNTED, so failing open never means failing silently. @es Donde se CUENTA un fallo propio. */
-export const ERRORS = path.join(HERE, 'state', 'guard-errors.jsonl');
+export const errorsFile = () => path.join(stateDir('collision-guard'), 'guard-errors.jsonl');
 
 /** Appends one record to a journal, or gives up: a journal is evidence, never a precondition. @es Añade un registro o desiste. */
 function record(file, entry) {
@@ -47,7 +48,7 @@ function record(file, entry) {
 
 /** Journals a refusal's payload verbatim, so a proof can replay real traffic. @es Registra el payload literal de cada negativa. */
 function journal(raw) {
-  record(REFUSALS, { raw });
+  record(refusalsFile(), { raw });
 }
 
 /** The refusal text, naming every path that would lose content and how to read it first. @es La negativa, con cada ruta y cómo leerla antes. */
@@ -113,7 +114,7 @@ export function evaluate(raw) {
     // @es DEGRADAR ABIERTO, NUNCA INVISIBLE: se deja pasar, pero se REGISTRA; la prueba de este guard
     // exige que el log de errores quede VACÍO, así que una negativa convertida en crash no pasa por
     // decisión.
-    record(ERRORS, { error: error instanceof Error ? error.message : String(error), command: payload?.tool_input?.command });
+    record(errorsFile(), { error: error instanceof Error ? error.message : String(error), command: payload?.tool_input?.command });
 
     return undefined;
   }

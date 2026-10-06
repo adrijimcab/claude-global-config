@@ -24,10 +24,11 @@
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_LEDGER = path.join(HERE, 'state', 'pending.jsonl');
+import { stateDir } from '../hook-state/locations.mjs';
+
+/** The live ledger, resolved at each call through the one state-location module. @es El ledger vivo, resuelto en cada llamada por el único módulo de ubicaciones. */
+const defaultLedger = () => path.join(stateDir('config-sync-guard'), 'pending.jsonl');
 
 /** The `repo|path` keys already recorded in `ledger`; an unreadable ledger knows none. @es Las claves `repo|path` ya registradas. */
 function recordedKeys(ledger, read) {
@@ -56,7 +57,7 @@ function recordedKeys(ledger, read) {
  * @es Registra cada `{ repo, path }` de `entries` que aún no esté, con la hora y la sesión; devuelve las
  * escritas. Un registro que no se puede escribir pierde evidencia, nunca una decisión.
  */
-export function recordUnexplained(entries, session, { ledger = DEFAULT_LEDGER, read = (file) => readFileSync(file, 'utf8'), now = () => new Date() } = {}) {
+export function recordUnexplained(entries, session, { ledger = defaultLedger(), read = (file) => readFileSync(file, 'utf8'), now = () => new Date() } = {}) {
   const known = recordedKeys(ledger, read);
   const fresh = entries.filter((entry) => !known.has(`${entry.repo}|${entry.path}`));
 

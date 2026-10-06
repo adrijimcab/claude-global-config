@@ -40,7 +40,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveTypeScript } from './resolve-typescript.mjs';
-import { ERRORS } from './guard.mjs';
+import { errorsFile } from './guard.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('type-assertion-guard');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.join(HERE, 'guard.mjs');
@@ -318,7 +325,7 @@ for (const [label, input] of [['garbage', 'NOT JSON AT ALL'], ['empty', ''], ['B
 
 // === NOTHING DEGRADED INVISIBLY: only the 3 designed-malfunction cases above (10, 11, 12) recorded one. ==
 {
-  const lines = existsSync(ERRORS) ? readFileSync(ERRORS, 'utf8').split('\n').filter((line) => line.length > 0) : [];
+  const lines = existsSync(errorsFile()) ? readFileSync(errorsFile(), 'utf8').split('\n').filter((line) => line.length > 0) : [];
 
   check('the guard recorded a malfunction ONLY for the cases designed to malfunction (>=3), never for a clean decision', lines.length >= 3, true);
 }

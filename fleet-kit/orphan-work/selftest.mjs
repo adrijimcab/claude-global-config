@@ -16,7 +16,7 @@ import { absolutePathsIn, delegationTouches, evaluate, lastWorkedMs, parkedWork 
 const { check, finish } = suite();
 const root = tempDir('orphan');
 
-process.env.FLEET_KIT_STATE = path.join(root, 'state');
+process.env.HOOK_STATE_DIR = path.join(root, 'state');
 
 try {
   const repository = makeRepository(root);

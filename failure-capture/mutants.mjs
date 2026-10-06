@@ -44,9 +44,9 @@ const MUTANTS = [
   ['a key that is in no ledger line can be promoted', 'failure-capture/capture.mjs', 'if (!keys.has(key)) {', 'if (false) {'],
 
   // --- the ledger lock: promote writes only while it holds it (the module is proved by ledger-lock.mutants.mjs)
-  ['promote takes some other lock, so a held ledger lock is ignored', 'failure-capture/capture.mjs', 'const collapsed = withLock(LOCK_FILE, () => {', "const collapsed = withLock(path.join(STATE_DIR, 'other.lock'), () => {"],
+  ['promote takes some other lock, so a held ledger lock is ignored', 'failure-capture/capture.mjs', 'const collapsed = withLock(lockFile(), () => {', "const collapsed = withLock(path.join(stateDirectory(), 'other.lock'), () => {"],
   ['promote does not notice that the lock was refused, and reports a closure that never happened', 'failure-capture/capture.mjs', 'if (!collapsed.held) {', 'if (false) {'],
-  ['promote reads the ledger before it holds the lock, so it writes back a stale copy', 'failure-capture/capture.mjs', 'const collapsed = withLock(LOCK_FILE, () => {\n    const ledgers = readLedgers(LEDGERS);\n    const found = locateKey(ledgers, key, readMarker);', 'const early = readLedgers(LEDGERS);\n  const collapsed = withLock(LOCK_FILE, () => {\n    const ledgers = early;\n    const found = locateKey(ledgers, key, readMarker);'],
+  ['promote reads the ledger before it holds the lock, so it writes back a stale copy', 'failure-capture/capture.mjs', 'const collapsed = withLock(lockFile(), () => {\n    const ledgers = readLedgers(LEDGERS);\n    const found = locateKey(ledgers, key, readMarker);', 'const early = readLedgers(LEDGERS);\n  const collapsed = withLock(lockFile(), () => {\n    const ledgers = early;\n    const found = locateKey(ledgers, key, readMarker);'],
   ['the stub of a promoted lesson loses its recurrence counter', 'failure-capture/promotion.mjs', 'marker: original.slice(marker.open, marker.close) })', 'marker: `<!--fc:${marker.key}#1-->` })'],
   ['the refusal to promote loses its Spanish half', 'failure-capture/capture.mjs', "speaker.complain('promote.locked');", "console.error('promote: the ledger is locked by another writer — re-run in a moment. Nothing was changed.');"],
 
@@ -63,7 +63,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'bilingual-output', 'mutation-proof'],
+  paths: ['failure-capture', 'bilingual-output', 'mutation-proof', 'hook-state'],
   selftest: 'failure-capture/selftest.mjs',
   mutants: MUTANTS
 });

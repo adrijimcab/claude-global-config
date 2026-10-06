@@ -43,17 +43,16 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { stateDir } from '../hook-state/locations.mjs';
 import { unmatchedAfterAssertions, raisesAssertionCount } from './assertion-diff.mjs';
 import { collectAssertions } from './collect-assertions.mjs';
 import { refusalText } from './refusal-text.mjs';
 import { resolveTypeScript } from './resolve-typescript.mjs';
 import { simulateEdit } from './simulate-edit.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-
 /** Where a malfunction of THIS guard is counted, so "failed open" never means "failed invisibly" — the
  * same property `collision-guard` proves for its own decision. @es Donde se cuenta un fallo propio. */
-export const ERRORS = path.join(HERE, 'state', 'guard-errors.jsonl');
+export const errorsFile = () => path.join(stateDir('type-assertion-guard'), 'guard-errors.jsonl');
 
 const TS_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const GUARDED_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
@@ -73,8 +72,8 @@ function reportMalfunction(message) {
   process.stderr.write(`[type-assertion-guard] @es ${message} — fallando ABIERTO: no poder verificar no es lo mismo que estar limpio.\n`);
 
   try {
-    mkdirSync(path.dirname(ERRORS), { recursive: true });
-    appendFileSync(ERRORS, `${JSON.stringify({ at: new Date().toISOString(), message })}\n`, 'utf8');
+    mkdirSync(path.dirname(errorsFile()), { recursive: true });
+    appendFileSync(errorsFile(), `${JSON.stringify({ at: new Date().toISOString(), message })}\n`, 'utf8');
   } catch {
     // A journal is evidence, never a precondition: losing this line never blocks the fail-open path.
   }

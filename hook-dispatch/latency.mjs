@@ -22,6 +22,8 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
+import { STATE_ROOT_VARIABLE } from '../hook-state/locations.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 /** A transcript written within this window is LIVE (30 minutes). @es Un transcript escrito dentro de esta ventana está VIVO. */
@@ -131,7 +133,7 @@ export function runDispatcher({ manifest, payload, env, timeoutMs = RUN_TIMEOUT_
 export function timeRuns({ manifest, payload, runs, stateDir, runOnce = runDispatcher }) {
   if (!Number.isInteger(runs) || runs < 1) throw fail(`The run count must be a positive integer, got ${runs}.`, `El número de corridas debe ser un entero positivo, llegó ${runs}.`);
 
-  const env = { ...process.env, HOOK_STATE_DIR: stateDir };
+  const env = { ...process.env, [STATE_ROOT_VARIABLE]: stateDir };
   const results = Array.from({ length: runs }, () => runOnce({ manifest, payload, env }));
 
   return { runsMs: results.map((result) => Math.round(result.ms * 10) / 10), failedRuns: results.filter((result) => result.code !== 0).length };

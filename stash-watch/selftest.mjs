@@ -33,6 +33,13 @@ import { fileURLToPath } from 'node:url';
 
 import { decide as decideGuard, fingerprint } from './guard.mjs';
 import { parseSubject, stashInventory } from './stashes.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
+// session reads, and never a line a previous run left behind.
+// @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
+// vivo que lee una sesión real, ni con líneas de una corrida anterior.
+isolateState('stash-watch');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /**
@@ -207,7 +214,7 @@ try {
   const shimRepo = fixture('shim-repo');
   const shimState = stateOf('shim');
   const shim = (input) =>
-    spawnSync(process.execPath, [GUARD], { input, env: { ...cleanEnv, CLAUDE_PROJECT_DIR: shimRepo, STASH_WATCH_STATE_DIR: shimState }, encoding: 'utf8', windowsHide: true });
+    spawnSync(process.execPath, [GUARD], { input, env: { ...cleanEnv, CLAUDE_PROJECT_DIR: shimRepo, HOOK_STATE_DIR: shimState }, encoding: 'utf8', windowsHide: true });
 
   const cleanRun = shim(JSON.stringify(payload('e1')));
 

@@ -58,7 +58,7 @@ const COMMAND_MUTANTS = [
   // --- promote uses the stub and keeps ONE store
   ['a refused stub is written to the ledger anyway', COMMAND, 'if (!stub.ok) return stub;', 'if (false) return stub;'],
   ['a refused promotion reports success', COMMAND, 'if (collapsed.value?.ok !== true) {', 'if (false) {'],
-  ['the old state/promoted.md is written again beside the evidence store', COMMAND, '    writeLedger(ledger);\n    appendFileSync(INCIDENTS,', "    writeLedger(ledger);\n    appendFileSync(PROMOTED, 'duplicate', 'utf8');\n    appendFileSync(INCIDENTS,"],
+  ['the old state/promoted.md is written again beside the evidence store', COMMAND, '    writeLedger(ledger);\n    appendFileSync(incidentsFile(),', "    writeLedger(ledger);\n    appendFileSync(promotedFile(), 'duplicate', 'utf8');\n    appendFileSync(incidentsFile(),"],
   ['the promotion is dated some other day', COMMAND, 'date: today(), closure, where })', "date: '2000-01-01', closure, where })"],
   ['promote shortens the line without the closure being what was verified', COMMAND, 'promotedStub({ ledgerFile: ledger.file, original: ledger.lines[index], date: today(), closure, where })', 'promotedStub({ ledgerFile: ledger.file, original: ledger.lines[index], date: today(), closure: { kind: \'no-mechanism\', reason: \'x\' }, where })'],
 
@@ -69,7 +69,7 @@ const COMMAND_MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'bilingual-output', 'mutation-proof'], selftest, mutants });
+const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest, mutants });
 const survivors = campaign('failure-capture/promotion.selftest.mjs', MODULE_MUTANTS) + campaign('failure-capture/selftest.mjs', COMMAND_MUTANTS);
 
 process.exit(survivors === 0 ? 0 : 1);

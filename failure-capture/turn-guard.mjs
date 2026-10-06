@@ -46,6 +46,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { stateDir } from '../hook-state/locations.mjs';
 import { findMarker } from './markers.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
 
@@ -65,9 +66,10 @@ function safeProjectScopes(cwd) {
 }
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const STATE_DIR = path.join(HERE, 'state');
-const STATE_FILE = path.join(STATE_DIR, 'guard-state.json');
-const LAST_CAPTURE = path.join(STATE_DIR, 'last-capture.json');
+/** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
+const stateDirectory = () => stateDir('failure-capture');
+const guardStateFile = () => path.join(stateDirectory(), 'guard-state.json');
+const lastCaptureFile = () => path.join(stateDirectory(), 'last-capture.json');
 const CAPTURE_CLI = path.join(HERE, 'capture.mjs');
 
 /** Independent anti-loop bound, in case `stop_hook_active` is ever absent. @es Cota antibucle independiente por si faltara `stop_hook_active`. */
@@ -76,9 +78,9 @@ const COOLDOWN_MS = 120_000;
 /** Every failure is written where it can be counted; a guard error never blocks a turn. @es Todo fallo propio queda contado; nunca bloquea un turno. */
 function recordError(error, raw) {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
+    mkdirSync(stateDirectory(), { recursive: true });
     appendFileSync(
-      path.join(STATE_DIR, 'guard-errors.jsonl'),
+      path.join(stateDirectory(), 'guard-errors.jsonl'),
       `${JSON.stringify({ at: new Date().toISOString(), error: error instanceof Error ? error.message : String(error), rawLength: raw.length, firstCharCode: raw.length > 0 ? raw.charCodeAt(0) : undefined })}\n`,
       'utf8',
     );
@@ -97,7 +99,7 @@ function readJson(file, fallback) {
 
 function writeJson(file, value) {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
+    mkdirSync(stateDirectory(), { recursive: true });
     writeFileSync(file, JSON.stringify(value), 'utf8');
   } catch {
     /* state is an optimisation; failing to persist it must never block a turn */
@@ -180,21 +182,21 @@ function decide(payload) {
   // Recorded already? The capture CLI stamps every capture and every dismissal. This is the
   // deterministic half of the decision: not "was there a mistake", but "was something written down".
   // @es ¿Ya registrado? El CLI sella cada captura y cada descarte. Esta es la mitad determinista.
-  const state = readJson(STATE_FILE, {});
+  const state = readJson(guardStateFile(), {});
   const previous = state[scopeKey] ?? { blockedAt: 0, seenAt: 0 };
-  const stamped = readJson(LAST_CAPTURE, undefined);
+  const stamped = readJson(lastCaptureFile(), undefined);
 
   if (stamped !== undefined && stamped.session === sessionId && Number(stamped.at) > Number(previous.seenAt)) {
-    writeJson(STATE_FILE, { ...state, [scopeKey]: { ...previous, seenAt: now } });
+    writeJson(guardStateFile(), { ...state, [scopeKey]: { ...previous, seenAt: now } });
     return undefined;
   }
 
   if (now - Number(previous.blockedAt) < COOLDOWN_MS) {
-    writeJson(STATE_FILE, { ...state, [scopeKey]: { ...previous, seenAt: now } });
+    writeJson(guardStateFile(), { ...state, [scopeKey]: { ...previous, seenAt: now } });
     return undefined;
   }
 
-  writeJson(STATE_FILE, { ...state, [scopeKey]: { blockedAt: now, seenAt: now } });
+  writeJson(guardStateFile(), { ...state, [scopeKey]: { blockedAt: now, seenAt: now } });
 
   return blockOutput(marker, agentType === undefined ? 'orchestrator' : `worker:${agentType}`, sessionId, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());
 }
