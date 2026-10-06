@@ -3,7 +3,8 @@
  * The shared modules the GLOBAL guards in `~/.claude/` import, vendored byte-identical from the b100-am-ui
  * fleet, which still owns them because its own project-specific guards import them too.
  *
- *   node ~/.claude/vendored/vendored.mjs check   provenance: every copy untouched, every source unchanged
+ *   node ~/.claude/vendored/vendored.mjs check   provenance: every copy untouched, every source unchanged,
+ *                                                and no module duplicated under both roots without being declared here
  *   node ~/.claude/vendored/vendored.mjs sync    re-copy every source and re-record its sha256
  *
  * WHY THEY SIT WHERE THEY SIT. Each copy keeps the relative position its source has under
@@ -19,7 +20,8 @@
  * @es Los módulos compartidos que importan las guardias GLOBALES de `~/.claude/`, vendorizados idénticos
  * desde la flota de b100-am-ui, que sigue siendo su dueña porque sus guardias propias también los importan.
  * Cada copia conserva la posición relativa de su fuente, para que los imports relativos resuelvan igual.
- * Copiar es trabajo de este script; la comprobación falla en cuanto cualquiera de los dos lados cambia.
+ * Copiar es trabajo de este script; la comprobación falla en cuanto cualquiera de los dos lados cambia, o en
+ * cuanto un módulo aparece idéntico bajo ambas raíces sin estar declarado aquí (`duplicates.mjs`).
  */
 
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -28,16 +30,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { provenanceFindings, sha256Of } from '../fleet-kit/vendor/provenance.mjs';
+import { duplicateFinding, RECORD_FILE_NAME, undeclaredDuplicates } from './duplicates.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TARGET_ROOT = path.resolve(HERE, '..');
+/** The install the copies land in: the folder holding `vendored/`. @es La instalación donde caen las copias: la carpeta que contiene `vendored/`. */
+export const TARGET_ROOT = path.resolve(HERE, '..');
 const SOURCE_SEGMENTS = Object.freeze(['Desktop', 'Projects', 'b100-am-ui', '.claude']);
 const SOURCE_ROOT = path.join(os.homedir(), ...SOURCE_SEGMENTS);
 // The record names the source home-relative: an absolute path would change with whichever machine synced
 // (and leak its user name) while naming the same fleet. @es El registro nombra la fuente relativa al home:
 // una ruta absoluta cambiaría según la máquina que sincronizó (y filtraría su usuario) para la misma flota.
-const SOURCE_ROOT_RECORDED = ['~', ...SOURCE_SEGMENTS].join('/');
-const PROVENANCE_FILE = path.join(HERE, 'PROVENANCE.json');
+/** The owner's `.claude/`, home-relative: how a person finds the file to edit. @es El `.claude/` dueño, relativo al home: cómo una persona halla el fichero que debe editar. */
+export const SOURCE_ROOT_RECORDED = ['~', ...SOURCE_SEGMENTS].join('/');
+const PROVENANCE_FILE = path.join(HERE, RECORD_FILE_NAME);
 
 /** Relative paths under both roots. @es Rutas relativas bajo ambas raíces. */
 export const VENDORED = Object.freeze([
@@ -53,7 +58,10 @@ export const VENDORED = Object.freeze([
   'mutation-proof/scope.mjs',
   'mutation-proof/scope.selftest.mjs',
   'mutation-proof/scope.mutants.mjs',
-  'mutation-proof/scope-repository.selftest.mjs'
+  'mutation-proof/scope-repository.selftest.mjs',
+  'write-targets/redirect-targets.mjs',
+  'write-targets/shell-writes.mjs',
+  'write-targets/tool-call-writes.mjs'
 ]);
 
 function sync() {
@@ -75,6 +83,8 @@ function sync() {
 function check() {
   const record = JSON.parse(readFileSync(PROVENANCE_FILE, 'utf8'));
   const { failures, notes } = provenanceFindings(record, { vendorRoot: TARGET_ROOT, sourceRoot: SOURCE_ROOT });
+
+  for (const relative of undeclaredDuplicates({ installRoot: TARGET_ROOT, sourceRoot: SOURCE_ROOT, declared: VENDORED })) failures.push(duplicateFinding(relative));
 
   for (const line of [...notes, ...failures]) process.stdout.write(`${line}\n`);
   process.stdout.write(`provenance: ${record.files.length} vendored module(s), ${failures.length} failure(s) @es procedencia: ${record.files.length} módulo(s) vendorizado(s), ${failures.length} fallo(s)\n`);

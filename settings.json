@@ -69,6 +69,15 @@
             "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/pretooluse-authoring.json\""
           }
         ]
+      },
+      {
+        "matcher": "NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/pretooluse-authoring.json\""
+          }
+        ]
       }
     ],
     "PostToolUse": [

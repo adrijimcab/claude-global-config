@@ -1,6 +1,7 @@
 {
   "event": "PreToolUse",
   "guards": [
-    "../../type-assertion-guard/guard.mjs"
+    "../../type-assertion-guard/guard.mjs",
+    "../../vendored-edit-guard/guard.mjs"
   ]
 }

@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell"
+    }
+  ],
+  "why": "an in-place edit of the vendored shell-command/shell-command.mjs in ~/.claude left the provenance check red for a day and a half (vendored-copy-edited-in-place); a vendored module is owned by b100-am-ui, so any write to one through an edit tool or a shell line is refused with the owner path and the re-sync command."
+}

@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-06T18:58:10.735Z",
+  "syncedAt": "2026-10-06T20:28:59.166Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -53,6 +53,18 @@
     {
       "path": "mutation-proof/scope-repository.selftest.mjs",
       "sha256": "3235c422bd1cedab588ae621d2cdefe26a2257073fd5228b695e4f603412de0f"
+    },
+    {
+      "path": "write-targets/redirect-targets.mjs",
+      "sha256": "656f15a1a261f43490f662ed79910361769a3258d07550b37cc21b9114bfdc41"
+    },
+    {
+      "path": "write-targets/shell-writes.mjs",
+      "sha256": "8697f3319924474346028dbe049790992eefb42d4d0ab32b838ca9657dae7888"
+    },
+    {
+      "path": "write-targets/tool-call-writes.mjs",
+      "sha256": "2cb9f7f33c8c2bc01851fb962fe879d674dc42bb929834d81b450a7f04aca842"
     }
   ]
 }
