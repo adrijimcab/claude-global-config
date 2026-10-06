@@ -1,4 +1,4 @@
 {
-  "command": ["node", "../run-tool.mjs", "karma", "karma", "start", "config.karma.cjs", "--single-run", "--target", "{target}"],
+  "command": ["node", "../../run-tool.mjs", "karma", "karma", "start", "config.karma.cjs", "--single-run", "--target", "{target}"],
   "timeoutMs": 300000
 }

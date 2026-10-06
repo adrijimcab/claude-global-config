@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { makeSpeaker } from '../../bilingual-output/speaker.mjs';
+import { makeSpeaker } from '../bilingual-output/speaker.mjs';
 
 const MESSAGES = {
   usage: { en: 'usage: run-tool.mjs <package> <bin> [args]', es: 'uso: run-tool.mjs <paquete> <bin> [argumentos]' },

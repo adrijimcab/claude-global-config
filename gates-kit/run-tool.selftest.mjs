@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { makeSpeaker } from '../../bilingual-output/speaker.mjs';
+import { makeSpeaker } from '../bilingual-output/speaker.mjs';
 
 const RUN_TOOL = path.join(path.dirname(fileURLToPath(import.meta.url)), 'run-tool.mjs');
 const TABLE = {
