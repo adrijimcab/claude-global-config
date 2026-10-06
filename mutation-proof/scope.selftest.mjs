@@ -80,19 +80,25 @@ expect('a campaign is JavaScript: `mutants.js` is not one', !isCampaignFile('a/m
 
 // --- deciding by DISPATCH: the manifest of a dispatcher.
 const MANIFEST = JSON.stringify({ event: 'Stop', guards: ['../../alpha/guard.mjs', '../../beta/guard.mjs'] });
-const dispatched = decidingIn({ 'hook-dispatch/manifests/stop.json': MANIFEST, 'alpha/guard.mjs': '', 'beta/guard.mjs': '' });
+const dispatched = decidingIn({ 'hook-dispatch/manifests/stop.json': MANIFEST, 'alpha/guard.mjs': 'permissionDecision', 'beta/guard.mjs': 'permissionDecision' });
 
-expect('a guard listed by a manifest under hook-dispatch/ decides', dispatched.modules.has('alpha/guard.mjs') && dispatched.modules.has('beta/guard.mjs'));
-expect('and the reason names the manifest', same(reasonsOf(dispatched, 'alpha/guard.mjs'), ['dispatched by hook-dispatch/manifests/stop.json']));
+expect('a guard listed by a manifest that emits no verdict does not decide: it records, it does not refuse', (() => {
+  const found = decidingIn({ 'hook-dispatch/manifests/stop.json': MANIFEST, 'alpha/guard.mjs': 'writes the ledger', 'beta/guard.mjs': 'writes the ledger' });
+
+  return found.modules.size === 0 && found.problems.length === 0;
+})());
+expect('a guard two manifests list carries both', same(reasonsOf(decidingIn({ 'hook-dispatch/a.json': JSON.stringify({ guards: ['../g.mjs'] }), 'hook-dispatch/b.json': JSON.stringify({ guards: ['../g.mjs'] }), 'g.mjs': 'permissionDecision' }), 'g.mjs'), ['hook entry that emits a verdict', 'dispatched by hook-dispatch/a.json', 'dispatched by hook-dispatch/b.json']));
+expect('a guard listed by a manifest under hook-dispatch/ that emits a verdict decides', dispatched.modules.has('alpha/guard.mjs') && dispatched.modules.has('beta/guard.mjs'));
+expect('and the reasons say it emits a verdict and name the manifest', same(reasonsOf(dispatched, 'alpha/guard.mjs'), ['hook entry that emits a verdict', 'dispatched by hook-dispatch/manifests/stop.json']));
 expect('a guard path is resolved from the manifest folder, so `../` climbs out of manifests/', !dispatched.modules.has('hook-dispatch/alpha/guard.mjs') && dispatched.problems.length === 0);
-expect('a manifest directly in hook-dispatch/ resolves its guards from there', decidingIn({ 'hook-dispatch/pre.json': JSON.stringify({ event: 'Stop', guards: ['../alpha/guard.mjs'] }), 'alpha/guard.mjs': '' }).modules.has('alpha/guard.mjs'));
-expect('a folder that merely CONTAINS the name is not hook-dispatch/', decidingIn({ 'x/my-hook-dispatch/stop.json': MANIFEST, 'alpha/guard.mjs': '' }).modules.size === 0);
+expect('a manifest directly in hook-dispatch/ resolves its guards from there', decidingIn({ 'hook-dispatch/pre.json': JSON.stringify({ event: 'Stop', guards: ['../alpha/guard.mjs'] }), 'alpha/guard.mjs': 'permissionDecision' }).modules.has('alpha/guard.mjs'));
+expect('a folder that merely CONTAINS the name is not hook-dispatch/', decidingIn({ 'x/my-hook-dispatch/stop.json': MANIFEST, 'alpha/guard.mjs': 'permissionDecision', 'beta/guard.mjs': 'permissionDecision' }).modules.size === 0);
 expect('a file under hook-dispatch/ that is not JSON is not read as a manifest', (() => {
   const found = decidingIn({ 'hook-dispatch/dispatch.mjs': 'export const x = 1;' });
 
   return found.modules.size === 0 && found.problems.length === 0;
 })());
-expect('the same JSON elsewhere is not a manifest and is not even read', decidingIn({ 'other/stop.json': MANIFEST, 'alpha/guard.mjs': '' }).modules.size === 0);
+expect('the same JSON elsewhere is not a manifest and is not even read', decidingIn({ 'other/stop.json': MANIFEST, 'alpha/guard.mjs': 'permissionDecision', 'beta/guard.mjs': 'permissionDecision' }).modules.size === 0);
 expect('a JSON under hook-dispatch/ with no guards list is data, not a finding', (() => {
   const found = decidingIn({ 'hook-dispatch/notes.json': JSON.stringify({ event: 'Stop' }) });
 
@@ -161,15 +167,15 @@ expect('a declaration that is no object with a file is a PROBLEM that says it na
   return found.problems.length === 3 && found.problems.every((problem) => problem.includes('names no file'));
 })());
 
-const several = decidingIn({ 'hook-dispatch/m.json': JSON.stringify({ guards: ['../a/decide.mjs'] }), 'a/decide.mjs': '' }, [], [{ file: 'a/decide.mjs', why: 'pinned' }]);
+const several = decidingIn({ 'hook-dispatch/m.json': JSON.stringify({ guards: ['../a/decide.mjs'] }), 'a/decide.mjs': 'permissionDecision' }, [], [{ file: 'a/decide.mjs', why: 'pinned' }]);
 
-expect('a module that decides in several ways is ONE module with every reason, in rule order', several.modules.size === 1 && same(reasonsOf(several, 'a/decide.mjs'), ['dispatched by hook-dispatch/m.json', 'named decide', 'declared: pinned']));
-expect('a selftest or a campaign a manifest lists is never a deciding module', decidingIn({ 'hook-dispatch/m.json': JSON.stringify({ guards: ['../a/selftest.mjs', '../a/mutants.mjs'] }), 'a/selftest.mjs': '', 'a/mutants.mjs': '' }).modules.size === 0);
+expect('a module that decides in several ways is ONE module with every reason, in rule order', several.modules.size === 1 && same(reasonsOf(several, 'a/decide.mjs'), ['hook entry that emits a verdict', 'dispatched by hook-dispatch/m.json', 'named decide', 'declared: pinned']));
+expect('a selftest or a campaign a manifest lists is never a deciding module', decidingIn({ 'hook-dispatch/m.json': JSON.stringify({ guards: ['../a/selftest.mjs', '../a/mutants.mjs'] }), 'a/selftest.mjs': 'permissionDecision', 'a/mutants.mjs': 'permissionDecision' }).modules.size === 0);
 expect('a selftest declared deciding is a PROBLEM, never a quiet drop', decidingIn({ 'a/x.selftest.mjs': '' }, [], [{ file: 'a/x.selftest.mjs', why: 'by mistake' }]).problems.some((problem) => problem.includes('a/x.selftest.mjs')));
 
 // --- the scope: campaigns against deciding modules.
 const SCOPE_FILES = ['hook-dispatch/m.json', 'a/guard.mjs', 'a/lib.mjs', 'a/mutants.mjs', 'b/guard.mjs', 'b/y.mutants.mjs', 'b/x.mutants.mjs', 'c/guard.mjs', 'run-mutants.mjs'];
-const SCOPE_TEXTS = { 'hook-dispatch/m.json': JSON.stringify({ guards: ['../c/guard.mjs', '../a/guard.mjs', '../b/guard.mjs'] }) };
+const SCOPE_TEXTS = { 'hook-dispatch/m.json': JSON.stringify({ guards: ['../c/guard.mjs', '../a/guard.mjs', '../b/guard.mjs'] }), 'a/guard.mjs': 'permissionDecision', 'b/guard.mjs': 'permissionDecision', 'c/guard.mjs': 'permissionDecision' };
 const PLANS = {
   'a/mutants.mjs': { targets: ['a/guard.mjs', 'a/lib.mjs', 'a/aux.mjs'], problems: [] },
   'b/x.mutants.mjs': { targets: ['b/guard.mjs'], problems: [] },
@@ -218,12 +224,12 @@ expect('a gap line names the module and why it is demanded', lines.some((line) =
 expect('an optional line names the module and its campaigns, and says the owner decides', lines.some((line) => line.startsWith('OPTIONAL') && line.includes('a/lib.mjs (a/mutants.mjs, b/y.mutants.mjs)')) && lines.some((line) => line.includes('keep or drop')));
 expect('a covered module is not a line of its own', !lines.some((line) => line.startsWith('GAP') && line.includes('a/guard.mjs')));
 expect('a problem has its own line', renderScope(broken).some((line) => line.startsWith('PROBLEM') && line.includes('it exited 3')));
-expect('a module out of reach carries every reason it decides', renderScope(scopeOf({ files: ['hook-dispatch/m.json', 'a/decide.ts'], readText: () => JSON.stringify({ guards: ['../a/decide.ts'] }), declared: [], plan: NO_PLAN })).some((line) => line.startsWith('OUT OF REACH') && line.includes('dispatched by hook-dispatch/m.json; named decide')));
+expect('a module out of reach carries every reason it decides', renderScope(scopeOf({ files: ['hook-dispatch/m.json', 'a/decide.ts'], readText: (file) => (file === 'a/decide.ts' ? 'permissionDecision' : JSON.stringify({ guards: ['../a/decide.ts'] })), declared: [], plan: NO_PLAN })).some((line) => line.startsWith('OUT OF REACH') && line.includes('hook entry that emits a verdict; dispatched by hook-dispatch/m.json; named decide')));
 expect('a module out of reach is reported as information', renderScope(scopeOf({ files: ['a/decide.ts'], readText: () => undefined, declared: [], plan: NO_PLAN })).some((line) => line.startsWith('OUT OF REACH') && line.includes('a/decide.ts')));
 expect('a complete scope says so', renderScope(complete).some((line) => line.includes('no deciding module without a campaign')));
 expect('a complete scope has no optional header and a scope with a gap does not say OK', !renderScope(complete).some((line) => line.startsWith('OPTIONAL')) && !lines.some((line) => line.startsWith('OK')));
 expect('a scope with a problem and no gap does not say OK either', !renderScope({ deciding: [], gaps: [], optional: [], outOfReach: [], problems: ['x'] }).some((line) => line.startsWith('OK')));
-expect('a gap line carries every reason', renderScope(scopeOf({ files: ['hook-dispatch/m.json', 'a/decide.mjs'], readText: () => JSON.stringify({ guards: ['../a/decide.mjs'] }), declared: [], plan: NO_PLAN })).some((line) => line.startsWith('GAP') && line.includes('dispatched by hook-dispatch/m.json; named decide')));
+expect('a gap line carries every reason', renderScope(scopeOf({ files: ['hook-dispatch/m.json', 'a/decide.mjs'], readText: (file) => (file === 'a/decide.mjs' ? 'permissionDecision' : JSON.stringify({ guards: ['../a/decide.mjs'] })), declared: [], plan: NO_PLAN })).some((line) => line.startsWith('GAP') && line.includes('hook entry that emits a verdict; dispatched by hook-dispatch/m.json; named decide')));
 
 // --- the planner, over the real child process.
 const sandbox = realpathSync(mkdtempSync(path.join(tmpdir(), 'mutation-scope-selftest-')));

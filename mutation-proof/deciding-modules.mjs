@@ -4,19 +4,21 @@
  * A mutants campaign proves that a selftest goes red when a DECISION is broken, so it is demanded where a
  * decision is the product: a module whose output is an allow/deny/block verdict, a landing or integration
  * verdict, or a gate verdict. A module that only formats, reads, renders or carries data keeps its selftest and
- * may keep a campaign, but nothing demands one. Four rules say which modules decide, in this order, each one
+ * may keep a campaign, but nothing demands one. Three rules say which modules decide, in this order, each one
  * STRUCTURAL where the tree can tell and DECLARED only where it cannot:
  *
- *   1. DISPATCHED. A guard listed in a dispatcher manifest (a `.json` under a `hook-dispatch/` folder with a
- *      `guards` list): the dispatcher exists to merge the verdicts of exactly those modules.
- *   2. A HOOK ENTRY THAT EMITS A VERDICT. A file with a `<file>.hook-registration.json` beside it (the
- *      repositories' own way to say "this is wired as a hook") whose source holds a word of the harness's
- *      verdict vocabulary. A hook that formats a file or provisions a worktree carries none; one that blocks a
- *      stop and is wired straight in the settings, not through a manifest, carries one.
- *   3. NAMED FOR IT. A code file whose name has the segment `decide`, `decision`, `verdict` or `verdicts`
+ *   1. A HOOK ENTRY THAT EMITS A VERDICT. A hook entry is a guard listed in a dispatcher manifest (a `.json`
+ *      under a `hook-dispatch/` folder with a `guards` list: the dispatcher exists to merge verdicts) or a file
+ *      with a `<file>.hook-registration.json` beside it (the repositories' own way to say "this is wired as a
+ *      hook"). It DECIDES when its source holds a word of the harness's verdict vocabulary. A hook that records
+ *      (the task ledger, which says of itself that it never blocks), formats a file or provisions a worktree
+ *      carries none and is not demanded a campaign; a guard that blocks a stop and is wired straight in the
+ *      settings, not through a manifest, carries one.
+ *   2. NAMED FOR IT. A code file whose name has the segment `decide`, `decision`, `verdict` or `verdicts`
  *      (`decide.mjs`, `tree-verdicts.mjs`, `run-verdict.mjs`).
- *   4. DECLARED, in `declared-deciding.mjs`, with the reason: only for what none of the above can see (a
- *      landing verdict that is neither dispatched nor named for it).
+ *   3. DECLARED, in `declared-deciding.mjs`, with the reason: only for what none of the above can see (a
+ *      landing verdict that is neither a hook nor named for it, a hook that emits its verdict through a helper
+ *      and so names no verdict word itself).
  *
  * A selftest or a campaign never decides, whatever lists it. A deciding module the runner cannot parse (it
  * parses JavaScript only) is reported as OUT OF REACH, since no campaign could ever mutate it.
@@ -26,12 +28,13 @@
  *
  * @es QUÉ ES UN MÓDULO QUE DECIDE — la única definición sobre la que descansa la exigencia de mutantes. Una
  * campaña prueba que el selftest se pone en rojo al romper una DECISIÓN, así que se exige donde la decisión es el
- * producto: un veredicto de permitir/denegar/bloquear, de aterrizaje o integración, o de gate. Cuatro reglas, en
- * orden, ESTRUCTURALES donde el árbol lo dice y DECLARADAS solo donde no: 1. DESPACHADO por un manifiesto de
- * dispatcher; 2. ENTRADA DE HOOK que emite veredicto (sidecar `.hook-registration.json` y una palabra del
- * vocabulario del harness en su fuente); 3. NOMBRADO así (segmento `decide`, `decision`, `verdict`, `verdicts`);
- * 4. DECLARADO en `declared-deciding.mjs`, con su motivo. Un selftest o una campaña nunca decide. Un módulo
- * que el corredor no sabe parsear (solo JavaScript) sale como FUERA DE ALCANCE.
+ * producto: un veredicto de permitir/denegar/bloquear, de aterrizaje o integración, o de gate. Tres reglas, en
+ * orden, ESTRUCTURALES donde el árbol lo dice y DECLARADAS solo donde no: 1. ENTRADA DE HOOK que emite veredicto
+ * (listada en un manifiesto de dispatcher o con sidecar `.hook-registration.json`, y una palabra del vocabulario
+ * del harness en su fuente: un hook que solo registra, formatea o provisiona no la lleva); 2. NOMBRADO así
+ * (segmento `decide`, `decision`, `verdict`, `verdicts`); 3. DECLARADO en `declared-deciding.mjs`, con su
+ * motivo. Un selftest o una campaña nunca decide. Un módulo que el corredor no sabe parsear (solo JavaScript)
+ * sale como FUERA DE ALCANCE.
  */
 
 import path from 'node:path';
@@ -102,6 +105,11 @@ export function decidingModules({ files, readText, declared }) {
     candidates.set(file, [...(candidates.get(file) ?? []), reason]);
   };
 
+  // The hook entries: every guard a manifest lists, and every file a sidecar declares as wired, each with the
+  // manifests that dispatch it.
+  // @es Las entradas de hook: cada guardia que lista un manifiesto y cada fichero que un sidecar declara cableado.
+  const entries = new Map();
+
   for (const manifest of files.filter((file) => file.endsWith('.json') && file.split('/').includes(MANIFEST_FOLDER))) {
     let parsed;
 
@@ -115,7 +123,7 @@ export function decidingModules({ files, readText, declared }) {
     if (!Array.isArray(parsed?.guards)) continue;
 
     for (const guard of guardsOf(manifest, parsed)) {
-      if (present.has(guard)) add(guard, `dispatched by ${manifest}`);
+      if (present.has(guard)) entries.set(guard, [...(entries.get(guard) ?? []), manifest]);
       else problems.push(`${manifest} dispatches ${guard}, which the repository does not hold @es despacha ${guard}, que el repositorio no tiene`);
     }
   }
@@ -123,7 +131,15 @@ export function decidingModules({ files, readText, declared }) {
   for (const sidecar of files.filter((file) => file.endsWith(HOOK_SIDECAR_SUFFIX))) {
     const entry = sidecar.slice(0, -HOOK_SIDECAR_SUFFIX.length);
 
-    if (present.has(entry) && VERDICT_VOCABULARY.some((word) => (readText(entry) ?? '').includes(word))) add(entry, 'hook entry that emits a verdict');
+    if (present.has(entry)) entries.set(entry, entries.get(entry) ?? []);
+  }
+
+  for (const [entry, manifests] of entries) {
+    if (!VERDICT_VOCABULARY.some((word) => (readText(entry) ?? '').includes(word))) continue;
+
+    add(entry, 'hook entry that emits a verdict');
+
+    for (const manifest of manifests) add(entry, `dispatched by ${manifest}`);
   }
 
   for (const file of files.filter((candidate) => CODE_EXTENSIONS.has(path.posix.extname(candidate)))) {
