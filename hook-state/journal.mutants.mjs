@@ -16,9 +16,10 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const J = 'hook-state/journal.mjs';
 
 const MUTANTS = [
-  // --- the three kinds ---
+  // --- the four kinds ---
   ['the decision kind is not accepted', J, "'decision', ", ''],
-  ['a fourth kind is accepted', J, "'false-positive-report'])", "'false-positive-report', 'block'])"],
+  ['the true-positive-report kind is not accepted', J, ", 'true-positive-report'])", '])'],
+  ['a fifth kind is accepted', J, "'true-positive-report'])", "'true-positive-report', 'block'])"],
   ['any kind is accepted', J, '!KINDS.has(kind)', 'false'],
 
   // --- the record shape ---
@@ -34,6 +35,19 @@ const MUTANTS = [
   ['the record has no toolUseId default', J, 'const { kind, blockId, toolUseId = null,', 'const { kind, blockId, toolUseId,'],
   ['a reason of any type is accepted', J, "reason !== undefined && typeof reason !== 'string'", 'false'],
   ['the record always carries a reason key', J, '...(reason === undefined ? {} : { reason })', '...{ reason }'],
+  ['an event of any type is accepted', J, "event !== undefined && typeof event !== 'string'", 'false'],
+  ['the record always carries an event key', J, '...(event === undefined ? {} : { event })', '...{ event }'],
+  ['the event is never written', J, '...(event === undefined ? {} : { event }), ', ''],
+  ['the event is not read from the fields', J, 'inputDigest, reason, event, sampled, seed } = fields;', 'inputDigest, reason, sampled, seed } = fields; const event = undefined;'],
+  ['a sampled flag of any type is accepted', J, "sampled !== undefined && typeof sampled !== 'boolean'", 'false'],
+  ['a seed of any type is accepted', J, "seed !== undefined && typeof seed !== 'string'", 'false'],
+  ['the sampled flag is never written', J, '...(sampled === undefined ? {} : { sampled }), ', ''],
+  ['the seed is never written', J, '...(seed === undefined ? {} : { seed }), ', ''],
+  ['the record always carries a sampled key', J, '...(sampled === undefined ? {} : { sampled })', '...{ sampled }'],
+  ['the record always carries a seed key', J, '...(seed === undefined ? {} : { seed })', '...{ seed }'],
+  ['a sampled flag of false is dropped', J, '...(sampled === undefined ? {} : { sampled })', '...(sampled ? { sampled } : {})'],
+  ['the sampled flag is not read from the fields', J, 'reason, event, sampled, seed } = fields;', 'reason, event, seed } = fields; const sampled = undefined;'],
+  ['the counter reader given is ignored', J, "text = readFile(file, 'utf8');", "text = readFileSync(file, 'utf8');"],
   ['the bad-field refusal names no field', J, "bilingual('bad-field', { field, expected })", "bilingual('bad-field', { field: 'x', expected })"],
 
   // --- ids ---
@@ -62,7 +76,7 @@ const MUTANTS = [
 
   // --- the fires counter ---
   ['the fires file has another name', J, "'fires.json'", "'fires.txt'"],
-  ['an increment adds two', J, 'readCount(file) + 1', 'readCount(file) + 2'],
+  ['an increment adds two', J, 'readCount(file, readFile) + 1', 'readCount(file, readFile) + 2'],
   ['an absent counter is an error', J, "error.code === 'ENOENT'", 'false'],
   ['any unreadable counter is read as zero', J, "if (error.code === 'ENOENT') return 0;", 'return 0;'],
   ['a corrupt counter is read as valid', J, 'parsed = JSON.parse(text);', 'parsed = { count: 0 };'],

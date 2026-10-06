@@ -28,7 +28,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -185,20 +186,26 @@ const registration = JSON.parse(readFileSync(path.join(HERE, 'guard.mjs.hook-reg
 check('the shell manifest lists this guard', manifest.guards.includes('../../cwd-change-guard/guard.mjs'), true);
 check('the registration names exactly Bash and PowerShell', registration.registrations.map((entry) => entry.matcher).join(), 'Bash|PowerShell');
 
-// --- END TO END through the dispatcher, the way the harness runs it.
+// --- END TO END through the dispatcher, the way the harness runs it. The dispatcher journals every block it
+// says, so its process writes to a temp state directory and never to the live journal of this guard.
+// @es DE PUNTA A PUNTA por el dispatcher. El dispatcher registra cada bloqueo que dice: su proceso escribe en un directorio de estado temporal, nunca en el journal vivo de esta guardia.
+const stateRoot = mkdtempSync(path.join(tmpdir(), 'cwd-change-guard-state-'));
 const dispatched = execFileSync('node', [path.join(HERE, '..', 'hook-dispatch', 'dispatch.mjs'), path.join(HERE, '..', 'hook-dispatch', 'manifests', 'pretooluse-shell.json')], {
   input: JSON.stringify(bash(INCIDENT_COMMAND)),
-  encoding: 'utf8'
+  encoding: 'utf8',
+  env: { ...process.env, HOOK_STATE_DIR: stateRoot }
 });
 
 check('the real payload of the incident is DENIED through the dispatcher', dispatched.includes('"deny"') && dispatched.includes('CWD-CHANGE GUARD REFUSED'), true);
 
 const dispatchedAllowed = execFileSync('node', [path.join(HERE, '..', 'hook-dispatch', 'dispatch.mjs'), path.join(HERE, '..', 'hook-dispatch', 'manifests', 'pretooluse-shell.json')], {
   input: JSON.stringify(bash('( cd x && ls )')),
-  encoding: 'utf8'
+  encoding: 'utf8',
+  env: { ...process.env, HOOK_STATE_DIR: stateRoot }
 });
 
 check('the subshell shape is ALLOWED through the dispatcher', dispatchedAllowed.includes('CWD-CHANGE GUARD'), false);
+rmSync(stateRoot, { recursive: true, force: true });
 
 const total = passed + failures.length;
 

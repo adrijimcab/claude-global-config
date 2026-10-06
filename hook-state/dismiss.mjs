@@ -73,7 +73,7 @@ export function recordOutcome(mechanism, { blockId, reason, falsePositive }, { n
 }
 
 /** A value option's value: the next token unless it is missing or is itself an option. @es El valor de una opción: el token siguiente salvo que falte o sea otra opción. */
-const valueAfter = (argv, index) => (argv[index + 1] === undefined || argv[index + 1].startsWith('--') ? undefined : argv[index + 1]);
+export const valueAfter = (argv, index) => (argv[index + 1] === undefined || argv[index + 1].startsWith('--') ? undefined : argv[index + 1]);
 
 /**
  * The options of a command line; throws a Refusal for an unknown token, for a required option that is

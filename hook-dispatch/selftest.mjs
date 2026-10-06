@@ -103,6 +103,10 @@ const deny = (reason) => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', p
 
 // ── 3 y 4. aislamiento y proceso real, con guardias construidas ─────────────────────────────
 const root = mkdtempSync(path.join(os.tmpdir(), 'hook-dispatch-selftest-'));
+// El dispatcher registra los bloqueos en el journal de cada guardia: los procesos que lanza este selftest
+// escriben en un estado temporal, nunca en el home vivo.
+const savedStateDir = process.env.HOOK_STATE_DIR;
+process.env.HOOK_STATE_DIR = path.join(root, 'state');
 
 try {
   const guard = (name, body, registrations) => {
@@ -178,6 +182,8 @@ try {
   const cliEmpty = run(manifest('empty.json', []), payload('Bash', 'bad'));
   check('proceso: manifiesto vacío → no es «cero guardias limpias»', cliEmpty.stdout.includes('NINGUNA de sus guardias decidió'), cliEmpty.stdout);
 } finally {
+  if (savedStateDir === undefined) delete process.env.HOOK_STATE_DIR;
+  else process.env.HOOK_STATE_DIR = savedStateDir;
   rmSync(root, { recursive: true, force: true });
 }
 

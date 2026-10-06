@@ -28,7 +28,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.join(import.meta.dirname, '..'),
-  paths: ['worker-delegation-guard', 'hook-caller', 'hook-payloads', 'hook-dispatch', 'settings.json'],
+  paths: ['worker-delegation-guard', 'hook-caller', 'hook-payloads', 'hook-dispatch', 'hook-state', 'bilingual-output', 'settings.json'],
   selftest: 'worker-delegation-guard/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

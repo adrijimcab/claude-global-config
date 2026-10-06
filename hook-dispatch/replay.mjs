@@ -149,7 +149,8 @@ async function oldPath(guards, event, raw, tool) {
 }
 
 async function newPath(raw) {
-  const env = NEW_HOME === undefined ? process.env : { ...process.env, HOOK_DISPATCH_HOME: NEW_HOME };
+  // El dispatcher registra los bloqueos en el estado de cada guardia: bajo el espejo B, nunca en el home vivo.
+  const env = NEW_HOME === undefined ? process.env : { ...process.env, HOOK_DISPATCH_HOME: NEW_HOME, HOOK_CLAUDE_HOME: path.join(NEW_HOME, '.claude') };
   const { stdout, code } = await run([path.join(HERE, 'dispatch.mjs'), manifestFile], raw, env);
 
   return { output: parse(stdout), code };

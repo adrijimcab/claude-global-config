@@ -49,6 +49,14 @@ export function labelOf(file) {
   return `${path.basename(path.dirname(file))}/${path.basename(file)}`;
 }
 
+/**
+ * El mecanismo de una guardia: la carpeta que la contiene (`type-assertion-guard/guard.mjs` →
+ * `type-assertion-guard`), el nombre de su directorio de estado y de `dismiss.mjs --mechanism`.
+ */
+export function mechanismOf(file) {
+  return path.basename(path.dirname(file));
+}
+
 /** Los registros declarados por la guardia, o `undefined` si no tiene sidecar legible. */
 function declaredRegistrations(guardFile) {
   const sidecar = `${guardFile}.hook-registration.json`;
@@ -81,7 +89,7 @@ export function loadManifest(manifestFile) {
     guards: parsed.guards.map((entry) => {
       const file = resolveGuard(entry, base);
 
-      return { name: labelOf(file), file, registrations: declaredRegistrations(file) };
+      return { name: labelOf(file), mechanism: mechanismOf(file), file, registrations: declaredRegistrations(file) };
     }),
   };
 }
