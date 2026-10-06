@@ -130,7 +130,6 @@ The verification contracts (Delegated Verification Gate, Native Checking Contrac
 
 <!-- owner-overlay:lazy-review-contract v1 sha256=48cf8cb15eecb45743aa389724d60ad26fe9742ddcfc67ad78522bec1b3b9d9c -->
 Receipt-driven development is off globally, so this contract is not loaded here; its exact text is in `~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md`. READ THAT FILE IN FULL, and follow it as if it were written here, before any `gentle-ai review` command other than `gentle-ai review mode status`, before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as `gentle-ai review mode status` reports `effective: on`.
-@es El desarrollo guiado por recibos está apagado globalmente, así que este contrato no se carga aquí; su texto exacto está en `~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md`. LEER ESE FICHERO COMPLETO, y seguirlo como si estuviera escrito aquí, antes de cualquier comando `gentle-ai review` distinto de `gentle-ai review mode status`, antes de transmitir un sobre `gentle-ai.review-integration.consent/v3`, y en cuanto `gentle-ai review mode status` informe `effective: on`.
 
 #### Cost and Context Balance
 
@@ -144,28 +143,8 @@ Receipt-driven development is off globally, so this contract is not loaded here;
 <!-- gentle-ai:sdd-model-assignments -->
 ## Model Assignments
 
-Read this table at session start (or before the first Claude Agent delegation), cache it for the session, and use the mapped alias for every Claude Agent call. Named SDD/Judgment-Day roles use their named row; organic explorer/mapper/writer/verifier and other generic delegations use the `default` assignment. If a named SDD/Judgment-Day role is missing, use the `default` row. If you do not have access to the assigned model (for example, no Opus access), substitute `sonnet` and continue.
-
-The Claude Code session model is controlled by Claude Code itself; Gentle AI does not configure the main orchestrator model.
-
-**Mandatory model gate:** Every Claude Agent tool call MUST include `model`. Before each Claude Agent call, resolve named SDD/Judgment-Day roles from this table; for organic explorer/mapper/writer/verifier and other generic delegations, use the `default` assignment.
-
-| Phase | Default Model | Effort | Reason |
-|-------|---------------|--------|--------|
-| sdd-explore | sonnet | default | Reads code, structural - not architectural |
-| sdd-research | sonnet | default | Collects source-backed evidence |
-| sdd-propose | opus | default | Architectural decisions |
-| sdd-spec | sonnet | default | Structured writing |
-| sdd-design | opus | default | Architecture decisions |
-| sdd-tasks | sonnet | default | Mechanical breakdown |
-| sdd-apply | sonnet | default | Implementation |
-| sdd-verify | opus | default | Validation against spec |
-| sdd-archive | haiku | default | Copy and close |
-| sdd-onboard | haiku | default | Guided walkthrough, pedagogical |
-| jd-judge-a | opus | default | Adversarial review — blind judge A |
-| jd-judge-b | opus | default | Adversarial review — blind judge B |
-| jd-fix-agent | opus | default | Surgical fixes from confirmed issues |
-| default | sonnet | default | Generic and SDD/JD delegation fallback |
+<!-- owner-overlay:lazy-model-assignments v1 sha256=f4273e244c59d86744bd3582100f8f6b945ff0a86b31b4ef05e8a735dddd0b2e -->
+The model-assignment table (the model alias of every SDD and Judgment-Day role, and of generic delegation) is not loaded here; its exact text is in `~/.claude/gentle-ai-overlay/lazy/model-assignments.md`. READ THAT FILE IN FULL before the first Agent or Task delegation of a session, keep it for the session, and give EVERY Claude Agent call the `model` it maps.
 
 <!-- /gentle-ai:sdd-model-assignments -->
 
@@ -201,14 +180,8 @@ After explicit change intent is established, route work for the requested outcom
 
 ### Receipt-driven development is user-owned
 
-The user controls receipt-driven development with a switch: `gentle-ai review mode enable|disable|status`.
-
-- It is **opt-in and off by default**. Until the user explicitly enables it, reviews do not run and delivery follows ordinary repository policy. Do not treat that as a fault to diagnose or work around.
-- `status` is read-only. It reports the deciding source and the effective mode, and changes nothing. A `default` deciding source means nobody has chosen, so the effective mode is off.
-- When the user asks to stop using receipt-driven development, run `disable`. Do not argue, do not work around it, and do not propose alternatives first.
-- While it is disabled, keep implementing organically through direct inline, delegated direct, or optional SDD: do not start reviews, do not retry, do not reactivate it, and do not fall back to any retired path.
-- Delivery under a disabled switch follows ordinary repository policy and reports `disabled/unmanaged`, never a fabricated approval.
-- Never enable receipt-driven development on the user's behalf unless the user explicitly asks for it.
+<!-- owner-overlay:lazy-rdd-user-owned v1 sha256=d42b7336a5f3b4114c3271b2abcf4ae86236e0b0acb014c697ee56f6ab49422e -->
+The rules for the receipt-driven development switch (`gentle-ai review mode enable|disable|status`: opt-in, off by default, never enabled on the user's behalf) are not loaded here; their exact text is in `~/.claude/gentle-ai-overlay/lazy/receipt-driven-development-switch.md`. READ THAT FILE IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.
 
 <!-- gentle-ai:remote-authorization -->
 ## Remote operation authorization
