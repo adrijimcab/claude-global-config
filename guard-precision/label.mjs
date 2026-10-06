@@ -1,29 +1,37 @@
 #!/usr/bin/env node
 /**
- * Hand labelling of guard blocks, the input of the false-block rate (`report.mjs`). Without a label option it
- * draws, per guard (or for `--mechanism <name>` only), a reproducible random sample of UNLABELLED blocks
- * (`--sample <n>`, default 10; `--seed <text>`, default 1) and prints each block's evidence: the time, the
- * tool use, the start of the input digest and the reason the guard journaled. With `--mechanism <name>
- * --correct <blockId>` or `--false <blockId>` it records the judgement through the journal, never by editing
- * JSONL by hand: `--correct` appends a `true-positive-report`, `--false` a `false-positive-report`, which is
- * information about the guard and does NOT lift the block (only `dismiss.mjs` does). A block that is
- * labelled again takes the new label (the last one decides); labelling it the same way twice is refused. The
- * sample is the unlabelled blocks ranked by a hash of seed, guard and block id, so the same inputs give the
- * same sample on every platform, labelled blocks leave it, and a smaller sample is the start of a larger one.
- * Every printed line is a bilingual message of `label-messages.mjs`; a refusal exits 2 and writes nothing.
+ * Hand labelling of guard blocks, the input of the false-block rate (`report.mjs`). The rate may only be
+ * estimated from a RANDOM sample, so this command is the only way to make a label that counts: without a label
+ * option it draws, per guard (or for `--mechanism <name>` only), a reproducible random sample of blocks
+ * (`--sample <n>`, default 10; `--seed <text>`, default 1) and prints the evidence of each one still to label:
+ * the time, the event, the tool use, the start of the input digest and the reason the guard journaled. With
+ * `--mechanism <name> --correct <blockId>` or `--false <blockId>` (and the same `--seed` and `--sample` as the
+ * draw) it records the judgement through the journal, never by editing JSONL by hand, and ONLY for a block that
+ * draw contains: `--correct` appends a `true-positive-report`, `--false` a `false-positive-report`, both with
+ * `sampled: true` and the seed. A false label does not lift the block (only `dismiss.mjs` does). A block
+ * labelled again takes the new label (the last one decides); labelling it the same way twice is refused.
+ * The population of the draw is every block nobody reported on their own (a dismissal, or a report made
+ * outside the sample, is a self-reported label: it is counted apart and is not drawn). The sample ranks that
+ * population by a hash of seed, guard and block id, so the same inputs give the same sample on every platform,
+ * and a smaller sample is the start of a larger one. Every printed line is a bilingual message of
+ * `label-messages.mjs`; a refusal exits 2 and writes nothing.
  *
  * @es Etiquetado a mano de los bloqueos de los guards, la entrada de la tasa de falsos bloqueos
- * (`report.mjs`). Sin opción de etiqueta saca, por guard (o solo `--mechanism <nombre>`), una muestra
- * aleatoria reproducible de bloqueos SIN ETIQUETAR (`--sample <n>`, por defecto 10; `--seed <texto>`, por
- * defecto 1) e imprime la evidencia de cada uno: la hora, el uso de herramienta, el inicio de la huella de
- * la entrada y el motivo que el guard registró. Con `--mechanism <nombre> --correct <blockId>` o `--false
- * <blockId>` registra el juicio por el journal, nunca editando JSONL a mano: `--correct` añade un
- * `true-positive-report`, `--false` un `false-positive-report`, que es información sobre el guard y NO
- * levanta el bloqueo (solo lo hace `dismiss.mjs`). Un bloqueo etiquetado de nuevo toma la nueva etiqueta
- * (decide la última); etiquetarlo igual dos veces se rechaza. La muestra son los bloqueos sin etiquetar
- * ordenados por un hash de semilla, guard e id de bloqueo, así que las mismas entradas dan la misma muestra
- * en cualquier plataforma, los etiquetados salen de ella y una muestra menor es el comienzo de una mayor.
- * Cada línea impresa es un mensaje bilingüe de `label-messages.mjs`; un rechazo sale con 2 y no escribe nada.
+ * (`report.mjs`). La tasa solo puede estimarse con una muestra ALEATORIA, así que este comando es la única
+ * manera de hacer una etiqueta que cuente: sin opción de etiqueta saca, por guard (o solo `--mechanism
+ * <nombre>`), una muestra aleatoria reproducible de bloqueos (`--sample <n>`, por defecto 10; `--seed
+ * <texto>`, por defecto 1) e imprime la evidencia de cada uno por etiquetar: la hora, el evento, el uso de herramienta,
+ * el inicio de la huella de la entrada y el motivo que el guard registró. Con `--mechanism <nombre> --correct
+ * <blockId>` o `--false <blockId>` (y la misma `--seed` y `--sample` del sorteo) registra el juicio por el
+ * journal, nunca editando JSONL a mano, y SOLO para un bloqueo que ese sorteo contiene: `--correct` añade un
+ * `true-positive-report`, `--false` un `false-positive-report`, ambos con `sampled: true` y la semilla. Una
+ * etiqueta falsa no levanta el bloqueo (solo lo hace `dismiss.mjs`). Un bloqueo etiquetado de nuevo toma la
+ * nueva etiqueta (decide la última); etiquetarlo igual dos veces se rechaza. La población del sorteo es todo
+ * bloqueo del que nadie informó por su cuenta (un descarte, o un informe hecho fuera de la muestra, es una
+ * etiqueta autoinformada: se cuenta aparte y no se sortea). La muestra ordena esa población por un hash de
+ * semilla, guard e id de bloqueo, así que las mismas entradas dan la misma muestra en cualquier plataforma, y
+ * una muestra menor es el comienzo de una mayor. Cada línea impresa es un mensaje bilingüe de
+ * `label-messages.mjs`; un rechazo sale con 2 y no escribe nada.
  */
 
 import { createHash } from 'node:crypto';
@@ -50,7 +58,6 @@ const KIND_OF_LABEL = { [CORRECT_LABEL]: 'true-positive-report', [FALSE_LABEL]: 
 const DIGEST_WIDTH = 12;
 const VALUE_OPTIONS = ['--mechanism', '--correct', '--false', '--sample', '--seed'];
 const LABEL_OPTIONS = { '--correct': CORRECT_LABEL, '--false': FALSE_LABEL };
-const SAMPLE_OPTIONS = ['--sample', '--seed'];
 
 /** A refusal of the command's own input: exit 2, nothing written. @es Un rechazo de la entrada del comando: sale con 2, sin escribir nada. */
 class Refusal extends Error {}
@@ -96,9 +103,6 @@ function parseOptions(argv) {
 
   if (otherLabelOption !== undefined) throw new Refusal(bilingual('options-conflict', { first: labelOption, second: otherLabelOption }));
 
-  const sampleOption = SAMPLE_OPTIONS.find((option) => values[option] !== undefined);
-
-  if (labelOption !== undefined && sampleOption !== undefined) throw new Refusal(bilingual('options-conflict', { first: labelOption, second: sampleOption }));
   if (labelOption !== undefined && values['--mechanism'] === undefined) throw new Refusal(bilingual('missing-argument', { option: '--mechanism' }));
 
   if (values['--mechanism'] !== undefined) {
@@ -123,34 +127,45 @@ function parseOptions(argv) {
 /** A value of the evidence as printed: a dash when the record has none. @es Un valor de la evidencia como se imprime: un guion si el registro no lo tiene. */
 const shown = (value) => value ?? '-';
 
-/** Prints the sample of one guard and returns whether the guard had blocks. @es Imprime la muestra de un guard y devuelve si el guard tenía bloqueos. */
-function printSample(mechanism, { decisions, labels }, { size, seed }, speaker) {
-  const unlabelled = [...decisions.keys()].filter((blockId) => !labels.has(blockId));
-  const sample = drawSample(unlabelled, { seed, mechanism, size });
+/**
+ * The blocks the sample draws from: every block that is unlabelled or was labelled by a sample, never one that
+ * somebody reported on their own.
+ * @es Los bloqueos de los que sortea la muestra: todo bloqueo sin etiqueta o etiquetado por una muestra, nunca uno del que alguien informó por su cuenta.
+ */
+const populationOf = ({ decisions, labels }) => [...decisions.keys()].filter((blockId) => labels.get(blockId)?.sampled ?? true);
 
-  speaker.say('sample-header', { mechanism, shown: sample.length, unlabelled: unlabelled.length, seed, labelled: labels.size, blocks: decisions.size });
+/** Prints the sample of one guard: the blocks of the draw still to label. @es Imprime la muestra de un guard: los bloqueos del sorteo por etiquetar. */
+function printSample(mechanism, blocks, { size, seed }, speaker) {
+  const { decisions, labels } = blocks;
+  const drawn = drawSample(populationOf(blocks), { seed, mechanism, size });
+  const pending = drawn.filter((blockId) => !labels.has(blockId));
+  const labelled = [...labels.values()].filter((entry) => entry.sampled).length;
 
-  for (const blockId of sample) {
-    const { ts, toolUseId, inputDigest, reason } = decisions.get(blockId);
+  speaker.say('sample-header', { mechanism, shown: pending.length, drawn: drawn.length, seed, labelled, blocks: decisions.size });
 
-    speaker.say('sample-block', { blockId, ts: shown(ts), toolUseId: shown(toolUseId), digest: shown(inputDigest?.slice(0, DIGEST_WIDTH)), reason: shown(reason) });
+  for (const blockId of pending) {
+    const { ts, event, toolUseId, inputDigest, reason } = decisions.get(blockId);
+
+    speaker.say('sample-block', { blockId, ts: shown(ts), event: shown(event), toolUseId: shown(toolUseId), digest: shown(inputDigest?.slice(0, DIGEST_WIDTH)), reason: shown(reason) });
   }
 }
 
 /**
- * Records `label` for block `blockId` of `mechanism` and returns the record; throws a Refusal for a block
- * that does not exist or already has that label.
- * @es Registra la etiqueta `label` del bloqueo `blockId` de `mechanism` y devuelve el registro; lanza un Refusal si el bloqueo no existe o ya tiene esa etiqueta.
+ * Records `label` for block `blockId` of `mechanism` as a SAMPLED label and returns the record; throws a Refusal
+ * for a guard with no journal, a block that does not exist, a block the draw of `seed` and `size` does not
+ * contain, and a block that already has that sampled label.
+ * @es Registra la etiqueta `label` del bloqueo `blockId` de `mechanism` como etiqueta de MUESTRA y devuelve el registro; lanza un Refusal si el guard no tiene journal, el bloqueo no existe, el sorteo de `seed` y `size` no lo contiene, o el bloqueo ya tiene esa etiqueta de muestra.
  */
-function recordLabel(mechanism, { blockId, label }, { now }) {
+function recordLabel(mechanism, { blockId, label, seed, size }, { now }) {
   if (!mechanismNames(readdirSync).includes(mechanism)) throw new Refusal(bilingual('no-guard', { mechanism }));
 
-  const { decisions, labels } = classifyBlocks(readMechanism(mechanism, readdirSync).records);
+  const blocks = classifyBlocks(readMechanism(mechanism, readdirSync).records);
 
-  if (!decisions.has(blockId)) throw new Refusal(bilingual('unknown-block', { blockId, mechanism }));
-  if (labels.get(blockId) === label) throw new Refusal(bilingual('already-labelled', { blockId, mechanism, label }));
+  if (!blocks.decisions.has(blockId)) throw new Refusal(bilingual('unknown-block', { blockId, mechanism }));
+  if (!drawSample(populationOf(blocks), { seed, mechanism, size }).includes(blockId)) throw new Refusal(bilingual('not-sampled', { blockId, mechanism, seed, size }));
+  if (blocks.labels.get(blockId)?.label === label) throw new Refusal(bilingual('already-labelled', { blockId, mechanism, label }));
 
-  return appendRecord(mechanism, { kind: KIND_OF_LABEL[label], blockId, inputDigest: digestInput(blockId) }, { now });
+  return appendRecord(mechanism, { kind: KIND_OF_LABEL[label], blockId, inputDigest: digestInput(blockId), sampled: true, seed }, { now });
 }
 
 /**
@@ -180,7 +195,8 @@ export function main(argv, { sink = console, now = Date.now() } = {}) {
 
     for (const { mechanism, blocks } of withBlocks) printSample(mechanism, blocks, options, speaker);
 
-    speaker.say(withBlocks.length === 0 ? 'no-blocks' : 'sample-usage');
+    if (withBlocks.length === 0) speaker.say('no-blocks');
+    else speaker.say('sample-usage', { seed: options.seed, size: options.size });
 
     return 0;
   } catch (error) {

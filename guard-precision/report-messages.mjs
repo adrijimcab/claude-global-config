@@ -10,12 +10,12 @@
 
 export const MESSAGE_TABLE = {
   'row-ok': {
-    en: '{mechanism}: {blocks} blocks, {labelled} labelled, {falseBlocks} false, false-block rate {percent}% (95% interval {low}% to {high}%), {unclassified} unclassified lines.',
-    es: '{mechanism}: {blocks} bloqueos, {labelled} etiquetados, {falseBlocks} falsos, tasa de falsos bloqueos {percent} % (intervalo del 95 % de {low} % a {high} %), {unclassified} líneas sin clasificar.'
+    en: '{mechanism}: {blocks} blocks, {labelled} labelled by sample, {falseBlocks} false, false-block rate {percent}% (95% interval {low}% to {high}%), {selfReportedFalse} self-reported false blocks (not in the rate), {unclassified} unclassified lines.',
+    es: '{mechanism}: {blocks} bloqueos, {labelled} etiquetados por muestra, {falseBlocks} falsos, tasa de falsos bloqueos {percent} % (intervalo del 95 % de {low} % a {high} %), {selfReportedFalse} falsos bloqueos autoinformados (fuera de la tasa), {unclassified} líneas sin clasificar.'
   },
   'row-insufficient': {
-    en: '{mechanism}: {blocks} blocks, {labelled} labelled, {falseBlocks} false, insufficient (fewer than {minimum} labelled blocks; label a sample with label.mjs), {unclassified} unclassified lines.',
-    es: '{mechanism}: {blocks} bloqueos, {labelled} etiquetados, {falseBlocks} falsos, insuficiente (menos de {minimum} bloqueos etiquetados; etiqueta una muestra con label.mjs), {unclassified} líneas sin clasificar.'
+    en: '{mechanism}: {blocks} blocks, {labelled} labelled by sample, {falseBlocks} false, insufficient (fewer than {minimum} blocks labelled by sample; draw one with label.mjs), {selfReportedFalse} self-reported false blocks (not in the rate), {unclassified} unclassified lines.',
+    es: '{mechanism}: {blocks} bloqueos, {labelled} etiquetados por muestra, {falseBlocks} falsos, insuficiente (menos de {minimum} bloqueos etiquetados por muestra; saca una con label.mjs), {selfReportedFalse} falsos bloqueos autoinformados (fuera de la tasa), {unclassified} líneas sin clasificar.'
   },
   orphans: {
     en: '{mechanism}: outcomes whose block does not exist, not counted: {ids}.',

@@ -2,27 +2,31 @@
 /**
  * The per-guard FALSE-BLOCK RATE report (the folder keeps its old name `guard-precision/` because the live
  * state paths depend on it). For every mechanism with a state directory it reads the v2 journal
- * (`journal.jsonl`) through `blocks.mjs`: the blocks, and the blocks a human LABELLED, `false`
- * (`dismissal`, `false-positive-report`) or `correct` (`true-positive-report`). The rate is estimated ONLY
- * from labelled blocks: falseBlockRate = labelled-false / labelled, with a 95% Wilson interval. An unlabelled
- * block contributes nothing, because counting it as correct is what inflated the old precision figure. A
- * guard with fewer than 10 labelled blocks reads `insufficient` and no rate, no percent and no interval is
- * printed or computed for it, so a guard nobody labelled can never read 0% or 100%. Label a sample by hand
- * with `label.mjs`. Every other line (v1 lines, a torn line, an unknown kind, no `blockId`, any other
- * `*.jsonl` beside the journal) is UNCLASSIFIED and counted per file. `--json` prints the report
- * untranslated; otherwise a bilingual table is printed through `bilingual-output/`.
+ * (`journal.jsonl`) through `blocks.mjs`: the blocks, and their labels, `false` (`dismissal`,
+ * `false-positive-report`) or `correct` (`true-positive-report`). The rate is estimated ONLY from the blocks
+ * the random sampler of `label.mjs` drew and a human labelled (`sampled: true`): falseBlockRate =
+ * sampled-false / sampled-labelled, with a 95% Wilson interval. Blocks people chose to dismiss or report on
+ * their own are NOT a random sample, so they never enter the rate: they are counted apart as
+ * `selfReportedFalse` / `selfReportedCorrect`. An unlabelled block contributes nothing, because counting it as
+ * correct is what inflated the old precision figure. A guard with fewer than 10 sampled labels reads
+ * `insufficient` and no rate, percent or interval is computed or printed for it, so a guard nobody sampled can
+ * never read 0% or 100%. Every other line (v1 lines, a torn line, an unknown kind, no `blockId`, any other
+ * `*.jsonl` beside the journal) is UNCLASSIFIED and counted per file. `--json` prints the report untranslated;
+ * otherwise a bilingual table is printed through `bilingual-output/`.
  *
  * @es El informe de TASA DE FALSOS BLOQUEOS por guard (la carpeta conserva su nombre antiguo
  * `guard-precision/` porque las rutas de estado vivas dependen de él). De cada mecanismo con directorio de
- * estado lee el journal v2 (`journal.jsonl`) a través de `blocks.mjs`: los bloqueos y los que una persona
- * ETIQUETÓ, `false` (`dismissal`, `false-positive-report`) o `correct` (`true-positive-report`). La tasa se
- * estima SOLO con bloqueos etiquetados: tasaFalsosBloqueos = falsos etiquetados / etiquetados, con un
- * intervalo de Wilson del 95 %. Un bloqueo sin etiquetar no aporta nada, porque contarlo como acertado era
- * lo que inflaba la antigua cifra de precisión. Un guard con menos de 10 bloqueos etiquetados dice
- * `insufficient` y no se calcula ni se imprime tasa, porcentaje ni intervalo, así que un guard que nadie
- * etiquetó nunca puede leerse como 0 % ni 100 %. Etiqueta una muestra a mano con `label.mjs`. Toda otra
- * línea (v1, cortada, tipo desconocido, sin `blockId`, otro `*.jsonl` junto al journal) es SIN CLASIFICAR y
- * se cuenta por fichero. `--json` imprime el informe sin traducir; si no, una tabla bilingüe por
+ * estado lee el journal v2 (`journal.jsonl`) a través de `blocks.mjs`: los bloqueos y sus etiquetas, `false`
+ * (`dismissal`, `false-positive-report`) o `correct` (`true-positive-report`). La tasa se estima SOLO con los
+ * bloqueos que el muestreador aleatorio de `label.mjs` sorteó y una persona etiquetó (`sampled: true`):
+ * tasaFalsosBloqueos = falsos de muestra / etiquetados de muestra, con un intervalo de Wilson del 95 %. Los
+ * bloqueos que la gente eligió descartar o informar por su cuenta NO son una muestra aleatoria, así que nunca
+ * entran en la tasa: se cuentan aparte como `selfReportedFalse` / `selfReportedCorrect`. Un bloqueo sin
+ * etiquetar no aporta nada, porque contarlo como acertado era lo que inflaba la antigua cifra de precisión.
+ * Un guard con menos de 10 etiquetas de muestra dice `insufficient` y no se calcula ni se imprime tasa,
+ * porcentaje ni intervalo, así que un guard que nadie muestreó nunca puede leerse como 0 % ni 100 %. Toda otra
+ * línea (v1, cortada, tipo desconocido, sin `blockId`, otro `*.jsonl` junto al journal) es SIN CLASIFICAR y se
+ * cuenta por fichero. `--json` imprime el informe sin traducir; si no, una tabla bilingüe por
  * `bilingual-output/`.
  */
 
@@ -30,10 +34,10 @@ import { readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { makeSpeaker } from '../bilingual-output/speaker.mjs';
-import { FALSE_LABEL, classifyBlocks, mechanismNames, readMechanism } from './blocks.mjs';
+import { CORRECT_LABEL, FALSE_LABEL, classifyBlocks, mechanismNames, readMechanism } from './blocks.mjs';
 import { MESSAGE_TABLE } from './report-messages.mjs';
 
-/** The labelled blocks a guard needs before a rate is printed. @es Los bloqueos etiquetados que un guard necesita antes de imprimir una tasa. */
+/** The blocks labelled by the sample a guard needs before a rate is printed. @es Los bloqueos etiquetados por la muestra que un guard necesita antes de imprimir una tasa. */
 export const MIN_LABELLED = 10;
 
 /** The normal quantile of a two-sided 95% interval. @es El cuantil normal de un intervalo bilateral del 95 %. */
@@ -58,8 +62,11 @@ export function wilsonInterval(falseCount, total) {
 /** The figures of one mechanism. @es Las cifras de un mecanismo. */
 function summarize(mechanism, { records, unclassifiedFiles }) {
   const { decisions, labels, orphaned } = classifyBlocks(records);
-  const labelled = labels.size;
-  const falseBlocks = [...labels.values()].filter((label) => label === FALSE_LABEL).length;
+  const all = [...labels.values()];
+  const sampled = all.filter((entry) => entry.sampled);
+  const selfReported = all.filter((entry) => !entry.sampled);
+  const labelled = sampled.length;
+  const falseBlocks = sampled.filter((entry) => entry.label === FALSE_LABEL).length;
   const status = labelled < MIN_LABELLED ? 'insufficient' : 'ok';
 
   return {
@@ -68,6 +75,8 @@ function summarize(mechanism, { records, unclassifiedFiles }) {
     labelled,
     falseBlocks,
     correctBlocks: labelled - falseBlocks,
+    selfReportedFalse: selfReported.filter((entry) => entry.label === FALSE_LABEL).length,
+    selfReportedCorrect: selfReported.filter((entry) => entry.label === CORRECT_LABEL).length,
     orphaned,
     unclassified: Object.values(unclassifiedFiles).reduce((sum, count) => sum + count, 0),
     unclassifiedFiles,

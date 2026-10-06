@@ -6,7 +6,9 @@
  * blocks (distinct `blockId` of `decision` records: an allow is never journaled) and LABELS: a `dismissal` or
  * a `false-positive-report` labels a block `false`, a `true-positive-report` labels it `correct`, and a block
  * with several labels has the LAST one, in journal order, because a human who changes their mind is right the
- * second time. A block with no label is unlabelled and contributes nothing to any rate. A label whose
+ * second time. A label is SAMPLED when the random sample of `label.mjs` drew its block (`sampled: true`) and
+ * SELF-REPORTED otherwise (a dismissal, or a report somebody chose to make): only sampled labels may estimate a
+ * rate, because the blocks people choose to report are not a random sample. A block with no label is unlabelled and contributes nothing to any rate. A label whose
  * `blockId` matches no block is ORPHANED: listed, never counted.
  *
  * @es Lo que los journals de los guards dicen de sus bloqueos, compartido por el informe y el comando de
@@ -16,7 +18,10 @@
  * `classifyBlocks` convierte esos registros en bloqueos (`blockId` distintos de los registros `decision`: un
  * permiso nunca se registra) y ETIQUETAS: un `dismissal` o un `false-positive-report` etiqueta un bloqueo
  * como `false`, un `true-positive-report` como `correct`, y un bloqueo con varias etiquetas se queda con la
- * ÚLTIMA, en orden de journal, porque quien cambia de opinión acierta la segunda vez. Un bloqueo sin
+ * ÚLTIMA, en orden de journal, porque quien cambia de opinión acierta la segunda vez. Una etiqueta es de MUESTRA
+ * cuando la muestra aleatoria de `label.mjs` sorteó su bloqueo (`sampled: true`) y AUTOINFORMADA si no (un
+ * descarte, o un informe que alguien eligió hacer): solo las etiquetas de muestra pueden estimar una tasa,
+ * porque los bloqueos que la gente elige informar no son una muestra aleatoria. Un bloqueo sin
  * etiqueta no está etiquetado y no aporta nada a ninguna tasa. Una etiqueta cuyo `blockId` no coincide con
  * ningún bloqueo es HUÉRFANA: se lista, nunca se cuenta.
  */
@@ -98,9 +103,10 @@ export function readMechanism(mechanism, readDirectory) {
 
 /**
  * The blocks of `records` and their labels: `decisions` maps each block id to its first `decision` record
- * (the evidence), `labels` maps each LABELLED block id to its last label, `orphaned` lists the sorted ids of
- * labels that name no block.
- * @es Los bloqueos de `records` y sus etiquetas: `decisions` asocia cada id de bloqueo a su primer registro `decision` (la evidencia), `labels` asocia cada id de bloqueo ETIQUETADO a su última etiqueta, `orphaned` lista los ids ordenados de etiquetas que no nombran ningún bloqueo.
+ * (the evidence), `labels` maps each LABELLED block id to its last label as `{ label, sampled }` (`sampled` is
+ * true only for a record that says `sampled: true`: the random sample of `label.mjs` drew it), `orphaned` lists
+ * the sorted ids of labels that name no block.
+ * @es Los bloqueos de `records` y sus etiquetas: `decisions` asocia cada id de bloqueo a su primer registro `decision` (la evidencia), `labels` asocia cada id de bloqueo ETIQUETADO a su última etiqueta como `{ label, sampled }` (`sampled` es true solo si el registro dice `sampled: true`: la muestra aleatoria de `label.mjs` lo sorteó), `orphaned` lista los ids ordenados de etiquetas que no nombran ningún bloqueo.
  */
 export function classifyBlocks(records) {
   const decisions = new Map();
@@ -116,7 +122,9 @@ export function classifyBlocks(records) {
 
     if (label === undefined) continue;
 
-    if (decisions.has(record.blockId)) labels.set(record.blockId, label);
+    const entry = { label, sampled: record.sampled === true };
+
+    if (decisions.has(record.blockId)) labels.set(record.blockId, entry);
     else orphans.add(record.blockId);
   }
 

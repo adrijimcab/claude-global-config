@@ -13,16 +13,16 @@ import { makeSpeaker } from '../bilingual-output/speaker.mjs';
 /** The messages. Placeholders are `{name}`. @es Los mensajes; los marcadores son `{name}`. */
 export const MESSAGE_TABLE = {
   'sample-header': {
-    en: '{mechanism}: {shown} of {unlabelled} unlabelled blocks sampled (seed {seed}); {labelled} of {blocks} blocks labelled.',
-    es: '{mechanism}: {shown} de {unlabelled} bloqueos sin etiquetar muestreados (semilla {seed}); {labelled} de {blocks} bloqueos etiquetados.'
+    en: '{mechanism}: {shown} of the {drawn} sampled blocks still to label (seed {seed}); {labelled} of {blocks} blocks labelled by sample.',
+    es: '{mechanism}: {shown} de los {drawn} bloqueos muestreados por etiquetar (semilla {seed}); {labelled} de {blocks} bloqueos etiquetados por muestra.'
   },
   'sample-block': {
-    en: 'block {blockId}: {ts}, tool use {toolUseId}, input digest {digest}, reason: {reason}.',
-    es: 'bloqueo {blockId}: {ts}, uso de herramienta {toolUseId}, huella de la entrada {digest}, motivo: {reason}.'
+    en: 'block {blockId}: {ts}, {event}, tool use {toolUseId}, input digest {digest}, reason: {reason}.',
+    es: 'bloqueo {blockId}: {ts}, {event}, uso de herramienta {toolUseId}, huella de la entrada {digest}, motivo: {reason}.'
   },
   'sample-usage': {
-    en: 'Label a block you judged: label.mjs --mechanism <name> --correct <blockId> | --false <blockId>.',
-    es: 'Etiqueta un bloqueo que hayas juzgado: label.mjs --mechanism <nombre> --correct <blockId> | --false <blockId>.'
+    en: 'Label a sampled block you judged: label.mjs --mechanism <name> --seed {seed} --sample {size} --correct <blockId> | --false <blockId>.',
+    es: 'Etiqueta un bloqueo muestreado que hayas juzgado: label.mjs --mechanism <nombre> --seed {seed} --sample {size} --correct <blockId> | --false <blockId>.'
   },
   'no-blocks': {
     en: 'No guard has blocks to label.',
@@ -39,6 +39,10 @@ export const MESSAGE_TABLE = {
   'no-guard': {
     en: 'No guard journal was found for {mechanism}.',
     es: 'No se encontró ningún journal del guard {mechanism}.'
+  },
+  'not-sampled': {
+    en: 'Block {blockId} of {mechanism} is not in the sample of {size} (seed {seed}): only a sampled block can be labelled here, because only a random sample estimates the rate. Report a block of your own choosing with dismiss.mjs.',
+    es: 'El bloqueo {blockId} de {mechanism} no está en la muestra de {size} (semilla {seed}): aquí solo se etiqueta un bloqueo muestreado, porque solo una muestra aleatoria estima la tasa. Informa de un bloqueo elegido por ti con dismiss.mjs.'
   },
   'unknown-block': {
     en: 'Block {blockId} of {mechanism} is not a recorded block.',
@@ -65,8 +69,8 @@ export const MESSAGE_TABLE = {
     es: 'La opción --sample necesita un número entero positivo, se recibió «{value}».'
   },
   'unknown-option': {
-    en: 'Unknown option or argument "{option}"; usage: label.mjs [--mechanism <name>] [--sample <n>] [--seed <text>] | label.mjs --mechanism <name> (--correct <blockId> | --false <blockId>).',
-    es: 'Opción o argumento desconocido «{option}»; uso: label.mjs [--mechanism <nombre>] [--sample <n>] [--seed <texto>] | label.mjs --mechanism <nombre> (--correct <blockId> | --false <blockId>).'
+    en: 'Unknown option or argument "{option}"; usage: label.mjs [--mechanism <name>] [--sample <n>] [--seed <text>] | label.mjs --mechanism <name> [--sample <n>] [--seed <text>] (--correct <blockId> | --false <blockId>).',
+    es: 'Opción o argumento desconocido «{option}»; uso: label.mjs [--mechanism <nombre>] [--sample <n>] [--seed <texto>] | label.mjs --mechanism <nombre> [--sample <n>] [--seed <texto>] (--correct <blockId> | --false <blockId>).'
   },
   'command-failed': {
     en: 'The command failed: {detail}.',

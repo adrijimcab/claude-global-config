@@ -268,7 +268,7 @@ if (loaded !== undefined) {
   const blockId = decision?.blockId ?? '';
   safe(() => recordOutcome('folder-one', { blockId, reason: 'the rule was wrong here', falsePositive: false }));
   const joined = safe(() => classifyBlocks(readMechanism('folder-one', readdirSync).records));
-  check('a dismissal of the id the dispatcher wrote is not an orphan and labels that block false', [joined.orphaned, joined.labels?.get(blockId), joined.decisions?.get(blockId)?.kind], [[], 'false', 'decision']);
+  check('a dismissal of the id the dispatcher wrote is not an orphan and labels that block false, self-reported', [joined.orphaned, joined.labels?.get(blockId), joined.decisions?.get(blockId)?.kind], [[], { label: 'false', sampled: false }, 'decision']);
   check('the state directory the dispatcher used is the one dismiss.mjs resolves', stateDir('folder-one'), path.join(stateRoot, 'folder-one'));
 }
 

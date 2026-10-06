@@ -94,6 +94,12 @@ try {
   check('no event key when none is given', 'event' in appendRecord('guard-c', { kind: 'decision', ...GOOD }), false);
   check('an event that is not a string is refused', /"event"/.test(thrown(() => appendRecord('guard-c', { kind: 'decision', ...GOOD, event: 4 })) ?? ''), true);
   check('an event is written to the journal line', lines('guard-c').find((record) => record.event === 'PreToolUse')?.event, 'PreToolUse');
+  check('a sampled flag and a seed are kept when given', ((record) => [record.sampled, record.seed])(appendRecord('guard-c', { kind: 'true-positive-report', ...GOOD, sampled: true, seed: 'abc' })), [true, 'abc']);
+  check('a sampled flag of false is kept', appendRecord('guard-c', { kind: 'true-positive-report', ...GOOD, sampled: false }).sampled, false);
+  check('no sampled or seed key when none is given', ((record) => ['sampled' in record, 'seed' in record])(appendRecord('guard-c', { kind: 'true-positive-report', ...GOOD })), [false, false]);
+  check('a sampled flag that is not a boolean is refused', [1, 'true', null].map((bad) => /"sampled"/.test(thrown(() => appendRecord('guard-c', { kind: 'true-positive-report', ...GOOD, sampled: bad })) ?? '')), [true, true, true]);
+  check('a seed that is not a string is refused', [1, true, null].map((bad) => /"seed"/.test(thrown(() => appendRecord('guard-c', { kind: 'true-positive-report', ...GOOD, seed: bad })) ?? '')), [true, true, true]);
+  check('the sampled flag and the seed are written to the journal line', lines('guard-c').filter((record) => record.seed === 'abc').map((record) => record.sampled), [true]);
   check('a field outside the record shape is not written', 'secret' in appendRecord('guard-c', { kind: 'decision', ...GOOD, secret: 'x' }), false);
   check('a mechanism that is a path is refused', /@es /.test(thrown(() => appendRecord('../x', { kind: 'decision', ...GOOD })) ?? ''), true);
 
