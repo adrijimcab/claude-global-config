@@ -1,0 +1,4 @@
+{
+  "command": ["node", "../../run-tool.mjs", "jest", "jest", "--projects", "config.jest.cjs", "--rootDir", "{target}", "--ci"],
+  "timeoutMs": 300000
+}
