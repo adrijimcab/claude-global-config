@@ -3,15 +3,19 @@
  * Proof of `check.mjs` and the inputs it reads: the "before" comes from git at the named revision, never from
  * the working copy; anchors come from the repository's `customizations.mjs`, only for the file checked; only
  * `.md` files are evidence; CRLF is read as LF; every unreadable input (bad revision, path absent at it, missing
- * "after", missing, empty or unlisted evidence directory, no customizations module, missing argument) is exit
- * 2 and never a verdict; a conserved file is exit 0 and a deficit exit 1, named in a bilingual report. Every
- * repository is CONSTRUCTED here, under `scratch/`, and removed.
+ * "after", missing, empty or unlisted evidence directory, a customizations module that cannot be imported,
+ * missing argument) is exit 2 and never a verdict; a repository with NO customizations module has no overlay
+ * anchors and is judged on everything else, as a project repository is; a conserved file is exit 0 and a
+ * deficit exit 1, named in a bilingual report. Every repository is CONSTRUCTED here, under `scratch/`, and
+ * removed.
  *
  * @es Prueba de `check.mjs` y de lo que lee: el "antes" sale de git en la revisión nombrada, nunca de la copia
  * de trabajo; las anclas salen del `customizations.mjs` del repositorio, solo para el fichero comprobado; solo
- * los `.md` son evidencia; CRLF se lee como LF; toda entrada ilegible es salida 2 y nunca un veredicto; un
- * fichero conservado sale 0 y un déficit 1, nombrado en un informe bilingüe. Cada repositorio se CONSTRUYE
- * aquí, bajo `scratch/`, y se borra.
+ * los `.md` son evidencia; CRLF se lee como LF; toda entrada ilegible (incluido un módulo de customizations
+ * que no se puede importar) es salida 2 y nunca un veredicto; un repositorio SIN módulo de customizations no
+ * tiene anclas de overlay y se juzga por todo lo demás, como un repositorio de proyecto; un fichero conservado
+ * sale 0 y un déficit 1, nombrado en un informe bilingüe. Cada repositorio se CONSTRUYE aquí, bajo
+ * `scratch/`, y se borra.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -109,6 +113,21 @@ try {
   rmSync(path.join(evidence, 'k.txt'));
   writeFileSync(path.join(evidence, 'k.md'), `${NARRATIVE}\n- **\`other\`** — Another file anchor.\n`);
 
+  // A section moved to a file of the repository says where it went; the pointer is admitted only for a file of the evidence set.
+  // @es Una sección movida a un fichero del repositorio dice adónde fue; el puntero se admite solo para un fichero del conjunto de evidencia.
+  const moved = path.join(repo, 'moved');
+
+  mkdirSync(moved);
+  writeFileSync(path.join(moved, 'k.md'), `${NARRATIVE}\n- **\`other\`** — Another file anchor.\n`);
+  writeFileSync(after, `${CONSERVED}\nEvidence: moved/k.md`);
+  check('a pointer to the repository path of a file of the evidence directory is conserved', run({ evidence: moved }).status, 0);
+  check('...the same pointer when the evidence directory is outside the repository is invented', run().status, 1);
+  writeFileSync(after, `${CONSERVED}\nEvidence: ../evidence/k.md`);
+  check('...a path that climbs out of the repository to an evidence directory is invented too', run().status, 1);
+  writeFileSync(after, `${CONSERVED}\nEvidence: moved/other.md`);
+  check('...a pointer to a file the evidence directory does not hold is invented', run({ evidence: moved }).status, 1);
+  writeFileSync(after, CONSERVED);
+
   const plain = path.join(root, 'plain');
 
   mkdirSync(path.join(plain, 'rules'), { recursive: true });
@@ -117,13 +136,42 @@ try {
   git(plain, 'add', '-A');
   git(plain, 'commit', '-q', '-m', 'plain');
 
+  // A project repository has no overlay: no module means no overlay anchors, and everything else is still judged.
+  // @es Un repositorio de proyecto no tiene overlay: sin módulo no hay anclas de overlay y todo lo demás se sigue juzgando.
+  const bare = run({ repo: plain, rev: 'HEAD' });
+
+  check('a repository without the customizations module is measured: conserved exits 0', bare.status, 0);
+  const kept = path.join(root, 'kept');
+
+  mkdirSync(kept);
+  writeFileSync(path.join(kept, 'k.md'), `${NARRATIVE}\n- **\`other\`** — Another file anchor.\n- **\`k\`** — Keep this. RULE: archive before cutting.\n`);
+  writeFileSync(after, ['# R', '  - **`k`** — Keep this. RULE: archive before cutting.'].join('\n'));
+  check('...and it enforces no anchor: an indented line fails with the module and passes without it', [run({ evidence: kept }).status, run({ repo: plain, rev: 'HEAD', evidence: kept }).status], [1, 0]);
+  writeFileSync(after, CONSERVED);
+
+  const nothing = path.join(root, 'nothing');
+
+  mkdirSync(nothing);
+  writeFileSync(path.join(nothing, 'k.md'), '# nothing archived\n');
+  check('...and every other decision is still taken there: an unarchived removed line is a deficit', run({ repo: plain, rev: 'HEAD', evidence: nothing }).status, 1);
+
+  const broken = path.join(root, 'broken');
+
+  mkdirSync(path.join(broken, 'rules'), { recursive: true });
+  mkdirSync(path.join(broken, 'gentle-ai-overlay'), { recursive: true });
+  writeFileSync(path.join(broken, 'rules', 'r.md'), BEFORE);
+  writeFileSync(path.join(broken, 'gentle-ai-overlay', 'customizations.mjs'), 'export const CUSTOMIZATIONS = [ {');
+  git(broken, 'init', '-q');
+  git(broken, 'add', '-A');
+  git(broken, 'commit', '-q', '-m', 'broken');
+
   const unmeasured = [
+    ['a customizations module that cannot be imported', { repo: broken, rev: 'HEAD' }],
     ['a revision git does not know', { rev: 'no-such-revision' }],
     ['a path absent at the revision', { file: 'rules/absent.md' }],
     ['a missing after file', { after: path.join(root, 'absent.md') }],
     ['a missing evidence directory', { evidence: path.join(root, 'absent') }],
     ['an evidence directory with no .md file', { evidence: path.join(repo, 'gentle-ai-overlay') }],
-    ['a repository without the customizations module', { repo: plain, rev: 'HEAD' }],
     ['a missing argument', { rev: undefined }]
   ];
 

@@ -19,8 +19,9 @@ const PLAN = 'failure-capture/condense-plan.mjs';
 const MUTANTS = [
   // --- which lines are this command's business
   ['a line that is not an entry is planned, so headers are reported', PLAN, "if (!line.startsWith('- [')) return undefined;", 'if (false) return undefined;'],
-  ['a line already shortened is planned again, so a second run rewrites it', PLAN, 'if (isTiered(line) || (entry.scope', 'if ((entry.scope'],
-  ['a line of another scope is planned', PLAN, "(entry.scope !== 'global' && entry.scope !== 'promoted')", 'false'],
+  ['a line already shortened is planned again, so a second run rewrites it', PLAN, 'if (isTiered(line)) return undefined;', 'if (false) return undefined;'],
+  ['a line of a project scope is left out, so its ledger cannot be condensed', PLAN, 'if (isTiered(line)) return undefined;', "if (isTiered(line) || (entry.scope !== 'global' && entry.scope !== 'promoted')) return undefined;"],
+  ['a lesson line is read as a promoted stub, so its rule is lost', PLAN, 'entry.scope === PROMOTED_SCOPE ? { ok: true } : splitRule(entry.body)', '{ ok: true }'],
   ['an entry that cannot be read is skipped in silence', PLAN, 'if (!entry.ok) return leave(entry);', 'if (!entry.ok) return undefined;'],
   ['the reason of a line that stays loses its Spanish half', PLAN, 'reason: refusal.problem })', "reason: refusal.problem.split(' @es ')[0] })"],
 
@@ -39,8 +40,10 @@ const MUTANTS = [
   ['a key used by two entries is accepted', PLAN, 'copies === 1 ? undefined', 'true ? undefined'],
   ['an entry already applied by an earlier run is reported as a problem', PLAN, 'if (applied.has(entry?.key)) return;', 'if (false) return;'],
   ['a prefix matches anywhere in the line, not only at its start', PLAN, 'line.startsWith(entry.line)', 'line.includes(entry.line)'],
-  ['a line that already has a marker can be named by a prefix', PLAN, "line.startsWith('- [global] ') && readMarker(line) === undefined", "line.startsWith('- [global] ')"],
-  ['a line already shortened can be named by a prefix', PLAN, 'readMarker(line) === undefined && !isTiered(line))', 'readMarker(line) === undefined)'],
+  ['a line that already has a marker can be named by a prefix', PLAN, 'entry.marker === undefined && !isTiered(line);', '!isTiered(line);'],
+  ['a line already shortened can be named by a prefix', PLAN, 'entry.marker === undefined && !isTiered(line);', 'entry.marker === undefined;'],
+  ['a promoted line can be named by a prefix', PLAN, 'entry.scope !== PROMOTED_SCOPE && entry.marker', 'entry.marker'],
+  ['a prefix can name only a global line, so a project ledger takes no key map', PLAN, 'filter(({ line }) => isMarkerlessLesson(line))', "filter(({ line }) => line.startsWith('- [global] ') && isMarkerlessLesson(line))"],
   ['the Spanish half of the ambiguity refusal is lost', PLAN, '`el prefijo coincide con ${String(matches)} líneas sin marcador (AMBIGUOUS).`', "'(AMBIGUOUS).'"],
   ['the Spanish half of the absence refusal is lost', PLAN, "'el prefijo no coincide con ninguna línea sin marcador (ABSENT).'", "'(ABSENT).'"],
   ['the Spanish half of the prefix refusal is lost', PLAN, '`el prefijo debe ser un texto de al menos ${String(MIN_PREFIX_LENGTH)} caracteres.`', "'prefijo corto.'"],

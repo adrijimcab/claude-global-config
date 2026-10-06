@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const RUN = 'failure-capture/condense.mjs';
+const WRITE = 'failure-capture/verified-write.mjs';
 const COMMAND = 'failure-capture/capture.mjs';
 
 const MUTANTS = [
@@ -29,9 +30,9 @@ const MUTANTS = [
   ['the reason of a failed line loses its Spanish half', RUN, 'reason: joinBilingual(proof.deficits) }', "reason: joinBilingual(proof.deficits).split(' @es ')[0] }"],
 
   // --- the write: once, read back, restored on any difference
-  ['the write is not read back', RUN, 'if (onDisk === next) return true;', 'return true;'],
-  ['a write that differs is not restored', RUN, "  writeFileSync(file, text, 'utf8');\n\n  return false;", '  return false;'],
-  ['a write that fails is not treated as a difference', RUN, '  } catch {\n    onDisk = undefined;', '  } catch (error) {\n    throw error;'],
+  ['the write is not read back', WRITE, 'if (onDisk === next) return true;', 'return true;'],
+  ['a write that differs is not restored', WRITE, "  writeFileSync(file, text, 'utf8');\n\n  return false;", '  return false;'],
+  ['a write that fails is not treated as a difference', WRITE, '  } catch {\n    onDisk = undefined;', '  } catch (error) {\n    throw error;'],
   ['a restored run is reported as clean', RUN, 'ledgers.some((one) => one.left.length > 0 || one.restored)', 'ledgers.some((one) => one.left.length > 0)'],
   ['a key-map problem alone does not fail the run', RUN, 'problems.length > 0 || ledgers.some(', 'ledgers.some('],
   ['a line left unchanged does not fail the run', RUN, 'one.left.length > 0 || one.restored', 'one.restored'],
@@ -58,11 +59,11 @@ const MUTANTS = [
 
   // --- the command
   ['a dry run is written for real', COMMAND, 'write: args.write === true })', 'write: true })'],
-  ['the ledger is read before the lock by the command', COMMAND, 'load: () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined)', 'load: ((early) => () => early)(readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined))'],
+  ['the ledger is read before the lock by the command', COMMAND, 'runCondense({ load: loadLedgers,', 'runCondense({ load: ((early) => () => early)(loadLedgers()),'],
   ['an unreadable keys file is not refused', COMMAND, "speaker.complain('condense.keysInvalid', { detail: error instanceof Error ? error.message : String(error) });", 'speaker.data(String(error));'],
   ['a refused keys file does not stop the run', COMMAND, '\n\n      return 1;\n    }\n  }\n\n  const outcome', '\n    }\n  }\n\n  const outcome'],
   ['a keys file without a keys array is accepted', COMMAND, "if (!Array.isArray(keyMap)) throw", 'if (false) throw'],
-  ['the status of the run is not the exit status', COMMAND, 'return outcome.status;', 'return 0;'],
+  ['the status of the run is not the exit status', COMMAND, 'for (const line of describeOutcome(outcome)) speaker.data(line);\n\n  return outcome.status;', 'for (const line of describeOutcome(outcome)) speaker.data(line);\n\n  return 0;'],
 ];
 
 const survivors = runMutants({

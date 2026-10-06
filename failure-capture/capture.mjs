@@ -49,6 +49,7 @@ import { describeOutcome, newRunId, runCondense } from './condense.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { loadedSet } from './loaded-set.mjs';
 import { promotedStub } from './promotion.mjs';
+import { describeSupersede, runSupersede } from './supersede.mjs';
 import { isPromotedStub, promotedRecurrenceLines } from './promoted-recurrence.mjs';
 import { GLOBAL_TARGET, PROJECT_TARGET, promotionFiles, promotionTargetOf } from './promotion-target.mjs';
 import { PROMOTE_MESSAGES } from './promote-messages.mjs';
@@ -114,7 +115,7 @@ let PARITY_GATE;
 let SCOPES;
 
 /** The commands that read the project: every one except `dismiss`, `budget` (which resolves its own) and the usage text. @es Los comandos que leen el proyecto: todos salvo `dismiss`, `budget` (que resuelve el suyo) y el texto de uso. */
-const PROJECT_COMMANDS = new Set(['init', 'keys', 'capture', 'promote', 'condense', 'status']);
+const PROJECT_COMMANDS = new Set(['init', 'keys', 'capture', 'promote', 'condense', 'supersede', 'status']);
 
 /** Resolves the project of the current directory and binds what derives from it. @es Resuelve el proyecto del directorio actual y fija lo que se deriva de él. */
 function bindLoopContext() {
@@ -773,8 +774,11 @@ function commandInit() {
  * y `--keys <fichero>` opcional con la clave de cada línea sin marcador. Salida 0 limpia, 1 si quedó alguna
  * línea sin cambiar, 2 si el ledger está bloqueado.
  */
+/** The ledgers of this project that exist, read afresh: what a command that rewrites a ledger line loads under the ledger lock. @es Los ledgers de este proyecto que existen, leídos de nuevo: lo que carga bajo el lock un comando que reescribe una línea del ledger. */
+const loadLedgers = () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined);
+
 /** Runs the condense over this project's ledgers, reading them under the ledger lock. @es Ejecuta el condense sobre los ledgers de este proyecto, leyéndolos bajo el lock del ledger. */
-const condenseLedgers = ({ keyMap, write }) => runCondense({ load: () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined), keyMap, write, date: today(), runId: newRunId(), lockFile: LOCK_FILE, preImageRoot: path.join(STATE_DIR, 'condense') });
+const condenseLedgers = ({ keyMap, write }) => runCondense({ load: loadLedgers, keyMap, write, date: today(), runId: newRunId(), lockFile: LOCK_FILE, preImageRoot: path.join(STATE_DIR, 'condense') });
 
 function commandCondense(args) {
   let keyMap = [];
@@ -794,6 +798,25 @@ function commandCondense(args) {
   const outcome = condenseLedgers({ keyMap, write: args.write === true });
 
   for (const line of describeOutcome(outcome)) speaker.data(line);
+
+  return outcome.status;
+}
+
+/**
+ * Replaces the rule a ledger line states with the current one (`supersede.mjs`): `--key` names the lesson, `--rule`
+ * is the rule that now holds and `--by` says where the directive that superseded the old one is written. The
+ * old line is archived whole to the evidence store first. Exit 0 done (or already so), 1 refused, 2 the ledger
+ * is locked.
+ * @es Sustituye la regla que enuncia una línea del ledger por la vigente: `--key` nombra la lección, `--rule`
+ * es la regla que rige ahora y `--by` dice dónde está escrita la directiva que sustituyó a la vieja. La línea
+ * vieja se archiva entera en la evidencia primero. Salida 0 hecho (o ya estaba), 1 rechazado, 2 ledger bloqueado.
+ */
+function commandSupersede(args) {
+  ensureDirs();
+
+  const outcome = runSupersede({ load: loadLedgers, key: args.key, rule: args.rule, by: args.by, date: today(), lockFile: LOCK_FILE });
+
+  for (const line of describeSupersede(outcome)) (outcome.status === 0 ? speaker.data : speaker.dataError)(line);
 
   return outcome.status;
 }
@@ -891,6 +914,8 @@ function main() {
       return commandPromote(args);
     case 'condense':
       return commandCondense(args);
+    case 'supersede':
+      return commandSupersede(args);
     case 'budget':
       return commandBudget(args);
     case 'status':

@@ -10,7 +10,7 @@
  */
 
 import { planLedgers, planLine } from './condense-plan.mjs';
-import { FAT_MECHANISM, FAT_NONE, HOOKS_KEY, KEYED, MARKERLESS, PROJECT_LINE, SHORT_KEYED, SHORT_MARKERLESS, STUB_MECHANISM, STUB_NONE, TIERED_BARE, TWIN, TWO_LABELS } from './condense-fixtures.mjs';
+import { FAT_MECHANISM, FAT_NONE, HOOKS_KEY, KEYED, MARKERLESS, PROJECT_KEY, PROMOTED_MARKERLESS, PROJECT_LINE, PROJECT_MARKERLESS, SHORT_KEYED, SHORT_MARKERLESS, SHORT_PROJECT, SHORT_PROJECT_MARKERLESS, STUB_MECHANISM, STUB_NONE, TIERED_BARE, TWIN, TWO_LABELS } from './condense-fixtures.mjs';
 
 let passed = 0;
 const failures = [];
@@ -35,12 +35,21 @@ check('...with an operator key it plans the tiered form under that key and inven
 check('a line with two RULE: labels stays, and says so in both languages', planLine(TWO_LABELS, undefined)?.reason.includes('more than one "RULE: " label') === true && planLine(TWO_LABELS, undefined).reason.includes('más de una etiqueta'), JSON.stringify(planLine(TWO_LABELS, undefined)));
 check('an entry that cannot be read stays with its reason: it is never skipped in silence', planLine('- [global] garbage', undefined)?.reason.includes('no "[scope] date — " head') === true, JSON.stringify(planLine('- [global] garbage', undefined)));
 
-for (const [name, line] of [['a header line', '---'], ['a line already shortened', TIERED_BARE], ['a stub already minimal', STUB_MECHANISM], ['a line of another scope', PROJECT_LINE]]) {
+for (const [name, line] of [['a header line', '---'], ['a line already shortened', TIERED_BARE], ['a stub already minimal', STUB_MECHANISM]]) {
   check(`${name} is not this command's business`, planLine(line, undefined) === undefined);
 }
 
+// --- a project ledger's lines go through the same path as a global one ---------------------------------
+const projectKeyed = planLine(PROJECT_LINE, undefined);
+const projectNeedsKey = planLine(PROJECT_MARKERLESS, undefined);
+const projectWithKey = planLine(PROJECT_MARKERLESS, PROJECT_KEY);
+
+check('a keyed line of a project scope plans its tiered form under its own scope and the key of its marker', projectKeyed?.key === 'project-one' && projectKeyed.shortened === SHORT_PROJECT, JSON.stringify(projectKeyed));
+check('a marker-less project line with no operator key stays, flagged as needing one', projectNeedsKey?.needsKey === true && projectNeedsKey.shortened === undefined, JSON.stringify(projectNeedsKey));
+check('...with an operator key it plans the tiered form under that key and invents no marker', projectWithKey?.key === PROJECT_KEY && projectWithKey.shortened === SHORT_PROJECT_MARKERLESS && !projectWithKey.shortened.includes('<!--fc:'), JSON.stringify(projectWithKey));
+
 // --- a key map, resolved against the ledgers -------------------------------------------------------------
-const LINES = [MARKERLESS, TWIN, KEYED, TIERED_BARE];
+const LINES = [MARKERLESS, TWIN, KEYED, TIERED_BARE, PROMOTED_MARKERLESS];
 const plan = (keyMap, lines = LINES) => planLedgers({ ledgers: [{ scope: 'global', file: 'ledger.md', lines }], keyMap });
 const shortened = (result) => result.plans[0].items.filter((item) => item.shortened !== undefined).map((item) => item.original);
 const good = plan([{ line: MARKERLESS.slice(0, 60), key: HOOKS_KEY }]);
@@ -54,6 +63,7 @@ for (const [name, keyMap, english, spanish] of [
   ['a fragment from the middle of a line is not a prefix', [{ line: MARKERLESS.slice(10, 70), key: 'some-key' }], '(ABSENT)', 'no coincide con ninguna'],
   ['a prefix naming a line that already has a marker is ABSENT', [{ line: KEYED.slice(0, 60), key: 'some-key' }], '(ABSENT)', 'no coincide con ninguna'],
   ['a prefix naming an already shortened line is ABSENT', [{ line: TIERED_BARE.slice(0, 60), key: 'some-key' }], '(ABSENT)', 'no coincide con ninguna'],
+  ['a prefix naming a promoted line that has no marker is ABSENT', [{ line: PROMOTED_MARKERLESS.slice(0, 60), key: 'some-key' }], '(ABSENT)', 'no coincide con ninguna'],
   ['a prefix under 30 characters is refused', [{ line: MARKERLESS.slice(0, 29), key: 'some-key' }], 'at least 30 characters', 'al menos 30 caracteres'],
   ['an entry that is not an object is refused', [null], 'at least 30 characters', 'al menos 30 caracteres'],
   ['a key that is not kebab-case is refused', [{ line: MARKERLESS.slice(0, 60), key: 'Bad Key' }], 'lowercase kebab-case', 'kebab-case en minúsculas'],
@@ -65,6 +75,12 @@ for (const [name, keyMap, english, spanish] of [
 
   check(`${name}: one problem naming its entry, in both languages, and no line shortened for it`, result.problems.length === keyMap.length && first.startsWith('key-map entry 1:') && first.includes(english) && first.includes(` @es `) && first.includes(spanish) && shortened(result).join() === KEYED, result.problems.join('\n'));
 }
+
+// a key map names a marker-less line of a project ledger too, in the ledger it is in
+const projectPlan = planLedgers({ ledgers: [{ scope: 'global', file: 'ledger.md', lines: [KEYED] }, { scope: 'b100-am-ui', file: 'project.md', lines: [PROJECT_MARKERLESS, PROJECT_LINE] }], keyMap: [{ line: PROJECT_MARKERLESS.slice(0, 60), key: PROJECT_KEY }] });
+const projectShortened = projectPlan.plans[1].items.filter((item) => item.shortened !== undefined).map((item) => item.shortened);
+
+check('a prefix naming a marker-less line of a project ledger shortens it there, with no problem', projectPlan.problems.length === 0 && projectShortened.join() === [SHORT_PROJECT_MARKERLESS, SHORT_PROJECT].join(), JSON.stringify(projectPlan.problems));
 
 for (const failure of failures) process.stdout.write(`  FAIL ${failure}\n`);
 process.stdout.write(`failure-capture condense plan selftest: ${passed} passed, ${failures.length} failed\n`);

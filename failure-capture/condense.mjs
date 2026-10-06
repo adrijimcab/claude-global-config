@@ -16,7 +16,7 @@
  * escritas a mano no son un ledger y nunca son objetivo.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { planLedgers } from './condense-plan.mjs';
@@ -24,9 +24,10 @@ import { proveConservation } from './conservation.mjs';
 import { appendEvidence, readEvidence } from './evidence.mjs';
 import { joinBilingual } from './ledger-line.mjs';
 import { withLock } from './ledger-lock.mjs';
+import { writeText, writeVerified } from './verified-write.mjs';
 
 /** What touches the disk, replaceable so a proof can make it lie. @es Lo que toca el disco, sustituible para que una prueba lo haga mentir. */
-const REAL_IO = { appendEvidence, readEvidence, writeText: (file, text) => writeFileSync(file, text, 'utf8') };
+const REAL_IO = { appendEvidence, readEvidence, writeText };
 
 /** A run id that sorts by time and cannot collide between two processes. @es Un id de ejecución que ordena por tiempo y no choca entre dos procesos. */
 export const newRunId = () => `${new Date().toISOString().replaceAll(':', '-')}-${String(process.pid)}`;
@@ -46,24 +47,6 @@ function proveItem({ io, file, item, date }) {
   const archived = io.appendEvidence({ ledgerFile: file, key: item.key, line: item.original, date, kind: 'condensed' });
 
   return archived.ok ? proveConservation({ original: item.original, shortened: item.shortened, evidence: io.readEvidence(file, item.key) }) : { ok: false, deficits: [archived.problem] };
-}
-
-/** Writes `next`, reads it back, and restores `text` unless it is exactly `next`. @es Escribe `next`, lo relee y restaura `text` salvo que sea exactamente `next`. */
-function writeVerified({ io, file, text, next }) {
-  let onDisk;
-
-  try {
-    io.writeText(file, next);
-    onDisk = readFileSync(file, 'utf8');
-  } catch {
-    onDisk = undefined;
-  }
-
-  if (onDisk === next) return true;
-
-  writeFileSync(file, text, 'utf8');
-
-  return false;
 }
 
 /** Condenses (or, dry, only plans) one ledger: `{ scope, file, before, after, condensed, left, restored }`. @es Condensa (o solo planifica) un ledger. */

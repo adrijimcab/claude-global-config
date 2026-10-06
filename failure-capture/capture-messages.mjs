@@ -66,6 +66,8 @@ export const CAPTURE_MESSAGES = {
       '  dismiss   --reason "<why this is not a correction>" [--marker <m>] [--session <id>]',
       '  promote   --key <kebab-key> (--mechanism <guard path> | --no-mechanism "<why none is possible>")',
       '  condense  [--keys <file>] [--write]   shorten ledger lines whose text is kept in evidence (dry run without --write)',
+      '  supersede --key <kebab-key> --rule "<the rule that holds now, one sentence>" --by "<where the directive that supersedes the old rule is written>"',
+      '            replace the rule a ledger line states, archiving the old line whole (the only way to amend a ledger line)',
       '  budget   [--project <dir>]            measure the always-loaded instruction set against its ceiling (exit 0 within, 1 over, 2 not measured)',
       '  status   counts, ledger token cost, and which lessons are due for promotion',
       "  Exit 2 when the project's .claude/failure-capture.json is invalid (only the commands that read the project fail)."
@@ -80,6 +82,8 @@ export const CAPTURE_MESSAGES = {
       '  dismiss: --reason "<por qué esto no es una corrección>" [--marker <m>] [--session <id>]',
       '  promote: --key <clave-kebab> (--mechanism <ruta del guard> | --no-mechanism "<por qué no cabe ninguno>")',
       '  condense: [--keys <fichero>] [--write] acorta las líneas del ledger cuyo texto se conserva en evidencia (simulacro sin --write)',
+      '  supersede: --key <clave-kebab> --rule "<la regla que rige ahora, una frase>" --by "<dónde está escrita la directiva que sustituye a la regla vieja>"',
+      '            sustituye la regla que enuncia una línea del ledger y archiva la línea vieja entera (la única manera de enmendar una línea del ledger)',
       '  budget: [--project <dir>] mide el conjunto de instrucciones siempre cargado frente a su techo (salida 0 dentro, 1 sobre el techo, 2 no medido)',
       '  status: recuentos, coste en tokens del ledger y qué lecciones tocan promoción',
       '  Salida 2 si el .claude/failure-capture.json del proyecto es inválido (solo fallan los comandos que leen el proyecto).'

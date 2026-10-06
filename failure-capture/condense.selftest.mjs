@@ -19,7 +19,7 @@ import { runCondense } from './condense.mjs';
 import { holdsWholeLine } from './conservation.mjs';
 import { appendEvidence } from './evidence.mjs';
 import { HEADER } from './ledgers.mjs';
-import { FAT_MECHANISM, FAT_NONE, HOOKS_KEY, KEYED, MARKERLESS, PROJECT_LINE, SHORT_KEYED, SHORT_MARKERLESS, STUB_MECHANISM, STUB_NONE, TIERED_BARE, TWO_LABELS } from './condense-fixtures.mjs';
+import { FAT_MECHANISM, FAT_NONE, HOOKS_KEY, KEYED, MARKERLESS, PROJECT_KEY, PROJECT_LINE, PROJECT_MARKERLESS, SHORT_KEYED, SHORT_MARKERLESS, SHORT_PROJECT, SHORT_PROJECT_MARKERLESS, STUB_MECHANISM, STUB_NONE, TIERED_BARE, TWO_LABELS } from './condense-fixtures.mjs';
 import { readMarker } from './ledger-line.mjs';
 import { provisionLoop } from './fixture-loop.mjs';
 
@@ -32,7 +32,7 @@ function check(name, condition, detail) {
   else failures.push(`${name}${detail === undefined ? '' : ` — ${String(detail).slice(0, 400)}`}`);
 }
 
-const OTHERS = ['---', PROJECT_LINE, TIERED_BARE];
+const OTHERS = ['---', TIERED_BARE];
 
 const SENTINEL = '# promoted rules, hand-written\n';
 const markersOf = (text) => text.split('\n').map((line) => readMarker(line)).filter((found) => found !== undefined).map((found) => `${found.key}#${String(found.count)}`);
@@ -131,6 +131,33 @@ const keysFile = (target, keys) => {
   check('...the same map run again changes nothing and stays clean', condense(target, ['--write', '--keys', keys]).status === 0 && readOr(target.ledger) === after);
 }
 
+// --- a project's own ledger is condensed by the same command, beside its own evidence --------------------
+{
+  const target = world('project', [KEYED]);
+  const claude = path.join(target.repo, '.claude');
+  const ledger = path.join(claude, 'lessons-ledger.md');
+  const evidence = (key) => path.join(claude, 'lessons', 'evidence', `${key}.md`);
+  const projectText = `${HEADER('b100-am-ui', '`y`')}${[PROJECT_LINE, PROJECT_MARKERLESS].join('\n')}\n`;
+
+  writeFileSync(path.join(claude, 'failure-capture.json'), '{ "scope": "b100-am-ui" }', 'utf8');
+  writeFileSync(ledger, projectText, 'utf8');
+
+  const keys = keysFile(target, [{ line: PROJECT_MARKERLESS.slice(0, 60), key: PROJECT_KEY }]);
+  const dry = condense(target, ['--keys', keys]);
+
+  check('a dry run plans the project ledger too and touches neither ledger', dry.status === 0 && dry.out.includes('b100-am-ui') && readOr(ledger) === projectText && readOr(target.ledger) === target.text && !existsSync(path.dirname(evidence('x'))), `exit ${dry.status}: ${dry.out}`);
+
+  const run = condense(target, ['--write', '--keys', keys]);
+  const after = readOr(ledger);
+  const lines = after.split('\n');
+
+  check('a keyed project line and a project line named by the key map are shortened in the project ledger, and the run is clean', run.status === 0 && lines.includes(SHORT_PROJECT) && lines.includes(SHORT_PROJECT_MARKERLESS) && after.startsWith(HEADER('b100-am-ui', '`y`')), `exit ${run.status}: ${run.out}\n${after}`);
+  check('...each project original is a whole line of the evidence file beside the PROJECT ledger, not the home one', holdsWholeLine(readOr(evidence('project-one')), PROJECT_LINE) && holdsWholeLine(readOr(evidence(PROJECT_KEY)), PROJECT_MARKERLESS) && !existsSync(target.evidence('project-one')), run.out);
+  check('...the home ledger of the same run is shortened as before', readOr(target.ledger).split('\n').includes(SHORT_KEYED));
+  check('...the pre-image holds the project ledger as it was', readOr(path.join(target.runs, listOf(target.runs)[0] ?? '', 'b100-am-ui.ledger')) === projectText, listOf(target.runs));
+  check('...a second run changes nothing', condense(target, ['--write', '--keys', keys]).status === 0 && readOr(ledger) === after);
+}
+
 // --- a key map is operator input: a problem in it is a failure even when no line is left over -------------
 {
   const target = world('map-problem', [KEYED]);
@@ -178,7 +205,15 @@ for (const [name, content] of [['a keys file that does not exist', undefined], [
 /** Condenses one keyed line in a fresh ledger with `deps` replacing the real archive and write. @es Condensa una línea con `deps` en lugar del archivo y la escritura reales. */
 function withDeps(name, deps) {
   const target = world(name, [KEYED]);
-  const outcome = runCondense({ load: () => [{ scope: 'global', file: target.ledger, lines: readFileSync(target.ledger, 'utf8').split('\n') }], keyMap: [], write: true, date: '2026-09-30', runId: 'run-1', lockFile: target.lock, preImageRoot: target.runs, deps });
+  const run = () => runCondense({ load: () => [{ scope: 'global', file: target.ledger, lines: readFileSync(target.ledger, 'utf8').split('\n') }], keyMap: [], write: true, date: '2026-09-30', runId: 'run-1', lockFile: target.lock, preImageRoot: target.runs, deps });
+  // A run that throws is a failed check, never a crash of this proof. @es Una ejecución que lanza es un check fallido, nunca un crash de esta prueba.
+  const outcome = (() => {
+    try {
+      return run();
+    } catch (error) {
+      return { status: 'threw', problems: [String(error)], ledgers: [{ restored: false }] };
+    }
+  })();
 
   return { target, outcome, after: readOr(target.ledger) };
 }

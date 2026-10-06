@@ -28,12 +28,16 @@ const MUTANTS = [
   // --- the anchors
   ['anchors of every file apply', INPUTS, ".filter((entry) => entry.file === `${HOME_PREFIX}${file}`)", ''],
   ['the home prefix is dropped, so no entry matches', INPUTS, "const HOME_PREFIX = '.claude/';", "const HOME_PREFIX = '';"],
-  ['a missing customizations module means no anchors', INPUTS, "throw refuse(`cannot import ${module}", "return []; throw refuse(`cannot import ${module}"],
+  ['a missing customizations module is refused instead of meaning no anchors', INPUTS, 'if (!existsSync(module)) return [];', 'if (false) return [];'],
+  ['a customizations module that cannot be imported means no anchors', INPUTS, "throw refuse(`cannot import ${module}", "return []; throw refuse(`cannot import ${module}"],
 
   // --- the evidence
   ['every file in the evidence directory is evidence', INPUTS, '.filter((name) => name.endsWith(EVIDENCE_EXTENSION))', ''],
   ['an evidence directory without evidence is judged', INPUTS, 'if (names.length === 0) throw refuse(', 'if (false) throw refuse('],
   ['an unlistable evidence directory crashes instead of refusing', INPUTS, "throw refuse(`cannot list the evidence directory", "throw error; throw refuse(`cannot list the evidence directory"],
+
+  ['an evidence file outside the repository is given a path inside it', INPUTS, "inside === '' || inside.startsWith('..') || path.isAbsolute(inside) ? undefined", 'false ? undefined'],
+  ['the command gives the evidence no repository to be relative to', CHECK, 'evidence: evidenceIn(evidence, repo),', 'evidence: evidenceIn(evidence, evidence),'],
 
   // --- the "after"
   ['an unreadable after crashes instead of refusing', INPUTS, "throw refuse(`cannot read ${file}", "throw error; throw refuse(`cannot read ${file}"],

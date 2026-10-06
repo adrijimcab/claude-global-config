@@ -118,6 +118,19 @@ function inventionDeficits(original, shortened, promotion) {
 }
 
 /**
+ * The proof that a line is safe in the evidence file, whatever becomes of it in the ledger: it must be a whole
+ * line of the file as re-read from disk. For a line that is REPLACED, not shortened, so that nothing of its
+ * text is expected in the new one.
+ * @returns `{ ok: true }` or `{ ok: false, deficits }`, each deficit a bilingual sentence.
+ * @es La prueba de que una línea está a salvo en la evidencia, pase lo que pase con ella en el ledger: debe ser una línea entera del fichero releído de disco. Para una línea que se SUSTITUYE, no se acorta, así que nada de su texto se espera en la nueva.
+ */
+export function proveArchived({ original, evidence }) {
+  const deficits = archiveDeficits(original, evidence);
+
+  return deficits.length === 0 ? { ok: true } : { ok: false, deficits };
+}
+
+/**
  * @param input `{ original, shortened, evidence, promotion }` — `evidence` is the file's text re-read from
  *   disk, or `undefined` when it is absent or unreadable. `promotion` is `{ date, mechanism }` only when the
  *   line is being promoted: the shortened line must then be exactly the minimal stub of those two facts and

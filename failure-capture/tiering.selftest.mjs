@@ -18,7 +18,7 @@ import path from 'node:path';
 
 import { holdsWholeLine, proveConservation } from './conservation.mjs';
 import { appendEvidence, evidenceFile, readEvidence } from './evidence.mjs';
-import { evidenceKeyOf, isTiered, isValidKey, minimalStub, parseEntry, parseStub, readMarker, splitRule, tieredLine } from './ledger-line.mjs';
+import { evidenceKeyOf, evidenceNameOf, isTiered, isValidKey, minimalStub, parseEntry, parseStub, readMarker, pointerAt, splitRule, tieredLine } from './ledger-line.mjs';
 import { provisionLoop } from './fixture-loop.mjs';
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'tiering-selftest-'));
@@ -88,6 +88,12 @@ check('parseStub reads a stub back', parseStub(withMechanism.line)?.mechanism ==
 check('parseStub reads the no-mechanism form back', parseStub(`- [promoted] 2026-09-29 — guard-that-cannot-go-red: no mechanism ${PROMOTED_MARKER}`)?.mechanism === undefined);
 check('parseStub refuses a fat promoted line', parseStub(`- [promoted] 2026-09-29 — guard-that-cannot-go-red: now a binding rule in a file; no mechanism is possible: x ${PROMOTED_MARKER}`) === undefined);
 check('evidenceKeyOf reads the pointer key and refuses a rule without one', evidenceKeyOf(`x Evidence: lessons/evidence/${KEY}.md`) === KEY && evidenceKeyOf('x') === undefined && evidenceKeyOf('x Evidence: lessons/evidence/../evil.md') === undefined);
+const POINTER = `Evidence: lessons/evidence/${KEY}.md`;
+
+check('pointerAt reads the pointer the builder writes, at its own start, and says where it ends', pointerAt(`x ${POINTER} <!--fc:${KEY}#1-->`, 2)?.key === KEY && pointerAt(`x ${POINTER} <!--fc:${KEY}#1-->`, 2)?.end === 2 + POINTER.length, JSON.stringify(pointerAt(`x ${POINTER}`, 2)));
+check('...it reads nothing off its start, in another directory, or under a key that is not one', pointerAt(`x ${POINTER}`, 3) === undefined && pointerAt(`x ${POINTER}`, 0) === undefined && pointerAt('Evidence: evidence/some-key.md', 0) === undefined && pointerAt('Evidence: lessons/evidence/Bad_Key.md', 0) === undefined && pointerAt('Evidence: lessons/evidence/some-key', 0) === undefined);
+check('evidenceKeyOf reads a pointer only at the very end of the rule', evidenceKeyOf(`x ${POINTER} and more`) === undefined && evidenceKeyOf(`x ${POINTER}`) === KEY);
+check('evidenceNameOf names the file the pointer of a key points at', evidenceNameOf(KEY) === `${KEY}.md` && tieredLine({ scope: 'global', date: '2026-06-30', rule: RULE, key: KEY }).line.includes(`lessons/evidence/${evidenceNameOf(KEY)}`));
 check('isTiered: a tiered line, a marker-less tiered line and a stub are tiered', isTiered(SHORT.line) && isTiered(`- [global] 2026-06-30 — RULE: ${RULE} Evidence: lessons/evidence/operator-key.md`) && isTiered(withMechanism.line));
 check('isTiered: a fat line and a fat promoted line are not', !isTiered(ORIGINAL) && !isTiered(`- [promoted] 2026-09-29 — guard-that-cannot-go-red: now a binding rule; closed ${PROMOTED_MARKER}`));
 

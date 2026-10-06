@@ -18,7 +18,7 @@ import { joinBilingual, MARK_OPEN, RULE_LABEL, tieredLine } from './ledger-line.
 export const MINIMUM_RULE_LENGTH = 20;
 
 /** What makes `text` unfit for a one-line ledger entry, as bilingual reasons. @es Qué hace que `text` no sirva para una entrada de una línea. */
-function oneLineProblems(name, text) {
+export function oneLineProblems(name, text) {
   return [
     ...(text.includes('\n') || text.includes('\r') ? [`${name} must be one line. @es ${name} debe ser de una sola línea.`] : []),
     ...(text.includes(MARK_OPEN) ? [`${name} must not contain "${MARK_OPEN}". @es ${name} no puede contener "${MARK_OPEN}".`] : []),
