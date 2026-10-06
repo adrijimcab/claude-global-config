@@ -32,7 +32,7 @@ const TABLE = {
   failures: { en: 'run-tool selftest: {count} assertion(s) failed.', es: 'selftest de run-tool: {count} aserción(es) fallida(s).' },
 };
 const speaker = makeSpeaker(TABLE);
-const TOOL = "process.stdout.write(`args=${process.argv.slice(3).join('|')} marker=${process.env.MARKER ?? ''}`);process.exit(Number(process.argv[2]));\n";
+const TOOL = "process.stdout.write(`args=${process.argv.slice(3).join('|')} marker=${process.env.MARKER ?? ''} cwd=${process.cwd()}`);process.exit(Number(process.argv[2]));\n";
 
 let passed = 0;
 const failures = [];
@@ -114,8 +114,37 @@ check('a package with no bin exits 3', launch(root, ['no-bin-tool', 'alpha', '0'
 check('a relative toolchain path is resolved', launch('.', ['object-tool', 'alpha', '6']).status === 6);
 check('a toolchain folder without the package exits 3 even when the package exists elsewhere', launch(path.join(root, 'node_modules', 'object-tool'), ['no-such-package', 'alpha', '0']).status === 3);
 
+// The working directory: by default the caller's, or the one `--cwd` names before the package.
+mkdirSync(path.join(root, 'work', 'inner'), { recursive: true });
+
+const workDir = path.join(root, 'work');
+const here = launch(root, ['object-tool', 'alpha', '0']);
+const moved = launch(root, ['--cwd', workDir, 'object-tool', 'alpha', '0', 'after']);
+const relative = launch(root, ['--cwd', 'work/inner', 'object-tool', 'alpha', '0']);
+const noDirectory = launch(root, ['--cwd']);
+const absentDirectory = launch(root, ['--cwd', path.join(root, 'no-such-folder'), 'object-tool', 'alpha', '0']);
+
+check('without --cwd the tool runs where the caller is', here.stdout.endsWith(`cwd=${root}`));
+check('--cwd moves the tool to that folder', moved.stdout.endsWith(`cwd=${workDir}`));
+check('--cwd keeps the arguments after the binary name', moved.stdout.startsWith('args=after '));
+check('--cwd keeps the exit code of the tool', launch(root, ['--cwd', workDir, 'object-tool', 'alpha', '4']).status === 4);
+check('a relative --cwd resolves from the caller folder', relative.stdout.endsWith(`cwd=${path.join(root, 'work', 'inner')}`));
+check('--cwd without a folder exits 3', noDirectory.status === 3);
+check('--cwd without a folder prints the usage', noDirectory.stderr.includes('usage'));
+check('--cwd with only a folder exits 3', launch(root, ['--cwd', workDir]).status === 3);
+check('a folder that does not exist exits 3, not the tool code', absentDirectory.status === 3 && absentDirectory.stdout === '');
+check('a folder that does not exist is named', absentDirectory.stderr.includes('no-such-folder'));
+
+const relativeAbsent = launch(root, ['--cwd', 'no-such-relative', 'object-tool', 'alpha', '0']);
+const fileAsDirectory = launch(root, ['--cwd', path.join(root, 'node_modules', 'object-tool', 'bin.js'), 'object-tool', 'alpha', '0']);
+
+check('a relative folder that does not exist is named by its resolved path', relativeAbsent.status === 3 && relativeAbsent.stderr.includes(path.join(root, 'no-such-relative')));
+check('a file given as the folder exits 3 and is named', fileAsDirectory.status === 3 && fileAsDirectory.stderr.includes('bin.js'));
+check('--cwd is only read before the package', launch(root, ['object-tool', 'alpha', '0', '--cwd', workDir]).stdout.startsWith(`args=--cwd|${workDir} `));
+check('--cwd still refuses a missing package', launch(root, ['--cwd', workDir, 'absent-tool', 'alpha', '0']).status === 3);
+
 // Every refusal is bilingual, with its accents.
-const refusals = [unset, empty, launch(root, []), missing, wrongBin];
+const refusals = [unset, empty, launch(root, []), missing, wrongBin, noDirectory, absentDirectory];
 
 check('every refusal carries its @es half', refusals.every((refusal) => refusal.stderr.includes(' @es ')));
 check('the Spanish half keeps its accents', unset.stderr.includes('está'));

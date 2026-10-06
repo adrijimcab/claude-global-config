@@ -34,6 +34,14 @@ const MUTANTS = [
   ['the tool output is not forwarded', T, "stdio: 'inherit'", "stdio: 'pipe'"],
   ['the environment is not forwarded', T, 'env: process.env', 'env: {}'],
   ['the tool arguments are dropped', T, '...args], {', '], {'],
+  ['--cwd is not recognised', T, "argv[0] === '--cwd'", 'false'],
+  ['--cwd is read anywhere in the call', T, "argv[0] === '--cwd'", "argv.includes('--cwd')"],
+  ['--cwd leaves its folder in the package position', T, 'withCwd ? argv.slice(2) : argv', 'withCwd ? argv.slice(1) : argv'],
+  ['a relative --cwd folder is not resolved', T, 'path.resolve(argv[1])', 'argv[1]'],
+  ['a --cwd folder that does not exist is not refused', T, "if (cwd !== undefined && !isDirectory(cwd)) refuse('missingCwd', { cwd });", ''],
+  ['a file counts as the --cwd folder', T, 'statSync(directory).isDirectory()', 'statSync(directory).isFile() || true'],
+  ['a missing --cwd folder counts as a folder', T, 'return false;\n  }\n}', 'return true;\n  }\n}'],
+  ['the working directory is not forwarded to the tool', T, 'env: process.env, cwd }', 'env: process.env }'],
   ['the tool exit code is not passed through', T, 'process.exit(run.status ?? EXIT_NOT_RUN);', 'process.exit(0);'],
 ];
 
