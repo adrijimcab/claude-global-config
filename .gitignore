@@ -13,6 +13,7 @@
 !/checklists/**
 !/hooks/
 !/hooks/**
+/hooks/state/
 !/hook-dispatch/
 !/hook-dispatch/**
 /hook-dispatch/state/
