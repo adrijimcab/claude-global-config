@@ -20,10 +20,10 @@ const COMMAND = 'failure-capture/capture.mjs';
 
 const MUTANTS = [
   // --- where it lands: the lesson's own scope
-  ['every lesson targets the global file, so a project lesson leaks into it', TARGET, 'scope === GLOBAL_SCOPE ? GLOBAL_TARGET : PROJECT_TARGET', 'GLOBAL_TARGET'],
-  ['every lesson targets the project contract, so a global lesson never reaches the global file', TARGET, 'scope === GLOBAL_SCOPE ? GLOBAL_TARGET : PROJECT_TARGET', 'PROJECT_TARGET'],
+  ['every lesson targets the global file, so a project lesson leaks into it', TARGET, 'isGlobalFamily(scope) ? GLOBAL_TARGET : PROJECT_TARGET', 'GLOBAL_TARGET'],
+  ['every lesson targets the project contract, so a global lesson never reaches the global file', TARGET, 'isGlobalFamily(scope) ? GLOBAL_TARGET : PROJECT_TARGET', 'PROJECT_TARGET'],
   ['a lesson with no scope is guessed a target instead of refused', TARGET, "if (typeof scope !== 'string' || scope.length === 0) throw", 'if (false) throw'],
-  ['the files of a project promotion are the global rules file', TARGET, 'target === GLOBAL_TARGET ? [globalRules] : workerContracts', '[globalRules]'],
+  ['the files of a project promotion are the global rules file', TARGET, 'target === GLOBAL_TARGET ? [globalRules].flat() : workerContracts', '[globalRules].flat()'],
   ['the command reads the scope of the wrong ledger', COMMAND, 'promotionTargetOf(locateKey(readLedgers(LEDGERS), key, readMarker)?.ledger.scope)', 'promotionTargetOf(readLedgers(LEDGERS)[0].scope)'],
 
   // --- how growth is measured: per file, in faces
@@ -32,12 +32,12 @@ const MUTANTS = [
   ['the baseline is measured on whatever file was recorded last', CLOSURE, "typeof entry.faces?.[id] === 'number'", "typeof entry.faces === 'object'"],
   ['the closure record carries no scope', CLOSURE, 'target, scope, faces, date:', 'target, faces, date:'],
   ['the record is stamped with the global scope whatever the lesson', COMMAND, 'closureRecord({ key, closure, verification, target, scope: ledger.scope,', "closureRecord({ key, closure, verification, target, scope: 'global',"],
-  ['only the first file is measured into the closure record', COMMAND, 'faces: facesByFile({ files: contractFilesOf(target),', 'faces: facesByFile({ files: contractFilesOf(target).slice(0, 1),']
+  ['only the first file is measured into the closure record', COMMAND, 'faces: facesByFile({ files: contractFilesOf(target, key),', 'faces: facesByFile({ files: contractFilesOf(target, key).slice(0, 1),']
 ];
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'mutation-proof'],
+  paths: ['failure-capture', 'bilingual-output', 'mutation-proof'],
   selftest: 'failure-capture/promotion-scope.selftest.mjs',
   mutants: MUTANTS
 });

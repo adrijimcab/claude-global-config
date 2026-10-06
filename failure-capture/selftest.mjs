@@ -169,6 +169,8 @@ function promote(target, extraArgs) {
     status,
     out,
     ledger: read(path.join(target.home, '.claude', 'lessons-ledger.md')),
+    // The stub of a global lesson is in the file the harness does not load (`ledger-routes.mjs`). @es El muñón de una lección global está en el fichero que el harness no carga.
+    stubs: read(path.join(target.home, '.claude', 'lessons-promoted.md')),
     incidents: read(path.join(target.loop, 'state', 'incidents.jsonl')),
     promoted: read(path.join(target.loop, 'state', 'promoted.md')),
   };
@@ -260,8 +262,9 @@ refused(
 
   const status = await closed;
   const after = readFileSync(ledgerFile, 'utf8');
+  const stubs = readFileSync(path.join(path.dirname(ledgerFile), 'lessons-promoted.md'), 'utf8');
 
-  check('promote that waited for the lock closes the lesson', status === 0 && after.includes('[promoted]') && after.includes('<!--fc:lesson-under-test#2-->'), `exit ${String(status)}: ${after}`);
+  check('promote that waited for the lock closes the lesson', status === 0 && stubs.includes('[promoted]') && stubs.includes('<!--fc:lesson-under-test#2-->') && !after.includes('<!--fc:lesson-under-test#'), `exit ${String(status)}: ${after}\n${stubs}`);
   check('...and keeps the line written while it waited, because it read the ledger under the lock', after.includes('<!--fc:late-lesson#1-->'), after);
 }
 
@@ -367,10 +370,10 @@ refused(
 
   check('a passing mechanism closes the lesson (exit 0)', run.status === 0, `exit ${run.status}: ${run.out.trim().slice(0, 400)}`);
   check('...and its selftest was RUN, not merely found (the sentinel it writes is on disk)', existsSync(path.join(target.repo, '.claude', 'good-guard', 'selftest-ran.txt')), 'no sentinel');
-  check('...the ledger stub names the mechanism', run.ledger.includes('[promoted]') && run.ledger.includes('.claude/good-guard/guard.mjs'), run.ledger);
+  check('...the ledger stub names the mechanism', run.stubs.includes('[promoted]') && run.stubs.includes('.claude/good-guard/guard.mjs'), run.stubs);
   // Changed on purpose with `ledger-tiering-budget`: the stub is the MINIMAL one (date, key, mechanism path,
   // marker), not the old long sentence, and the full line is archived in evidence. @es Cambiado a propósito.
-  check('...and the stub is EXACTLY the minimal one: promotion date, key, mechanism path, the original marker', run.ledger.split('\n').includes(`- [promoted] ${todayLocal()} — ${KEY}: mechanism .claude/good-guard/guard.mjs <!--fc:${KEY}#2-->`), run.ledger);
+  check('...and the stub is EXACTLY the minimal one: promotion date, key, mechanism path, the original marker', run.stubs.split('\n').includes(`- [promoted] ${todayLocal()} — ${KEY}: mechanism .claude/good-guard/guard.mjs <!--fc:${KEY}#2-->`), run.stubs);
   check('...the line it replaced is archived WHOLE in the evidence file beside the ledger, with the closure note', holdsWholeLine(homeEvidence(target), `- [global] 2026-09-14 — a lesson that recurred -> RULE: do the thing <!--fc:${KEY}#2-->`) && homeEvidence(target).includes('closed by mechanism .claude/good-guard/guard.mjs (selftest run, exit 0)'), homeEvidence(target));
   check('...and nothing is written to the old state/promoted.md: the evidence store is the one place', run.promoted === '', run.promoted);
   check('...the incident log records the closure with the selftest exit code', run.incidents.includes('"mechanism":".claude/good-guard/guard.mjs"') && run.incidents.includes('"selftestExit":0'), run.incidents);
@@ -396,7 +399,7 @@ refused(
   // Changed on purpose with `ledger-tiering-budget`: the reason is no longer in the ledger stub (that is what
   // made every promotion regrow the always-loaded set); it is VERBATIM in the evidence file, and the stub
   // says only that there is no mechanism. @es Cambiado a propósito: el motivo ya no va en el muñón.
-  check('...the ledger stub says only "no mechanism": the reason is NOT in it', run.ledger.split('\n').includes(`- [promoted] ${todayLocal()} — ${KEY}: no mechanism <!--fc:${KEY}#2-->`) && !run.ledger.includes(REASON), run.ledger);
+  check('...the ledger stub says only "no mechanism": the reason is NOT in it', run.stubs.split('\n').includes(`- [promoted] ${todayLocal()} — ${KEY}: no mechanism <!--fc:${KEY}#2-->`) && !run.stubs.includes(REASON) && !run.ledger.includes(REASON), run.stubs);
   check('...the reason is in the evidence file VERBATIM, beside the archived original', homeEvidence(target).includes(`no mechanism is possible: ${REASON}`) && holdsWholeLine(homeEvidence(target), `- [global] 2026-09-14 — a lesson that recurred -> RULE: do the thing <!--fc:${KEY}#2-->`), homeEvidence(target));
   check('...and in the incident log VERBATIM', run.incidents.includes(JSON.stringify(REASON)), run.incidents);
 

@@ -41,6 +41,7 @@ export const CAPTURE_MESSAGES = {
   'dismiss.done': { en: 'DISMISSED and recorded. The turn may end.', es: 'DESCARTADA y registrada. El turno puede terminar.' },
 
   'status.ledger': { en: 'ledger {scope}: {file} — {bytes} bytes (~{tokens} tokens, loaded once per session)', es: 'ledger {scope}: {file} — {bytes} bytes (~{tokens} tokens, cargado una vez por sesión)' },
+  'status.ledger.unloaded': { en: 'ledger {scope}: {file} — {bytes} bytes (~{tokens} tokens, NOT loaded: the harness never reads it)', es: 'ledger {scope}: {file} — {bytes} bytes (~{tokens} tokens, NO cargado: el harness nunca lo lee)' },
   'status.keyed': { en: 'keyed lessons: {count}', es: 'lecciones con clave: {count}' },
   'status.incidents': { en: 'incidents recorded: {count}', es: 'incidentes registrados: {count}' },
   'status.dismissals': { en: 'dismissals: {count}', es: 'descartes: {count}' },
@@ -53,6 +54,13 @@ export const CAPTURE_MESSAGES = {
   'init.import.present': { en: 'project {scope}: import already present in {file}', es: 'proyecto {scope}: import ya presente en {file}' },
 
   'condense.keysInvalid': { en: 'condense REFUSED — --keys needs a JSON file of the form {"keys":[{"line":"...","key":"..."}]} ({detail}).', es: 'condense RECHAZADO: --keys necesita un fichero JSON de la forma {"keys":[{"line":"...","key":"..."}]} ({detail}).' },
+  'route.usage': { en: 'route REFUSED — say what to route, ONE of: --stubs (move every promoted stub out of the loaded home ledger), --key <key> --to <area> (move a lesson to an area, loaded only when its paths are read) or --headers (bring the header of every home ledger up to the declared one); and --write to do it (a dry run otherwise).', es: 'route RECHAZADO: indica qué enrutar, UNO de: --stubs (mueve cada muñón promovido fuera del ledger cargado del home), --key <clave> --to <área> (mueve una lección a un área, cargada solo cuando se leen sus rutas) o --headers (pone al día el encabezado de cada ledger del home con el declarado); y --write para hacerlo (simulacro si no).' },
+  'route.refused': { en: 'route REFUSED — nothing was changed:', es: 'route RECHAZADO: no se cambió nada:' },
+  'route.nothing': { en: 'route: nothing to move — everything is already where it belongs.', es: 'route: nada que mover: todo está ya donde le corresponde.' },
+  'route.dry': { en: 'route (dry run): {count} item(s) would change, in {file}; add --write to do it:', es: 'route (simulacro): {count} elemento(s) cambiaría(n), en {file}; añade --write para hacerlo:' },
+  'route.done': { en: 'route DONE: {count} item(s) changed; the files were re-read and no line was lost or invented.', es: 'route HECHO: {count} elemento(s) cambiado(s); se releyeron los ficheros y no se perdió ni se inventó ninguna línea.' },
+  'route.proofFailed': { en: 'route FAILED — the re-read files do not prove the move lost nothing, so both were RESTORED as they were:', es: 'route FALLÓ: los ficheros releídos no prueban que el movimiento no perdió nada, así que ambos se RESTAURARON como estaban:' },
+  'route.locked': { en: 'route REFUSED — the ledger is locked by another writer; re-run in a moment. Nothing was changed.', es: 'route RECHAZADO: el ledger está bloqueado por otro escritor; reintenta en un momento. No se cambió nada.' },
   'project.configUnreadable': { en: '{command} REFUSED — the project configuration cannot be read: {defect}. Nothing was changed.', es: '{command} RECHAZADO: no se puede leer la configuración del proyecto: {defect}. No se cambió nada.' },
 
   usage: {
@@ -60,7 +68,7 @@ export const CAPTURE_MESSAGES = {
       'failure-capture — record a correction as a durable lesson.',
       '  init                 give this project its own ledger and import it from .claude/CLAUDE.md',
       '  keys                 list existing lesson keys (reuse one when it is the SAME lesson)',
-      "  capture   --key <kebab-key> --scope <global|<this project's scope>> --actor <orchestrator|worker:<type>>",
+      "  capture   --key <kebab-key> --scope <global|<area>|<this project's scope>> --actor <orchestrator|worker:<type>>",
       '            --lesson "<what went wrong -> root cause -> RULE ...>" [--session <id>]',
       '            or --lesson "<what went wrong -> root cause>" --rule "<the rule, one sentence>" (tiered ledger line)',
       '  dismiss   --reason "<why this is not a correction>" [--marker <m>] [--session <id>]',
@@ -68,6 +76,9 @@ export const CAPTURE_MESSAGES = {
       '  condense  [--keys <file>] [--write]   shorten ledger lines whose text is kept in evidence (dry run without --write)',
       '  supersede --key <kebab-key> --rule "<the rule that holds now, one sentence>" --by "<where the directive that supersedes the old rule is written>"',
       '            replace the rule a ledger line states, archiving the old line whole (the only way to amend a ledger line)',
+      '  route     --stubs [--write]           move the promoted stubs out of the loaded home ledger into the file the harness does not load (dry run without --write)',
+      '  route     --headers [--write]         bring the header of every home ledger up to the declared one (the lessons are untouched)',
+      '  route     --key <key> --to <area> [--write]   move a lesson (or, once promoted, the text of its rule) to an area: a rules file the harness loads only when its paths are read',
       '  budget   [--project <dir>]            measure the always-loaded instruction set against its ceiling (exit 0 within, 1 over, 2 not measured)',
       '  status   counts, ledger token cost, and which lessons are due for promotion',
       "  Exit 2 when the project's .claude/failure-capture.json is invalid (only the commands that read the project fail)."
@@ -76,7 +87,7 @@ export const CAPTURE_MESSAGES = {
       'failure-capture — registra una corrección como lección durable.',
       '  init: da a este proyecto su propio ledger y lo importa desde .claude/CLAUDE.md',
       '  keys: lista las claves de lección existentes (reutiliza una cuando es la MISMA lección)',
-      "  capture: --key <clave-kebab> --scope <global|<alcance de este proyecto>> --actor <orchestrator|worker:<tipo>>",
+      "  capture: --key <clave-kebab> --scope <global|<área>|<alcance de este proyecto>> --actor <orchestrator|worker:<tipo>>",
       '           --lesson "<qué falló -> causa raíz -> RULE ...>" [--session <id>]',
       '           o --lesson "<qué falló -> causa raíz>" --rule "<la regla, una frase>" (línea de ledger por niveles)',
       '  dismiss: --reason "<por qué esto no es una corrección>" [--marker <m>] [--session <id>]',
@@ -84,6 +95,9 @@ export const CAPTURE_MESSAGES = {
       '  condense: [--keys <fichero>] [--write] acorta las líneas del ledger cuyo texto se conserva en evidencia (simulacro sin --write)',
       '  supersede: --key <clave-kebab> --rule "<la regla que rige ahora, una frase>" --by "<dónde está escrita la directiva que sustituye a la regla vieja>"',
       '            sustituye la regla que enuncia una línea del ledger y archiva la línea vieja entera (la única manera de enmendar una línea del ledger)',
+      '  route: --stubs [--write] mueve los muñones promovidos fuera del ledger cargado del home al fichero que el harness no carga (simulacro sin --write)',
+      '  route: --headers [--write] pone al día el encabezado de cada ledger del home con el declarado (las lecciones no se tocan)',
+      '  route: --key <clave> --to <área> [--write] mueve una lección (o, ya promovida, el texto de su regla) a un área: un fichero de reglas que el harness carga solo cuando se leen sus rutas',
       '  budget: [--project <dir>] mide el conjunto de instrucciones siempre cargado frente a su techo (salida 0 dentro, 1 sobre el techo, 2 no medido)',
       '  status: recuentos, coste en tokens del ledger y qué lecciones tocan promoción',
       '  Salida 2 si el .claude/failure-capture.json del proyecto es inválido (solo fallan los comandos que leen el proyecto).'

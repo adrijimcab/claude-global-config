@@ -15,6 +15,7 @@
  */
 
 import { ledgerFiles } from './ledgers.mjs';
+import { areaScopes, isReservedScope } from './ledger-routes.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
 
 /**
@@ -26,11 +27,13 @@ import { GLOBAL_SCOPE, projectOf } from './project.mjs';
 export function resolveLoopContext({ directory, home }) {
   const project = projectOf(directory);
 
+  if (project !== undefined && isReservedScope(project.scope)) throw new Error(`the project scope "${project.scope}" is reserved: it names a scope of the home ledger (global, promoted or an area). @es el alcance de proyecto "${project.scope}" está reservado: nombra un alcance del ledger del home (global, promoted o un área).`);
+
   return {
     project,
     ledgers: ledgerFiles({ project, home }),
     workerContracts: project?.workerContracts ?? [],
     parityGate: project?.parityGate,
-    scopes: project === undefined ? [GLOBAL_SCOPE] : [GLOBAL_SCOPE, project.scope]
+    scopes: [GLOBAL_SCOPE, ...areaScopes(), ...(project === undefined ? [] : [project.scope])]
   };
 }

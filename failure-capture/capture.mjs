@@ -36,7 +36,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync, appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,7 +54,10 @@ import { isPromotedStub, promotedRecurrenceLines } from './promoted-recurrence.m
 import { GLOBAL_TARGET, PROJECT_TARGET, promotionFiles, promotionTargetOf } from './promotion-target.mjs';
 import { PROMOTE_MESSAGES } from './promote-messages.mjs';
 import { facesByFile, staleFiles } from './text-growth.mjs';
-import { GLOBAL_LOADER, globalLedgerFile, HEADER, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
+import { HEADER, homeLedgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
+import { commitHeaderRoute, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, routeOutcome } from './ledger-route.mjs';
+import { PROMOTED_SCOPE, areaRulesFile, areaRulesHeader, areaScopes, isAreaScope, stubScopeOf } from './ledger-routes.mjs';
+import { commitBlockRoute, findBlock, planBlockRoute } from './rule-block.mjs';
 import { withLock } from './ledger-lock.mjs';
 import { resolveLoopContext } from './loop-context.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
@@ -115,7 +118,7 @@ let PARITY_GATE;
 let SCOPES;
 
 /** The commands that read the project: every one except `dismiss`, `budget` (which resolves its own) and the usage text. @es Los comandos que leen el proyecto: todos salvo `dismiss`, `budget` (que resuelve el suyo) y el texto de uso. */
-const PROJECT_COMMANDS = new Set(['init', 'keys', 'capture', 'promote', 'condense', 'supersede', 'status']);
+const PROJECT_COMMANDS = new Set(['init', 'keys', 'capture', 'promote', 'condense', 'supersede', 'status', 'route']);
 
 /** Resolves the project of the current directory and binds what derives from it. @es Resuelve el proyecto del directorio actual y fija lo que se deriva de él. */
 function bindLoopContext() {
@@ -206,7 +209,7 @@ function spool(entry) {
 }
 
 /**
- * The ledgers each spooled entry can see — the global one and the one of the project it was captured in —
+ * The ledgers each spooled entry can see — the home's (the loaded one and the unloaded stubs) and the one of the project it was captured in —
  * read once per file and SHARED between entries, so two entries touching the same file edit one copy.
  * @returns `(entry) => ledgers | undefined`.
  * @es Los ledgers que ve cada entrada del spool, leídos una vez por fichero y COMPARTIDOS entre entradas.
@@ -220,12 +223,12 @@ function ledgerCache() {
   };
 
   return (entry) => {
-    const global = load(GLOBAL_SCOPE, globalLedgerFile(homedir()), HEADER(GLOBAL_SCOPE, GLOBAL_LOADER));
+    const home = Object.entries(homeLedgerFiles(homedir())).map(([scope, { file, header }]) => load(scope, file, header));
     const project = entry.project ?? (PROJECT !== undefined && entry.scope === PROJECT.scope ? { scope: PROJECT.scope, ledgerFile: PROJECT.ledgerFile } : undefined);
 
-    if (project === undefined) return entry.scope === GLOBAL_SCOPE ? [global] : undefined;
+    if (project === undefined) return Object.hasOwn(homeLedgerFiles(homedir()), entry.scope) ? home : undefined;
 
-    return [global, load(project.scope, project.ledgerFile, HEADER(project.scope, PROJECT_LOADER))];
+    return [...home, load(project.scope, project.ledgerFile, HEADER(project.scope, PROJECT_LOADER))];
   };
 }
 
@@ -420,7 +423,7 @@ function recordCapture(args) {
   // A rule that is already promoted is not promoted twice: the reader reads its text and extends it.
   // @es Una regla ya promovida no se promueve dos veces: se lee su texto y se extiende.
   if (isPromotedStub(found?.ledger.lines[found.index])) {
-    for (const line of promotedRecurrenceLines({ key, count: mine.count, files: contractFilesOf(target) })) speaker.data(line);
+    for (const line of promotedRecurrenceLines({ key, count: mine.count, files: contractFilesOf(target, key) })) speaker.data(line);
 
     return 0;
   }
@@ -430,6 +433,24 @@ function recordCapture(args) {
   speaker.data(promotionInstructions(key, target));
 
   return 0;
+}
+
+/**
+ * The rules files the text of a global-family lesson lives in: its area's file when the lesson is an area's (its
+ * text is path-scoped with it); otherwise the files of the family that already carry its key (an area lesson that
+ * was promoted keeps its text in its area, and its stub no longer says which); otherwise the global one.
+ * @es Los ficheros de reglas donde vive el texto de una lección de la familia global: el de su área si la
+ * lección es de un área; si no, los ficheros de la familia que ya llevan su clave (una lección de área promovida
+ * conserva su texto en su área, y su muñón ya no lo dice); si no, el global.
+ */
+function globalRulesOf(key) {
+  const found = locateKey(readLedgers(LEDGERS), key, readMarker);
+
+  if (isAreaScope(found?.ledger.scope)) return [areaRulesFile(homedir(), found.ledger.scope)];
+
+  const holding = [ORCHESTRATOR_RULES, ...areaScopes().map((area) => areaRulesFile(homedir(), area))].filter((file) => readFileOr(file, '').includes(key));
+
+  return holding.length > 0 ? holding : [ORCHESTRATOR_RULES];
 }
 
 /**
@@ -456,7 +477,7 @@ function promotionInstructions(key, target) {
     speaker.line('instructions.close.note')
   ];
 
-  if (target === GLOBAL_TARGET) return [speaker.line('instructions.global', { file: ORCHESTRATOR_RULES, key }), ...closeSteps(2), speaker.line('instructions.global.tail')].join('\n');
+  if (target === GLOBAL_TARGET) return [speaker.line('instructions.global', { file: globalRulesOf(key)[0], key }), ...closeSteps(2), speaker.line('instructions.global.tail')].join('\n');
 
 
   const contractSteps = WORKER_CONTRACTS.map((file, at) => speaker.line('instructions.contract.step', { number: at + 1, file, key }));
@@ -491,8 +512,8 @@ function incidentsFor(key) {
   return found;
 }
 
-/** Every file whose text carries a promotion of `target`. @es Cada fichero cuyo texto lleva una promoción de `target`. */
-const contractFilesOf = (target) => promotionFiles({ target, globalRules: ORCHESTRATOR_RULES, workerContracts: WORKER_CONTRACTS });
+/** Every file whose text carries the promotion of `key` into `target`. @es Cada fichero cuyo texto lleva la promoción de `key` en `target`. */
+const contractFilesOf = (target, key) => promotionFiles({ target, globalRules: target === GLOBAL_TARGET ? globalRulesOf(key) : undefined, workerContracts: WORKER_CONTRACTS });
 
 /**
  * The refusal text when a lesson recurred and some promoted file has not grown a face (`text-growth.mjs`),
@@ -500,7 +521,7 @@ const contractFilesOf = (target) => promotionFiles({ target, globalRules: ORCHES
  * @es El texto de la negativa cuando la lección reincidió y algún fichero promovido no ha ganado una cara.
  */
 function textGrowthProblem(key, target) {
-  const stale = staleFiles({ entries: incidentsFor(key), files: contractFilesOf(target), key, read: (file) => readFileOr(file, '') });
+  const stale = staleFiles({ entries: incidentsFor(key), files: contractFilesOf(target, key), key, read: (file) => readFileOr(file, '') });
 
   if (stale.length === 0) return undefined;
 
@@ -551,7 +572,7 @@ function commandPromote(args) {
   const missing = [];
 
   if (target === GLOBAL_TARGET) {
-    if (!readFileOr(ORCHESTRATOR_RULES, '').includes(key)) missing.push(speaker.line('promote.missing.token', { key, file: ORCHESTRATOR_RULES }));
+    for (const file of contractFilesOf(target, key)) if (!readFileOr(file, '').includes(key)) missing.push(speaker.line('promote.missing.token', { key, file }));
   } else {
     for (const file of WORKER_CONTRACTS) if (!readFileOr(file, '').includes(key)) missing.push(speaker.line('promote.missing.token', { key, file }));
     if (PARITY_GATE !== undefined && !readFileOr(PARITY_GATE, '').includes(`'${key}'`)) missing.push(speaker.line('promote.missing.anchor', { key, gate: PARITY_GATE }));
@@ -615,13 +636,14 @@ function commandPromote(args) {
   // recibir el contrato en esta sesión; borrarla cambiaría impuesto de tokens por un agujero. La línea
   // entera y cómo cerró la promoción van antes al almacén de evidencia; ese almacén es el único sitio
   // del texto, así que `state/promoted.md` ya no se escribe.
-  const where = target === GLOBAL_TARGET ? '~/.claude/rules/promoted-rules.md' : `the delegated-worker contract (${WORKER_CONTRACTS.length > 1 ? `all ${String(WORKER_CONTRACTS.length)} files` : 'its file'})`;
+  const where = target === GLOBAL_TARGET ? contractFilesOf(target, key).map((file) => `~/${path.relative(homedir(), file).split(path.sep).join('/')}`).join(', ') : `the delegated-worker contract (${WORKER_CONTRACTS.length > 1 ? `all ${String(WORKER_CONTRACTS.length)} files` : 'its file'})`;
   // The ledger is read only once the lock is held: a copy read before it would be written back over any
   // line another writer added while this one waited, and would carry an out-of-date recurrence counter.
   // @es El ledger se lee solo con el lock ya tomado: una copia leída antes se reescribiría encima de las
   // líneas que otro escritor añadiera mientras este esperaba, y llevaría un contador de recurrencia viejo.
   const collapsed = withLock(LOCK_FILE, () => {
-    const found = locateKey(readLedgers(LEDGERS), key, readMarker);
+    const ledgers = readLedgers(LEDGERS);
+    const found = locateKey(ledgers, key, readMarker);
 
     if (found === undefined) return;
 
@@ -630,9 +652,24 @@ function commandPromote(args) {
 
     if (!stub.ok) return stub;
 
-    ledger.lines[index] = stub.line;
+    // The stub goes where its scope's stubs live (`ledger-routes.mjs`): a global lesson's, to the file the
+    // harness does not load; a project's, to its own ledger, in place. The stub is written first, so a crash
+    // between the two writes leaves the key twice (which `route` refuses to make worse) and never none.
+    // @es El muñón va donde viven los de su alcance: el de una lección global, al fichero que el harness no
+    // carga; el de un proyecto, a su propio ledger, en su sitio. Se escribe primero el muñón: una caída entre
+    // las dos escrituras deja la clave dos veces y nunca ninguna.
+    const home = ledgerForScope(ledgers, stubScopeOf(ledger.scope));
+
+    if (home === ledger) {
+      ledger.lines[index] = stub.line;
+    } else {
+      home.lines.push(stub.line);
+      writeLedger(home);
+      ledger.lines.splice(index, 1);
+    }
+
     writeLedger(ledger);
-    appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, scope: ledger.scope, faces: facesByFile({ files: contractFilesOf(target), key, read: (file) => readFileOr(file, '') }) }))}\n`, 'utf8');
+    appendFileSync(INCIDENTS, `${JSON.stringify(closureRecord({ key, closure, verification, target, scope: ledger.scope, faces: facesByFile({ files: contractFilesOf(target, key), key, read: (file) => readFileOr(file, '') }) }))}\n`, 'utf8');
 
     return stub;
   });
@@ -657,7 +694,7 @@ function commandPromote(args) {
   
 
   speaker.say('promote.done', { key });
-  speaker.say(target === GLOBAL_TARGET ? 'promote.landed.global' : 'promote.landed.contract', { count: WORKER_CONTRACTS.length, files: contractFilesOf(target).join(', ') });
+  speaker.say(target === GLOBAL_TARGET ? 'promote.landed.global' : 'promote.landed.contract', { count: WORKER_CONTRACTS.length, files: contractFilesOf(target, key).join(', ') });
   speaker.say(...proofMessage(target));
   speaker.say(closure.kind === 'mechanism' ? 'promote.closed.mechanism' : 'promote.closed.reason', closure.kind === 'mechanism' ? { path: closure.path } : { reason: closure.reason });
   speaker.say('promote.stub');
@@ -691,7 +728,7 @@ function commandStatus() {
   for (const ledger of readLedgers(LEDGERS)) {
     const bytes = ledger.lines === undefined ? 0 : Buffer.byteLength(ledger.lines.join('\n'));
 
-    speaker.say('status.ledger', { scope: ledger.scope, file: ledger.file, bytes, tokens: Math.round(bytes / 4) });
+    speaker.say(ledger.scope === PROMOTED_SCOPE ? 'status.ledger.unloaded' : 'status.ledger', { scope: ledger.scope, file: ledger.file, bytes, tokens: Math.round(bytes / 4) });
   }
   speaker.say('status.keyed', { count: keys.size });
   speaker.say('status.incidents', { count: incidents });
@@ -718,6 +755,215 @@ function commandStatus() {
   }
 
   return 0;
+}
+
+/**
+ * What routing moves LINES between two ledgers would do: a route object the command can show, or `{ problems }` when
+ * the plan refuses, or `{ nothing: true }`. `commit` writes, re-reads and proves it (`ledger-route.mjs`).
+ * @es Lo que haría un enrutamiento que mueve LÍNEAS entre dos ledgers: un objeto de ruta que el comando puede mostrar, `{ problems }` si el plan rechaza, o `{ nothing: true }`.
+ */
+function linesRoute({ source, destination, plan }) {
+  if (!plan.ok) return { problems: plan.problems };
+  if (plan.moved.length === 0) return { nothing: true };
+
+  const before = { source: source.lines ?? [], destination: destination.lines };
+  const io = {
+    writeSource: (lines) => {
+      source.lines = lines;
+      writeLedger(source);
+    },
+    writeDestination: (lines) => {
+      if (lines === undefined) {
+        rmSync(destination.file, { force: true });
+
+        return;
+      }
+
+      mkdirSync(path.dirname(destination.file), { recursive: true });
+      destination.lines = lines;
+      writeLedger(destination);
+    },
+    readBack: () => {
+      const reread = readLedgers(LEDGERS);
+
+      return { source: reread.find((ledger) => ledger.scope === source.scope).lines ?? [], destination: reread.find((ledger) => ledger.scope === destination.scope).lines };
+    }
+  };
+
+  return { count: plan.moved.length, file: destination.file, keys: plan.moved.map((one) => one.key), commit: () => commitRoute({ before, plan, io }) };
+}
+
+/**
+ * What routing the TEXT of a promoted rule to an area's rules file would do (`rule-block.mjs`): the stub of a
+ * promoted lesson stays where it is, and the block that says what the rule is moves out of the always-loaded file.
+ * @es Lo que haría enrutar el TEXTO de una regla promovida al fichero de reglas de un área: el muñón de una lección promovida se queda donde está y el bloque que dice qué es la regla sale del fichero siempre cargado.
+ */
+function blockRoute(key, area) {
+  const family = [ORCHESTRATOR_RULES, ...areaScopes().map((one) => areaRulesFile(homedir(), one))];
+  const holding = family.filter((file) => findBlock(readFileOr(file, ''), key).start !== undefined);
+  const target = areaRulesFile(homedir(), area);
+
+  if (holding.length === 0) return { problems: [`the rule text of "${key}" is in no rules file of the family (${family.join(', ')}). @es el texto de la regla de "${key}" no está en ningún fichero de reglas de la familia (${family.join(', ')}).`] };
+  if (holding.length > 1) return { problems: [`the rule text of "${key}" is in more than one rules file (${holding.join(', ')}). @es el texto de la regla de "${key}" está en más de un fichero de reglas (${holding.join(', ')}).`] };
+  if (holding[0] === target) return { nothing: true };
+
+  const [from] = holding;
+  const before = { from: readFileOr(from, ''), to: existsSync(target) ? readFileOr(target, '') : undefined };
+  const plan = planBlockRoute({ ...before, key, header: areaRulesHeader(area) });
+
+  if (!plan.ok) return { problems: plan.problems };
+
+  const io = {
+    writeFrom: (text) => writeFileSync(from, text, 'utf8'),
+    writeTo: (text) => {
+      if (text === undefined) {
+        rmSync(target, { force: true });
+
+        return;
+      }
+
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, text, 'utf8');
+    },
+    readBack: () => ({ from: readFileOr(from, ''), to: existsSync(target) ? readFileOr(target, '') : undefined })
+  };
+
+  return { count: plan.block.length, file: target, keys: [key], commit: () => commitBlockRoute({ before, plan, io }) };
+}
+
+/**
+ * What bringing the header of every home ledger up to its declared one would do (`planHeaderRoute`): the headers
+ * are tool-owned text, so when the declared text changes (or a ledger predates the tool) one command refreshes them
+ * all, each proved on its own: the lessons are untouched.
+ * @es Lo que haría poner al día el encabezado de cada ledger del home con el declarado: los encabezados son texto de la herramienta, así que cuando el texto declarado cambia (o un ledger es anterior a la herramienta) un comando los refresca todos, cada uno probado por su cuenta: las lecciones no se tocan.
+ */
+function headersRoute(ledgers) {
+  const scopes = Object.keys(homeLedgerFiles(homedir()));
+  const changing = ledgers
+    .filter((ledger) => scopes.includes(ledger.scope) && ledger.lines !== undefined)
+    .map((ledger) => ({ ledger, plan: planHeaderRoute({ lines: ledger.lines, header: ledger.header }) }))
+    .filter(({ plan }) => plan.changed);
+
+  if (changing.length === 0) return { nothing: true };
+
+  const commit = () => {
+    for (const { ledger, plan } of changing) {
+      const io = {
+        write: (lines) => {
+          ledger.lines = lines;
+          writeLedger(ledger);
+        },
+        readBack: () => readLedgers(LEDGERS).find((one) => one.scope === ledger.scope).lines
+      };
+      const proof = commitHeaderRoute({ before: [...ledger.lines], plan, header: ledger.header, io });
+
+      if (!proof.ok) return proof;
+    }
+
+    return { ok: true };
+  };
+
+  return { count: changing.length, file: changing.map(({ ledger }) => ledger.file).join(', '), keys: changing.map(({ ledger }) => ledger.scope), commit };
+}
+
+/**
+ * Moves what the router keeps apart (`ledger-routes.mjs`): `--stubs` moves every promoted stub of the loaded home
+ * ledger to the file the harness does not load; `--key <key> --to <area>` moves a lesson to the path-scoped file of
+ * an area, or, for a promoted lesson, the text of its rule to the area's rules file (its stub stays). Every line
+ * moves byte for byte (a lesson only changes its scope tag). A dry run unless `--write` is given; under `--write`
+ * it holds the ledger lock, writes, RE-READS both files from disk and proves nothing was lost or invented
+ * (`ledger-route.mjs`, `rule-block.mjs`), restoring what it had when the proof fails. Exit 0 done or nothing to
+ * move, 1 refused or failed, 2 the ledger is locked. `--headers` brings the header of every home ledger up to the declared one.
+ * @es Mueve lo que el enrutador mantiene aparte: `--stubs` mueve cada muñón promovido del ledger cargado del
+ * home al fichero que el harness no carga; `--key <clave> --to <área>` mueve una lección al fichero con
+ * alcance de ruta de un área o, si está promovida, el texto de su regla al fichero de reglas del área (su
+ * muñón se queda). Toda línea se mueve byte a byte (una lección solo cambia su etiqueta de alcance). Simulacro
+ * salvo con `--write`; con `--write` toma el lock del ledger, escribe, RELEE ambos ficheros de disco y prueba
+ * que no se perdió ni se inventó nada, y restaura lo que tenía si la prueba falla. Salida 0 hecho o nada que
+ * mover, 1 rechazado o fallido, 2 ledger bloqueado.
+ */
+function commandRoute(args) {
+  const stubs = args.stubs === true;
+  const headers = args.headers === true;
+  const lesson = typeof args.key === 'string' && typeof args.to === 'string';
+
+  if ([stubs, headers, lesson].filter(Boolean).length !== 1) {
+    speaker.complain('route.usage');
+
+    return 1;
+  }
+
+  const planned = () => {
+    const ledgers = readLedgers(LEDGERS);
+
+    if (headers) return headersRoute(ledgers);
+
+    if (stubs) {
+      const source = ledgers.find((ledger) => ledger.scope === GLOBAL_SCOPE);
+      const destination = ledgers.find((ledger) => ledger.scope === PROMOTED_SCOPE);
+
+      return linesRoute({ source, destination, plan: planStubRoute({ source: source.lines ?? [], destination: destination.lines, header: destination.header }) });
+    }
+
+    const found = locateLesson(ledgers, args.key);
+
+    if (found?.ledger.scope === PROMOTED_SCOPE && isAreaScope(args.to)) return blockRoute(args.key, args.to);
+
+    const destination = ledgers.find((ledger) => ledger.scope === args.to);
+
+    return linesRoute({ source: found?.ledger, destination, plan: planLessonRoute({ found, area: args.to, key: args.key, destination: destination?.lines, header: destination?.header }) });
+  };
+
+  const route = () => {
+    const wanted = planned();
+
+    if (wanted.problems !== undefined) {
+      speaker.complain('route.refused');
+      for (const problem of wanted.problems) speaker.dataError(`  - ${problem}`);
+
+      return 1;
+    }
+
+    if (wanted.nothing === true) {
+      speaker.say('route.nothing');
+
+      return 0;
+    }
+
+    if (args.write !== true) {
+      speaker.say('route.dry', { count: wanted.count, file: wanted.file });
+      for (const key of wanted.keys) speaker.data(`  ${key}`);
+
+      return 0;
+    }
+
+    const outcome = routeOutcome({ proof: wanted.commit(), count: wanted.count });
+
+    if (outcome.status !== 0) {
+      speaker.complain(outcome.complain);
+      for (const deficit of outcome.deficits) speaker.dataError(`  - ${deficit}`);
+
+      return outcome.status;
+    }
+
+    speaker.say(...outcome.say);
+
+    return 0;
+  };
+
+  if (args.write !== true) return route();
+
+  ensureDirs();
+
+  const outcome = withLock(LOCK_FILE, route);
+
+  if (!outcome.held) {
+    speaker.complain('route.locked');
+
+    return 2;
+  }
+
+  return outcome.value;
 }
 
 /** The line that loads a project's ledger from its `.claude/CLAUDE.md`. @es La línea que carga el ledger del proyecto. */
@@ -916,6 +1162,8 @@ function main() {
       return commandCondense(args);
     case 'supersede':
       return commandSupersede(args);
+    case 'route':
+      return commandRoute(args);
     case 'budget':
       return commandBudget(args);
     case 'status':

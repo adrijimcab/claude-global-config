@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
- * SessionStart hook: first re-place the review execution contract (the one customization applied
- * automatically, see lazy-review-hook-output.mjs), which heals a `gentle-ai sync` run outside Claude
- * Code; then, when any customization of a gentle-ai-managed file has drifted, tell both the user
+ * SessionStart hook: first re-apply the sync-safe customizations (lazy sections, pruned text, the line
+ * replacement; see reapply-hook-output.mjs), which heals a `gentle-ai sync` run outside Claude Code; then, when any customization of a gentle-ai-managed file has drifted, tell both the user
  * (systemMessage) and the model (additionalContext) exactly what to run. Silent when all hold and
  * nothing was re-placed.
  *
@@ -13,8 +12,8 @@
  * Registered in ~/.claude/settings.json. gentle-ai sync merges that file's hooks append-only
  * (internal/components/sdd/inject.go, appendClaudeReviewStopHookEntry), so the entry survives a sync.
  *
- * @es Hook SessionStart: primero recoloca el contrato de ejecución de revisiones (la única
- * personalización que se aplica sola), lo que repara un `gentle-ai sync` corrido fuera de Claude Code;
+ * @es Hook SessionStart: primero reaplica las personalizaciones seguras ante sync (secciones diferidas,
+ * texto podado, reemplazo de línea), lo que repara un `gentle-ai sync` corrido fuera de Claude Code;
  * luego, si alguna personalización de un fichero gestionado por gentle-ai se desvió, se lo dice al
  * usuario y al modelo con el comando exacto. Callado cuando todo se mantiene y nada se recolocó.
  * SIEMPRE sale con 0, también ante su propia falla, que igual se informa.
@@ -35,9 +34,9 @@ try {
   const { CUSTOMIZATIONS } = await import('./customizations.mjs');
   const { evaluateAll } = await import('./invariants.mjs');
   const { driftAdvisory } = await import('./report.mjs');
-  const { reconcileLazyReview } = await import('./lazy-review-hook-output.mjs');
+  const { reapplySyncSafe } = await import('./reapply-hook-output.mjs');
   const context = contextFromArgv(process.argv.slice(2));
-  const replaced = reconcileLazyReview(context);
+  const replaced = reapplySyncSafe(context);
   const results = evaluateAll(CUSTOMIZATIONS, context);
   const advisory = results.some((result) => result.status !== 'held') ? driftAdvisory(results) : undefined;
   const message = joined([replaced.systemMessage, advisory]);

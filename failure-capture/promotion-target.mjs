@@ -17,7 +17,7 @@
  * contrato de worker del proyecto.
  */
 
-import { GLOBAL_SCOPE } from './project.mjs';
+import { isGlobalFamily } from './ledger-routes.mjs';
 
 /** The target of a global lesson. @es El destino de una lección global. */
 export const GLOBAL_TARGET = 'claude-md';
@@ -33,14 +33,14 @@ export const PROJECT_TARGET = 'contract';
 export function promotionTargetOf(scope) {
   if (typeof scope !== 'string' || scope.length === 0) throw new TypeError('a lesson with no scope has no promotion target. @es una lección sin alcance no tiene destino de promoción.');
 
-  return scope === GLOBAL_SCOPE ? GLOBAL_TARGET : PROJECT_TARGET;
+  return isGlobalFamily(scope) ? GLOBAL_TARGET : PROJECT_TARGET;
 }
 
 /**
  * The files whose text must carry a promotion of `target`.
- * @param input `{ target, globalRules, workerContracts }` — the global promoted-rules file and the project's contract files.
+ * @param input `{ target, globalRules, workerContracts }` — the global promoted-rules file(s) (one path, or the list of them when the lesson belongs to an area) and the project's contract files.
  * @es Los ficheros cuyo texto debe llevar una promoción de `target`.
  */
 export function promotionFiles({ target, globalRules, workerContracts }) {
-  return target === GLOBAL_TARGET ? [globalRules] : workerContracts;
+  return target === GLOBAL_TARGET ? [globalRules].flat() : workerContracts;
 }

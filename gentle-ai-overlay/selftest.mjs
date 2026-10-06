@@ -16,13 +16,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CUSTOMIZATIONS } from './customizations.mjs';
 import { KINDS, applyAll, evaluateAll } from './invariants.mjs';
-import { parseManagedRegions } from './managed-regions.mjs';
-import { inspectSection, reconcileSection, sha256 } from './review-contract-section.mjs';
-import { lazyReviewTrigger } from './lazy-review-triggers.mjs';
+import { reconcileSection } from './lazy-section.mjs';
+import { registerLazySectionCases } from './lazy-section-cases.mjs';
+import { lazyEntryNamed, orchestratorRegion } from './lazy-section-fixtures.mjs';
 import { registerLineReplacementCases } from './line-replacement-cases.mjs';
 import { registerPrunedTextCases } from './pruned-text-cases.mjs';
+import { registerReapplyCases } from './reapply-cases.mjs';
 import { registerSyncWrapperCases } from './sync-wrapper-cases.mjs';
-import { readTextOrNull } from './text-file.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '2.99.0';
@@ -406,331 +406,10 @@ test('telemetry: disabled by an unknown source -> unverifiable, not held', () =>
   expect(evaluate(telemetry, withCli({ enabled: false, source: 'CI' })).status, 'unverifiable', 'status');
 });
 
-// ---------------------------------------------------------------- review contract section (pure)
-// The span gentle-ai renders, its lazy form, and its restoration, on a multibyte fixture in both line
-// endings. @es El tramo que genera gentle-ai, su forma diferida y su restauración, sobre un fixture
-// multibyte con ambos finales de línea.
+// ---------------------------------------------------------------- lazy sections
+// @es Secciones diferidas: los casos viven en lazy-section-cases.mjs.
 
-const REVIEW_SPAN = ['#### Review Execution Contract', '', '# Native Compact Review Orchestration', '', 'Contract body — ñandú 日本.', '<!-- authority-first-terminal-procedure:start -->', 'Procedure.', '<!-- authority-first-terminal-procedure:end -->', '', ''].join('\n');
-const STASH_LABEL = '~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md';
-
-/** A CLAUDE.md whose sdd-orchestrator region holds the review span. @es Un CLAUDE.md cuya región sdd-orchestrator contiene el tramo. */
-const orchestratorRegion = (span = REVIEW_SPAN) =>
-  region('sdd-orchestrator', ['# Agent Teams', '', '#### Native Checking Contract', '', 'Checking.', '', `${span}#### Cost and Context Balance`, '', 'Cost.'].join('\n'));
-function orchestratorMd({ span = REVIEW_SPAN, eol = '\n', after = '' } = {}) {
-  return ['# Owner pointer', '', region('persona', PERSONA), '', orchestratorRegion(span), '', region('agent-routing', 'Routing.'), after, ''].join('\n').split('\n').join(eol);
-}
-const spanOf = (text) => {
-  const { start, end } = inspectSection(text);
-  return { start, end, bytes: text.slice(start, end) };
-};
-const lazy = (text, stash = null, keepLoaded = false) => reconcileSection(text, { keepLoaded, stash, stashLabel: STASH_LABEL });
-const ORCHESTRATOR_OPEN = '<!-- gentle-ai:sdd-orchestrator -->';
-const ORCHESTRATOR_CLOSE = '<!-- /gentle-ai:sdd-orchestrator -->';
-/** What `gentle-ai sync` does to the region: replaces everything between its markers. @es Lo que hace `gentle-ai sync` con la región. */
-const syncRegion = (text, from) =>
-  text.slice(0, text.indexOf(ORCHESTRATOR_OPEN)) + from.slice(from.indexOf(ORCHESTRATOR_OPEN), from.indexOf(ORCHESTRATOR_CLOSE)) + text.slice(text.indexOf(ORCHESTRATOR_CLOSE));
-
-for (const eol of ['\n', '\r\n']) {
-  const label = eol === '\n' ? 'LF' : 'CRLF';
-
-  test(`section ${label}: off + present -> moved; stash is the span byte for byte; nothing outside the span changes`, () => {
-    const original = orchestratorMd({ eol });
-    const span = spanOf(original);
-    const result = lazy(original);
-    expect(result.outcome, 'moved', 'outcome');
-    expect(result.stash, span.bytes, 'stash bytes');
-    expect(result.text.slice(0, span.start), original.slice(0, span.start), 'prefix');
-    expect(result.text.endsWith(original.slice(span.end)), true, 'suffix');
-    expect(parseManagedRegions(result.text).problems.length, 0, 'markers well formed');
-  });
-
-  test(`section ${label}: the pointer carries the sentinel sha, the stash label, every trigger, both languages, and the file's line ending`, () => {
-    const original = orchestratorMd({ eol });
-    const result = lazy(original);
-    const pointer = result.text.slice(spanOf(original).start, result.text.length - (original.length - spanOf(original).end));
-    expect(pointer.includes(`sha256=${sha256(result.stash)} -->`), true, 'sentinel sha');
-    ['`~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md`', 'other than `gentle-ai review mode status`', 'consent/v3', 'effective: on', '\n@es '].forEach((needle) => expect(pointer.includes(needle), true, `pointer holds ${needle}`));
-    expect(pointer.split('\r\n').join('').includes('\n'), eol === '\n', 'line ending');
-  });
-
-  test(`section ${label}: idempotent; keepLoaded restores the original bytes; keepLoaded on a present span changes nothing`, () => {
-    const original = orchestratorMd({ eol });
-    const moved = lazy(original);
-    const again = lazy(moved.text, moved.stash);
-    expect(again.outcome, 'unchanged', 'second run outcome');
-    expect(again.text, moved.text, 'second run bytes');
-    const restored = lazy(moved.text, moved.stash, true);
-    expect(restored.outcome, 'restored', 'restore outcome');
-    expect(restored.text, original, 'restored bytes');
-    expect(lazy(original, null, true).text, original, 'present + keepLoaded');
-  });
-
-  test(`section ${label}: a sync-shaped rewrite of the moved file, then the overlay, gives the same moved file`, () => {
-    const original = orchestratorMd({ eol });
-    const moved = lazy(original);
-    expect(moved.outcome, 'moved', 'moved before the sync');
-    const synced = syncRegion(moved.text, original);
-    expect(synced, original, 'sync restores the span');
-    const again = lazy(synced, moved.stash);
-    expect(again.text, moved.text, 'moved again');
-    expect(again.stash, moved.stash, 'stash again');
-  });
-}
-
-test('section: a moved span whose stash is tampered, missing or drifted is refused, never guessed', () => {
-  const moved = lazy(orchestratorMd());
-  expect(lazy(moved.text, `${moved.stash}x`, true).refused !== undefined, true, 'tampered, restore');
-  expect(lazy(moved.text, null, true).refused !== undefined, true, 'missing, restore');
-  expect(lazy(moved.text, 'other', false).refused !== undefined, true, 'drifted, off');
-});
-
-test('section: no heading and no contract title -> absent, nothing to move', () => {
-  const text = orchestratorMd({ span: '' });
-  expect(inspectSection(text).form, 'absent', 'form');
-  expect(lazy(text).outcome, 'unchanged', 'outcome');
-});
-
-/** The refusal names the exact cause it found. @es El rechazo nombra la causa exacta que encontró. */
-const refusedFor = (text, cause) => (lazy(text).refused ?? '').startsWith(cause);
-const START_REFUSAL = '"#### Review Execution Contract" is not exactly one whole line';
-const END_REFUSAL = '"#### Cost and Context Balance" is not exactly one whole line';
-
-test('section near misses refuse, naming why: duplicated start, duplicated end, renamed start with the title still rendered', () => {
-  expect(refusedFor(orchestratorMd({ after: '#### Review Execution Contract' }), START_REFUSAL), true, 'start twice');
-  expect(refusedFor(orchestratorMd({ after: '#### Cost and Context Balance' }), END_REFUSAL), true, 'end twice');
-  expect(refusedFor(orchestratorMd({ span: REVIEW_SPAN.replace('#### Review Execution Contract', '#### Review Execution Contracts') }), START_REFUSAL), true, 'renamed start');
-});
-
-test('section near misses refuse, naming why: end heading missing, a second sdd-orchestrator region, span outside the region', () => {
-  expect(refusedFor(orchestratorMd().replace('#### Cost and Context Balance', '#### Cost'), END_REFUSAL), true, 'end missing');
-  expect(refusedFor(orchestratorMd({ after: region('sdd-orchestrator', 'Second copy.') }), 'the sdd-orchestrator region is not present exactly once'), true, 'region twice');
-  const outside = orchestratorMd({ span: '' }).replace('#### Cost and Context Balance', 'Cost heading moved.').concat(REVIEW_SPAN, '#### Cost and Context Balance\n');
-  expect(lazy(outside).refused !== undefined, true, 'outside the region');
-});
-
-test('section near misses are not headings or sentinels: a heading quoted mid-line, a sentinel without its closing', () => {
-  const quoted = orchestratorMd().replace('Checking.', 'See #### Review Execution Contract below.');
-  expect(lazy(quoted).outcome, 'moved', 'mid-line mention ignored');
-  const moved = lazy(orchestratorMd());
-  const unclosed = moved.text.replace(`${sha256(moved.stash)} -->`, sha256(moved.stash));
-  expect(inspectSection(unclosed).form, 'present', 'unclosed sentinel is not a sentinel');
-});
-
-// ---------------------------------------------------------------- lazy-review-contract kind
-// The kind reads the review mode through a fake gentle-ai CLI and moves or restores the span on disk.
-// @es El tipo lee el modo de revisiones con un CLI falso de gentle-ai y mueve o restaura el tramo en disco.
-
-const lazyEntry = CUSTOMIZATIONS.find((entry) => entry.kind === 'lazy-review-contract');
-/** A fixture home with the review span in CLAUDE.md and the given CLI state. @es Un home de fixture con el tramo en CLAUDE.md y el estado de CLI dado. */
-function lazyHome(cliState, text = orchestratorMd({ eol: '\r\n' })) {
-  const context = installFakeCli(newRoot(), { enabled: false, ...cliState });
-  put(context.home, lazyEntry.file, text);
-  return context;
-}
-const stashOf = (context) => readFileSync(path.join(context.home, lazyEntry.stash), 'utf8');
-
-test('lazy kind: reviews off, span loaded -> broken, sync-safe, reapplicable; apply moves it; second apply finds nothing', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  const original = read(context.home, lazyEntry.file);
-  const [before] = evaluateAll([lazyEntry], context);
-  expect(before.status, 'broken', 'status before');
-  expect(before.syncSafe, true, 'sync-safe');
-  expect(before.reapplicable, true, 'reapplicable');
-  expect(applyAll([lazyEntry], context)[0].outcome, 'applied', 'apply');
-  expect(read(context.home, lazyEntry.file), lazy(original).text, 'CLAUDE.md after apply');
-  expect(stashOf(context), lazy(original).stash, 'stash bytes');
-  expect(evaluate(lazyEntry, context).status, 'held', 'status after');
-  expect(applyAll([lazyEntry], context).length, 0, 'second apply');
-});
-
-test('lazy kind: global on -> a moved span is broken and apply restores the original bytes', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  const original = read(context.home, lazyEntry.file);
-  applyAll([lazyEntry], context);
-  installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
-  expect(evaluate(lazyEntry, context).status, 'broken', 'status');
-  applyAll([lazyEntry], context);
-  expect(read(context.home, lazyEntry.file), original, 'restored bytes');
-  expect(evaluate(lazyEntry, context).status, 'held', 'held once loaded');
-});
-
-test('lazy kind near miss: global on while THIS clone is forced off -> the span stays loaded (another clone may review)', () => {
-  expect(evaluate(lazyEntry, lazyHome({ reviewGlobal: '', cloneOff: true })).status, 'broken', 'the same file with reviews off everywhere');
-  expect(evaluate(lazyEntry, lazyHome({ reviewGlobal: 'on', cloneOff: true })).status, 'held', 'global on, this clone off');
-});
-
-for (const [label, cliState] of [
-  ['the CLI exits non-zero', { reviewFault: 'exit' }],
-  ['the CLI prints non-JSON', { reviewFault: 'garbage' }],
-  ['the report schema changed', { reviewSchema: 'gentle-ai.review-mode/v2' }],
-  ['the status schema changed', { reviewStatusSchema: 'gentle-ai.rdd-mode-status/v2' }],
-]) {
-  test(`lazy kind: review mode unreadable (${label}) -> unverifiable, and apply keeps the span loaded`, () => {
-    const context = lazyHome(cliState);
-    const original = read(context.home, lazyEntry.file);
-    const [result] = evaluateAll([lazyEntry], context);
-    expect(result.status, 'unverifiable', 'status');
-    expect(result.syncSafe, true, 'sync-safe');
-    applyAll([lazyEntry], context);
-    expect(read(context.home, lazyEntry.file), original, 'CLAUDE.md untouched');
-  });
-}
-
-test('lazy kind: a moved span with the mode unreadable is restored, never left pointing at a stash nobody may read', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  const original = read(context.home, lazyEntry.file);
-  applyAll([lazyEntry], context);
-  expect(read(context.home, lazyEntry.file) !== original, true, 'moved first');
-  installFakeCli(context, { enabled: false, reviewFault: 'exit' });
-  applyAll([lazyEntry], context);
-  expect(read(context.home, lazyEntry.file), original, 'restored bytes');
-});
-
-test('lazy kind: the stash changed on disk -> broken, apply refuses, CLAUDE.md untouched', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  applyAll([lazyEntry], context);
-  put(context.home, lazyEntry.stash, 'edited by hand');
-  const moved = read(context.home, lazyEntry.file);
-  expect(evaluate(lazyEntry, context).status, 'broken', 'status');
-  expect(KINDS[lazyEntry.kind].apply(lazyEntry, context).outcome, 'refused', 'apply');
-  expect(read(context.home, lazyEntry.file), moved, 'CLAUDE.md bytes');
-});
-
-test('lazy kind: no span in CLAUDE.md -> held; no CLAUDE.md -> broken', () => {
-  expect(evaluate(lazyEntry, lazyHome({}, orchestratorMd({ span: '' }))).status, 'held', 'absent span');
-  expect(evaluate(lazyEntry, installFakeCli(newRoot(), { enabled: false })).status, 'broken', 'missing file');
-});
-
-test('lazy kind: plan names the move and writes nothing', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  const original = read(context.home, lazyEntry.file);
-  expect(KINDS[lazyEntry.kind].plan(lazyEntry, context).outcome, 'would-move', 'plan');
-  expect(read(context.home, lazyEntry.file), original, 'CLAUDE.md untouched');
-  expect(readTextOrNull(path.join(context.home, lazyEntry.stash)), null, 'no stash written');
-});
-
-// ---------------------------------------------------------------- lazy review triggers and hooks
-// Which commands re-place the contract, and the two hooks proven through the real dispatcher, manifest
-// and settings entry. @es Qué comandos recolocan el contrato, y los dos hooks probados a través del
-// dispatcher, el manifiesto y la entrada de settings reales.
-
-const TRIGGERS = [
-  ['Bash', 'gentle-ai sync', 'sync'],
-  ['Bash', 'cd x && gentle-ai sync --agents claude-code', 'sync'],
-  ['Bash', 'gentle-ai sync --dry-run', null],
-  ['Bash', 'echo gentle-ai sync', null],
-  ['Bash', 'gentle-ai review mode enable --scope global', 'review-mode'],
-  ['Bash', 'gentle-ai review mode disable --scope global', 'review-mode'],
-  ['PowerShell', '& "C:\\go\\bin\\gentle-ai.exe" review mode enable --scope global', 'review-mode'],
-  ['Bash', 'echo "x" \\; gentle-ai review mode enable', null],
-  ['PowerShell', 'echo "x" \\; gentle-ai review mode enable', 'review-mode'],
-  ['Bash', 'gentle-ai review mode status --json', null],
-  ['Bash', 'gentle-ai review start --cwd .', null],
-  ['Bash', 'gentle-ai review modes enable', null],
-  ['Bash', 'other-tool review mode enable', null],
-  // A help flag before the subcommand asks for help, it changes nothing. @es Un flag de ayuda antes del subcomando pide ayuda, no cambia nada.
-  ['Bash', 'gentle-ai --help sync', null],
-  ['Bash', 'gentle-ai -h sync', null],
-  ['Bash', 'gentle-ai help sync', null],
-  ['Bash', 'gentle-ai --help review mode enable', null],
-  ['Bash', 'gentle-ai review --help mode enable', null],
-  ['Bash', 'gentle-ai review mode --help disable', null],
-  ['Bash', 'gentle-ai help review mode enable', null],
-  ['PowerShell', 'gentle-ai --help sync', null],
-  ['PowerShell', '& "C:\\go\\bin\\gentle-ai.exe" -h review mode enable', null],
-  ['PowerShell', 'gentle-ai help review mode disable', null],
-  ['Bash', 'gentle-ai --verbose sync', 'sync'],
-  ['Bash', 'gentle-ai --verbose review mode enable', 'review-mode'],
-  ['PowerShell', 'gentle-ai --verbose review mode enable', 'review-mode'],
-];
-TRIGGERS.forEach(([tool, command, expected]) =>
-  test(`trigger (${tool}): ${JSON.stringify(command)} -> ${expected}`, () => expect(lazyReviewTrigger(command, tool), expected, 'trigger')),
-);
-test('trigger: no command string -> null', () => expect(lazyReviewTrigger(undefined, 'Bash'), null, 'trigger'));
-
-const DISPATCH = path.join(HERE, '..', 'hook-dispatch', 'dispatch.mjs');
-const POST_MANIFEST = path.join(HERE, '..', 'hook-dispatch', 'manifests', 'posttooluse-shell.json');
-const shellPayload = (command, tool = 'Bash') => JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: tool, tool_input: { command }, tool_response: { stdout: '' } });
-/** The dispatcher, the way the harness runs it, pointed at a fixture home. @es El dispatcher como lo corre el harness, apuntando a un home de fixture. */
-const dispatchPost = (context, input, manifest = POST_MANIFEST) =>
-  spawnSync(process.execPath, [DISPATCH, manifest], { input, encoding: 'utf8', env: { ...process.env, GENTLE_AI_OVERLAY_HOME: context.home, GENTLE_AI_OVERLAY_CLI_SCRIPT: context.fakeCli } });
-
-test('wiring: settings run the dispatcher on PostToolUse Bash|PowerShell with the shell manifest, which lists the hook, whose registration matches', () => {
-  const settings = JSON.parse(readFileSync(path.join(HERE, '..', 'settings.json'), 'utf8'));
-  const entries = (settings.hooks.PostToolUse ?? []).filter((entry) => entry.matcher === 'Bash|PowerShell' && entry.hooks.some((hook) => hook.command.includes('hook-dispatch/manifests/posttooluse-shell.json')));
-  expect(entries.length, 1, 'settings entry');
-  expect(JSON.parse(readFileSync(POST_MANIFEST, 'utf8')).guards.includes('../../gentle-ai-overlay/post-command-hook.mjs'), true, 'manifest lists the hook');
-  const registration = JSON.parse(readFileSync(path.join(HERE, 'post-command-hook.mjs.hook-registration.json'), 'utf8'));
-  expect(registration.registrations.map((entry) => `${entry.event}:${entry.matcher}`).join(), 'PostToolUse:Bash|PowerShell', 'hook registration');
-});
-
-test('dispatcher: a real sync with reviews off moves the span and tells the user; exit 0', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  const original = read(context.home, lazyEntry.file);
-  const result = dispatchPost(context, shellPayload('gentle-ai sync'));
-  expect(result.status, 0, 'exit');
-  expect(read(context.home, lazyEntry.file), lazy(original).text, 'CLAUDE.md moved');
-  expect(JSON.parse(result.stdout).systemMessage.includes('review contract moved'), true, `stdout (${result.stdout})`);
-});
-
-test('dispatcher: review mode enabled -> the span is restored and the model is told to read the stash now', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  const original = read(context.home, lazyEntry.file);
-  applyAll([lazyEntry], context);
-  installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
-  const output = JSON.parse(dispatchPost(context, shellPayload('gentle-ai review mode enable --scope global', 'PowerShell')).stdout);
-  expect(read(context.home, lazyEntry.file), original, 'restored bytes');
-  expect(output.hookSpecificOutput.hookEventName, 'PostToolUse', 'event');
-  expect(output.hookSpecificOutput.additionalContext.includes(`read ~/${lazyEntry.stash} IN FULL now`), true, 'model told to read');
-});
-
-test('dispatcher: an unrelated command, or a tool the registration does not name, changes nothing and says nothing', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  const original = read(context.home, lazyEntry.file);
-  expect(dispatchPost(context, shellPayload('ls -la')).stdout, '', 'unrelated command');
-  expect(dispatchPost(context, JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { command: 'gentle-ai sync' } })).stdout, '', 'Edit tool');
-  expect(read(context.home, lazyEntry.file), original, 'CLAUDE.md untouched');
-});
-
-test('dispatcher RED when unregistered: a manifest without the hook leaves the span loaded after a real sync', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  const original = read(context.home, lazyEntry.file);
-  const root = path.dirname(context.home);
-  put(root, 'unregistered/silent.mjs', 'export const evaluate = () => undefined;\n');
-  put(root, 'unregistered/posttooluse-shell.json', JSON.stringify({ event: 'PostToolUse', guards: ['./silent.mjs'] }));
-  dispatchPost(context, shellPayload('gentle-ai sync'), path.join(root, 'unregistered', 'posttooluse-shell.json'));
-  expect(read(context.home, lazyEntry.file), original, 'CLAUDE.md untouched without the registration');
-});
-
-test('post-command hook run directly (not through the dispatcher): it names its own event, PostToolUse', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  applyAll([lazyEntry], context);
-  installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
-  const env = { ...process.env, GENTLE_AI_OVERLAY_HOME: context.home, GENTLE_AI_OVERLAY_CLI_SCRIPT: context.fakeCli };
-  const result = spawnSync(process.execPath, [path.join(HERE, 'post-command-hook.mjs')], { input: shellPayload('gentle-ai review mode enable'), encoding: 'utf8', env });
-  expect(result.status, 0, 'exit');
-  expect(JSON.parse(result.stdout).hookSpecificOutput.hookEventName, 'PostToolUse', 'event');
-});
-
-test('post-command hook run directly: unreadable payload -> exit 0 and a systemMessage saying nothing was re-placed', () => {
-  const result = spawnSync(process.execPath, [path.join(HERE, 'post-command-hook.mjs')], { input: 'not json', encoding: 'utf8' });
-  expect(result.status, 0, 'exit');
-  expect(JSON.parse(result.stdout).systemMessage.includes('NOT re-placed'), true, 'message');
-});
-
-test('session start: reviews off -> the span is moved before the drift check; global on -> restored and the model is told to read it', () => {
-  const context = lazyHome({ reviewGlobal: '' });
-  const original = read(context.home, lazyEntry.file);
-  const moved = run('session-start-hook.mjs', ['--home', context.home, '--gentle-ai-node-script', context.fakeCli]);
-  expect(moved.status, 0, 'exit');
-  expect(read(context.home, lazyEntry.file), lazy(original).text, 'moved at session start');
-  expect(JSON.parse(moved.stdout).systemMessage.includes('review contract moved'), true, 'user told');
-  installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
-  const restored = JSON.parse(run('session-start-hook.mjs', ['--home', context.home, '--gentle-ai-node-script', context.fakeCli]).stdout);
-  expect(read(context.home, lazyEntry.file), original, 'restored at session start');
-  expect(restored.hookSpecificOutput.additionalContext.includes('IN FULL now'), true, 'model told to read');
-});
+registerLazySectionCases({ test, expect, newRoot, put, read, installFakeCli });
 
 // ---------------------------------------------------------------- the real list, through the CLIs
 
@@ -802,20 +481,21 @@ test('check.mjs --json: same verdict as the exit code, results carry id, status 
 
 test('apply.mjs --dry-run: the review span would move, nothing is written, exit is the current verdict; apply.mjs then moves it -> exit 0', () => {
   const context = completeHome();
+  const review = lazyEntryNamed('review-contract');
   const withSpan = `${read(context.home, '.claude/CLAUDE.md')}${orchestratorRegion().split('\n').join('\r\n')}\r\n`;
   put(context.home, '.claude/CLAUDE.md', withSpan);
   const dry = run('apply.mjs', [...flags(context), '--dry-run']);
   expect(dry.status, 1, 'dry-run exit');
-  expect(dry.stdout.includes('WOULD-MOVE review-contract-lazy-while-reviews-are-off'), true, `dry-run stdout (${dry.stdout})`);
+  expect(dry.stdout.includes('WOULD-MOVE lazy-review-contract'), true, `dry-run stdout (${dry.stdout})`);
   expect(read(context.home, '.claude/CLAUDE.md'), withSpan, 'CLAUDE.md after dry run');
   expect(run('apply.mjs', flags(context)).status, 0, 'apply exit');
-  expect(read(context.home, '.claude/CLAUDE.md'), lazy(withSpan).text, 'CLAUDE.md after apply');
+  expect(read(context.home, '.claude/CLAUDE.md'), reconcileSection(withSpan, review, { keepLoaded: false, stash: null, stashLabel: `~/${review.stash}` }).text, 'CLAUDE.md after apply');
 });
 
-test('check.mjs --json: the lazy kind and the line replacement report syncSafe, every other kind does not', () => {
+test('check.mjs --json: the lazy sections and the line replacement report syncSafe, every other kind does not', () => {
   const report = JSON.parse(run('check.mjs', [...flags(completeHome()), '--json']).stdout);
   const safe = report.results.filter((entry) => entry.syncSafe === true).map((entry) => entry.id);
-  expect(safe.join(','), 'sdd-verify-runs-scoped-gates,review-contract-lazy-while-reviews-are-off', 'sync-safe ids');
+  expect(safe.join(','), 'sdd-verify-runs-scoped-gates,lazy-blocking-prompts,lazy-delegated-verification,lazy-review-contract,lazy-model-assignments,lazy-rdd-user-owned', 'sync-safe ids');
 });
 
 test('apply.mjs --dry-run on the REAL list: the upstream verify sentence would be replaced, nothing is written; apply.mjs then replaces it -> exit 0', () => {
@@ -841,6 +521,11 @@ test('check.mjs: reference unavailable, nothing broken -> exit 2', () => {
 // @es El envoltorio de sync: los casos viven en sync-wrapper-cases.mjs.
 
 registerSyncWrapperCases({ test, expect, newRoot, put, read, installFakeCli, completeHome, agentFile, run });
+
+// ---------------------------------------------------------------- the self-healing hooks
+// @es Los hooks que se reparan solos: los casos viven en reapply-cases.mjs.
+
+registerReapplyCases({ test, expect, newRoot, put, read, installFakeCli, completeHome, agentFile, run });
 
 // ---------------------------------------------------------------- the hook
 

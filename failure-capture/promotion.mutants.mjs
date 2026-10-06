@@ -58,7 +58,7 @@ const COMMAND_MUTANTS = [
   // --- promote uses the stub and keeps ONE store
   ['a refused stub is written to the ledger anyway', COMMAND, 'if (!stub.ok) return stub;', 'if (false) return stub;'],
   ['a refused promotion reports success', COMMAND, 'if (collapsed.value?.ok !== true) {', 'if (false) {'],
-  ['the old state/promoted.md is written again beside the evidence store', COMMAND, 'ledger.lines[index] = stub.line;', "appendFileSync(PROMOTED, 'duplicate', 'utf8');\n    ledger.lines[index] = stub.line;"],
+  ['the old state/promoted.md is written again beside the evidence store', COMMAND, '    writeLedger(ledger);\n    appendFileSync(INCIDENTS,', "    writeLedger(ledger);\n    appendFileSync(PROMOTED, 'duplicate', 'utf8');\n    appendFileSync(INCIDENTS,"],
   ['the promotion is dated some other day', COMMAND, 'date: today(), closure, where })', "date: '2000-01-01', closure, where })"],
   ['promote shortens the line without the closure being what was verified', COMMAND, 'promotedStub({ ledgerFile: ledger.file, original: ledger.lines[index], date: today(), closure, where })', 'promotedStub({ ledgerFile: ledger.file, original: ledger.lines[index], date: today(), closure: { kind: \'no-mechanism\', reason: \'x\' }, where })'],
 

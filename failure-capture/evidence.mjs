@@ -19,8 +19,19 @@ import { isDate, isValidKey } from './ledger-line.mjs';
 /** Why a line is archived: shortened later, captured shortened, promoted, or superseded by a newer rule. @es Por qué se archiva una línea: acortada después, capturada ya acortada, promovida o sustituida por una regla más nueva. */
 export const EVIDENCE_KINDS = ['condensed', 'captured', 'promoted', 'superseded'];
 
+/**
+ * Where the evidence store is for the ledger at `ledgerFile`: beside it, except that a ledger in a `rules/` directory
+ * (an area's, which the harness loads by path) keeps its evidence one level up, because everything under `rules/` is
+ * LOADED as a rule and the evidence must never be. @es Dónde está el almacén de evidencia del ledger en `ledgerFile`: junto a él, salvo que un ledger en un directorio `rules/` (el de un área) guarda su evidencia un nivel arriba, porque todo lo que hay bajo `rules/` se CARGA como regla y la evidencia nunca debe cargarse.
+ */
+const evidenceRoot = (ledgerFile) => {
+  const directory = path.dirname(ledgerFile);
+
+  return path.basename(directory) === 'rules' ? path.dirname(directory) : directory;
+};
+
 /** The evidence file of `key` for the ledger at `ledgerFile`; the key must already be valid. @es El fichero de evidencia de `key`; la clave debe ser válida. */
-export const evidenceFile = (ledgerFile, key) => path.join(path.dirname(ledgerFile), 'lessons', 'evidence', `${key}.md`);
+export const evidenceFile = (ledgerFile, key) => path.join(evidenceRoot(ledgerFile), 'lessons', 'evidence', `${key}.md`);
 
 /** The bilingual header of a new evidence file. @es El encabezado bilingüe de un fichero nuevo. */
 const header = (key) => `# \`${key}\` — full evidence / evidencia completa\n\nLedger lines archived verbatim, append-only: each block is one original line, byte for byte, and may end with a closure note. @es Líneas del ledger archivadas literalmente, solo se añade: cada bloque es una línea original, byte a byte, y puede terminar con una nota de cierre.\n`;

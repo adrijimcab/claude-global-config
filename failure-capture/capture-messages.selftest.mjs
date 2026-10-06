@@ -20,6 +20,8 @@ import { fileURLToPath } from 'node:url';
 import { CAPTURE_MESSAGES } from './capture-messages.mjs';
 import { lessonFor, makeCaptureWorld, monolingualRuns, readOrEmpty } from './capture-world.mjs';
 import { messageProblems, render } from '../bilingual-output/message.mjs';
+import { areaScopes } from './ledger-routes.mjs';
+import { GLOBAL_SCOPE } from './project.mjs';
 
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-capture-messages-')));
 const KEY = 'message-lesson-key';
@@ -62,7 +64,7 @@ const capture = (world, extra = [], { key = KEY, scope = 'global', actor = 'orch
   check('a refused capture exits 1', status === 1, out);
   says('capture refused', out, 'capture.refused');
   says('capture refused (key)', out, 'capture.problem.key');
-  says('capture refused (scope, inside a project)', out, 'capture.problem.scope', { allowed: '"global" / "demo"' });
+  says('capture refused (scope, inside a project)', out, 'capture.problem.scope', { allowed: [GLOBAL_SCOPE, ...areaScopes(), 'demo'].map((scope) => `"${scope}"`).join(' / ') });
   says('capture refused (actor)', out, 'capture.problem.actor');
   says('capture refused (lesson too short)', out, 'capture.problem.lessonShort');
 }
@@ -82,7 +84,7 @@ const capture = (world, extra = [], { key = KEY, scope = 'global', actor = 'orch
 
   const { out } = capture(world, [], { scope: 'demo', cwd: outside });
 
-  says('a scope that needs a project, from outside any', out, 'capture.problem.scope.noProject', { allowed: '"global"' });
+  says('a scope that needs a project, from outside any', out, 'capture.problem.scope.noProject', { allowed: [GLOBAL_SCOPE, ...areaScopes()].map((scope) => `"${scope}"`).join(' / ') });
 }
 
 {

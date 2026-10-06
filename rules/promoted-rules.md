@@ -3,28 +3,6 @@
 Cada clave conserva cada frase «RULE» LITERAL; el relato
 medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (no se carga solo: leerlo al tocar ese tema).
 
-- **`stale-artifact-read-as-this-runs-result`** — Never interpret a results, exit-code, log, golden, or coverage artifact without first proving it belongs to THIS run: truncate or delete it in the same command that produces it, and REGENERATE whatever a gate derives from (`npm run build` before `check:api`, the full suite before coverage) before reading it.
-  RULE: before asserting that something is still blocked, unavailable, rate-limited or locked, ATTEMPT IT — the attempt is nearly always cheaper than the claim — or say plainly that it is unverified. Never infer a CURRENT capability from a PAST refusal.
-  RULE: before dispatching work from any record older than the current session, verify the specific items are still open; a reconciliation runs BEFORE the work it scopes, never beside it.
-  RULE: before reading a SUITE, enumerate every artefact its gates derive from and regenerate ALL of them — not just the one that was complaining.
-  - **The tell is DISAGREEMENT, not the exit code**: a red set that contradicts a measurement you took yourself is a claim about execution ORDER, never about the tree.
-  RULE: an artefact is attributable to a run only when its PATH carries a run id; before launching a long run, establish that no earlier one is still alive.
-  RULE: before launching or resuming a worker while a long chain is live, name the exclusive resources both touch and forbid the overlap in the brief.
-  RULE: read a gate's result from the run's `verdict.json` (`gates[].log`), never by picking a file out of a directory by name.
-  RULE: a worker's verdict is read with `--read` run INSIDE that worker's worktree, or through the explicit path of its `runs/<id>/verdict.json`; never from the main checkout, and the report names the worktree the verdict came from.
-
-- **`guard-that-cannot-go-red`** — A new guard, gate, check or classifier is NOT trusted until it has been proven to DISCRIMINATE, on real cases, across the state space its decision ranges over.
-  RULE: enumerate the state space the decision ranges over and exercise each state in the self-test, so the discrimination cannot silently drift back.
-  RULE: test the near miss, and make the refusal NAME it — do not relax the form to make the message unnecessary; strictness is what stops a marker from being talked around.
-  RULE: a fixture is CONSTRUCTED by the test, never read from a branch, a tag's relationship to a branch, or any artifact that legitimately changes.
-  RULE: before any probe becomes a decision signal, exercise the state in which it MUST say no — a borrowed signal gets the same scrutiny as a guard you wrote.
-  RULE: name the question the action decides, in words, BEFORE choosing the probe; when a decision has two independent preconditions, satisfying one is not evidence about the other.
-  RULE: when a guard forbids a token, its self-test must exercise that token appearing as DATA — heredoc bodies, quoted strings, echoed text, commit messages — and must prove the scan RESUMES afterwards.
-  RULE: an identity guard compares what the author actually wrote (the brief, not the label), folds the domain's own spellings, and treats a live worktree as overriding recency; where the signal is too weak to refuse, it must still surface the candidate.
-  RULE: a value measured in one unit is applied in that unit — a byte size cuts bytes, never a decoded string; a fixture is chosen for the data the guard will really read.
-  RULE: the completion of a multi-item operation is verified by COUNTING what landed against what was asked, never by a state flag; prefer the tool that already owns the operation.
-  RULE: a kill measured over a red baseline is not evidence, and a proof is only as good as the runner's ability to refuse to measure.
-
 - **`bounded-search-read-as-absence`** — Reading ONE empty store as "no record exists". **A tool you lack is never the search that establishes absence.** Before saying a record does not exist, query every store that could hold it — and when the question is about project state, history, or what remains, query engram FIRST, because that is where this project deliberately puts what the tooling cannot keep.
   RULE: a document asserting "X does not exist" is a HYPOTHESIS inheriting somebody else's search, never a measurement — and it may never be forwarded to a worker under `MEASURED:`.
   RULE: a negative written into any DURABLE record must NAME THE STORES SEARCHED inside the record itself; where a store was not searched, say so rather than letting silence read as coverage.
