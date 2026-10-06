@@ -111,6 +111,16 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/project-profile/session-start.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [
