@@ -33,13 +33,15 @@ import { provenanceFindings, sha256Of } from '../fleet-kit/vendor/provenance.mjs
 import { duplicateFinding, RECORD_FILE_NAME, undeclaredDuplicates } from './duplicates.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TARGET_ROOT = path.resolve(HERE, '..');
+/** The install the copies land in: the folder holding `vendored/`. @es La instalación donde caen las copias: la carpeta que contiene `vendored/`. */
+export const TARGET_ROOT = path.resolve(HERE, '..');
 const SOURCE_SEGMENTS = Object.freeze(['Desktop', 'Projects', 'b100-am-ui', '.claude']);
 const SOURCE_ROOT = path.join(os.homedir(), ...SOURCE_SEGMENTS);
 // The record names the source home-relative: an absolute path would change with whichever machine synced
 // (and leak its user name) while naming the same fleet. @es El registro nombra la fuente relativa al home:
 // una ruta absoluta cambiaría según la máquina que sincronizó (y filtraría su usuario) para la misma flota.
-const SOURCE_ROOT_RECORDED = ['~', ...SOURCE_SEGMENTS].join('/');
+/** The owner's `.claude/`, home-relative: how a person finds the file to edit. @es El `.claude/` dueño, relativo al home: cómo una persona halla el fichero que debe editar. */
+export const SOURCE_ROOT_RECORDED = ['~', ...SOURCE_SEGMENTS].join('/');
 const PROVENANCE_FILE = path.join(HERE, RECORD_FILE_NAME);
 
 /** Relative paths under both roots. @es Rutas relativas bajo ambas raíces. */
@@ -56,7 +58,10 @@ export const VENDORED = Object.freeze([
   'mutation-proof/scope.mjs',
   'mutation-proof/scope.selftest.mjs',
   'mutation-proof/scope.mutants.mjs',
-  'mutation-proof/scope-repository.selftest.mjs'
+  'mutation-proof/scope-repository.selftest.mjs',
+  'write-targets/redirect-targets.mjs',
+  'write-targets/shell-writes.mjs',
+  'write-targets/tool-call-writes.mjs'
 ]);
 
 function sync() {

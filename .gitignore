@@ -96,6 +96,9 @@
 !/cwd-change-guard/
 !/cwd-change-guard/**
 /cwd-change-guard/state/
+!/vendored-edit-guard/
+!/vendored-edit-guard/**
+/vendored-edit-guard/state/
 !/stash-watch/
 !/stash-watch/**
 /stash-watch/state/
@@ -163,6 +166,9 @@
 !/toolchain-guard/
 !/toolchain-guard/**
 /toolchain-guard/state/
+!/write-targets/
+!/write-targets/**
+/write-targets/state/
 
 !/eval-guard/
 !/eval-guard/*.mjs
