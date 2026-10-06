@@ -3,7 +3,9 @@
  * Verifies the gates-kit: every gate directory `gates-kit/<stack>/<gate>/` must hold its parts (see
  * `gate-layout.mjs`), a config free of suppressions (see `config-rules.mjs`), a command that exits 0 on
  * `pass/`, and the same command exiting NON-ZERO on `fail/`. A gate whose fail fixture passes could never
- * go red, which is the `guard-that-cannot-go-red` defect this kit exists to prevent. Every toolchain
+ * go red, which is the `guard-that-cannot-go-red` defect this kit exists to prevent. A command that leaves
+ * anything changed in the gate folder (a cache, a report, a rewritten fixture) is a problem too: a gate runs
+ * on a tree it must not touch. Every toolchain
  * `gates-kit/toolchains/<stack>/` must be pinned and locked (see `toolchain-layout.mjs`), and the package a
  * gate runs must be one its stack's toolchain declares.
  *
@@ -19,7 +21,8 @@
  *
  * @es Verifica el gates-kit: cada gate debe tener sus partes, una config sin supresiones, un comando que
  * sale con 0 sobre `pass/` y con código NO cero sobre `fail/`. Un gate cuyo fixture fail pasa nunca podría
- * ponerse en rojo. Cada toolchain debe estar fijada y con lockfile, y el paquete que corre un gate debe estar
+ * ponerse en rojo. Un comando que deja algo cambiado en la carpeta del gate (una caché, un informe, un
+ * fixture reescrito) también es un problema. Cada toolchain debe estar fijada y con lockfile, y el paquete que corre un gate debe estar
  * declarado en la toolchain de su stack; como `GATES_KIT_TOOLCHAIN` nombra la toolchain instalada de UN stack,
  * una corrida es por stack (`--stack`). Salida 0 todo correcto; 1 algún problema; 2 nada medido. Un comando
  * que agotó el tiempo o no arrancó no decidió nada: es un problema, no un fallo válido. Cada línea sale de la
@@ -27,7 +30,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -66,6 +69,7 @@ export const MESSAGES = {
   'problem.lock-version-mismatch': ['  the lockfile resolves {detail} to another version than the pin', '  el lockfile resuelve {detail} a otra versión que la fijada'],
   'problem.tool-not-declared': ['  the command runs {detail}, which the stack toolchain does not declare', '  el comando ejecuta {detail}, que la toolchain del stack no declara'],
   'problem.no-toolchain': ['  the command runs a package but the stack has no toolchain', '  el comando ejecuta un paquete pero el stack no tiene toolchain'],
+  'problem.left-residue': ['  the command changed the gate folder: {detail}', '  el comando cambió la carpeta del gate: {detail}'],
   'problem.timed-out': ['  the command timed out on {detail}', '  el comando agotó el tiempo sobre {detail}'],
   'run.none': ['no gate found to verify', 'no se encontró ningún gate que verificar'],
   'toolchain.ok': ['toolchain {stack}: pinned to exact versions and locked', 'toolchain {stack}: fijada a versiones exactas y con lockfile'],
@@ -114,6 +118,28 @@ function runSide(gate, dir, side) {
   return undefined;
 }
 
+/**
+ * What is under `dir`, as a map from each relative path to its signature: `dir` for a folder, size and
+ * modification time for a file. @es Lo que hay bajo `dir`, como mapa de cada ruta relativa a su firma.
+ */
+function snapshot(dir) {
+  const entries = new Map();
+
+  for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    const file = path.join(entry.parentPath, entry.name);
+    const { size, mtimeMs } = statSync(file);
+
+    entries.set(path.relative(dir, file).split(path.sep).join('/'), entry.isDirectory() ? 'dir' : `${size}:${mtimeMs}`);
+  }
+
+  return entries;
+}
+
+/** The sorted relative paths that were added, removed or changed between two snapshots. @es Las rutas añadidas, quitadas o cambiadas entre dos instantáneas. */
+function changedPaths(before, after) {
+  return [...new Set([...before.keys(), ...after.keys()])].filter((key) => before.get(key) !== after.get(key)).sort();
+}
+
 /** `{ id, file, line }` problems for every suppression in the gate's configs. @es Supresiones de las configs. */
 function configProblems(configs) {
   return configs.flatMap((file) => configViolations(readFileSync(file, 'utf8')).map(({ rule, line }) => ({ id: `config-${rule}`, file: path.basename(file), line })));
@@ -132,7 +158,15 @@ export function verifyGate({ stack, name, dir, toolchain }) {
   const wiring = gate === undefined ? [] : gateToolProblems(gate.command, toolchain);
   const all = [...problems, ...wiring, ...configProblems(configs)];
 
-  if (problems.length === 0 && wiring.length === 0) for (const side of ['pass', 'fail']) all.push(runSide(gate, dir, side));
+  if (problems.length === 0 && wiring.length === 0) {
+    const before = snapshot(dir);
+
+    for (const side of ['pass', 'fail']) all.push(runSide(gate, dir, side));
+
+    const changed = changedPaths(before, snapshot(dir));
+
+    if (changed.length > 0) all.push({ id: 'left-residue', detail: changed.join(' ') });
+  }
 
   return { stack, name, problems: all.filter((problem) => problem !== undefined) };
 }

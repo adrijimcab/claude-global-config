@@ -128,6 +128,26 @@ check('an invalid declaration (not an array) is refused', problemsOf({ 'gate.jso
 check('an invalid declaration (extra key) is refused', problemsOf({ 'gate.json': '{"command":["node"],"shell":true}' }).includes('invalid-gate-json'));
 check('an invalid declaration (not JSON) is refused', problemsOf({ 'gate.json': '{' }).includes('invalid-gate-json'));
 check('an invalid declaration (bad timeout) is refused', problemsOf({ 'gate.json': '{"command":["node"],"timeoutMs":0}' }).includes('invalid-gate-json'));
+// A command that leaves anything behind in the gate folder, or in the fixture it was given, is a problem.
+/** A gate.json whose command runs the JavaScript `script` with the target as its argument. @es Un gate.json cuyo comando corre `script`. */
+const running = (script) => JSON.stringify({ command: ['node', '-e', script, '{target}'] });
+/** The problems of a gate whose command runs `script`, as `id:detail`. @es Los problemas de un gate cuyo comando corre `script`. */
+const residueOf = (script, overrides = {}) => {
+  const dir = buildGate(freshRoot(), 's', 'g', { 'gate.json': running(script), ...overrides });
+
+  return verifyGate({ stack: 's', name: 'g', dir }).problems.filter((problem) => problem.id === 'left-residue').map((problem) => problem.detail).join(' ');
+};
+
+check('a command that writes a file in the gate folder is refused and the file named', residueOf('require("fs").writeFileSync("residue.txt","x")') === 'residue.txt');
+check('a command that writes a file in the fixture is refused and the file named', residueOf('require("fs").writeFileSync(require("path").join(process.argv[1],"extra.txt"),"x")').split(' ').includes('fail/extra.txt'));
+check('the changed paths are listed in order, removed and added alike', residueOf('const fs=require("fs");fs.rmSync(require("path").join(process.argv[1],"a.txt"),{force:true});fs.writeFileSync("aaa.txt","x")') === 'aaa.txt fail/a.txt pass/a.txt');
+check('a command that creates a folder is refused', residueOf('require("fs").mkdirSync("cache")') === 'cache');
+check('a command that creates a nested file is refused with its path', residueOf('require("fs").mkdirSync("a/b",{recursive:true});require("fs").writeFileSync("a/b/c.txt","x")').includes('a/b/c.txt'));
+check('a command that deletes a file is refused', residueOf('require("fs").rmSync(require("path").join(process.argv[1],"a.txt"),{force:true})').includes('/a.txt'));
+check('a command that rewrites a file with the same text is refused', residueOf('const f=require("path").join(process.argv[1],"a.txt");const s=require("fs").readFileSync(f);require("fs").writeFileSync(f,s);require("fs").utimesSync(f,1,1)').includes('/a.txt'));
+check('a command that only reads leaves no residue', residueOf('require("fs").readdirSync(process.argv[1])') === '');
+check('a correct gate leaves no residue', problemsOf({}).every((id) => id !== 'left-residue'));
+check('a gate that writes nothing is not refused for residue even when it fails', residueOf('process.exit(0)') === '');
 check('a gate with a missing part does not run its command', problemsOf({ 'pass/a.txt': null, 'fail/a.txt': 'fine\n' }).join() === 'missing-pass');
 
 check('an empty pass folder is refused', gateWithEmptyFolder('pass/a.txt', 'pass').includes('missing-pass'));
@@ -214,7 +234,7 @@ check('every message of the table has both halves', Object.values(MESSAGES).ever
 check('a Spanish half keeps its accents', Object.values(MESSAGES).some(([, spanish]) => /[áéíóúñ]/.test(spanish)));
 check('a message without its @es half throws', (() => { MESSAGES['test.half'] = ['only English', '']; try { say('test.half'); return false; } catch { return true; } finally { delete MESSAGES['test.half']; } })());
 check('an unknown message id throws', (() => { try { say('no.such.id'); return false; } catch { return true; } })());
-check('every problem id has a message', ['missing-config', 'missing-pass', 'missing-fail', 'missing-source', 'missing-gate-json', 'invalid-gate-json', 'config-ignore', 'config-off', 'config-directive', 'config-threshold', 'pass-failed', 'fail-passed', 'could-not-run', 'timed-out'].every((id) => MESSAGES[`problem.${id}`] !== undefined));
+check('every problem id has a message', ['missing-config', 'missing-pass', 'missing-fail', 'missing-source', 'missing-gate-json', 'invalid-gate-json', 'config-ignore', 'config-off', 'config-directive', 'config-threshold', 'pass-failed', 'fail-passed', 'could-not-run', 'timed-out', 'left-residue'].every((id) => MESSAGES[`problem.${id}`] !== undefined));
 
 // Toolchains: the verifier checks each one beside the gates, and a gate's package against its stack's toolchain.
 /** Writes `<root>/toolchains/<stack>` with a manifest and the lockfile that matches it; `lock: false` omits the lockfile. @es Escribe una toolchain correcta; `lock: false` omite el lockfile. */

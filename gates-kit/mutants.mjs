@@ -5,12 +5,15 @@
  * `../mutation-proof/run-mutants.mjs`; crash-only kills count as survivors (`crashKills: 'fail'`). Each row
  * names the decision it removes, not the line it edits.
  *
- * Known residual: the sort of discovery and the quoting of Windows shim arguments are not distinguished by
- * any fixture (a file system lists in order anyway; no fixture path holds a space), so neither has a mutant.
+ * Known residual: the sort of discovery, the quoting of Windows shim arguments and the conversion of a
+ * changed path's separator to a slash are not distinguished by any fixture on a POSIX file system (it lists
+ * in order anyway, no fixture path holds a space, and a POSIX separator already is a slash), so none has a
+ * mutant. The row for the npm shim below survives for the same reason on Linux (baseline).
  *
  * @es Las decisiones del verificador de gates-kit, rotas una a una, que `verify.selftest.mjs` debe cazar.
  * Una muerte solo por crash cuenta como superviviente. Residual conocido: el orden del descubrimiento y el
- * entrecomillado de los shims de Windows no tienen mutante porque ningún fixture los distingue.
+ * entrecomillado de los shims de Windows y la conversión del separador de una ruta cambiada a barra no
+ * tienen mutante porque ningún fixture los distingue en un sistema de ficheros POSIX.
  */
 
 import path from 'node:path';
@@ -67,7 +70,7 @@ const MUTANTS = [
   ['the target token is not substituted', V, "arg.replaceAll('{target}', target)", 'arg'],
   ['both sides run on the pass folder', V, 'const target = path.join(dir, side);', "const target = path.join(dir, 'pass');"],
   ['the command runs outside the gate directory', V, '{ cwd: dir,', '{ cwd: undefined,'],
-  ['a gate with a missing part still runs its command', V, 'if (problems.length === 0 && wiring.length === 0) for', 'if (true) for'],
+  ['a gate with a missing part still runs its command', V, 'if (problems.length === 0 && wiring.length === 0) {', 'if (true) {'],
   ['config suppressions are not reported', V, '...configProblems(configs)', ''],
   ['the npm shim is not launched through a shell', V, "new Set(['npx', 'npm', 'pnpm', 'yarn'])", "new Set(['npx', 'pnpm', 'yarn'])"],
   ['a gate that runs an undeclared package still runs', V, 'problems.length === 0 && wiring.length === 0', 'problems.length === 0'],
@@ -82,6 +85,14 @@ const MUTANTS = [
   ['a run without gates prints a gate summary', V, "if (gates.length > 0) print(say('run.summary'", "if (true) print(say('run.summary'"],
   ['a run without toolchains prints a toolchain summary', V, "if (toolchains.length > 0) print(say('run.summary-toolchains'", "if (true) print(say('run.summary-toolchains'"],
   ['the stack filter is ignored by toolchains', V, 'discoverToolchains(root, options.stack)', 'discoverToolchains(root)'],
+  ['a command that leaves residue is accepted', V, 'if (changed.length > 0) all.push', 'if (false) all.push'],
+  ['the gate folder is not read before the run', V, 'const before = snapshot(dir);', 'const before = new Map();'],
+  ['a created folder is not seen', V, "entry.isDirectory() ? 'dir' : `${size}:${mtimeMs}`", "entry.isDirectory() ? undefined : `${size}:${mtimeMs}`"],
+  ['a rewritten file is not seen', V, '`${size}:${mtimeMs}`', '`${size}`'],
+  ['a removed file is not seen', V, '[...new Set([...before.keys(), ...after.keys()])]', '[...new Set([...after.keys()])]'],
+  ['an added file is not seen', V, '[...new Set([...before.keys(), ...after.keys()])]', '[...new Set([...before.keys()])]'],
+  ['the changed paths are not sorted', V, '.filter((key) => before.get(key) !== after.get(key)).sort()', '.filter((key) => before.get(key) !== after.get(key))'],
+  ['the changed paths are not listed', V, "detail: changed.join(' ')", 'detail: changed.length'],
   ['a message without its @es half is rendered', V, "entry.some((half) => typeof half !== 'string' || half.trim() === '')", 'false'],
   ['the @es marker is dropped from every line', V, '`${english} @es ${spanish}`', '`${english} ${spanish}`'],
   ['a gate with problems exits 0', V, 'return ok === results.length && toolchainsOk === toolchainResults.length ? 0 : 1;', 'return 0;'],
