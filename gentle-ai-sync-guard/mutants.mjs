@@ -70,6 +70,9 @@ const MUTANTS = [
   ['the overlay-check timeout failure loses its Spanish half', 'gentle-ai-sync-guard/overlay-check.mjs', ' @es no terminó`', ' no terminó`'],
   ['the overlay-check missing-array failure loses its Spanish half', 'gentle-ai-sync-guard/overlay-check.mjs', ' @es no imprimió un arreglo de resultados`', ' no imprimió un arreglo de resultados`'],
   ['the overlay-check non-JSON failure loses its Spanish half', 'gentle-ai-sync-guard/overlay-check.mjs', ' @es salió sin su informe JSON`', ' salió sin su informe JSON`'],
+  ["a refusal no longer points at the overlay wrapper", "gentle-ai-sync-guard/decide.mjs", "const SYNC_COMMAND = `node \"${OVERLAY}/sync.mjs\"`;", "const SYNC_COMMAND = `node \"${OVERLAY}/check.mjs\"`;"],
+  ["another program's sync subcommand counts as gentle-ai's", "gentle-ai-sync-guard/sync-invocations.mjs", "program === PROGRAM && subcommandWords", "subcommandWords"],
+  ["the broken refusal loses the Spanish half of its wrapper line", "gentle-ai-sync-guard/decide.mjs", "(${SYNC_COMMAND}), which prunes again what sync puts back. \\`gentle-ai sync --dry-run\\` is always allowed. @es Despu\u00e9s", "(${SYNC_COMMAND}), which prunes again what sync puts back. \\`gentle-ai sync --dry-run\\` is always allowed. Despu\u00e9s"],
 ];
 
 const survivors = runMutants({

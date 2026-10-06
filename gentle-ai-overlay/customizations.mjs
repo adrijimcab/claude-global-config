@@ -11,6 +11,25 @@
  * about a CLI setting rather than a file has no `file`). When a new promoted rule or owner heading
  * is added (now in ~/.claude/rules/), add its anchor to PROMOTED_RULE_ANCHORS or
  * OWNER_MANDATE_ANCHORS; the anchor makes the report name it if it ever goes missing.
+ *
+ * Pruning text that sync keeps emitting: add an entry of kind `pruned-text-stays-pruned` (kinds/pruned-text.mjs)
+ * with `file`, two stable lines sync emits around the text (`before`, `after`), the exact `block` of lines
+ * between them and, to condense instead of remove, a `replacement`. There is NO live entry yet: gentle-ai
+ * 2.9.1 has no native way to omit or lazy-load a single section (sync replaces every marker region whole,
+ * internal/components/filemerge/section.go), and no pruning decision of the owner is recorded for
+ * CLAUDE.md as it stands, so none is invented here.
+ *
+ * Syncing: run `node ~/.claude/gentle-ai-overlay/sync.mjs [gentle-ai sync arguments]` (sync-wrapper.mjs). It
+ * runs the real sync, re-applies what sync undid, checks, and exits non-zero while anything drifts.
+ *
+ * @es Podar texto que sync sigue emitiendo: añadir una entrada del tipo `pruned-text-stays-pruned`
+ * (kinds/pruned-text.mjs) con `file`, dos líneas estables que sync emite alrededor del texto (`before`,
+ * `after`), el `block` exacto de líneas entre ellas y, para condensar en vez de quitar, un `replacement`.
+ * Todavía NO hay ninguna entrada viva: gentle-ai 2.9.1 no tiene forma nativa de omitir ni cargar bajo
+ * demanda una sola sección (sync reemplaza cada región entera) y ninguna decisión de poda del dueño consta
+ * en el CLAUDE.md actual, así que no se inventa ninguna. Para sincronizar: ejecutar
+ * `node ~/.claude/gentle-ai-overlay/sync.mjs [argumentos de gentle-ai sync]` (sync-wrapper.mjs): corre el
+ * sync real, reaplica lo que sync deshizo, comprueba, y sale distinto de cero mientras algo quede desviado.
  */
 
 // Owner lesson «QUE LOS SDD TENGAN BASH Y TODO LO NECESARIO» (engram #698).

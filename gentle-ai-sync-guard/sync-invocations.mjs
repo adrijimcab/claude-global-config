@@ -19,8 +19,11 @@ const PROGRAM = 'gentle-ai';
 const SUBCOMMAND = 'sync';
 const DRY_RUN_SPELLINGS = new Set(['--dry-run', '--dry-run=true']);
 
+/** Whether `gentle-ai sync` run with `args` only previews. @es Si `gentle-ai sync` con `args` solo hace una vista previa. */
+export const isDryRun = (args) => args.some((arg) => DRY_RUN_SPELLINGS.has(arg));
+
 /** @returns {{ args: string[], dryRun: boolean }[]} */
 export const syncInvocations = (script, dialect) =>
   executedPrograms(script, dialect)
     .filter(({ program, args }) => program === PROGRAM && subcommandWords(args)[0] === SUBCOMMAND)
-    .map(({ args }) => ({ args, dryRun: args.some((arg) => DRY_RUN_SPELLINGS.has(arg)) }));
+    .map(({ args }) => ({ args, dryRun: isDryRun(args) }));
