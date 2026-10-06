@@ -3,6 +3,8 @@ paths:
   - "**/angular.json"
   - "**/src/app/**/*.ts"
   - "**/projects/*/src/**/*.ts"
+  - "**/libs/**/src/**/*.ts"
+  - "**/src/lib/**/*.ts"
   - "**/*.component.ts"
   - "**/*.directive.ts"
   - "**/*.pipe.ts"

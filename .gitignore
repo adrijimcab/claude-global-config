@@ -246,3 +246,6 @@
 # cache/, debug/, paste-cache/, scratch/   cachés, logs de debug por sesión, portapapeles pegado
 # *.jsonl, *.log, *.credentials.json, .last-*, *.swp, mcp-needs-auth-cache.json  estado/credenciales sueltos
 # .claude.json y sus backups viven FUERA de ~/.claude — nunca se referencian aquí
+
+# A crash mid-write of the overlay can leave its temp file; it is never content.
+*.overlay-tmp-*
