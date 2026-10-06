@@ -11,10 +11,14 @@ const LABEL = { held: 'HELD        ', broken: 'BROKEN      ', unverifiable: 'UNV
 export const OVERLAY_DIR = '$HOME/.claude/gentle-ai-overlay';
 export const APPLY_COMMAND = `node "${OVERLAY_DIR}/apply.mjs"`;
 export const CHECK_COMMAND = `node "${OVERLAY_DIR}/check.mjs"`;
+export const SYNC_COMMAND = `node "${OVERLAY_DIR}/sync.mjs"`;
 
 const location = (result) => (result.file === undefined ? '' : ` (~/${result.file.split(path.sep).join('/')})`);
 
 export const formatResult = (result) => `${LABEL[result.status]} ${result.id}${location(result)} — ${result.detail}`;
+
+/** One line per apply outcome, shared by apply and the sync wrapper. @es Una línea por resultado de apply, compartida por apply y el envoltorio de sync. */
+export const formatOutcome = (outcome) => `${outcome.outcome.toUpperCase().padEnd(9)} ${outcome.id} — ${outcome.detail}`;
 
 export function exitCodeFor(results) {
   if (results.some((result) => result.status === 'broken')) return 1;
@@ -33,5 +37,6 @@ export function driftAdvisory(results) {
     ...(restorable ? [`Restore the reapplicable ones with: ${APPLY_COMMAND} @es Restaurar las reaplicables con: ${APPLY_COMMAND}`] : []),
     ...remedies,
     `Re-check with: ${CHECK_COMMAND} @es Volver a comprobar con: ${CHECK_COMMAND}`,
+    `Sync only through the wrapper, which re-applies after the sync: ${SYNC_COMMAND} @es Sincronizar solo con el envoltorio, que reaplica tras el sync: ${SYNC_COMMAND}`,
   ].join('\n');
 }

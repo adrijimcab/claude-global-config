@@ -16,7 +16,7 @@ import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decide } from './decide.mjs';
+import { decide, driftVerdict } from './decide.mjs';
 import { runOverlayCheck } from './overlay-check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -122,6 +122,10 @@ const NOT_A_SYNC = [
   [BASH, 'echo "a \\" ; gentle-ai sync"'],
   [BASH, 'x="$(echo "gentle-ai sync")"'],
   [BASH, 'gentle-ai sdd-status sync'],
+  // Another program's `sync` subcommand is not gentle-ai's. @es El subcomando `sync` de otro programa no es el de gentle-ai.
+  [BASH, 'rclone sync src dst'],
+  [BASH, 'git sync'],
+  [POWERSHELL, 'robocopy-sync sync'],
   // A help flag (or the `help` word) BEFORE the subcommand asks for help, it never syncs.
   // @es Un flag de ayuda (o la palabra `help`) ANTES del subcomando pide ayuda, nunca sincroniza.
   [BASH, 'gentle-ai --help sync'],
@@ -217,6 +221,59 @@ test('the check is consulted only when a real sync is present', () => {
 });
 
 test('no command string -> allow', () => expect(decide({ command: undefined, toolName: BASH }, { checkDrift: DRIFT.broken }).decision, 'allow', 'decision'));
+
+// ------------------------------------------------ the overlay sync wrapper
+// The wrapper line runs `node .../gentle-ai-overlay/sync.mjs`, whose program is `node`, so this guard never
+// judges it: the real `gentle-ai sync` is its child, a process no PreToolUse hook sees. The wrapper is its own
+// gate (it takes the same `driftVerdict` before it syncs), so allowing its line here opens no hole.
+// @es El envoltorio corre `node .../gentle-ai-overlay/sync.mjs`, cuyo programa es `node`, así que este guard
+// nunca lo juzga: el `gentle-ai sync` real es su hijo, un proceso que ningún hook PreToolUse ve. El envoltorio
+// es su propia compuerta (toma el mismo `driftVerdict` antes de sincronizar), así que dejar pasar su línea
+// aquí no abre ningún hueco.
+
+const WRAPPER_LINES = [
+  [BASH, 'node "$HOME/.claude/gentle-ai-overlay/sync.mjs"'],
+  [BASH, 'node ~/.claude/gentle-ai-overlay/sync.mjs --agents claude-code'],
+  [BASH, 'node /c/Users/a/.claude/gentle-ai-overlay/sync.mjs --dry-run=false'],
+  [BASH, 'cd ~/.claude && node gentle-ai-overlay/sync.mjs 2>&1 | tee sync.log'],
+  [BASH, 'bash -c "node $HOME/.claude/gentle-ai-overlay/sync.mjs"'],
+  [POWERSHELL, 'node "$HOME/.claude/gentle-ai-overlay/sync.mjs" --agents claude-code'],
+  [POWERSHELL, '& node "C:\\Users\\a\\.claude\\gentle-ai-overlay\\sync.mjs"'],
+];
+WRAPPER_LINES.forEach(([tool, command]) =>
+  test(`wrapper (${tool}): ${JSON.stringify(command)} -> allowed with a broken overlay, and the check is never consulted`, () => {
+    let calls = 0;
+    const counting = () => ((calls += 1), DRIFT.broken());
+    expect(verdict(command, tool, counting), 'allow', 'decision');
+    expect(calls, 0, 'check calls');
+  }));
+
+const RAW_BESIDE_WRAPPER = [
+  [BASH, 'node "$HOME/.claude/gentle-ai-overlay/sync.mjs" && gentle-ai sync'],
+  [BASH, 'gentle-ai sync; node "$HOME/.claude/gentle-ai-overlay/sync.mjs"'],
+  [BASH, 'node "$HOME/.claude/gentle-ai-overlay/sync.mjs" --dry-run; gentle-ai sync'],
+  [POWERSHELL, 'node "$HOME/.claude/gentle-ai-overlay/sync.mjs"; gentle-ai sync'],
+];
+RAW_BESIDE_WRAPPER.forEach(([tool, command]) => test(`raw sync beside the wrapper (${tool}): ${JSON.stringify(command)} -> still refused`, () => expect(verdict(command, tool), 'deny', 'decision')));
+
+test('the wrapper takes the guard\'s own verdict: driftVerdict equals what decide answers for a raw sync, on every drift shape', () => {
+  for (const [name, drift] of Object.entries(DRIFT)) {
+    const raw = decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: drift });
+    expect(JSON.stringify(driftVerdict(drift())), JSON.stringify(raw), `verdict on ${name}`);
+  }
+});
+
+test('driftVerdict: a sync-safe breakage allows, a real one refuses', () => {
+  expect(driftVerdict({ exitCode: 1, results: SYNC_SAFE_RESULTS }).decision, 'allow', 'sync-safe');
+  expect(driftVerdict({ exitCode: 1, results: BROKEN_RESULTS }).decision, 'deny', 'real');
+});
+
+test('a refusal sends the owner to the wrapper to sync, not to a raw sync', () => {
+  for (const check of [DRIFT.broken, DRIFT.unverifiable]) {
+    const reason = decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: check }).reason;
+    expect(reason.includes('node "$HOME/.claude/gentle-ai-overlay/sync.mjs"'), true, `reason (${reason})`);
+  }
+});
 
 // ------------------------------------------------ el CLI
 

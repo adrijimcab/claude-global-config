@@ -20,6 +20,8 @@ import { parseManagedRegions } from './managed-regions.mjs';
 import { inspectSection, reconcileSection, sha256 } from './review-contract-section.mjs';
 import { lazyReviewTrigger } from './lazy-review-triggers.mjs';
 import { registerLineReplacementCases } from './line-replacement-cases.mjs';
+import { registerPrunedTextCases } from './pruned-text-cases.mjs';
+import { registerSyncWrapperCases } from './sync-wrapper-cases.mjs';
 import { readTextOrNull } from './text-file.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -94,6 +96,11 @@ if (args === 'telemetry disable --json') {
   if (state.reviewFault === 'garbage') { process.stdout.write('not json at all'); process.exit(0); }
   process.stdout.write(JSON.stringify(report));
   if (state.reviewFault === 'exit') process.exit(4);
+} else if (process.argv[2] === 'sync') {
+  fs.appendFileSync(path.join(__dirname, 'sync-calls.log'), JSON.stringify(process.argv.slice(3)) + '\\n');
+  for (const [file, text] of Object.entries(state.syncWrites ?? {})) fs.writeFileSync(file, text);
+  if (state.syncSignal) process.kill(process.pid, state.syncSignal);
+  process.exit(state.syncExit ?? 0);
 } else {
   process.exit(2);
 }
@@ -232,6 +239,11 @@ test('forbidden: tools line without Bash -> held; with Bash -> broken and not re
 // @es Reemplazo de una línea anclada: los casos viven en line-replacement-cases.mjs.
 
 registerLineReplacementCases({ test, expect, newRoot, put, read });
+
+// ---------------------------------------------------------------- pruned text
+// @es Texto podado: los casos viven en pruned-text-cases.mjs.
+
+registerPrunedTextCases({ test, expect, newRoot, put, read });
 
 // ---------------------------------------------------------------- owner sections
 
@@ -825,6 +837,11 @@ test('check.mjs: reference unavailable, nothing broken -> exit 2', () => {
   expect(run('check.mjs', flags(context)).status, 2, 'exit');
 });
 
+// ---------------------------------------------------------------- the sync wrapper
+// @es El envoltorio de sync: los casos viven en sync-wrapper-cases.mjs.
+
+registerSyncWrapperCases({ test, expect, newRoot, put, read, installFakeCli, completeHome, agentFile, run });
+
 // ---------------------------------------------------------------- the hook
 
 test('hook: all held -> exit 0 and silent', () => {
@@ -840,6 +857,7 @@ test('hook: drift -> exit 0 with valid JSON naming the apply command', () => {
   expect(result.status, 0, 'exit');
   const message = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
   expect(message.includes('apply.mjs') && message.includes('sdd-design-grants-bash'), true, 'advisory');
+  expect(message.includes('gentle-ai-overlay/sync.mjs'), true, 'advisory names the sync wrapper');
 });
 
 test('hook: its own malfunction (its sibling modules are missing) -> still exit 0, and says the check failed', () => {
@@ -870,7 +888,7 @@ test('bilingual: the drift advisory carries both halves on its header, restore a
   put(context.home, '.claude/agents/sdd-design.md', agentFile({ tools: `Read, ${MCP}` }));
   put(context.home, '.claude/agents/sdd-research.md', agentFile({ tools: 'WebFetch, Bash' }));
   const message = JSON.parse(run('session-start-hook.mjs', flags(context)).stdout).hookSpecificOutput.additionalContext;
-  ['local customization(s)', 'Restore the reapplicable ones with:', 'A withheld tool was granted', 'Re-check with:'].forEach((needle) => expect(withEs(lineWith(message, needle)), true, `line "${needle}"`));
+  ['local customization(s)', 'Restore the reapplicable ones with:', 'A withheld tool was granted', 'Re-check with:', 'Sync only through the wrapper'].forEach((needle) => expect(withEs(lineWith(message, needle)), true, `line "${needle}"`));
 });
 
 test('bilingual: the hook malfunction message carries both halves', () => {

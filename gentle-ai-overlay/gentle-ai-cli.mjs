@@ -30,3 +30,24 @@ export function runGentleAi({ gentleAi }, args) {
   if (result.status !== 0) return { ok: false, reason: `${shown} exited ${result.status}: ${result.stderr.trim().slice(0, 200)}` };
   return { ok: true, stdout: result.stdout };
 }
+
+/**
+ * Run the real `gentle-ai sync` with `args` exactly as given: an argument vector, never a shell line, so
+ * nothing in an argument is interpreted. The caller's environment is kept whole (unlike the queries above,
+ * which unmask it): a sync is run as the owner would run it. No timeout: a sync may legitimately take long.
+ * @es Corre el `gentle-ai sync` real con `args` tal cual: un vector de argumentos, nunca una línea de shell,
+ * así que nada en un argumento se interpreta. El entorno de quien llama se conserva entero (a diferencia de
+ * las consultas de arriba, que lo desenmascaran): el sync corre como lo correría el dueño. Sin plazo: un
+ * sync puede tardar legítimamente.
+ * @param {{ gentleAi: string[] }} context
+ * @param {string[]} args  the arguments AFTER `sync`
+ * @param {'inherit' | 'pipe'} stdio
+ * @returns {{ started: true, status: number, note?: string } | { started: false, reason: string }}
+ */
+export function syncGentleAi({ gentleAi }, args, stdio = 'inherit') {
+  const [command, ...leading] = gentleAi;
+  const result = spawnSync(command, [...leading, 'sync', ...args], { stdio, windowsHide: true });
+  if (result.error) return { started: false, reason: result.error.message };
+  if (result.status === null) return { started: true, status: 1, note: `killed by ${result.signal}` };
+  return { started: true, status: result.status };
+}

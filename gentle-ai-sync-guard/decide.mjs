@@ -20,6 +20,15 @@
  * apply del overlay la vuelve a colocar), así que rechazar el sync por ella no protegería nada. El
  * veredicto sale de los demás resultados; una salida 1 o 2 que ningún resultado explica es una falla y
  * se rechaza como tal.
+ *
+ * The overlay's sync wrapper (`gentle-ai-overlay/sync.mjs`) is the way to sync. This guard never judges its
+ * command line: the line runs `node`, and the real `gentle-ai sync` is the wrapper's child, which no hook
+ * sees. The wrapper is therefore its own gate and takes the same `driftVerdict` exported here, so the rule
+ * lives in one place and the wrapper is not a way around it.
+ * @es El envoltorio de sync del overlay (`gentle-ai-overlay/sync.mjs`) es la forma de sincronizar. Este
+ * guard nunca juzga su línea de comando: la línea ejecuta `node`, y el `gentle-ai sync` real es hijo del
+ * envoltorio, que ningún hook ve. Por eso el envoltorio es su propia compuerta y toma el mismo
+ * `driftVerdict` exportado aquí: la regla vive en un solo lugar y el envoltorio no es un modo de saltarla.
  */
 import { DIALECTS } from './shell-words.mjs';
 import { syncInvocations } from './sync-invocations.mjs';
@@ -27,6 +36,7 @@ import { syncInvocations } from './sync-invocations.mjs';
 const OVERLAY = '$HOME/.claude/gentle-ai-overlay';
 const APPLY_COMMAND = `node "${OVERLAY}/apply.mjs"`;
 const CHECK_COMMAND = `node "${OVERLAY}/check.mjs"`;
+const SYNC_COMMAND = `node "${OVERLAY}/sync.mjs"`;
 const HEADER = 'GENTLE-AI-SYNC-GUARD REFUSED `gentle-ai sync`';
 const HEADER_ES = 'GENTLE-AI-SYNC-GUARD RECHAZÓ `gentle-ai sync`';
 
@@ -60,7 +70,7 @@ function brokenReason(results) {
     'Fix first: @es Arreglar primero:',
     ...fixes(results),
     '',
-    `Then re-check (${CHECK_COMMAND}) and sync again. \`gentle-ai sync --dry-run\` is always allowed. @es Después volver a comprobar (${CHECK_COMMAND}) y sincronizar de nuevo. \`gentle-ai sync --dry-run\` siempre se permite.`,
+    `Then re-check (${CHECK_COMMAND}) and sync through the overlay wrapper (${SYNC_COMMAND}), which prunes again what sync puts back. \`gentle-ai sync --dry-run\` is always allowed. @es Después volver a comprobar (${CHECK_COMMAND}) y sincronizar con el envoltorio del overlay (${SYNC_COMMAND}), que vuelve a podar lo que sync devuelve. \`gentle-ai sync --dry-run\` siempre se permite.`,
   ].join('\n');
 }
 
@@ -71,7 +81,7 @@ function unverifiableReason(results) {
     'Could not be verified: @es No se pudieron verificar:',
     ...listed(results, 'unverifiable'),
     '',
-    `Make the check able to answer (for instance, reinstall gentle-ai with \`go install\` so its source is in the Go module cache), re-run ${CHECK_COMMAND}, then sync. \`gentle-ai sync --dry-run\` is always allowed. @es Lograr que el check pueda responder (por ejemplo, reinstalar gentle-ai con \`go install\` para que su código esté en la caché de módulos de Go), volver a ejecutar ${CHECK_COMMAND} y luego sincronizar. \`gentle-ai sync --dry-run\` siempre se permite.`,
+    `Make the check able to answer (for instance, reinstall gentle-ai with \`go install\` so its source is in the Go module cache), re-run ${CHECK_COMMAND}, then sync through the overlay wrapper (${SYNC_COMMAND}). \`gentle-ai sync --dry-run\` is always allowed. @es Lograr que el check pueda responder (por ejemplo, reinstalar gentle-ai con \`go install\` para que su código esté en la caché de módulos de Go), volver a ejecutar ${CHECK_COMMAND} y luego sincronizar con el envoltorio del overlay (${SYNC_COMMAND}). \`gentle-ai sync --dry-run\` siempre se permite.`,
   ].join('\n');
 }
 
@@ -84,15 +94,17 @@ const failureReason = (failure) =>
 const deny = (reason) => ({ decision: 'deny', reason });
 
 /**
- * @param {{ command?: unknown, toolName?: string }} input
- * @param {{ checkDrift: () => ({ exitCode: number, results: object[] } | { failure: string }) }} deps
+ * What the overlay's drift answer means for a real `gentle-ai sync`: allow, or refuse with the reason.
+ * The ONE place that decision lives, shared by this guard (a raw sync it sees on a command line) and by the
+ * overlay's sync wrapper (the sync it is about to run, which no PreToolUse hook can see).
+ * @es Lo que la respuesta de deriva del overlay significa para un `gentle-ai sync` real: permitir, o
+ * rechazar con el motivo. El ÚNICO lugar de esa decisión, compartido por este guard (un sync crudo que ve
+ * en una línea de comando) y por el envoltorio de sync del overlay (el sync que va a correr, que ningún
+ * hook PreToolUse puede ver).
+ * @param {{ exitCode: number, results: object[] } | { failure: string }} drift
  * @returns {{ decision: 'allow' } | { decision: 'deny', reason: string }}
  */
-export function decide({ command, toolName }, { checkDrift }) {
-  if (typeof command !== 'string') return ALLOW;
-  const realSyncs = syncInvocations(command, dialectOfTool(toolName)).filter((invocation) => !invocation.dryRun);
-  if (realSyncs.length === 0) return ALLOW;
-  const drift = checkDrift();
+export function driftVerdict(drift) {
   if (drift.failure !== undefined) return deny(failureReason(drift.failure));
   if (drift.exitCode === 0) return ALLOW;
   if (drift.exitCode !== 1 && drift.exitCode !== 2) return deny(failureReason(`unexpected exit code ${drift.exitCode}`));
@@ -101,4 +113,16 @@ export function decide({ command, toolName }, { checkDrift }) {
   if (blocking.some((result) => result.status === 'broken')) return deny(brokenReason(blocking));
   if (blocking.some((result) => result.status === 'unverifiable')) return deny(unverifiableReason(blocking));
   return ALLOW;
+}
+
+/**
+ * @param {{ command?: unknown, toolName?: string }} input
+ * @param {{ checkDrift: () => ({ exitCode: number, results: object[] } | { failure: string }) }} deps
+ * @returns {{ decision: 'allow' } | { decision: 'deny', reason: string }}
+ */
+export function decide({ command, toolName }, { checkDrift }) {
+  if (typeof command !== 'string') return ALLOW;
+  const realSyncs = syncInvocations(command, dialectOfTool(toolName)).filter((invocation) => !invocation.dryRun);
+  if (realSyncs.length === 0) return ALLOW;
+  return driftVerdict(checkDrift());
 }

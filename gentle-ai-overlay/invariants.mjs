@@ -8,6 +8,7 @@ import { lazyReviewContract } from './kinds/lazy-review-contract.mjs';
 import { anchoredLineReplacement } from './kinds/line-replacement.mjs';
 import { ownerSectionsOutsideManagedRegions } from './kinds/owner-sections.mjs';
 import { personaRegionMatchesUpstream } from './kinds/persona-region.mjs';
+import { prunedTextStaysPruned } from './kinds/pruned-text.mjs';
 import { telemetryDisabled } from './kinds/telemetry.mjs';
 
 export const KINDS = {
@@ -18,6 +19,7 @@ export const KINDS = {
   'telemetry-disabled': telemetryDisabled,
   'lazy-review-contract': lazyReviewContract,
   'anchored-line-replacement': anchoredLineReplacement,
+  'pruned-text-stays-pruned': prunedTextStaysPruned,
 };
 
 const kindOf = (customization) => {

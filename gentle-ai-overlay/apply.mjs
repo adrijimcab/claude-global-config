@@ -13,13 +13,13 @@
 import { contextFromArgv } from './context.mjs';
 import { CUSTOMIZATIONS } from './customizations.mjs';
 import { applyAll, evaluateAll, planAll } from './invariants.mjs';
-import { exitCodeFor, formatResult } from './report.mjs';
+import { exitCodeFor, formatOutcome, formatResult } from './report.mjs';
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes('--dry-run');
 const context = contextFromArgv(argv);
 const outcomes = dryRun ? planAll(CUSTOMIZATIONS, context) : applyAll(CUSTOMIZATIONS, context);
-outcomes.forEach((outcome) => console.log(`${outcome.outcome.toUpperCase().padEnd(9)} ${outcome.id} — ${outcome.detail}`));
+outcomes.forEach((outcome) => console.log(formatOutcome(outcome)));
 if (outcomes.length === 0) console.log('nothing reapplicable was broken @es nada reaplicable estaba roto');
 
 console.log(dryRun ? '--- current verdict (dry run, nothing written) @es veredicto actual (simulación, nada escrito) ---' : '--- verdict after apply @es veredicto tras aplicar ---');
