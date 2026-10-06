@@ -103,6 +103,9 @@
 !/stash-watch/
 !/stash-watch/**
 /stash-watch/state/
+!/premise-judge/
+!/premise-judge/**
+/premise-judge/state/
 !/delegation-receipts/
 !/delegation-receipts/**
 /delegation-receipts/state/
