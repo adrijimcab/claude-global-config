@@ -109,6 +109,9 @@
 !/worker-stash-guard/
 !/worker-stash-guard/**
 /worker-stash-guard/state/
+!/integrated-worktree-guard/
+!/integrated-worktree-guard/**
+/integrated-worktree-guard/state/
 !/premise-judge/
 !/premise-judge/**
 /premise-judge/state/

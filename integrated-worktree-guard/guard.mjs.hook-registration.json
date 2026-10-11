@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "Stop"
+    }
+  ],
+  "why": "the owner's closing rule says a finished unit's worktree and branch are removed once integrated (measured with git cherry), but prose let integrated, clean, idle worktrees accumulate with their branches and Windows junctions; the main session's turn end is the one place every session passes."
+}

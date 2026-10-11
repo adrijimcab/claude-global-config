@@ -9,6 +9,7 @@
     "../../engram-persistence/guard.mjs",
     "../../delegation-receipts/guard.mjs",
     "../../stash-watch/guard.mjs",
+    "../../integrated-worktree-guard/guard.mjs",
     "../../premise-judge/journal-guard.mjs"
   ]
 }
