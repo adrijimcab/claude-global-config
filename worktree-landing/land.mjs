@@ -36,6 +36,7 @@ import { GitFailure } from './git.mjs';
 import { EXIT_LANDED, EXIT_REFUSED, EXIT_VERIFICATION_RED, Refusal } from './outcome.mjs';
 import { landingRangeOf } from './preconditions.mjs';
 import { publish } from './publication.mjs';
+import { mayPublishTo } from './remote-policy.mjs';
 import { verifyWorktree } from './verification.mjs';
 
 /** The range must not have moved while the verification ran. @es El rango no debe haberse movido durante la verificación. */
@@ -70,6 +71,9 @@ export function land({ worktree, main, branch, remote, check = false, verifyTime
         exitCode: EXIT_LANDED,
         lines: [
           `READY ${range} (${after.landed.length} path(s)); verification: ${summary}. Check mode: nothing was landed. @es LISTO ${range} (${after.landed.length} ruta(s)); verificación: ${summary}. Modo comprobación: no se aterrizó nada.`,
+          mayPublishTo({ main, remote })
+            ? `Publication: would publish to ${remote}. @es Publicación: publicaría en ${remote}.`
+            : `Publication: would land locally only, not published (${remote} is not an owner backup remote). @es Publicación: aterrizaría solo en local, sin publicar (${remote} no es un remoto de respaldo del dueño).`,
           after.integration,
         ],
       };

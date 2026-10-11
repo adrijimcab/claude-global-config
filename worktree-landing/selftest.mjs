@@ -524,6 +524,13 @@ try {
   const checked = cli(...argsOf(viaCli), '--check');
   check(checked.status === 0 && checked.stdout.startsWith('READY ') && checked.stdout.includes('nothing was landed'), `check mode: exit 0 READY: ${checked.status} ${checked.stdout}${checked.stderr}`);
   check(snapshotOf(viaCli) === cliBefore, 'check mode: nothing moved');
+  check(checked.stdout.includes('would publish to origin') && checked.stdout.includes('publicaría en origin') && !checked.stdout.includes('locally only'), `check mode on an owner remote says it would publish: ${checked.stdout}`);
+  const checkForeign = layout({ work: { 'b.txt': 'b\n' }, remoteUrl: COMPANY_URL });
+  const checkForeignBefore = snapshotOf(checkForeign);
+  const checkedForeign = cli(...argsOf(checkForeign), '--check');
+  check(checkedForeign.status === 0 && checkedForeign.stdout.startsWith('READY '), `check mode on a company remote: exit 0 READY: ${checkedForeign.status} ${checkedForeign.stdout}${checkedForeign.stderr}`);
+  check(checkedForeign.stdout.includes('would land locally only, not published') && checkedForeign.stdout.includes('aterrizaría solo en local, sin publicar') && !checkedForeign.stdout.includes('would publish to'), `check mode on a company remote says it would land locally only: ${checkedForeign.stdout}`);
+  check(snapshotOf(checkForeign) === checkForeignBefore, 'check mode on a company remote: nothing moved');
   const landedViaCli = cli(...argsOf(viaCli));
   expectLanded('the command line lands', viaCli, { exitCode: landedViaCli.status, lines: landedViaCli.stdout.trimEnd().split('\n') });
 
