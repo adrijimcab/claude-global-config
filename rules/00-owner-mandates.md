@@ -102,6 +102,37 @@ carried on. **The line stops.**
    pass is not watching it work (`guard-that-cannot-go-red`).
 5. Only then resume.
 
+## A CHANGE TO A SHARED RESOURCE IS COORDINATED WITH EVERY LIVE SESSION (owner directive 2026-10-11)
+
+Owner, verbatim: «notificar a todas las sesiones que paren de hacer lo que están haciendo, hacer el update y
+cuando esté ok notificarlas para que sigan y prueben y te notifiquen cómo está todo ok, y así con todas las
+cosas en común».
+
+A shared resource is anything more than one live session reads or runs: the engram binary and database,
+the gentle-ai binary and every `gentle-ai sync`, `~/.claude` (rules, hooks, settings, guards), the b100
+tooling repo, shared toolchains. Before changing one, the orchestrator runs this sequence, in order:
+
+1. **Announce and pause.** List the live peers (ListAgents) and message each: what changes, why, and
+   "stop at a safe point and reply when paused".
+2. **Wait for every acknowledgement.** A peer that does not answer is not assumed paused; the change waits
+   or goes to the owner.
+3. **Free the resource when processes hold it.** A paused session can still hold the resource open (each
+   session runs its own engram server, which locks the binary and keeps the database open). Stop those
+   processes only after the owner of each session paused.
+4. **Apply the change** with a backup and a rollback ready.
+5. **Announce resume.** Tell each peer what changed and what it must do (restart to load a new binary or
+   rule set), and ask it to test its own use of the resource and report.
+6. **Collect the reports.** The change is done only when every peer reported OK; a failure triggers the
+   rollback.
+
+Mechanism: the rule is enforced by a coordination window that commands mutating a shared resource require
+(backlog item, built test-first); until it lands, this text is the control.
+@es Un cambio a un recurso compartido (engram, gentle-ai y su sync, `~/.claude`, el tooling de b100,
+toolchains compartidos) se coordina con todas las sesiones vivas: anunciar y pedir pausa, esperar la
+confirmación de cada una, liberar los procesos que retienen el recurso solo cuando su sesión pausó,
+aplicar con respaldo y rollback, avisar que sigan (y reinicien si hace falta) y prueben, y dar el cambio
+por hecho solo cuando todas reportan que está bien; un fallo activa el rollback.
+
 ## Standing workflow premise — SDD + full contract + tooling leverage + senior audit stance (owner directive 2026-07-28)
 
 The route a change takes (SDD where the design is open, direct where it is settled), the full agent
