@@ -113,7 +113,12 @@ the gentle-ai binary and every `gentle-ai sync`, `~/.claude` (rules, hooks, sett
 tooling repo, shared toolchains. Before changing one, the orchestrator runs this sequence, in order:
 
 1. **Announce and pause.** List the live peers (ListAgents) and message each: what changes, why, and
-   "stop at a safe point and reply when paused".
+   "stop at a safe point and reply when paused". **Pausing means not WRITING to that shared resource —
+   never stopping work.** The pause names exactly the writes it forbids (for `~/.claude`: commits there and
+   `capture.mjs`, which writes the live lessons ledger; for engram: every engram call while its server is
+   replaced); everything else — Agent launches, project work, other repositories — continues. Measured
+   2026-10-11: a pause that also forbade Agent launches left a session idle with three units queued; the
+   owner ordered that it never happen again.
 2. **Wait for every acknowledgement.** A peer that does not answer is not assumed paused; the change waits
    or goes to the owner.
 3. **Free the resource when processes hold it.** A paused session can still hold the resource open (each
