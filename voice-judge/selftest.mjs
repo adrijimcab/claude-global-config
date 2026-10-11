@@ -66,11 +66,16 @@ check('rubric: passes on stop_hook_active', PROMPT.includes('If the input field 
 check('rubric: judges only the final message', PROMPT.includes('Judge only the field last_assistant_message.'), true);
 check('rubric: passes a message addressed to a subagent or peer', PROMPT.includes('addressed to a subagent or a peer session rather than to the owner (for example a brief with MEASURED: and HYPOTHESIS: lines'), true);
 check('rubric: passes one or two lines with no status', PROMPT.includes('one or two lines with no status content'), true);
-check('rubric: blocks only a dry log to the owner', PROMPT.includes('reads as a dry log: lists of commit hashes, commands, file paths or results with no explanation of why each decision was taken, no warm Rioplatense voseo, and no closing that lands'), true);
+check('rubric: rule 4 looks at what carries the reply, prose or enumerations', PROMPT.includes('Look at what CARRIES it: full-sentence prose paragraphs that tell what happened and why, or enumerations'), true);
+check('rubric: enumerations that carry a report fail', PROMPT.includes('when the enumerations carry a status or work report: after the opening sentence the body is mostly bullets, a table or a list of commits, hashes, paths or command results, each with at most a clause of explanation'), true);
+check('rubric: voseo does not rescue a changelog', PROMPT.includes('Voseo does not rescue it: a changelog with an accent is still a changelog.'), true);
+check('rubric: prose that explains the why with a closing is the one exception', PROMPT.includes('full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands'), true);
+check('rubric: prose with a supporting list passes', PROMPT.includes('when prose carries the message and a list only supports it (a few short items, or a command block the owner must run)'), true);
 check('rubric: unsure passes', PROMPT.includes('When unsure, answer {"ok": true}.'), true);
+check('rubric: the signature is the v2 line', PROMPT_SIGNATURE, 'voice-judge rubric v2.');
 check('rubric: never sets impossible', PROMPT.includes('Never set the field impossible.'), true);
 check('rubric: never asks for length for its own sake', PROMPT.includes('Never ask for a longer message for its own sake'), true);
-check('rubric: the reason asks for the Gentleman mentor voice', PROMPT.includes('Gentleman mentor voice: warm Rioplatense voseo, the why of each decision next to its result, and a closing that lands'), true);
+check('rubric: the reason asks for the Gentleman mentor voice in prose', PROMPT.includes('Gentleman mentor voice: prose that talks to the person with warmth and energy, the why of each decision in sentences, a list only where a list genuinely helps, and a closing that lands'), true);
 check('rubric: never holds the literal marker', PROMPT.includes(MARKER), false);
 check('rubric: spells the marker in words', PROMPT.includes('starts with the word VOICE-JUDGE followed by a colon'), true);
 check('rubric: the marker is what the words spell', MARKER, 'VOICE-JUDGE:');
