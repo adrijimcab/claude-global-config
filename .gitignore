@@ -255,3 +255,6 @@
 
 # A crash mid-write of the overlay can leave its temp file; it is never content.
 *.overlay-tmp-*
+!/gate-summary/
+!/gate-summary/**
+/gate-summary/state/
