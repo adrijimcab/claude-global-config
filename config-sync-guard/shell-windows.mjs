@@ -35,6 +35,19 @@ function blocksOf(record) {
 }
 
 /**
+ * Every shell call of the JSONL `transcriptText` as `{ start, end, command, failed }`: the windows below
+ * plus the call's `input.command` and whether its result was an error (a call with no result has
+ * `failed: false`). The ONE place a shell call's `tool_use` is paired with its `tool_result`; the windows are
+ * this list without the extra fields. Timing rules as `shellWindowsIn`.
+ * @es Cada llamada de shell de `transcriptText` como `{ start, end, command, failed }`: las ventanas de abajo
+ * más el `input.command` y si el resultado fue un error (sin resultado, `failed: false`). El ÚNICO sitio que
+ * empareja `tool_use` con `tool_result`; las ventanas son esta lista sin los campos extra.
+ */
+export function shellCallsIn(transcriptText, now = Date.now()) {
+  return pairedShellCalls(transcriptText, now);
+}
+
+/**
  * Every shell call of the JSONL `transcriptText` as `{ start, end }` in epoch ms. A call that never got a
  * result ends at the transcript's last timestamp when later records exist (it was interrupted), else at
  * `now` (it is still running). Lines that are not JSON or carry no timestamp are skipped.
@@ -42,6 +55,11 @@ function blocksOf(record) {
  * último timestamp si hay registros posteriores (interrumpida), si no en `now` (sigue corriendo).
  */
 export function shellWindowsIn(transcriptText, now = Date.now()) {
+  return pairedShellCalls(transcriptText, now).map(({ start, end }) => ({ start, end }));
+}
+
+/** Pairs each shell `tool_use` with its `tool_result`; see `shellCallsIn`. @es Empareja cada `tool_use` de shell con su `tool_result`; ver `shellCallsIn`. */
+function pairedShellCalls(transcriptText, now) {
   const open = new Map();
   const windows = [];
   let last = 0;
@@ -64,16 +82,16 @@ export function shellWindowsIn(transcriptText, now = Date.now()) {
     last = Math.max(last, at);
 
     for (const block of blocksOf(record)) {
-      if (block?.type === 'tool_use' && SHELL_TOOLS.has(block.name)) open.set(block.id, at);
+      if (block?.type === 'tool_use' && SHELL_TOOLS.has(block.name)) open.set(block.id, { start: at, command: String(block.input?.command ?? '') });
 
       if (block?.type === 'tool_result' && open.has(block.tool_use_id)) {
-        windows.push({ start: open.get(block.tool_use_id), end: at });
+        windows.push({ ...open.get(block.tool_use_id), end: at, failed: block.is_error === true });
         open.delete(block.tool_use_id);
       }
     }
   }
 
-  for (const start of open.values()) windows.push({ start, end: start < last ? last : now });
+  for (const { start, command } of open.values()) windows.push({ start, command, failed: false, end: start < last ? last : now });
 
   return windows;
 }

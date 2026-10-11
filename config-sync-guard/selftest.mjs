@@ -27,7 +27,7 @@ import { decide } from './decide.mjs';
 import { measureFingerprint } from './fingerprint.mjs';
 import { evaluate as evaluateGuard } from './guard.mjs';
 import { recordUnexplained } from './pending-ledger.mjs';
-import { CLOCK_TOLERANCE_MS, shellWindowsIn, withinWindow } from './shell-windows.mjs';
+import { CLOCK_TOLERANCE_MS, shellCallsIn, shellWindowsIn, withinWindow } from './shell-windows.mjs';
 import { parseStatusPorcelain } from './status.mjs';
 import { parseAheadLog } from './unpushed-commits.mjs';
 import { writtenPathsIn as writtenPathsOf } from './transcript-writes.mjs';
@@ -546,6 +546,14 @@ check(
   check('a call that is the last record is still running: it ends at now', shellWindowsIn(callAt(1, 'a', 'Bash'), now), [{ start: ms(1), end: now }]);
   check('a call with later records but no result was interrupted: it ends at the last timestamp', shellWindowsIn(callAt(1, 'a', 'Bash') + callAt(7, 'b', 'Read') + resultAt(8, 'b'), now), [{ start: ms(1), end: ms(8) }]);
   check('lines that are not JSON or carry no timestamp are skipped, the rest still read', shellWindowsIn(`{"tool_use": cut\n${JSON.stringify({ message: { content: [{ type: 'tool_use', id: 'x', name: 'Bash' }] } })}\n${callAt(1, 'a', 'Bash')}${resultAt(2, 'a')}`, now), [{ start: ms(1), end: ms(2) }]);
+
+  const failedAt = (second, id) => resultAt(second, id).replace('"tool_use_id"', '"is_error":true,"tool_use_id"');
+
+  check('a shell call carries its command and is not failed when its result is not an error', shellCallsIn(callAt(1, 'a', 'Bash', { command: 'git status' }) + resultAt(4, 'a'), now), [{ start: ms(1), command: 'git status', end: ms(4), failed: false }]);
+  check('a call whose result is an error is failed', shellCallsIn(callAt(1, 'a', 'PowerShell', { command: 'git commit' }) + failedAt(4, 'a'), now)[0]?.failed, true);
+  check('a call with no result is not failed: it may still be running', shellCallsIn(callAt(1, 'a', 'Bash', { command: 'git commit' }), now), [{ start: ms(1), command: 'git commit', failed: false, end: now }]);
+  check('a call without a command carries an empty one', shellCallsIn(callAt(1, 'a', 'Bash') + resultAt(2, 'a'), now)[0]?.command, '');
+  check('the window list is the call list without the extra fields', shellWindowsIn(callAt(1, 'a', 'Bash', { command: 'x' }) + failedAt(4, 'a'), now), [{ start: ms(1), end: ms(4) }]);
 
   const windows = [{ start: ms(10), end: ms(20) }];
 

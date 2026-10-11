@@ -112,7 +112,12 @@ const MUTANTS = [
   ['the tolerance before a call is dropped, so a write just before its recorded start is not explained', 'shell-windows.mjs', 'window.start - tolerance', 'window.start'],
   ['the tolerance after a call is dropped, so a write just after its result is not explained', 'shell-windows.mjs', 'window.end + tolerance', 'window.end'],
   ['the window start stops being inclusive, so a write exactly at the edge is not explained', 'shell-windows.mjs', 'mtimeMs >= window.start', 'mtimeMs > window.start'],
-  ['the window end stops being inclusive, so a write exactly at the edge is not explained', 'shell-windows.mjs', 'mtimeMs <= window.end', 'mtimeMs < window.end']
+  ['the window end stops being inclusive, so a write exactly at the edge is not explained', 'shell-windows.mjs', 'mtimeMs <= window.end', 'mtimeMs < window.end'],
+  ['a call whose result is an error is not told from one that succeeded', 'shell-windows.mjs', 'failed: block.is_error === true', 'failed: false'],
+  ['every call with a result is failed', 'shell-windows.mjs', 'failed: block.is_error === true', 'failed: true'],
+  ['the window list leaks the call fields', 'shell-windows.mjs', '.map(({ start, end }) => ({ start, end }))', '.map((call) => call)'],
+  ['a call loses its command', 'shell-windows.mjs', "command: String(block.input?.command ?? '') }", "command: '' }"],
+  ['an interrupted or running call is read as failed', 'shell-windows.mjs', 'command, failed: false, end:', 'command, failed: true, end:']
 ];
 
 const survivors = runMutants({
