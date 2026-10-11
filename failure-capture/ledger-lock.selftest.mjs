@@ -42,6 +42,15 @@ function check(name, condition, detail) {
   else failures.push(`${name}${detail === undefined ? '' : ` — ${String(detail).slice(0, 300)}`}`);
 }
 
+/** `takeLock`, answering `'threw'` instead of throwing, so a fault fails the check that expects true or false rather than crashing the run. @es `takeLock`, que responde `'threw'` en vez de lanzar, para que un fallo haga fallar la comprobación que espera true o false en vez de tumbar la corrida. */
+function taken(...input) {
+  try {
+    return takeLock(...input);
+  } catch {
+    return 'threw';
+  }
+}
+
 const STALE_AFTER = 60_000;
 
 /** Backdates a lock file so it was made `ms` before `at`. @es Retrocede un fichero de lock: se hizo `ms` antes de `at`. */
@@ -68,7 +77,7 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
 {
   const lock = path.join(scratch, 'free.lock');
 
-  check('a free lock is taken and its file exists', takeLock(lock, options(Date.now())) === true && existsSync(lock));
+  check('a free lock is taken and its file exists', taken(lock, options(Date.now())) === true && existsSync(lock));
   releaseLock(lock);
   check('releasing removes the file, and releasing it again is harmless', gone(lock) && attempt(() => releaseLock(lock)) === undefined);
 }
@@ -77,28 +86,28 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
   const { lock, at } = held('held');
   let waits = 0;
 
-  check('a freshly made (still empty) lock is held, not taken', takeLock(lock, options(at, { wait: () => { waits += 1; } })) === false);
+  check('a freshly made (still empty) lock is held, not taken', taken(lock, options(at, { wait: () => { waits += 1; } })) === false);
   check('...the holder keeps its file and the taker waited once per attempt', existsSync(lock) && waits === 3, `waits: ${String(waits)}`);
 }
 
 {
   const { lock, at } = held('released-meanwhile');
 
-  check('a lock released while the taker waits is taken on the next attempt', takeLock(lock, options(at, { wait: () => rmSync(lock, { force: true }) })) === true);
+  check('a lock released while the taker waits is taken on the next attempt', taken(lock, options(at, { wait: () => rmSync(lock, { force: true }) })) === true);
 }
 
 // --- a stale lock ---------------------------------------------------------------------------------------
 {
   const { lock, at } = held('stale', STALE_AFTER + 10_000);
 
-  check('a lock older than the stale limit belonged to a dead process and is taken', takeLock(lock, options(at)) === true);
+  check('a lock older than the stale limit belonged to a dead process and is taken', taken(lock, options(at)) === true);
   check('...and the file is the new holder\'s, not the dead one\'s', statSync(lock).mtimeMs > at - 5_000);
 }
 
 {
   const { lock, at } = held('nearly-stale', STALE_AFTER - 10_000);
 
-  check('NEAR MISS: a lock just inside the stale limit is still held', takeLock(lock, options(at)) === false);
+  check('NEAR MISS: a lock just inside the stale limit is still held', taken(lock, options(at)) === false);
 }
 
 {
@@ -108,8 +117,8 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
   const recent = held('default-recent', 30_000);
   let waits = 0;
 
-  check('by default a lock two minutes old is taken', takeLock(old.lock, { now: () => old.at, wait: () => undefined }) === true);
-  check('...and one half a minute old is held for forty attempts', takeLock(recent.lock, { now: () => recent.at, wait: () => { waits += 1; } }) === false && waits === 40, `waits: ${String(waits)}`);
+  check('by default a lock two minutes old is taken', taken(old.lock, { now: () => old.at, wait: () => undefined }) === true);
+  check('...and one half a minute old is held for forty attempts', taken(recent.lock, { now: () => recent.at, wait: () => { waits += 1; } }) === false && waits === 40, `waits: ${String(waits)}`);
 }
 
 {
@@ -132,7 +141,7 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
 {
   const lock = path.join(scratch, 'with-success.lock');
   let ran = 0;
-  const done = withLock(lock, () => { ran += 1; return 'value'; }, options(Date.now()));
+  const done = attempt(() => withLock(lock, () => { ran += 1; return 'value'; }, options(Date.now())));
 
   check('withLock runs the work once, returns its value, and releases the lock', done.held === true && done.value === 'value' && ran === 1 && gone(lock), JSON.stringify(done));
 }
@@ -148,7 +157,7 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
 {
   const { lock, at } = held('with-held');
   let ran = 0;
-  const refused = withLock(lock, () => { ran += 1; }, options(at));
+  const refused = attempt(() => withLock(lock, () => { ran += 1; }, options(at)));
 
   check('withLock on a held lock does not run the work and leaves the holder\'s lock', refused.held === false && ran === 0 && existsSync(lock), JSON.stringify(refused));
 }
