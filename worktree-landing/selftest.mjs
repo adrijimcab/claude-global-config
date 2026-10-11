@@ -525,6 +525,9 @@ try {
   check(checked.status === 0 && checked.stdout.startsWith('READY ') && checked.stdout.includes('nothing was landed'), `check mode: exit 0 READY: ${checked.status} ${checked.stdout}${checked.stderr}`);
   check(snapshotOf(viaCli) === cliBefore, 'check mode: nothing moved');
   check(checked.stdout.includes('would publish to origin') && checked.stdout.includes('publicaría en origin') && !checked.stdout.includes('locally only'), `check mode on an owner remote says it would publish: ${checked.stdout}`);
+  must(viaCli.main, 'remote', 'add', 'backup', OWNER_URL);
+  const checkedBackup = cli('--worktree', viaCli.worktree, '--main', viaCli.main, '--branch', 'master', '--remote', 'backup', '--check');
+  check(checkedBackup.status === 0 && checkedBackup.stdout.includes('would publish to backup.') && checkedBackup.stdout.includes('publicaría en backup.'), `check mode names the remote it would publish to: ${checkedBackup.status} ${checkedBackup.stdout}${checkedBackup.stderr}`);
   const checkForeign = layout({ work: { 'b.txt': 'b\n' }, remoteUrl: COMPANY_URL });
   const checkForeignBefore = snapshotOf(checkForeign);
   const checkedForeign = cli(...argsOf(checkForeign), '--check');
