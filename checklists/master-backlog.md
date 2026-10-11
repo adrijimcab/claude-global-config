@@ -184,6 +184,21 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   `land/odd` rewrites, so it starts after that branch lands. Owner order 2026-10-11: it is the LAST step
   before the session stops and before the final integration to master — after every worker lands and
   after `land/odd`, and before the final report.
+- Company guards, wider (requested 2026-10-11 by session b100-am-ui-f8 before it deletes its own denylist;
+  the 8-name list in `company-config/company-config.json` measured the same day): match AI tool PATHS by
+  path segment (`.cursor/`, `.gemini/`, `.codex/`, `.opencode/`, `.kimi/`, `.windsurf/`, `.aider*`, `.atl/`,
+  `.mimocode/`, `.playwright-mcp/`, `AGENTS.md`, `GEMINI.md`, `AGENT-LEDGER*`, `*agent-worktree*`,
+  `*subagent*`, `*agent-contract*`), never as bare words ("cursor" is CSS); and attribution in commit
+  messages (`Co-Authored-By`, `Generated with`, `cherry picked from`, the robot emoji). Each term is grepped
+  against the real company trees before it enters the list (rule `blocking-term-list-drafted-from-one-incident`).
+  Pending, reason (1): Agent launches in Discovery are refused until feature/meet lands its held worktrees,
+  which waits on the land.mjs test-command fix.
+- Per-clone `info/exclude` provisioning (same request, measured 2026-10-11): b100's `.git/info/exclude`
+  lacks `.claude/` and the AI directories its tracked `.gitignore` lists today (lines 85, 89, 93, 98, 133);
+  once the `.gitignore` drops them they would read as untracked. Mechanism: an idempotent ~/.claude step that
+  writes the shared AI-exclusion block into a clone's common `info/exclude` (linked worktrees share it), run
+  under the coordination rule on each clone (b100-am-ui, di_1700002_discovery_fe), with a selftest. Pending,
+  same reason (1); it must run BEFORE b100's `.gitignore` loses the entries.
 - Stale-session guard warning (measured 2026-10-11): a PreToolUse hook group registered after a session
   started does not fire in that session — the orchestrator's session (started before 03383e3) wrote an
   English line and the following Read was not refused; Stop-hook additions did reach the same session, a
