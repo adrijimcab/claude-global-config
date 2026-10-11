@@ -1,0 +1,89 @@
+#!/usr/bin/env node
+/**
+ * The decisions of where a selftest runs and what counts as an escape from its sandbox, each broken once, that
+ * `sandbox.selftest.mjs` must catch. The campaign runner and its rules live in `../mutation-proof/run-mutants.mjs`.
+ * A mutant is never deleted or softened to get a clean campaign: a survivor is a missing assertion.
+ *
+ * @es Las decisiones de dónde corre un selftest y qué cuenta como fuga de su sandbox, rotas una a una, que
+ * `sandbox.selftest.mjs` debe cazar. Un mutante nunca se borra ni se ablanda: un superviviente es una aserción que falta.
+ */
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { runMutants } from '../mutation-proof/run-mutants.mjs';
+
+const RUN = 'selftest-runner/run.mjs';
+const SANDBOX = 'selftest-runner/sandbox.mjs';
+const VERDICT = 'selftest-runner/sandbox-verdict.mjs';
+const TREE = 'selftest-runner/tree-status.mjs';
+
+const MUTANTS = [
+  // The runner's wiring / El cableado del runner
+  ['the child runs in the runner environment, not its sandbox', RUN, 'env: sandboxEnv(sandbox, { base: process.env, tree: root }) });', 'env: process.env });'],
+  ['the tree named to the child is the runner cwd', RUN, 'sandboxEnv(sandbox, { base: process.env, tree: root })', 'sandboxEnv(sandbox, { base: process.env, tree: process.cwd() })'],
+  ['the sandbox is left behind', RUN, '    removeSandbox(sandbox);\n', ''],
+  ['every selftest shares one sandbox', RUN, 'const sandbox = createSandbox();', 'const sandbox = (globalThis.sharedSandbox ??= createSandbox());'],
+  [
+    'the tree is read "before" the selftest only after it ran',
+    RUN,
+    '    const treeBefore = treeStatus(root);\n    const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root }) });',
+    '    const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root }) });\n    const treeBefore = treeStatus(root);',
+  ],
+  ['the tree after the selftest is the tree before it', RUN, 'const treeAfter = treeStatus(root);', 'const treeAfter = treeBefore;'],
+  ['a selftest that escaped but exited 0 is green', RUN, 'if (outcome.failure === null && outcome.escapes.length === 0) {', 'if (outcome.failure === null) {'],
+  ['the escaped paths are not printed', RUN, '    lines.push(...escapes.map((escape) => speaker.line(`escape-${escape.area}-${escape.change}`, { path: escape.path })));\n', ''],
+  ['the escape count is not printed', RUN, "    lines.push(speaker.line('escaped', { count: escapes.length }));\n", ''],
+  ['an unreadable tree crashes the run instead of stopping it as not measured', RUN, 'if (!(error instanceof TreeStatusError)) throw error;', 'throw error;'],
+  ['the reason a tree stopped the run does not close the report', RUN, 'report: [...report, notMeasured], notMeasured };', 'report, notMeasured };'],
+  ['an unreadable tree is reported as a red run', RUN, 'return { exitCode: EXIT_NOT_MEASURED, report: [...report, notMeasured], notMeasured };', 'return { exitCode: EXIT_RED, report: [...report, notMeasured], notMeasured };'],
+  // What a child is given / Qué recibe el hijo
+  ['USERPROFILE is not pointed at the sandbox home', SANDBOX, "const HOME_VARIABLES = ['HOME', 'USERPROFILE'];", "const HOME_VARIABLES = ['HOME'];"],
+  ['HOME is not pointed at the sandbox home', SANDBOX, "const HOME_VARIABLES = ['HOME', 'USERPROFILE'];", "const HOME_VARIABLES = ['USERPROFILE'];"],
+  ['TMP is not pointed at the private temp', SANDBOX, "const TEMP_VARIABLES = ['TMP', 'TEMP', 'TMPDIR'];", "const TEMP_VARIABLES = ['TEMP', 'TMPDIR'];"],
+  ['TEMP is not pointed at the private temp', SANDBOX, "const TEMP_VARIABLES = ['TMP', 'TEMP', 'TMPDIR'];", "const TEMP_VARIABLES = ['TMP', 'TMPDIR'];"],
+  ['TMPDIR is not pointed at the private temp', SANDBOX, "const TEMP_VARIABLES = ['TMP', 'TEMP', 'TMPDIR'];", "const TEMP_VARIABLES = ['TMP', 'TEMP'];"],
+  ['HOOK_CLAUDE_HOME is not pointed at the sandbox', SANDBOX, '  setVariable(env, CLAUDE_HOME_VARIABLE, sandbox.claudeHome);\n', ''],
+  ['HOOK_STATE_DIR is not pointed at the sandbox', SANDBOX, '  setVariable(env, STATE_ROOT_VARIABLE, sandbox.state);\n', ''],
+  ['SELFTEST_TREE is not set', SANDBOX, '  setVariable(env, TREE_VARIABLE, path.resolve(tree));\n', ''],
+  ['SELFTEST_TREE is not made absolute', SANDBOX, 'setVariable(env, TREE_VARIABLE, path.resolve(tree));', 'setVariable(env, TREE_VARIABLE, tree);'],
+  ['a variable spelled in another case is left beside the new one', SANDBOX, 'if (key.toUpperCase() === name) delete env[key];', 'if (key.toUpperCase() === name) void env[key];'],
+  ['the state root lives inside the home', SANDBOX, "state: path.join(root, 'state')", "state: path.join(home, 'state')"],
+  ['the empty .claude is not created', SANDBOX, '[sandbox.claudeHome, sandbox.state, sandbox.temp]', '[sandbox.state, sandbox.temp]'],
+  ['the private temp is not created', SANDBOX, '[sandbox.claudeHome, sandbox.state, sandbox.temp]', '[sandbox.claudeHome, sandbox.state]'],
+  ['removing a sandbox removes only its temp', SANDBOX, 'rmSync(sandbox.root, { recursive: true, force: true });', 'rmSync(sandbox.temp, { recursive: true, force: true });'],
+  // What is an escape / Qué es una fuga
+  ['the home is not looked at', VERDICT, 'return [...homeEscapes(sandbox), ...tempEscapes(sandbox), ...inTree];', 'return [...tempEscapes(sandbox), ...inTree];'],
+  ['the temp is not looked at', VERDICT, 'return [...homeEscapes(sandbox), ...tempEscapes(sandbox), ...inTree];', 'return [...homeEscapes(sandbox), ...inTree];'],
+  ['the tree is not looked at', VERDICT, 'return [...homeEscapes(sandbox), ...tempEscapes(sandbox), ...inTree];', 'return [...homeEscapes(sandbox), ...tempEscapes(sandbox)];'],
+  ['the temp is listed before the home', VERDICT, 'return [...homeEscapes(sandbox), ...tempEscapes(sandbox), ...inTree];', 'return [...tempEscapes(sandbox), ...homeEscapes(sandbox), ...inTree];'],
+  ['the empty .claude itself is an escape', VERDICT, '.filter((relative) => relative !== CLAUDE_FOLDER)', '.filter(() => true)'],
+  ['a removed .claude is not an escape', VERDICT, 'if (lstatSync(sandbox.claudeHome, { throwIfNoEntry: false })?.isDirectory() !== true) {', 'if (false) {'],
+  ['an empty directory is not named', VERDICT, 'leaves.push(...(children.length > 0 ? children : [relative]));', 'leaves.push(...(children.length > 0 ? children : lstatSync(full).isDirectory() ? [] : [relative]));'],
+  ['a directory is named instead of its contents', VERDICT, 'leaves.push(...(children.length > 0 ? children : [relative]));', 'leaves.push(relative);'],
+  ['a link is entered', VERDICT, "import { lstatSync, readdirSync } from 'node:fs';", "import { statSync as lstatSync, readdirSync } from 'node:fs';"],
+  ['the leftovers are listed in the order the disk gives them', VERDICT, 'readdirSync(directory).sort()', 'readdirSync(directory)'],
+  ['a home escape loses its ~/ prefix', VERDICT, "path: `~/${relative}`", 'path: relative'],
+  ['a temp escape loses its $TMP/ prefix', VERDICT, "path: `$TMP/${relative}`", 'path: relative'],
+  ['a tree escape is named relative to the tree', VERDICT, 'path: path.join(tree, relative)', 'path: relative'],
+  // What git lists / Lo que lista git
+  ['a staged rename is paired', TREE, "'--no-renames', ", ''],
+  ['a new untracked directory is listed as one entry', TREE, "'--untracked-files=all'", "'--untracked-files=normal'"],
+  ['a file touched again while dirty is not a change', TREE, '`${entry.slice(0, 2)}|${signatureOf(path.join(tree, entry.slice(3)))}`', '`${entry.slice(0, 2)}`'],
+  ['a status change with the same bytes is not a change', TREE, '`${entry.slice(0, 2)}|${signatureOf(path.join(tree, entry.slice(3)))}`', '`${signatureOf(path.join(tree, entry.slice(3)))}`'],
+  ['a git failure reads as a clean tree', TREE, 'if (result.error || result.status !== 0) throw', 'if (false) throw'],
+  ['an added path is not a change', TREE, "    if (!before.has(entry)) changes.push({ path: entry, change: 'added' });\n    else if", '    if (!before.has(entry)) continue;\n    else if'],
+  ['a changed path is not a change', TREE, "    else if (before.get(entry) !== signature) changes.push({ path: entry, change: 'changed' });\n", ''],
+  ['a path no longer listed is not a change', TREE, "if (!after.has(entry)) changes.push({ path: entry, change: 'removed' });", 'void entry;'],
+  ['the tree changes are not sorted', TREE, 'return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));', 'return changes;'],
+];
+
+const survivors = runMutants({
+  fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
+  paths: ['selftest-runner', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  selftest: 'selftest-runner/sandbox.selftest.mjs',
+  mutants: MUTANTS,
+  crashKills: 'fail',
+});
+
+process.exit(survivors === 0 ? 0 : 1);
