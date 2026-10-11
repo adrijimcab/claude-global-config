@@ -1,0 +1,6 @@
+{
+  "id": "control-short-reply",
+  "expect": "pass",
+  "source": "synthetic control",
+  "message": "Listo, ya quedó guardado. Avisame si querés que lo suba también."
+}

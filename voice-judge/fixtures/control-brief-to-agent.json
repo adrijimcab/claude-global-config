@@ -1,0 +1,6 @@
+{
+  "id": "control-brief-to-agent",
+  "expect": "pass",
+  "source": "synthetic control",
+  "message": "MEASURED: the branch feat/x is at 1a2b3c4, clean, 3 commits ahead of origin/master (git status -sb).\nHYPOTHESIS: the failing selftest depends on an ignored file.\nTENANCY: you write only inside C:/work/x.\nFix the selftest at its root, run only its selftest and mutants, commit with an explicit pathspec and report the commit, the files and the exit codes."
+}
