@@ -94,6 +94,8 @@
 !/commit-pathspec-guard/
 !/commit-pathspec-guard/**
 /commit-pathspec-guard/state/
+!/company-scan/
+!/company-scan/**
 !/company-remote/
 !/company-remote/**
 !/company-config/
