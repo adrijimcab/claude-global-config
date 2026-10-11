@@ -70,6 +70,7 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   RULE: a gate deferred because a resource is busy is a HARD BLOCKER on landing, written into the plan as one; a change to shipped styles or tokens runs `check:a11y` BEFORE anything is stacked on it; and no ref move onto `develop`/`main` happens without a complete green verdict of the full chain for that exact tree.
   RULE: every fast-forward of develop requires a green `npm test -- --all` on that exact tree, on top of the related `check:*` gates; a list I pick is never the landing proof.
   RULE: a move whose content changes any `*.spec.ts` is also graded by `check:spec-typecheck`.
+  RULE (face of 2026-10-11, ~/.claude): `hook-state/census.selftest.mjs` reads EVERY selftest and every state writer, so it is a gate of any change that adds or edits one; a ~/.claude worker runs it in its scoped proof and every brief for ~/.claude work names it. Twice in one day a worker's selftest drove the dispatcher without `isolateState` and only `land.mjs` caught it. Mechanism to build: the brief preflight refuses a ~/.claude brief that does not name the census.
 
 - **`acted-on-a-live-actors-working-state`**
   RULE: before committing, reaping, rebasing or otherwise acting on ANY worktree that is not mine, establish that its actor has STOPPED from the agent list, never from how finished the diff looks.
