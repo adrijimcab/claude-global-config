@@ -218,6 +218,16 @@
             "command": "echo '[Recordatorio] Mandatos, contratos, reglas promovidas y lecciones: cargados desde ~/.claude/rules/ (y .claude/CLAUDE.md del proyecto). Vinculantes.'"
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/stale-session-guard/prompt-hook.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ]
   },
