@@ -79,11 +79,13 @@ A `stop` ends its transition, never approves delivery. Complete atomic inventory
 | `corrupted_or_unverifiable_authority`, `manual_intervention_required`, `native_stop_required` | Terminal — maintainer inspects authority/lineage, or `D`. |
 | `empty_base_diff_bootstrap_required` | Terminal — authorized empty-root bootstrap for a new target, or `D`. |
 | `lens_context_budget_exceeded` | Terminal — reduce B scope and start a new transaction, or `D`. |
+| `correction_context_budget_exceeded` | Release B authority with `gentle-ai review abandon` (run it with no flags for the binding template); `gentle-ai review invalidate` refuses here. Then review B as smaller candidates, or `D`. |
 | `managed_assets_outdated` | Run the `gentle-ai sync` command from the stop's `continuation`, then `S`. |
 | `staged_workspace_overlay_recovery_unavailable` | Terminal — pass `--lineage <id>` to recover, or drop `--workspace-overlay` and start fresh; otherwise `D`. |
 | `corrected_candidate_unavailable` | Change B correction candidate, then `S`; do not reuse the pre-correction target. |
 | `recovery_scope_unchanged` | Change B target identity, then retry the exact returned `gentle-ai review recover`. |
 | `unachievable_lens_slot` | A host reported a selected reviewer slot unachievable. If transient, re-run `gentle-ai review capture-unachievable` with the same binding and `--withdraw=true` so B re-offers the slot. If not, reduce B scope and start a new `gentle-ai review start`, or `D`. |
+| `target_already_acknowledged` | Terminal: this exact target was already acknowledged and its review authority burned. No further review action is required; delivery follows ordinary repository policy. Changed targets remain eligible for review. Only when deliberately requesting a new independent review, use `gentle-ai review start`; do not automatically restart this consumed target. |
 | `rdd_disabled` | `--scope clone` only clears a clone-local off; `gentle-ai review mode enable --scope global`, then `S`. |
 
 ## Delivery follows ordinary repository policy

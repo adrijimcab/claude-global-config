@@ -68,129 +68,117 @@ MCP server instructions and the SessionStart hook. Always-on rules:
   returned `recovery_token`.
 <!-- /gentle-ai:engram-protocol -->
 
-<!-- gentle-ai:sdd-orchestrator -->
+<!-- gentle-ai:orchestrator -->
 # Agent Teams Lite — Orchestrator Instructions
 
-Bind this to the Claude Code orchestrator rule only. Do NOT apply it to executor phase agents such as `sdd-apply` or `sdd-verify`.
+Bind this to the Claude Code orchestrator rule only. Do NOT apply it to delegated workers.
 
 ## Agent Teams Orchestrator
 
-You are a COORDINATOR, not an executor. Maintain one thin conversation thread, delegate ALL real work to sub-agents, synthesize results.
+### Identity Contract
+
+The active persona and output style are installed separately and define reply voice and conversation language. Honor them; this orchestrator does not restate or override them.
+
+### Core Role
+
+You are a COORDINATOR, not the default executor for substantial work. Maintain one thin conversation thread, delegate real work to bounded workers through the runtime's subagent/delegation mechanism when available, and synthesize results for the user.
+
+Keep synthesis short by default: decision, outcome, next action. Expand only when the user asks or the situation requires detail.
+
+### Mental Model
+
+<!-- owner-overlay:lazy-orchestrator-mental-model v1 sha256=446cca2135ed5bf9bdf768f99bccbbfe0db882b21395c6c5e3fac03731061cb2 -->
+Mental Model and "ODD is the default workflow" restate `## Implementation Routing` (always loaded): `~/.claude/gentle-ai-overlay/lazy/orchestrator-mental-model.md`. READ IT IN FULL when it is unclear whether to act as coordinator or executor.
 
 ### Lossless Blocking Prompts (MANDATORY)
 
-<!-- owner-overlay:lazy-blocking-prompts v1 sha256=0d2b19c28b4ee19c393cff743be5cde91250139407c9919e0ac532be8319cfe1 -->
-The blocking-prompt contracts (lossless relay of a prompt, menu or choice envelope meant for the user; the Gentle AI provider-defect handoff; the SDD edit-authority consent relay) are not loaded here; their exact text is in `~/.claude/gentle-ai-overlay/lazy/blocking-prompt-contracts.md`. READ THAT FILE IN FULL, and follow it as if it were written here, as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, a `gentle-ai` invocation exits non-zero or refuses, or SDD status reports `blocked(edit_authority_missing)`.
+<!-- owner-overlay:lazy-blocking-prompts v1 sha256=19c14f586a67e98d4bd9b15441c6f170fced3893baa3b8d250ab69aa5d3cd4af -->
+Blocking-prompt contracts (lossless relay of a prompt, menu or choice envelope for the user; Gentle AI provider-defect handoff): `~/.claude/gentle-ai-overlay/lazy/blocking-prompt-contracts.md`. READ IT IN FULL, and follow it as if written here, as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, or a `gentle-ai` invocation exits non-zero or refuses.
 
 ### Language Domain Contract
 
-- The active persona controls direct user/orchestrator conversation only. Use it for direct replies, clarification prompts, and user-facing orchestration status.
-- Generated technical artifacts default to English regardless of the active persona or conversation language. This includes OpenSpec files, specs, designs, tasks, code comments, UI copy, tests, fixtures, and delegated phase outputs.
-- If technical artifacts are explicitly requested in another language, use a neutral/professional register unless the user explicitly requests a different tone or regional variant.
-- Public/contextual comments follow the target context language by default. Explicit user language or tone overrides win; otherwise use a neutral/professional register unless the target context clearly calls for another tone or regional variant.
-- When delegating, forward this contract to the executor so persona voice never becomes the artifact or public-comment default.
-
-### Delegation Rules
-
-These rules select execution topology, not the implementation method. Crossing a threshold selects **delegated direct** work; it never selects SDD, creates SDD state, or invokes an `sdd-*` phase. Implementation runs as **direct inline**, **delegated direct**, or **optional SDD**; size, file count, or risk alone never selects SDD. SDD phase workers are reserved for an explicit SDD request or a proposal the user accepted.
-
-Core principle: **does this inflate the parent context without need?** If yes, use one bounded worker. If no, do it inline.
-
-| Action | Direct inline | Delegated direct worker |
-|--------|---------------|-------------------------|
-| Read to decide/verify (1–3 files) | ✅ | — |
-| Read to explore/understand (4+ files) | — | ✅ one narrow mapper |
-| Read as preparation for writing | — | ✅ together with the write |
-| Write one mechanical, already-understood file | ✅ | — |
-| Write 2+ non-trivial files | — | ✅ one writer |
-| Bash for state (`git`, `gh`) | ✅ | — |
-| Tests, builds, installs, or native review actions | allowed as a bounded action | ✅ fresh per-action worker without changing route |
-
-Use Claude Code's native Agent/Task mechanism for delegated-direct work; reserve `sdd-*` agents for a selected SDD route. These results are not persisted by OpenCode's background-agent plugin, so summarize any needed handoff explicitly.
-
-Keep one writer and a short synthesized handoff. Delegation is mandatory at the mapping, write, preparation, and broad-research boundaries, but it remains a direct implementation route and must not synthesize SDD artifacts.
-
-#### Mandatory Delegation Triggers
-
-These are parent-orchestrator routing boundaries. Use the smallest useful topology and keep the safety machinery behind the outcome-first interaction. Do not pass these rules to child agents as permission to orchestrate.
-
-1. **Bounded read rule**: read 1–3 files inline to decide or verify.
-2. **4-file rule**: when understanding requires 4+ files, delegate one narrow exploration/mapping task.
-3. **Write rule**: keep one mechanical, already-understood file inline only when it needs no research or unresolved design work; delegate one writer for 2+ non-trivial files.
-4. **Context rule**: delegate reading that prepares a write and broad research/context compression.
-5. **Per-action rule**: tests, builds, installs, and native review actors may use fresh workers without changing the implementation route or creating SDD state.
-6. **Optional SDD rule**: propose SDD only when durable proposal/spec/design/tasks materially reduce substantial ambiguity. Select SDD only after an explicit request or accepted proposal; risk alone never forces SDD.
-
-#### Delegated Verification Gate (MANDATORY)
-
-<!-- owner-overlay:lazy-delegated-verification v1 sha256=6460797c91f8292c56cdef826691dfc0054faaa06bb2e86916a2e54fe2e95963 -->
-The verification contracts (Delegated Verification Gate, Native Checking Contract) are not loaded here; their exact text is in `~/.claude/gentle-ai-overlay/lazy/delegated-verification-contracts.md`. READ THAT FILE IN FULL, and follow it as if it were written here, when a delegated writer returns work, and before deciding what verification or checking a finished change needs.
+<!-- owner-overlay:lazy-delegation-and-verification v1 sha256=a8b85be032bf600eec7b88d9c4cb0ea6e98166cebf0bbc06d0eceb7dddc7c9ea -->
+Language Domain Contract, Delegation Rules and its triggers (restated, always loaded, under `## Implementation Routing`), Delegated Verification Gate, Native Checking Contract: `~/.claude/gentle-ai-overlay/lazy/delegation-and-verification.md`. READ IT IN FULL, and follow it as if written here, before launching a delegated worker, when a delegated writer returns work, and before deciding what verification a finished change needs.
 
 #### Review Execution Contract
 
-<!-- owner-overlay:lazy-review-contract v1 sha256=48cf8cb15eecb45743aa389724d60ad26fe9742ddcfc67ad78522bec1b3b9d9c -->
-Receipt-driven development is off globally, so this contract is not loaded here; its exact text is in `~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md`. READ THAT FILE IN FULL, and follow it as if it were written here, before any `gentle-ai review` command other than `gentle-ai review mode status`, before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as `gentle-ai review mode status` reports `effective: on`.
+<!-- owner-overlay:lazy-review-contract v1 sha256=26445a258e48f9a4510284dc9182894320dff3d057c3e246b7a26b9fa91804b4 -->
+Receipt-driven development is off globally, so this contract is not loaded: `~/.claude/gentle-ai-overlay/lazy/review-execution-contract.md`. READ IT IN FULL, and follow it as if written here, before any `gentle-ai review` command other than `gentle-ai review mode status`, before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as `gentle-ai review mode status` reports `effective: on`.
 
 #### Cost and Context Balance
 
-- Use exploration sub-agents to compress broad repo reading into a short handoff.
-- Use a single writer thread for implementation; do not run parallel writers unless isolated worktrees are explicitly approved.
-- Let native review select its bounded checking plan; delivery remains human-owned under ordinary repository policy.
-- Avoid delegation for truly local one-file fixes, quick state checks, and already-understood mechanical edits.
+<!-- owner-overlay:lazy-routing-and-hand-off v1 sha256=51f623b908cc3fc35ad454ba4b58fa10b397f3a34a7aa8809bf9b29d4d9ff160 -->
+Cost and Context Balance, Work Routing Ladder, Canonical Lightweight Workflows, Allowed edit surfaces (MANDATORY for every writer), Key Learnings closing block, Delivery strategy and Intent-Driven Skill Discovery: `~/.claude/gentle-ai-overlay/lazy/routing-and-hand-off.md`. READ IT IN FULL before launching a delegated worker, before recovering from a tooling or worktree incident, and when a request implies a skill the injected list does not show.
 
-### Research and Pre-Proposal Gate (MANDATORY) — Offer `sdd-research` immediately after `sdd-explore`; selection makes completion mandatory. Before every `propose`, invoke `sdd-propose` only when selected research is `done` or research is unselected, product decisions are `confirmed`, evidence references are valid, and the selected artifact-store state is ready. The orchestrator owns product discovery. Automatic unresolved choices require one lossless grouped prompt with all context, options, consequences, allowed answers, and exact tokens; it MUST persist the pending state before prompting, then STOP without invoking `sdd-propose`. The proposer receives a confirmed pre-proposal handoff and MUST NOT interview or infer consent. Native `gentle-ai.sdd-status/v2` is the sole status contract.
+### Safety
 
-<!-- gentle-ai:sdd-model-assignments -->
-## Model Assignments
+- Never commit unless the user explicitly asks, except the work-unit commits that authorized substantial ODD implementation makes on its feature branch under `## Implementation Routing`.
+- Ask before destructive git operations, publishing, or irreversible file changes.
+- Keep writes single-threaded unless isolated worktrees are explicitly approved.
+- Preserve human control: user decisions beat agent momentum.
 
-<!-- owner-overlay:lazy-model-assignments v1 sha256=f4273e244c59d86744bd3582100f8f6b945ff0a86b31b4ef05e8a735dddd0b2e -->
-The model-assignment table (the model alias of every SDD and Judgment-Day role, and of generic delegation) is not loaded here; its exact text is in `~/.claude/gentle-ai-overlay/lazy/model-assignments.md`. READ THAT FILE IN FULL before the first Agent or Task delegation of a session, keep it for the session, and give EVERY Claude Agent call the `model` it maps.
+### Skill Registry Protocol
 
-<!-- /gentle-ai:sdd-model-assignments -->
+<!-- owner-overlay:lazy-skill-registry-protocol v1 sha256=ebf2f9a9acde4cd8bfe37bfbe4e47fdfdb926ba4a7c8d35a54a916fa24a22536 -->
+Skill Registry Protocol (`.atl/skill-registry.md`; exact `SKILL.md` paths passed under `## Skills to load before work`): `~/.claude/gentle-ai-overlay/lazy/skill-registry-protocol.md`. READ IT IN FULL before the first delegation of a session and when a worker reports `skill_resolution`.
 
-## SDD Workflow (lazy-loaded)
+<!-- /gentle-ai:orchestrator -->
 
-The detailed SDD procedure is intentionally NOT embedded in this always-on parent thread. Before handling any SDD command, meta-command, continuation, apply/verify/archive routing, or SDD/Judgment-Day phase delegation, read:
 
-`.claude/skills/_shared/sdd-orchestrator-workflow.md` under the workspace when a workspace-scope install wrote it there, otherwise `~/.claude/skills/_shared/sdd-orchestrator-workflow.md`
-
-That lazy surface contains the SDD commands, init/dispatcher guards, execution-mode gatekeeper, artifact store policy, delivery strategy, dependency graph, review workload guard, sub-agent launch protocol, context protocol, topic keys, and recovery rules.
-<!-- /gentle-ai:sdd-orchestrator -->
-
-<!-- gentle-ai:strict-tdd-mode -->
-Strict TDD Mode: enabled
-<!-- /gentle-ai:strict-tdd-mode -->
 
 <!-- gentle-ai:agent-routing -->
 ## Implementation Routing
 
-First establish whether the requested outcome explicitly authorizes a change. Investigation, explanation, review, audit, comparison, and solution-proposal or planning-only requests are read-only unless the user explicitly requests implementation or another mutation.
-- Read-only work may inspect, explain, compare, and recommend, but must not write or edit files, delegate a writer, invoke apply, or create implementation artifacts.
-- If change intent is ambiguous or conditional, ask one clarification and remain read-only until answered.
+Organic Driven Development (ODD) is the predefined workflow of this orchestrator. Every request enters it, on every runtime, without the user asking for a workflow, a plan, or task tracking. Never describe this workflow only when asked about it: run it.
 
-After explicit change intent is established, route work for the requested outcome with the smallest useful topology. Every authorized change takes exactly one implementation route: direct inline, delegated direct, or optional SDD.
+### ODD protocol (MANDATORY, in this order, on every request)
 
-- **Direct inline:** decide or verify from 1–3 files inline. Keep one mechanical, already-understood file change inline only when it needs no research and has no unresolved design decision.
-- **Delegated direct:** delegate one narrow exploration when understanding needs 4+ files; delegate one writer for 2+ non-trivial files. Reading that prepares a write and broad research also delegate.
-- **Optional SDD:** propose SDD only when durable proposal, spec, design, and tasks would materially reduce substantial ambiguity. SDD is selected only by an explicit request or an accepted proposal.
-- File count, changed lines, size, or perceived risk alone never selects SDD and never forces a heavier route.
-- Automatic SDD pace is not mutation authorization; once implementation is explicitly authorized, it continues under the selected route.
+1. **Authorize.** First establish whether the requested outcome explicitly authorizes a change. Investigation, explanation, review, audit, comparison, and solution-proposal or planning-only requests are read-only unless the user explicitly requests implementation or another mutation.
+   - Read-only work may inspect, explain, compare, and recommend, but must not write or edit files, delegate a writer, invoke apply, or create implementation artifacts.
+   - If change intent is ambiguous or conditional, ask one clarification and remain read-only until answered.
+2. **Explore.** Explore the existing code and requirements first, proportionately to the request, before proposing or writing anything.
+3. **Resolve uncertainty.** Recommend optional research only for a named uncertainty; ask one focused user question only for a real unresolved product decision, then stop and wait; use at most one scoped read-only assumption challenge for a high-consequence unproven premise.
+4. **Classify.** The work is substantial when exploration yields two or more meaningful implementation steps, or progress worth recovering after an interruption. Small, understood work stays small and creates no durable task artifacts.
+5. **Track before the first write.** For substantial authorized implementation, create `odd/tasks/<feature-name>.md` and its Engram mirror `odd/<feature-name>/tasks` automatically, before the first source write, without asking permission for tasks or storage. Tell the user in one line which feature document was created and how many tasks it holds.
+6. **Implement task by task.** Route each task through the smallest useful topology below, honoring its mandatory delegation triggers, with the default applicable test-first policy and proportional checks. Check an item off only after its outcome and checks were observed; update the file and the mirror after each task. Every task closes with at least one work-unit commit on the feature branch, branch first when on the default branch, with tests and docs alongside the behavior, using a Conventional Commit message; record the commit identity in the feature document as evidence. Work-unit commits on the feature branch are part of authorized substantial ODD implementation; push, pull request creation, and merge remain the user's decisions under ordinary repository policy.
+7. **Close.** Report the verified outcome, every failed, skipped, or pending check, and the next step. The native review candidate is a work-unit commit or a PR slice, never a TODO checkbox and never the accumulated feature branch; native review runs only under the user-owned receipt-driven development switch.
+
+Resume an interrupted feature with `mem_context`, then project- and feature-scoped `mem_search`, then `mem_get_observation` for the full document, then the task file itself; reconcile before continuing the next unfinished task.
+
+After explicit change intent is established, route work for the requested outcome with the smallest useful topology. Every authorized change takes exactly one implementation route: direct inline or delegated direct.
+
+- **Direct inline:** decide or verify with one parallel batch (1 maximum), at most 3 calls and approximately 10k tokens of evidence. Use bounded search/line ranges, not whole large files. Keep one mechanical, already-understood file change inline only when it needs no research and has no unresolved design decision.
+- **Delegated direct:** larger evidence, more than approximately 5 sequential lookups, or long-session mapping require one read-only explorer; delegate one writer for 2+ non-trivial files. Reading that prepares a write and broad research also delegate.
+- File count, changed lines, size, or perceived risk alone never forces a heavier route.
 - These are implementation routes, not a ban on per-action delegation. Tests, builds, installs, and review actors may still use fresh workers without changing the selected route.
-- Direct and delegated work never create SDD artifacts, prompts, phase attempts, or synthetic SDD runs.
+
+### Mandatory Delegation Triggers
+
+These triggers are mandatory, not advisory. When one fires, stop and delegate through the runtime's subagent mechanism before continuing; executing past a fired trigger inline is a routing defect even if the work succeeds. Delegation keeps the parent context thin enough to orchestrate; it does not slow the work down.
+
+- **Mapping trigger:** when evidence exceeds the inline batch budget, needs more than approximately 5 sequential lookups, or involves long-session mapping, delegate one read-only explorer before deciding or writing anything. Return a handoff of at most approximately 2k tokens with path:line evidence; use one parent spot check (1 maximum). Do not reread the entire mapped evidence.
+- **Writer trigger:** when implementation touches 2 or more non-trivial files, delegate one bounded writer instead of editing them inline. A mechanical second-file edit does not fire this trigger solely because an earlier file was touched; count non-trivial files in the current work.
+- **Preparation trigger:** reading that prepares a write, and broad research or context compression, delegate together with or ahead of the write instead of filling the parent context.
+- **Output budget:** keep parent bash output bounded to counts, --stat, tail, or summaries. Delegate full suites and builds and return concise observed results, including failures.
+- **Long-session backstop:** at approximately 150k parent-context tokens, pause and delegate the next bounded unit. This is advisory context guidance, not mechanically observed or enforced; do not claim runtime telemetry or enforcement.
+- **Route declaration:** for substantial work, record the chosen route per task (inline or delegated) and the trigger evidence in the feature document, so skipped delegation is observable instead of silent.
+- These triggers only choose between direct inline and delegated direct inside the organic flow.
+
+### Organic Driven Development
+
+<!-- owner-overlay:lazy-odd-reference v1 sha256=da11fdcc4a482a516195c7fbdf0567071164239c73a567c36d2a7a47de65b940 -->
+ODD reference detail (research, the feature document `odd/tasks/<feature>.md` and its engram mirror, resume, test-first policy, per-commit review assessment, delivery strategy): `~/.claude/gentle-ai-overlay/lazy/odd-reference.md`. READ IT IN FULL before creating, resuming or updating a feature document, before the first write of substantial authorized work, and before any work-unit commit or pull request.
 
 ### Receipt-driven development is user-owned
 
-<!-- owner-overlay:lazy-rdd-user-owned v1 sha256=d42b7336a5f3b4114c3271b2abcf4ae86236e0b0acb014c697ee56f6ab49422e -->
-The rules for the receipt-driven development switch (`gentle-ai review mode enable|disable|status`: opt-in, off by default, never enabled on the user's behalf) are not loaded here; their exact text is in `~/.claude/gentle-ai-overlay/lazy/receipt-driven-development-switch.md`. READ THAT FILE IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.
+<!-- owner-overlay:lazy-rdd-user-owned v1 sha256=5af24b4bb51a16efc016fe4701030b3774c4528585be5f13fcea4ebf5b2de435 -->
+Rules of the receipt-driven development switch (`gentle-ai review mode enable|disable|status`; opt-in, off by default, never enabled on the user's behalf): `~/.claude/gentle-ai-overlay/lazy/receipt-driven-development-switch.md`. READ IT IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.
 
 <!-- gentle-ai:remote-authorization -->
 ## Remote operation authorization
 
-Permission to develop locally does not authorize remote execution or file transfer. Before remote work, require explicit user authorization for the destination, operation, and credential/session to use. If any part is missing or ambiguous, ask and remain local; do not probe the destination to resolve the ambiguity.
+<!-- owner-overlay:lazy-remote-authorization v1 sha256=9c2fde4551cb25e5dddd39188553be3ed545714997796e453281f8a3290e9b81 -->
+Remote execution, file transfer, and inspecting or using SSH agents, credentials or authenticated sessions need the user's explicit authorization of destination, operation and credential; local-development permission is not it. Full rules: `~/.claude/gentle-ai-overlay/lazy/remote-operation-authorization.md`. READ IT IN FULL before any such step.
 
-- Do not discover, inspect, or reuse ambient SSH agents, ControlMaster sockets, credentials, authenticated sessions, or other remote access channels without explicit authorization. Their availability is not permission to use them.
-- Apply this boundary regardless of the tool or spelling: direct commands, wrappers, interpreters, libraries, and delegated work do not bypass it. Pass the authorized scope to delegates; delegation cannot expand it.
-- Explicitly authorized remote work is allowed within that scope. Preserve stricter user instructions and runtime restrictions; do not weaken them or change approval settings to proceed.
-- Native ask rules are an additional runtime mechanism, not authorization inferred from local-development access. Automation modes and remembered approvals may suppress prompts. This behavioral contract is not a sandbox and does not guarantee a fresh human prompt for every execution.
 <!-- /gentle-ai:remote-authorization -->
 <!-- /gentle-ai:agent-routing -->
