@@ -84,6 +84,7 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
 
 - **`unverified-commit-published-by-another-sessions-sync`**
   RULE: work in progress goes on a branch in its own worktree with no upstream, and reaches the shared branch only through `node ~/.claude/worktree-landing/land.mjs --worktree <dir> --main <dir> --branch <shared> --remote <remote>` (verifies in the worktree, then fast-forwards, pushes and reads the remote tip back); never commit to, merge into or fast-forward the shared branch by hand.
+  RULE (face of 2026-10-11, Discovery): a project's `.claude/fleet-kit.json` `integrationBranches` names the branch work ACTUALLY lands on, the current batch branch first; a guard configured for a branch nobody integrates into governs nothing and refuses every honest delegation. When the batch branch changes, the configuration changes in the same turn.
 
 - **`orchestrator-cwd-change-leaked-to-workers`**
   RULE: the main session runs a command in another directory with (1) absolute paths or `git -C <dir>`, (2) a `( cd <dir> && … )` subshell, or (3) `run_in_background`.
