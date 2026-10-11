@@ -53,7 +53,14 @@ function registrationsCarryingGuard(tool) {
   for (const group of groups.filter((candidate) => covers(candidate.matcher, tool))) {
     for (const hook of group.hooks.filter((entry) => typeof entry.command === 'string')) {
       for (const manifest of manifestsOf(hook.command)) {
-        const guards = JSON.parse(readFileSync(manifest, 'utf8')).guards;
+        // A manifest that cannot be read carries no guard: a hole to report, not a crash. @es Un manifiesto ilegible no lleva guard.
+        let guards = [];
+
+        try {
+          guards = JSON.parse(readFileSync(manifest, 'utf8')).guards;
+        } catch {
+          guards = [];
+        }
 
         count += guards.filter((guard) => guard.endsWith(GUARD)).length;
       }
