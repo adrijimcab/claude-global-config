@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const REMOTES = 'company-remote/remotes.mjs';
+const DIRECTORY = 'company-remote/invocation-directory.mjs';
 
 const MUTANTS = [
   ['a URL with a scheme is no longer parsed (every URL is read as scp-like)', REMOTES, 'const schemeAt = url.indexOf(\'://\');', 'const schemeAt = -1;'],
@@ -22,6 +23,10 @@ const MUTANTS = [
   ['a host that merely CONTAINS a company host counts', REMOTES, 'return host !== undefined && hosts.includes(host);', 'return host !== undefined && hosts.some((one) => host.includes(one));'],
   ['the push URL is dropped (only the first URL of each remote counts)', REMOTES, '.map(([name, url]) => ({ name, url }));', '.map(([name, url]) => ({ name, url }))\n    .filter((remote, at, all) => all.findIndex((other) => other.name === remote.name) === at);'],
   ['a failing git is reported as ok', REMOTES, 'ok: result.status === 0', 'ok: true'],
+  ['-C is ignored', DIRECTORY, "if (gitOptions[index] !== '-C') continue;", 'continue;'],
+  ['a relative -C replaces instead of folding onto the directory', DIRECTORY, 'else current = path.resolve(current, value);', 'else current = value;'],
+  ['a relative -C on an unfollowable cd is trusted', DIRECTORY, 'current = path.isAbsolute(value) ? value : undefined;', 'current = value;'],
+  ['a dangling -C erases the directory', DIRECTORY, 'if (value === undefined) continue;', 'if (value === undefined) { current = undefined; continue; }'],
   ['company remote names are no longer de-duplicated', REMOTES, 'return [...new Set(remoteUrls(dir).filter((remote) => isCompanyUrl(remote.url, hosts)).map((remote) => remote.name))];', 'return remoteUrls(dir).filter((remote) => isCompanyUrl(remote.url, hosts)).map((remote) => remote.name);']
 ];
 
