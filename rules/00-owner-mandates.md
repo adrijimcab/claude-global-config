@@ -196,9 +196,16 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
   cambió, los mutantes solo de los módulos que DECIDEN entre ellos (los lista `node
   ~/.claude/mutation-proof/scope.mjs`) y los gates que leen esas rutas — ni más ni menos. Nunca la suite completa ni la
   cadena entera: esa corrida es del orquestador, una vez, al aterrizar. El brief nombra esos comandos.
-- Las ramas se acumulan en UNA rama de tanda. La rama de integración (develop) se mueve UNA sola vez, al
-  final, con la cadena completa (`build:ci-pr`, y el suelo del landing guard) sobre ese árbol exacto. Ese
-  aterrizaje cierra también, con `--close`, todos los worktrees cuyo contenido entra en él.
+- La rama de integración (develop, o `master` de un repo de configuración) se mueve en cada PUNTO DE
+  CONTROL — cada vez que un agente termina y su unidad está verificada — y nunca por debajo del suelo del
+  landing guard: la suite de tests en verde (`ci:test` en b100-am-ui) sobre ese árbol exacto más los gates
+  que leen lo que cambió; solo se mide lo que se cambió (decisión del dueño 2026-10-11, relevada por la
+  sesión b100-am-ui-f8: «cada vez que termine un agente integramos y todas las premisas que dijiste, solo
+  se mide lo que se cambió»; reemplaza la «UNA rama de tanda que se mueve UNA sola vez»). La cadena
+  completa (`build:ci-pr`) corre UNA vez, al final, sobre el árbol final. Cada aterrizaje es un cambio a
+  un recurso compartido: va con la pausa de escrituras de la regla de coordinación, y cierra los worktrees
+  cuyo contenido entra en él (en b100-am-ui, `.claude/integrate/integrate.mjs --close`; en el resto, la
+  sección siguiente).
 
 ## Cierre de toda unidad de trabajo terminada (directiva del dueño 2026-10-01, global, todo proyecto)
 
