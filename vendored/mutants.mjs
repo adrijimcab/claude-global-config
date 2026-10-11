@@ -52,7 +52,7 @@ const MUTANTS = [
   ['the moved-source line stops naming the re-sync', PROVENANCE, ' — run vendored/vendored.mjs sync, then the selftests', ''],
 
   // --- UNDECLARED DUPLICATES: what `check` reports besides the declared modules.
-  ['check reports no duplicate', VENDORED, 'failures.push(duplicateFinding(relative))', 'void relative'],
+  ['check reports no duplicate', VENDORED, 'failures.push(finding)', 'void finding'],
   ['check treats nothing as declared: every vendored module is a duplicate', VENDORED, 'declared: VENDORED })', 'declared: [] })'],
   ['check looks for duplicates against itself instead of the reference fleet', VENDORED, 'installRoot: TARGET_ROOT, sourceRoot: SOURCE_ROOT, declared', 'installRoot: TARGET_ROOT, sourceRoot: TARGET_ROOT, declared'],
   ['the duplicate finding stops saying what to do', DUPLICATES, ' — declare it vendored or make the copies diverge on purpose', ''],
@@ -71,14 +71,18 @@ const MUTANTS = [
   ['a record that cannot be read crashes the check', DUPLICATES, '    return files.some((entry) => entry?.path === rest);\n  } catch {\n    return false;\n  }', '    return files.some((entry) => entry?.path === rest);\n  } catch (error) {\n    throw error;\n  }'],
   ['an entry without a path crashes the check', DUPLICATES, 'entry?.path === rest', 'entry.path === rest'],
   ['the findings are not sorted', DUPLICATES, "    .sort();\n", ';\n'],
-  ['the reference fleet is walked without descending into folders', DUPLICATES, 'if (entry.isDirectory() && !NOT_ITS_TREE.has(entry.name)) found.push(...filesUnder(root, relative));', 'if (false) found.push(...filesUnder(root, relative));'],
-  ['the .git folder is walked', DUPLICATES, "new Set(['.git', ", 'new Set(['],
-  ['the node_modules folder is walked', DUPLICATES, "'node_modules', ", ''],
-  ['the worktrees folder is walked', DUPLICATES, ", 'worktrees'", ''],
-  ['every folder is walked', DUPLICATES, '!NOT_ITS_TREE.has(entry.name)', 'true'],
-  ['every entry is a file, folders named like modules included', DUPLICATES, 'else if (entry.isFile())', 'else if (true)'],
-  ['a nested module is named without its folder', DUPLICATES, "const relative = folder === '' ? entry.name : `${folder}/${entry.name}`;", 'const relative = entry.name;'],
   ['the record is looked for under another name', DUPLICATES, "export const RECORD_FILE_NAME = 'PROVENANCE.json';", "export const RECORD_FILE_NAME = 'PROVENANCE.txt';"],
+
+  // --- THE REFERENCE FLEET IS READ THROUGH ITS GIT INDEX, never by walking its directory.
+  ['the reference fleet is no longer listed', DUPLICATES, 'walk = trackedFiles }', 'walk = () => [] }'],
+  ['the node_modules folder is read', DUPLICATES, "new Set(['node_modules', 'worktrees'])", "new Set(['worktrees'])"],
+  ['the worktrees folder is read', DUPLICATES, "new Set(['node_modules', 'worktrees'])", "new Set(['node_modules'])"],
+  ['a file inside an unread folder still counts', DUPLICATES, ' && !isInsideUnwalkedFolder(relative)', ''],
+  ['a tracked entry that is not a regular file on disk still counts', DUPLICATES, ' && isRegularFile(path.join(sourceRoot, relative))', ''],
+  ['a link or folder is read as a regular file', DUPLICATES, 'return lstatSync(file).isFile();', 'return true;'],
+  ['a tree that cannot be listed is read as having no duplicates', DUPLICATES, 'return [`DUPLICATES NOT CHECKED  ${error.message}`];', 'return [];'],
+  ['the unlisted-tree finding loses its name', DUPLICATES, 'DUPLICATES NOT CHECKED  ', ''],
+  ['the findings are not turned into their lines', DUPLICATES, '.map(duplicateFinding);', '.map(String);'],
 
   // --- THE COMMAND LINE: how it is dispatched.
   ['sync is never recognised', VENDORED, "if (command === 'sync') return sync();", "if (command === 'syncx') return sync();"],
@@ -90,7 +94,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['vendored'],
+  paths: ['vendored', 'hook-state'],
   selftest: 'vendored/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

@@ -9,13 +9,13 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { provenanceFindings, sha256Of } from './provenance.mjs';
-import { duplicateFinding, RECORD_FILE_NAME, undeclaredDuplicates } from './duplicates.mjs';
+import { duplicateFinding, duplicateFindings, RECORD_FILE_NAME, undeclaredDuplicates } from './duplicates.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'vendored-selftest-'));
 const vendorRoot = path.join(root, 'vendor');
@@ -27,6 +27,14 @@ const put = (base, relative, text) => {
   mkdirSync(path.dirname(path.join(base, relative)), { recursive: true });
   writeFileSync(path.join(base, relative), text);
 };
+
+/** Puts every file under `dir` in a git index (initialising the repository once): the reference fleet is read through its index. @es Mete cada fichero de `dir` en un índice git (inicializa el repo una vez): la flota de referencia se lee por su índice. */
+function track(dir) {
+  const git = (...args) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8', env: { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(dir) } });
+
+  if (!existsSync(path.join(dir, '.git'))) git('init', '-q');
+  git('add', '-A', '-f');
+}
 
 function check(label, findings, expected) {
   const actual = JSON.stringify({ failures: findings.failures.map((line) => line.split(' ')[0]), notes: findings.notes.length });
@@ -110,6 +118,8 @@ function installIn(base) {
   copyFileSync(REAL_VENDORED, path.join(claude, 'vendored', 'vendored.mjs'));
   copyFileSync(path.join(HERE, 'duplicates.mjs'), path.join(claude, 'vendored', 'duplicates.mjs'));
   copyFileSync(path.join(HERE, 'provenance.mjs'), path.join(claude, 'vendored', 'provenance.mjs'));
+  mkdirSync(path.join(claude, 'hook-state'), { recursive: true });
+  copyFileSync(path.join(HERE, '..', 'hook-state', 'census.mjs'), path.join(claude, 'hook-state', 'census.mjs'));
 
   for (const relative of VENDORED) put(sourceRoot, relative, `// reference copy of ${relative}\n`);
 
@@ -118,7 +128,11 @@ function installIn(base) {
 
 const runNode = (install, args, extraEnv = {}) =>
   spawnSync(process.execPath, args, { encoding: 'utf8', cwd: install.claude, env: { ...process.env, HOME: install.home, USERPROFILE: install.home, ...extraEnv } });
-const vendoredCli = (install, ...args) => runNode(install, [path.join(install.claude, 'vendored', 'vendored.mjs'), ...args]);
+const vendoredCli = (install, ...args) => {
+  if (existsSync(install.sourceRoot)) track(install.sourceRoot);
+
+  return runNode(install, [path.join(install.claude, 'vendored', 'vendored.mjs'), ...args]);
+};
 // The extra argument gives `process.argv[1]` a value, as it has when a module is run as a script, so a broken
 // main-module check cannot hide behind its own `argv[1] !== undefined` precondition.
 // @es El argumento extra da valor a `process.argv[1]`, como cuando se ejecuta un script.
@@ -223,6 +237,8 @@ try {
       if (sourceText !== undefined) put(path.join(base, 'source'), relative, sourceText);
     }
 
+    track(path.join(base, 'source'));
+
     return { installRoot: path.join(base, 'install'), sourceRoot: path.join(base, 'source') };
   };
   const duplicatesOf = (roots, extra = {}) => {
@@ -241,7 +257,7 @@ try {
   expect('copies that diverge on purpose are no finding', () => duplicatesOf(twinsIn('d-diverge', [['a/twin.mjs', same, 'export const same = 2;\n']])).length === 0);
   expect('a module present under one root only is no finding, on either side', () => duplicatesOf(twinsIn('d-one-sided', [['a/mine.mjs', same, undefined], ['a/theirs.mjs', undefined, same]])).length === 0);
   expect('only .mjs modules count: an identical .json, .md or .mjs.bak is no finding', () => duplicatesOf(twinsIn('d-kinds', [['a/data.json', same, same], ['a/notes.md', same, same], ['a/twin.mjs.bak', same, same], ['a/mjs', same, same]])).length === 0);
-  expect('an identical module under .git, node_modules or worktrees is no finding', () => duplicatesOf(twinsIn('d-skipped', [['.git/x.mjs', same, same], ['node_modules/x.mjs', same, same], ['worktrees/w/x.mjs', same, same], ['a/node_modules/x.mjs', same, same]])).length === 0);
+  expect('an identical module under node_modules or worktrees is no finding', () => duplicatesOf(twinsIn('d-skipped', [['node_modules/x.mjs', same, same], ['worktrees/w/x.mjs', same, same], ['a/node_modules/x.mjs', same, same]])).length === 0);
   expect('findings come out sorted whatever order the file system lists in', () => JSON.stringify(duplicatesOf(twinsIn('d-order', [['z.mjs', same, same], ['a.mjs', same, same], ['m.mjs', same, same]]), { walk: () => ['z.mjs', 'a.mjs', 'm.mjs'] })) === '["a.mjs","m.mjs","z.mjs"]');
   expect('a folder named like a module is no module', () => duplicatesOf(twinsIn('d-folder', [['a/folder.mjs/inner.txt', same, same]])).length === 0);
   expect('a malformed entry in a record does not hide the entries after it', () => duplicatesOf(twinsIn('d-malformed', [['kit/a/pinned.mjs', same, same], [`kit/${RECORD_FILE_NAME}`, '{"files":[null,{"path":3},{"path":"a/pinned.mjs"}]}', undefined]])).length === 0);
@@ -254,9 +270,48 @@ try {
       return true;
     }
 
+    track(roots.sourceRoot);
     put(roots.installRoot, 'link.mjs', same);
 
     return JSON.stringify(duplicatesOf(roots)) === '["real.mjs"]';
+  });
+  // --- The reference fleet is read through its git index, never by walking its directory.
+  // @es La flota de referencia se lee por su índice git, nunca recorriendo su directorio.
+  expect('untracked scratch, deep and wide, is never read: only the tracked twin is a finding', () => {
+    const roots = twinsIn('d-scratch', [['a/twin.mjs', same, same]]);
+    const deep = Array.from({ length: 40 }, (_, level) => `level${level}`).join('/');
+
+    for (let index = 0; index < 200; index += 1) {
+      put(roots.sourceRoot, `scratch/${deep}/mirror${index}.mjs`, same);
+      put(roots.installRoot, `scratch/${deep}/mirror${index}.mjs`, same);
+    }
+
+    return JSON.stringify(duplicatesOf(roots)) === '["a/twin.mjs"]';
+  });
+  expect('a hundreds-of-thousands-of-files listing is handled without spreading it into call arguments', () => duplicatesOf(twinsIn('d-huge', [['a/twin.mjs', same, same]]), { walk: () => Array.from({ length: 400000 }, (_, index) => `mirror/f${index}.txt`) }).length === 0);
+  expect('a file the index tracks but the disk no longer holds is no finding and never crashes', () => {
+    const roots = twinsIn('d-gone', [['a/twin.mjs', same, same]]);
+
+    rmSync(path.join(roots.sourceRoot, 'a/twin.mjs'));
+
+    return duplicatesOf(roots).length === 0;
+  });
+  expect('duplicateFindings turns the tracked duplicates into their finding lines', () => JSON.stringify(duplicateFindings({ ...twinsIn('d-lines', [['a/twin.mjs', same, same]]), declared: [] })) === JSON.stringify([duplicateFinding('a/twin.mjs')]));
+  expect('a reference fleet that is not a git repository is reported as a bilingual failure, never a crash', () => {
+    const roots = twinsIn('d-norepo', [['a/twin.mjs', same, same]]);
+    const ceiling = process.env.GIT_CEILING_DIRECTORIES;
+
+    rmSync(path.join(roots.sourceRoot, '.git'), { recursive: true, force: true });
+    process.env.GIT_CEILING_DIRECTORIES = path.dirname(roots.sourceRoot);
+
+    try {
+      const lines = duplicateFindings({ ...roots, declared: [] });
+
+      return lines.length === 1 && lines[0].startsWith('DUPLICATES NOT CHECKED') && bilingual(lines[0]) && lines[0].includes('not a git repository');
+    } finally {
+      if (ceiling === undefined) delete process.env.GIT_CEILING_DIRECTORIES;
+      else process.env.GIT_CEILING_DIRECTORIES = ceiling;
+    }
   });
   expect('an absent reference fleet has no duplicates and never throws', () => JSON.stringify(duplicatesOf({ installRoot: twinsIn('d-absent', [['a/twin.mjs', same, undefined]]).installRoot, sourceRoot: path.join(cliRoot, 'd-absent', 'nowhere') })) === '[]');
 
@@ -299,6 +354,12 @@ try {
   const pinned = vendoredCli(twins, 'check');
 
   expect('check excludes what another record pins, through that record\'s own data', () => !pinned.stdout.includes('extra/pinned/p.mjs') && pinned.stdout.includes('extra/twin.mjs'));
+
+  rmSync(path.join(twins.sourceRoot, '.git'), { recursive: true, force: true });
+
+  const unlisted = runNode(twins, [path.join(twins.claude, 'vendored', 'vendored.mjs'), 'check'], { GIT_CEILING_DIRECTORIES: path.dirname(twins.sourceRoot) });
+
+  expect('check fails, in both languages, when the reference fleet cannot be listed (not a git repository)', () => unlisted.status === 1 && unlisted.stdout.split('\n').some((line) => line.startsWith('DUPLICATES NOT CHECKED') && bilingual(line)));
 } finally {
   rmSync(cliRoot, { recursive: true, force: true });
 }

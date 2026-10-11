@@ -38,7 +38,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { provenanceFindings, sha256Of } from './provenance.mjs';
-import { duplicateFinding, RECORD_FILE_NAME, undeclaredDuplicates } from './duplicates.mjs';
+import { duplicateFindings, RECORD_FILE_NAME } from './duplicates.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** The install the copies land in: the folder holding `vendored/`. @es La instalación donde caen las copias: la carpeta que contiene `vendored/`. */
@@ -104,7 +104,7 @@ function check() {
   const record = JSON.parse(readFileSync(PROVENANCE_FILE, 'utf8'));
   const { failures, notes } = provenanceFindings(record, { vendorRoot: TARGET_ROOT, sourceRoot: SOURCE_ROOT });
 
-  for (const relative of undeclaredDuplicates({ installRoot: TARGET_ROOT, sourceRoot: SOURCE_ROOT, declared: VENDORED })) failures.push(duplicateFinding(relative));
+  for (const finding of duplicateFindings({ installRoot: TARGET_ROOT, sourceRoot: SOURCE_ROOT, declared: VENDORED })) failures.push(finding);
 
   for (const line of [...notes, ...failures]) process.stdout.write(`${line}\n`);
   process.stdout.write(`provenance: ${record.files.length} vendored module(s), ${failures.length} failure(s) @es procedencia: ${record.files.length} módulo(s) vendorizado(s), ${failures.length} fallo(s)\n`);

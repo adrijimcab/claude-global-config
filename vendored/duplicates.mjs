@@ -16,9 +16,10 @@
  *     `<kit>/vendor/shell-command/shell-command.mjs` would already have its provenance there. This check's own
  *     record names its files relative to the install root, so read relative to ITS folder it pins nothing:
  *     the derived echo of `VENDORED` can never be a way to silence a finding.
- * Only `.mjs` modules count, `.git`, `node_modules` and `worktrees` are not trees of the reference
- * fleet, and a symbolic link in it is never followed (the walk reads directory entries, which do not resolve
- * links).
+ * Only `.mjs` modules count, `node_modules` and `worktrees` are not trees of the reference fleet, and a
+ * symbolic link in it is never followed (only regular files are read). The reference fleet is read through
+ * its git index (`trackedFiles` of `hook-state/census.mjs`), never by walking the directory: a walk entered
+ * job scratch and mirrors of hundreds of thousands of files and overflowed the stack (2026-10-11).
  *
  * @es Los módulos que están idénticos byte a byte en la misma ruta relativa bajo AMBAS raíces (la
  * instalación de `~/.claude/` y la flota de referencia de b100-am-ui) y que nadie declaró: una copia sin
@@ -30,13 +31,16 @@
  * procedencia ya fija (cada `PROVENANCE.json` ajeno nombra sus ficheros relativos a SU carpeta); el registro
  * propio de esta comprobación nombra los suyos relativos a la raíz, así que leído relativo a SU carpeta no
  * fija nada: el eco derivado de `VENDORED` nunca silencia un hallazgo. Solo cuentan los `.mjs`;
- * `.git`, `node_modules` y `worktrees` no son árboles de la flota de referencia y un enlace simbólico de ella
- * no se sigue.
+ * `node_modules` y `worktrees` no son árboles de la flota de referencia y un enlace simbólico de ella no se
+ * sigue. La flota de referencia se lee por su índice git (`trackedFiles` de `hook-state/census.mjs`), nunca
+ * recorriendo el directorio: el recorrido entraba en scratch y espejos de cientos de miles de ficheros y
+ * desbordaba la pila (2026-10-11).
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { trackedFiles } from '../hook-state/census.mjs';
 import { sha256Of } from './provenance.mjs';
 
 /** The file name every provenance record carries. @es El nombre de fichero de todo registro de procedencia. */
@@ -44,21 +48,19 @@ export const RECORD_FILE_NAME = 'PROVENANCE.json';
 
 const MODULE_EXTENSION = '.mjs';
 /** Folders that are not trees of the reference fleet. @es Carpetas que no son árboles de la flota de referencia. */
-const NOT_ITS_TREE = new Set(['.git', 'node_modules', 'worktrees']);
+const NOT_ITS_TREE = new Set(['node_modules', 'worktrees']);
 
-/** Every regular file under `root`, relative with forward slashes; links and the untracked trees are not entered. @es Cada fichero regular bajo `root`, relativo y con barras normales. */
-function filesUnder(root, folder = '') {
-  const found = [];
+/** Whether `relative` lies inside a folder that is not a tree of the reference fleet. @es Si `relative` está dentro de una carpeta que no es un árbol de la flota de referencia. */
+const isInsideUnwalkedFolder = (relative) => relative.split('/').some((segment) => NOT_ITS_TREE.has(segment));
 
-  for (const entry of readdirSync(path.join(root, folder), { withFileTypes: true })) {
-    const relative = folder === '' ? entry.name : `${folder}/${entry.name}`;
-
-    if (entry.isDirectory() && !NOT_ITS_TREE.has(entry.name)) found.push(...filesUnder(root, relative));
-    else if (entry.isFile()) found.push(relative);
+/** Whether `file` is a regular file on disk, never a link or a folder. @es Si `file` es un fichero regular en disco, nunca un enlace ni una carpeta. */
+const isRegularFile = (file) => {
+  try {
+    return lstatSync(file).isFile();
+  } catch {
+    return false;
   }
-
-  return found;
-}
+};
 
 /** Whether the record in `folder` (relative, `.` for the root) lists `rest`, a path relative to that folder; a record that cannot be read pins nothing. @es Si el registro de `folder` lista `rest`, una ruta relativa a esa carpeta; un registro ilegible no fija nada. */
 function recordPins(root, folder, rest) {
@@ -88,16 +90,19 @@ function isPinnedElsewhere(root, relative) {
  * @param sourceRoot The reference fleet (an absent one has no duplicates). It is the tree walked: the install
  *   is a whole `~/.claude/`, which holds far more than modules.
  * @param declared The relative paths `VENDORED` declares.
- * @param walk Replaces the directory walk (a test seam: the order a file system lists in is its own).
+ * @param walk Lists the reference fleet's files (default: the files its git index TRACKS, never a walk of the
+ *   directory, so job scratch and mirrors the repository does not hold are never read). A test seam.
  * @es Las rutas relativas de los duplicados sin declarar, ordenadas. Se recorre la flota de referencia: la
  * instalación es un `~/.claude/` entero, que guarda mucho más que módulos. `walk` sustituye al recorrido
- * (punto de prueba: el orden en que un sistema de ficheros lista es cosa suya).
+ * (punto de prueba). Por defecto son los ficheros que su índice git RASTREA, nunca un recorrido del directorio:
+ * el scratch de trabajos y los espejos que el repositorio no guarda no se leen. Lanza, bilingüe, si la
+ * flota de referencia no es un repositorio git.
  */
-export function undeclaredDuplicates({ installRoot, sourceRoot, declared, walk = filesUnder }) {
+export function undeclaredDuplicates({ installRoot, sourceRoot, declared, walk = trackedFiles }) {
   if (!existsSync(sourceRoot)) return [];
 
   return walk(sourceRoot)
-    .filter((relative) => relative.endsWith(MODULE_EXTENSION) && !declared.includes(relative))
+    .filter((relative) => relative.endsWith(MODULE_EXTENSION) && !declared.includes(relative) && !isInsideUnwalkedFolder(relative) && isRegularFile(path.join(sourceRoot, relative)))
     .filter((relative) => existsSync(path.join(installRoot, relative)) && sha256Of(path.join(installRoot, relative)) === sha256Of(path.join(sourceRoot, relative)))
     .filter((relative) => !isPinnedElsewhere(installRoot, relative))
     .sort();
@@ -106,3 +111,19 @@ export function undeclaredDuplicates({ installRoot, sourceRoot, declared, walk =
 /** The finding line for one undeclared duplicate. @es La línea de hallazgo de un duplicado sin declarar. */
 export const duplicateFinding = (relative) =>
   `DUPLICATED WITHOUT PROVENANCE  ${relative} — declare it vendored or make the copies diverge on purpose @es DUPLICADO SIN PROCEDENCIA: declararlo vendorizado o hacer que las copias diverjan a propósito`;
+
+/**
+ * The finding lines for the undeclared duplicates, or the one line saying the reference fleet could not be
+ * listed (not a git repository): a tree that cannot be read is a failure to report, never a crash and never
+ * an empty tree.
+ * @es Las líneas de hallazgo de los duplicados sin declarar, o la línea que dice que la flota de referencia no
+ * se pudo listar (no es un repositorio git): un árbol ilegible es un fallo a informar, nunca un crash ni un
+ * árbol vacío.
+ */
+export function duplicateFindings(options) {
+  try {
+    return undeclaredDuplicates(options).map(duplicateFinding);
+  } catch (error) {
+    return [`DUPLICATES NOT CHECKED  ${error.message}`];
+  }
+}
