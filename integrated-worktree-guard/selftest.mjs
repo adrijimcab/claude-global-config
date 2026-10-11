@@ -56,6 +56,15 @@ const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) =
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, env: cleanEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }).trim();
 const root = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'integrated-worktree-')));
 
+/** The census, or an empty list when it throws, so a broken census fails the checks instead of crashing the run. @es El censo, o lista vacía si lanza. */
+function censusSafely(repository, dependencies) {
+  try {
+    return censusOf(repository, dependencies) ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /** A path with forward slashes, as the refusal prints it. @es Una ruta con barras normales, como la imprime el rechazo. */
 const slash = (somePath) => somePath.replaceAll('\\', '/');
 
@@ -271,7 +280,7 @@ try {
   // ---- the census -------------------------------------------------------------------------------
   const liveSet = new Set([path.resolve(live).toLowerCase()]);
   const isLive = (worktreePath) => liveSet.has(path.resolve(worktreePath).toLowerCase());
-  const verdicts = censusOf(main, { isLive }) ?? [];
+  const verdicts = censusSafely(main, { isLive });
   const kindOf = (directory) => verdicts.find((verdict) => path.resolve(verdict.path).toLowerCase() === path.resolve(directory).toLowerCase())?.kind;
 
   check('census: integrated by fast-forward, clean, idle -> removable', kindOf(integrated) === 'removable');
@@ -287,14 +296,14 @@ try {
   check('census: a prunable worktree (directory gone) -> skipped', verdicts.find((verdict) => verdict.branch === 'feat/gone')?.reason?.includes('prunable') === true);
   check('census: a worktree whose status git cannot read -> skipped with that reason, never removable', verdicts.find((verdict) => verdict.branch === 'feat/broken')?.reason?.includes('could not read its status') === true);
   check('census: a failed git cherry -> skipped, never removable', (() => {
-    const failing = censusOf(main, { isLive, readCherry: () => undefined }) ?? [];
+    const failing = censusSafely(main, { isLive, readCherry: () => undefined });
 
     return failing.find((verdict) => verdict.branch === 'feat/int')?.reason?.includes('git cherry') === true && failing.every((verdict) => verdict.kind !== 'removable');
   })());
   check('census: the main checkout is never in the census', verdicts.every((verdict) => path.resolve(verdict.path).toLowerCase() !== path.resolve(main).toLowerCase()));
   check('census: an unlistable repository answers undefined', censusOf(path.join(root, 'nowhere'), { isLive }) === undefined);
 
-  const verdicts2 = censusOf(main2, { isLive: () => false }) ?? [];
+  const verdicts2 = censusSafely(main2, { isLive: () => false });
   const kind2 = (branch) => verdicts2.find((verdict) => verdict.branch === branch)?.kind;
 
   check('census: no upstream on a root default -> skipped, with the reason', kind2('feature/noup') === 'skipped' && verdicts2.find((verdict) => verdict.branch === 'feature/noup')?.reason?.includes('root commit') === true);

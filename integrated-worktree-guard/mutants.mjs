@@ -47,7 +47,7 @@ const MUTANTS = [
   ['a worktree with no integration base is compared anyway', CENSUS, "if ('skip' in base) return skipped(base.skip);", ''],
   ['an unlistable cherry reads as integrated', CENSUS, 'if (cherry === undefined) return skipped(', 'if (false) return skipped('],
   ['a branch is integrated when it merely HAS commits (the + test is inverted)', CENSUS, 'line.startsWith(UNINTEGRATED_LINE)', "line.startsWith('-')"],
-  ['integration is judged by ancestry instead of patch-id', CENSUS, "readGit(mainRoot, ['cherry', base.base, worktree.branch])", "readGit(mainRoot, ['rev-list', '--left-right', `${base.base}...${worktree.branch}`])"],
+  ['integration is judged by ancestry instead of patch-id', CENSUS, "readCherry(mainRoot, base.base, worktree.branch)", "readGit(mainRoot, ['rev-list', '--left-right', `${base.base}...${worktree.branch}`])"],
   ['the links of a removable worktree are not reported', CENSUS, 'links: state.links }', 'links: [] }'],
 
   // --- the integration base
