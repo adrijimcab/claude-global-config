@@ -100,11 +100,11 @@ try {
     check('a group registered after the session started produces the notice', text.length > 0, true);
     check('the notice names the event of the hook output', warned?.hookSpecificOutput?.hookEventName, 'UserPromptSubmit');
     check('the notice is bilingual (English first, then @es)', /^STALE SESSION.* @es SESIÓN DESACTUALIZADA/s.test(text), true);
-    check('the notice names the guard the session lacks', text.includes('owner-language-guard/pretool.mjs'), true);
+    check('the notice names the guard the session lacks, without relative climbs', text.includes('owner-language-guard/pretool.mjs') && !text.includes('../'), true);
     check('the notice names the group registration', text.includes('PreToolUse') && text.includes('pretooluse-language'), true);
     check('the notice does not name a group the session has', text.includes('exit-code-guard'), false);
     check('the notice tells the session to restart', text.includes('Restart') && text.includes('Reiniciá'), true);
-    check('the notice never blocks the prompt', warned?.decision === undefined && warned?.hookSpecificOutput?.permissionDecision === undefined, true);
+    check('the notice never blocks the prompt', warned !== undefined && !JSON.stringify(warned).includes('decision') && !JSON.stringify(warned).includes('block'), true);
     check('the same change is warned only once', prompt(home, id, file), undefined);
 
     setHooks(home, { ...WITH_LANGUAGE, PostToolUse: [POST_SHELL] });
@@ -200,7 +200,11 @@ try {
     check('payload without session_id is silent', evaluate(JSON.stringify({ hook_event_name: 'UserPromptSubmit' }), { home }), undefined);
     check('a session id that is not a plain name is silent', evaluate(JSON.stringify({ session_id: '../x', transcript_path: transcript() }), { home }), undefined);
     check('garbage payload is silent', evaluate('{not json', { home }), undefined);
-    check('BOM payload is parsed', evaluate(`﻿${JSON.stringify({ session_id: newSession(), transcript_path: transcript() })}`, { home }), undefined);
+    const bomId = newSession();
+    const bomFile = transcript();
+
+    prompt(makeHome(BASE_HOOKS), bomId, bomFile);
+    check('BOM payload is parsed', contextOf(evaluate(`﻿${JSON.stringify({ session_id: bomId, transcript_path: bomFile })}`, { home: makeHome(WITH_LANGUAGE) })).length > 0, true);
     check('a subagent caller is never judged', evaluate(JSON.stringify({ session_id: newSession(), agent_id: 'a1' }), { home }), undefined);
 
     const broken = makeHome(BASE_HOOKS);
@@ -240,6 +244,56 @@ try {
     prompt(localHome, lId, transcript());
     writeFileSync(path.join(localHome, 'settings.local.json'), JSON.stringify({ hooks: { Stop: [group('', 'node "$HOME/.claude/local-hook.mjs"')] } }), 'utf8');
     check('settings.local.json groups count too', contextOf(prompt(localHome, lId, transcript())).includes('local-hook.mjs'), true);
+
+    const lateTranscript = makeHome(BASE_HOOKS);
+    const ltId = newSession();
+    const ltFile = transcript();
+
+    prompt(lateTranscript, ltId, nope);
+    setHooks(lateTranscript, WITH_LANGUAGE);
+    check('a start marker that appears later is not a restart', contextOf(prompt(lateTranscript, ltId, ltFile)).length > 0, true);
+
+    const lostTranscript = makeHome(BASE_HOOKS);
+    const lostId = newSession();
+
+    prompt(lostTranscript, lostId, transcript());
+    setHooks(lostTranscript, WITH_LANGUAGE);
+    check('a transcript that becomes unreadable is not a restart', contextOf(prompt(lostTranscript, lostId, nope)).length > 0, true);
+
+    const absent = makeHome(BASE_HOOKS);
+    const absentId = newSession();
+
+    rmSync(path.join(absent, 'settings.json'));
+    check('absent settings on the first prompt are silent', prompt(absent, absentId, transcript()), undefined);
+    setHooks(absent, WITH_LANGUAGE);
+    check('and record no baseline, so the next prompt is the first', prompt(absent, absentId, transcript()), undefined);
+
+    const sameCommand = makeHome(BASE_HOOKS);
+    const scId = newSession();
+
+    prompt(sameCommand, scId, transcript());
+    setHooks(sameCommand, { ...BASE_HOOKS, PreToolUse: [group('Bash', dispatchCommand('pretooluse-shell')), group('Write', dispatchCommand('pretooluse-shell'))] });
+    check('the same command under another matcher is a new group', contextOf(prompt(sameCommand, scId, transcript())).length > 0, true);
+
+    const otherEvent = makeHome(BASE_HOOKS);
+    const oeId = newSession();
+
+    prompt(otherEvent, oeId, transcript());
+    setHooks(otherEvent, { ...BASE_HOOKS, PostToolUse: [group('Bash', dispatchCommand('pretooluse-shell'))] });
+    check('the same command and matcher under another event is a new group', contextOf(prompt(otherEvent, oeId, transcript())).length > 0, true);
+
+    const staleSub = makeHome(BASE_HOOKS);
+    const ssId = newSession();
+
+    prompt(staleSub, ssId, transcript());
+    setHooks(staleSub, WITH_LANGUAGE);
+    check('a subagent caller of a stale session is never warned', prompt(staleSub, ssId, transcript(), { agent_id: 'a1' }), undefined);
+
+    const escaping = makeHome(BASE_HOOKS);
+
+    prompt(escaping, '../escape', transcript());
+    setHooks(escaping, WITH_LANGUAGE);
+    check('a session id that climbs out of the state directory is never recorded', prompt(escaping, '../escape', transcript()), undefined);
 
     const dupHome = makeHome(BASE_HOOKS);
     const dId = newSession();
