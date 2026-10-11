@@ -150,7 +150,7 @@ const LAZY_SECTIONS = [
     regions: ['orchestrator'],
     stash: `${LAZY_DIR}/orchestrator-mental-model.md`,
     pointer: {
-      en: 'Mental Model and "ODD is the default workflow" restate `## Implementation Routing` (always loaded): `{stash}`. READ IT IN FULL when it is unclear whether to act as coordinator or executor.',
+      en: 'Mental Model, restating `## Implementation Routing`: `{stash}`. READ IT IN FULL when unsure whether to coordinate or execute.',
     },
   },
   {
@@ -183,7 +183,7 @@ const LAZY_SECTIONS = [
     regions: ['orchestrator'],
     stash: `${LAZY_DIR}/skill-registry-protocol.md`,
     pointer: {
-      en: 'Skill Registry Protocol (`.atl/skill-registry.md`; exact `SKILL.md` paths passed under `## Skills to load before work`): `{stash}`. READ IT IN FULL before the first delegation of a session and when a worker reports `skill_resolution`.',
+      en: 'Skill Registry Protocol (`.atl/skill-registry.md`, exact `SKILL.md` paths for workers): `{stash}`. READ IT IN FULL before the first delegation of a session and when a worker reports `skill_resolution`.',
     },
   },
   {
@@ -205,7 +205,7 @@ const LAZY_SECTIONS = [
     regions: ['agent-routing'],
     stash: `${LAZY_DIR}/receipt-driven-development-switch.md`,
     pointer: {
-      en: 'Rules of the receipt-driven development switch (`gentle-ai review mode enable|disable|status`; opt-in, off by default, never enabled on the user\'s behalf): `{stash}`. READ IT IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.',
+      en: 'Receipt-driven development switch rules (opt-in, off by default, never enabled on the user\'s behalf): `{stash}`. READ IT IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.',
     },
   },
   // The core of the rule stays loaded in the pointer itself; the stash holds its full text. @es El núcleo de la

@@ -88,7 +88,7 @@ Keep synthesis short by default: decision, outcome, next action. Expand only whe
 ### Mental Model
 
 <!-- owner-overlay:lazy-orchestrator-mental-model v1 sha256=446cca2135ed5bf9bdf768f99bccbbfe0db882b21395c6c5e3fac03731061cb2 -->
-Mental Model and "ODD is the default workflow" restate `## Implementation Routing` (always loaded): `~/.claude/gentle-ai-overlay/lazy/orchestrator-mental-model.md`. READ IT IN FULL when it is unclear whether to act as coordinator or executor.
+Mental Model, restating `## Implementation Routing`: `~/.claude/gentle-ai-overlay/lazy/orchestrator-mental-model.md`. READ IT IN FULL when unsure whether to coordinate or execute.
 
 ### Lossless Blocking Prompts (MANDATORY)
 
@@ -120,7 +120,7 @@ Cost and Context Balance, Work Routing Ladder, Canonical Lightweight Workflows, 
 ### Skill Registry Protocol
 
 <!-- owner-overlay:lazy-skill-registry-protocol v1 sha256=ebf2f9a9acde4cd8bfe37bfbe4e47fdfdb926ba4a7c8d35a54a916fa24a22536 -->
-Skill Registry Protocol (`.atl/skill-registry.md`; exact `SKILL.md` paths passed under `## Skills to load before work`): `~/.claude/gentle-ai-overlay/lazy/skill-registry-protocol.md`. READ IT IN FULL before the first delegation of a session and when a worker reports `skill_resolution`.
+Skill Registry Protocol (`.atl/skill-registry.md`, exact `SKILL.md` paths for workers): `~/.claude/gentle-ai-overlay/lazy/skill-registry-protocol.md`. READ IT IN FULL before the first delegation of a session and when a worker reports `skill_resolution`.
 
 <!-- /gentle-ai:orchestrator -->
 
@@ -172,7 +172,7 @@ ODD reference detail (research, the feature document `odd/tasks/<feature>.md` an
 ### Receipt-driven development is user-owned
 
 <!-- owner-overlay:lazy-rdd-user-owned v1 sha256=5af24b4bb51a16efc016fe4701030b3774c4528585be5f13fcea4ebf5b2de435 -->
-Rules of the receipt-driven development switch (`gentle-ai review mode enable|disable|status`; opt-in, off by default, never enabled on the user's behalf): `~/.claude/gentle-ai-overlay/lazy/receipt-driven-development-switch.md`. READ IT IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.
+Receipt-driven development switch rules (opt-in, off by default, never enabled on the user's behalf): `~/.claude/gentle-ai-overlay/lazy/receipt-driven-development-switch.md`. READ IT IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.
 
 <!-- gentle-ai:remote-authorization -->
 ## Remote operation authorization
