@@ -96,9 +96,11 @@ function caseOf(body, { tracked = {}, loose = {}, ignore = '' } = {}) {
 
 // ── What a child is given ────────────────────────────────────────────────────────────────────────
 const probe = script(`import { existsSync, readdirSync } from 'node:fs';
+import module from 'node:module';
+const compileCache = module.enableCompileCache().status;
 const e = process.env;
 const list = (d) => (d && existsSync(d) ? readdirSync(d) : null);
-writeFileSync('seen.json', JSON.stringify({ HOME: e.HOME, USERPROFILE: e.USERPROFILE, homedir: os.homedir(), claude: e.HOOK_CLAUDE_HOME, state: e.HOOK_STATE_DIR, TMP: e.TMP, TEMP: e.TEMP, TMPDIR: e.TMPDIR, tmpdir: os.tmpdir(), tree: e.SELFTEST_TREE, homeList: list(os.homedir()), claudeList: list(e.HOOK_CLAUDE_HOME), stateList: list(e.HOOK_STATE_DIR), tempList: list(os.tmpdir()) }));`);
+writeFileSync('seen.json', JSON.stringify({ compileCache, HOME: e.HOME, USERPROFILE: e.USERPROFILE, homedir: os.homedir(), claude: e.HOOK_CLAUDE_HOME, state: e.HOOK_STATE_DIR, TMP: e.TMP, TEMP: e.TEMP, TMPDIR: e.TMPDIR, tmpdir: os.tmpdir(), tree: e.SELFTEST_TREE, homeList: list(os.homedir()), claudeList: list(e.HOOK_CLAUDE_HOME), stateList: list(e.HOOK_STATE_DIR), tempList: list(os.tmpdir()) }));`);
 const probeWorld = realWorld();
 const probed = repo({ tracked: { 'a/selftest.mjs': probe, 'b/selftest.mjs': probe }, ignore: 'seen.json\n' });
 const probeRun = runIn(probed, probeWorld);
@@ -116,6 +118,7 @@ for (const [index, given] of seen.entries()) {
   check(path.isAbsolute(given.state ?? '') && JSON.stringify(given.stateList) === '[]' && !given.state.startsWith(given.homedir), `${label}: HOOK_STATE_DIR is absolute, empty and outside the home: ${given.state}`);
   check(given.TMP === given.tmpdir && given.TEMP === given.tmpdir && given.TMPDIR === given.tmpdir && JSON.stringify(given.tempList) === '[]', `${label}: TMP, TEMP and TMPDIR are one empty directory, what tmpdir() returns: ${given.TMP} ${given.TEMP} ${given.TMPDIR} ${given.tmpdir}`);
   check(given.tree === probed, `${label}: SELFTEST_TREE is the tree's top level: ${given.tree}`);
+  check(given.compileCache === 3, `${label}: Node's compile cache is disabled (status 3), so npm leaves no cache in the temp: ${given.compileCache}`);
   for (const place of [given.homedir, given.state, given.tmpdir]) {
     check(typeof place === 'string' && !place.startsWith(probeWorld.home) && place !== probeWorld.temp && !place.startsWith(probed), `${label}: ${place} is neither in the real home nor in the tree, nor the real temp itself`);
     check(!existsSync(place), `${label}: ${place} is removed when the selftest ends`);
@@ -134,7 +137,7 @@ check(!existsSync(unit.root), 'removeSandbox removes the whole sandbox');
 const viaHomedir = caseOf("const target = path.join(os.homedir(), '.claude', 'x', 'state', 'a.jsonl');\nmkdirSync(path.dirname(target), { recursive: true });\nwriteFileSync(target, 'x');");
 check(viaHomedir.status === 1 && viaHomedir.stdout.includes('RED    a/selftest.mjs (exit 0)'), `a child that exits 0 but writes ~/.claude through homedir() is RED: ${viaHomedir.status} ${viaHomedir.stdout}`);
 check(viaHomedir.stdout.includes('    escaped its sandbox: 1 path(s) written outside its seams @es '), `the escape is counted, bilingual: ${viaHomedir.stdout}`);
-check(viaHomedir.stdout.includes('    ~/.claude/x/state/a.jsonl written in its sandbox home: a module bypassed the state seam (HOOK_STATE_DIR) @es '), `the path is named relative to the home: ${viaHomedir.stdout}`);
+check(viaHomedir.stdout.includes('    ~/.claude/x/state/a.jsonl written in its sandbox home: a module bypassed the state seam (hook-state/locations.mjs) @es ~/.claude/x/state/a.jsonl escrito'), `the path is named relative to the home: ${viaHomedir.stdout}`);
 check(viaHomedir.stdout.includes('0/1 green'), 'the summary counts it red');
 
 const viaVariable = caseOf("const target = path.join(process.env.HOOK_CLAUDE_HOME, 'y', 'state', 'b.jsonl');\nmkdirSync(path.dirname(target), { recursive: true });\nwriteFileSync(target, 'x');");

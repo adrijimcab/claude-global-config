@@ -12,6 +12,7 @@
  *   - `temp/`         is `TMP`, `TEMP` and `TMPDIR` (what `os.tmpdir()` returns on every platform).
  * `SELFTEST_TREE` carries the top level of the tree under test, absolute: a selftest that has to read the tree
  * (a contract file, a settings file) reads it from there, never from the home, which is now empty.
+ * `NODE_DISABLE_COMPILE_CACHE` is set, so no Node process of the child leaves a compile cache in its temp.
  *
  * WHAT IT CANNOT REACH: a path a module builds without the environment (a hard-coded absolute path), and the
  * other per-user directories Windows keeps in `APPDATA`/`LOCALAPPDATA`, which stay the real ones.
@@ -23,7 +24,8 @@
  * que mira el runner. DISPOSICIÓN: `home/` es `HOME` y `USERPROFILE`; `home/.claude/` es `HOOK_CLAUDE_HOME`,
  * creado vacío; `state/` es `HOOK_STATE_DIR`, el ÚNICO sitio donde un mecanismo puede escribir su estado, fuera
  * del home; `temp/` es `TMP`, `TEMP` y `TMPDIR`. `SELFTEST_TREE` lleva el nivel superior del árbol bajo prueba,
- * absoluto: un selftest que necesita leer el árbol lo lee de ahí, nunca del home, que ahora está vacío. NO
+ * absoluto: un selftest que necesita leer el árbol lo lee de ahí, nunca del home, que ahora está vacío. Se fija
+ * `NODE_DISABLE_COMPILE_CACHE`, así ningún proceso Node del hijo deja una caché de compilación en su temporal. NO
  * ALCANZA una ruta que un módulo construye sin el entorno (una ruta absoluta fija) ni los demás directorios por
  * usuario de Windows (`APPDATA`/`LOCALAPPDATA`), que siguen siendo los reales.
  */
@@ -43,6 +45,17 @@ const HOME_VARIABLES = ['HOME', 'USERPROFILE'];
 /** The variables `os.tmpdir()` reads. @es Las variables que lee `os.tmpdir()`. */
 const TEMP_VARIABLES = ['TMP', 'TEMP', 'TMPDIR'];
 
+/**
+ * The variable that turns Node's module compile cache off. npm 10.9 calls `module.enableCompileCache()` with no
+ * directory, which writes `<tmpdir>/node-compile-cache`: every selftest that runs npm would leave that cache in its
+ * private temp. A cache is an optimisation, never part of what a selftest proves, so it is off in the sandbox.
+ * @es La variable que apaga la caché de compilación de módulos de Node. npm 10.9 llama a
+ * `module.enableCompileCache()` sin directorio, que escribe `<tmpdir>/node-compile-cache`: cada selftest que
+ * ejecuta npm dejaría esa caché en su temporal privado. Una caché es una optimización, nunca parte de lo que
+ * prueba un selftest, así que en el sandbox está apagada.
+ */
+const COMPILE_CACHE_OFF = 'NODE_DISABLE_COMPILE_CACHE';
+
 /** The Claude home inside a sandbox home. @es El home de Claude dentro del home del sandbox. */
 export const CLAUDE_FOLDER = '.claude';
 
@@ -53,7 +66,7 @@ export const CLAUDE_FOLDER = '.claude';
 export function createSandbox(parent = tmpdir()) {
   const root = mkdtempSync(path.join(parent, 'selftest-sandbox-'));
   const home = path.join(root, 'home');
-  const sandbox = { root, home, claudeHome: path.join(home, CLAUDE_FOLDER), state: path.join(root, 'state'), temp: path.join(root, 'temp') };
+  const sandbox = { root, home, claudeHome: path.join(home, CLAUDE_FOLDER), state: path.join(root, 'state-root'), temp: path.join(root, 'temp') };
 
   for (const directory of [sandbox.claudeHome, sandbox.state, sandbox.temp]) mkdirSync(directory, { recursive: true });
 
@@ -86,6 +99,7 @@ export function sandboxEnv(sandbox, { base, tree }) {
   setVariable(env, CLAUDE_HOME_VARIABLE, sandbox.claudeHome);
   setVariable(env, STATE_ROOT_VARIABLE, sandbox.state);
   setVariable(env, TREE_VARIABLE, path.resolve(tree));
+  setVariable(env, COMPILE_CACHE_OFF, '1');
 
   return env;
 }

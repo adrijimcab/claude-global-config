@@ -126,11 +126,11 @@ function whyRed({ failure, escapes }) {
   const lines = [];
 
   if (escapes.length > 0) {
-    lines.push(speaker.line('escaped', { count: escapes.length }));
-    lines.push(...escapes.map((escape) => speaker.line(`escape-${escape.area}-${escape.change}`, { path: escape.path })));
+    lines.push(`    ${speaker.line('escaped', { count: escapes.length })}`);
+    lines.push(...escapes.map((escape) => `    ${speaker.line(`escape-${escape.area}-${escape.change}`, { path: escape.path })}`));
   }
   if (failure === null) return lines;
-  if (failure.reason !== '') lines.push(failure.reason);
+  if (failure.reason !== '') lines.push(`    ${failure.reason}`);
 
   return [...lines, ...indent(failure.output)];
 }
