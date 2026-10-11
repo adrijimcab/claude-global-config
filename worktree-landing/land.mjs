@@ -74,14 +74,14 @@ export function land({ worktree, main, branch, remote, check = false, verifyTime
         ],
       };
     }
-    const commits = publish({ main, branch, remote, tip: after.tip, head: after.head });
+    const { commits, pushCommand } = publish({ main, branch, remote, tip: after.tip, head: after.head });
+    const headline =
+      pushCommand === undefined
+        ? `LANDED ${range} on ${branch}, confirmed on ${remote} (${commits.length} commit(s)); verification: ${summary}. @es ATERRIZADO ${range} en ${branch}, confirmado en ${remote} (${commits.length} commit(s)); verificación: ${summary}.`
+        : `LANDED LOCALLY ${range} on ${branch} (${commits.length} commit(s)); verification: ${summary}. NOT published: ${remote} is not an owner backup remote, so nothing was pushed; the owner publishes with: @es ATERRIZADO EN LOCAL ${range} en ${branch} (${commits.length} commit(s)); verificación: ${summary}. NO publicado: ${remote} no es un remoto de respaldo del dueño, así que no se empujó nada; el dueño publica con:`;
     return {
       exitCode: EXIT_LANDED,
-      lines: [
-        `LANDED ${range} on ${branch}, confirmed on ${remote} (${commits.length} commit(s)); verification: ${summary}. @es ATERRIZADO ${range} en ${branch}, confirmado en ${remote} (${commits.length} commit(s)); verificación: ${summary}.`,
-        ...commits.map((line) => `    ${line}`),
-        after.integration,
-      ],
+      lines: [headline, ...(pushCommand === undefined ? [] : [`    ${pushCommand}`]), ...commits.map((line) => `    ${line}`), after.integration],
     };
   } catch (error) {
     if (error instanceof Refusal) return stoppedBy(error);

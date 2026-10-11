@@ -20,6 +20,7 @@ const INTEGRATION = 'worktree-landing/integration-branch.mjs';
 const LAND = 'worktree-landing/land.mjs';
 const PRECONDITIONS = 'worktree-landing/preconditions.mjs';
 const PUBLICATION = 'worktree-landing/publication.mjs';
+const REMOTE_POLICY = 'worktree-landing/remote-policy.mjs';
 const VERIFICATION = 'worktree-landing/verification.mjs';
 const WORKING_TREE = 'worktree-landing/working-tree.mjs';
 
@@ -71,6 +72,23 @@ const MUTANTS = [
   ['a project module that fails to import is accepted', INTEGRATION, 'if (run.status !== 0) throw', 'if (false) throw'],
   ['the project module is not read', INTEGRATION, '(existsSync(ownModule) ? fromOwnModule(ownModule) : undefined)', 'undefined'],
   ['a repository with no source is refused', INTEGRATION, 'if (list === undefined) {', 'if (false) {'],
+  // Where it publishes / Dónde publica
+  ['every remote is published to', PUBLICATION, 'const publishes = mayPublishTo({ main, remote });', 'const publishes = true;'],
+  ['the push runs whatever the policy says', PUBLICATION, 'if (publishes) {', 'if (true) {'],
+  ['the owner push command is not returned', PUBLICATION, 'pushCommand: publishes ? undefined : `git -C "${main}" push ${remote} ${branch}`', 'pushCommand: undefined'],
+  ['the push command names the wrong remote', PUBLICATION, 'push ${remote} ${branch}`', 'push ${branch} ${remote}`'],
+  ['a local landing is reported as published', LAND, '`LANDED LOCALLY ${range}', '`LANDED ${range}'],
+  ['the push command is not printed', LAND, '...(pushCommand === undefined ? [] :', '...(true ? [] :'],
+  ['a remote with no configured url is published to', REMOTE_POLICY, 'urls.length > 0 && urls.every', 'urls.every'],
+  ['one owner url is enough', REMOTE_POLICY, 'urls.every((url)', 'urls.some((url)'],
+  ['the pushurl is ignored', REMOTE_POLICY, 'pushUrls.length > 0 ? pushUrls : configured(main, remote, \'url\')', 'configured(main, remote, \'url\')'],
+  ['a longer path under the owner is accepted', REMOTE_POLICY, 'adrijimcab\\/[^/\\s]+$/i', 'adrijimcab\\/[^\\s]+$/i'],
+  ['the owner name is case sensitive', REMOTE_POLICY, 'adrijimcab\\/[^/\\s]+$/i', 'adrijimcab\\/[^/\\s]+$/'],
+  ['any owner-prefixed name is accepted', REMOTE_POLICY, 'adrijimcab\\/[^/\\s]+$/i', 'adrijimcab[^/\\s]*$/i'],
+  ['the github host dot matches any character', REMOTE_POLICY, '@)?github\\.com\\/|ssh', '@)?github.com\\/|ssh'],
+  ['plain http is accepted', REMOTE_POLICY, '(?:https:\\/\\/', '(?:https?:\\/\\/'],
+  ['the ssh url form is not recognised', REMOTE_POLICY, '|ssh:\\/\\/git@github\\.com\\/', ''],
+  ['the scp-like url form is not recognised', REMOTE_POLICY, '|git@github\\.com:)', ')'],
   // The command line / La línea de órdenes
   ['an unknown option is accepted', ARGUMENTS, 'if (key === undefined || key in inputs ||', 'if (key in inputs ||'],
   ['a repeated option is accepted', ARGUMENTS, '|| key in inputs ||', '||'],

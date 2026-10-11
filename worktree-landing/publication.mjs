@@ -10,6 +10,7 @@
 
 import { git, gitOutput } from './git.mjs';
 import { Refusal } from './outcome.mjs';
+import { mayPublishTo } from './remote-policy.mjs';
 
 /** Fast-forwards the shared branch; git refuses before touching anything when it cannot. @es Fast-forward de la rama compartida. */
 function fastForward(main, head) {
@@ -41,15 +42,23 @@ function confirmRemoteTip({ main, branch, remote, head }) {
 }
 
 /**
+ * Pushes only where `remote-policy.mjs` allows it; for any other remote the local branch is fast-forwarded,
+ * nothing is pushed, and the command the owner runs himself is returned.
+ * @es Empuja solo donde `remote-policy.mjs` lo permite; en cualquier otro remoto se hace fast-forward de la
+ * rama local, no se empuja nada, y se devuelve la orden que ejecuta el dueño.
  * @param {{ main: string, branch: string, remote: string, tip: string, head: string }} landing
- * @returns {string[]} one line per landed commit, oldest last
- * @es Devuelve una línea por commit aterrizado, el más antiguo al final.
+ * @returns {{ commits: string[], pushCommand: string | undefined }} one line per landed commit, oldest last; the owner's push command when nothing was published
+ * @es Una línea por commit aterrizado, el más antiguo al final; la orden de push del dueño si no se publicó.
  */
 export function publish({ main, branch, remote, tip, head }) {
   fastForward(main, head);
-  push({ main, branch, remote, head });
-  confirmRemoteTip({ main, branch, remote, head });
-  return gitOutput(main, ['log', '--oneline', '--no-decorate', `${tip}..${head}`])
+  const publishes = mayPublishTo({ main, remote });
+  if (publishes) {
+    push({ main, branch, remote, head });
+    confirmRemoteTip({ main, branch, remote, head });
+  }
+  const commits = gitOutput(main, ['log', '--oneline', '--no-decorate', `${tip}..${head}`])
     .split('\n')
     .filter((line) => line !== '');
+  return { commits, pushCommand: publishes ? undefined : `git -C "${main}" push ${remote} ${branch}` };
 }

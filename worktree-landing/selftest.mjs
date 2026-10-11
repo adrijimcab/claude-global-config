@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { isolateState } from '../hook-state/locations.mjs';
 import { requireIntegrationBranch } from './integration-branch.mjs';
 import { land } from './land.mjs';
+import { mayPublishTo } from './remote-policy.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
 // session reads, and never a line a previous run left behind.
@@ -47,6 +48,8 @@ isolateState('worktree-landing');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LAND = path.join(HERE, 'land.mjs');
+const OWNER_URL = 'https://github.com/adrijimcab/claude-global-config.git';
+const COMPANY_URL = 'https://gitlab.base100.local/team/discovery.git';
 const KEY = 'unverified-commit-published-by-another-sessions-sync';
 const HANG_TIMEOUT_MS = 1000;
 const CHILD_TIMEOUT_MS = 120_000;
@@ -169,7 +172,7 @@ const seed = (() => {
  * @es Copia la semilla y le añade un worktree en la rama `work`. Los ficheros de `work` se commitean en el
  * worktree; los `forced` con `add -f` (ignorados en el principal).
  */
-function layout({ work = {}, forced = {}, removed = [] } = {}) {
+function layout({ work = {}, forced = {}, removed = [], remoteUrl = OWNER_URL } = {}) {
   fixtures += 1;
   const base = path.join(scratchRoot, `f${fixtures}`);
   mkdirSync(base);
@@ -178,7 +181,11 @@ function layout({ work = {}, forced = {}, removed = [] } = {}) {
   const worktree = path.join(base, 'work');
   cpSync(seed.remote, remote, { recursive: true });
   cpSync(seed.main, main, { recursive: true });
-  must(main, 'remote', 'set-url', 'origin', remote);
+  // The remote's CONFIGURED url is what the publication policy reads; `insteadOf` routes that name to the
+  // constructed bare remote, so a pushed ref can be observed. @es La URL CONFIGURADA es la que lee la política;
+  // `insteadOf` la encamina al remoto bare construido para poder observar el ref empujado.
+  must(main, 'remote', 'set-url', 'origin', remoteUrl);
+  must(main, 'config', `url.${remote}.insteadOf`, remoteUrl);
   must(main, 'worktree', 'add', '-q', '-b', 'work', worktree, 'master');
   for (const [name, content] of Object.entries(work)) put(worktree, name, content);
   for (const [name, content] of Object.entries(forced)) put(worktree, name, content);
@@ -447,6 +454,63 @@ try {
   const revertedReport = revertedResult.lines.join('\n');
   check(revertedResult.exitCode === 2 && revertedResult.lines[0] === 'REFUSED [remote-tip-mismatch]', `remote tip not the landed commit: exit 2 naming remote-tip-mismatch: ${revertedReport}`);
   check(revertedReport.includes('the landing is NOT confirmed'), `remote tip not the landed commit: the report says it is not confirmed: ${revertedReport}`);
+
+  // ── Where the landing may publish ─────────────────────────────────────────────────────────────
+  const publishedOwner = layout({ work: { 'b.txt': 'b\n' } });
+  const ownerReport = expectLanded('an owner remote is pushed and read back', publishedOwner);
+  check(!ownerReport.includes('LANDED LOCALLY') && ownerReport.includes('confirmed on origin'), `an owner remote: the report says it was confirmed on the remote: ${ownerReport}`);
+
+  for (const [name, url] of [['a company host', COMPANY_URL], ['an unresolvable url', 'not a url']]) {
+    const foreign = layout({ work: { 'b.txt': 'b\n' }, remoteUrl: url });
+    const remoteBefore = refOf(foreign.remote, 'refs/heads/master');
+    const result = landFixture(foreign);
+    const report = result.lines.join('\n');
+    const head = refOf(path.join(foreign.main, '.git'), 'refs/heads/work');
+    check(result.exitCode === 0 && result.lines[0].startsWith(`LANDED LOCALLY ${remoteBefore}..${head} on master`), `${name}: lands locally, exit 0: ${result.exitCode} ${report}`);
+    check(refOf(path.join(foreign.main, '.git'), 'refs/heads/master') === head, `${name}: the local branch is fast-forwarded`);
+    check(refOf(foreign.remote, 'refs/heads/master') === remoteBefore, `${name}: nothing was pushed, the remote ref did not move`);
+    check(result.lines.includes(`    git -C "${foreign.main}" push origin master`), `${name}: the exact push command for the owner is printed: ${report}`);
+    check(report.includes('NOT published') && report.includes(' @es ') && report.includes('NO publicado'), `${name}: the report is bilingual and says it is not published: ${report}`);
+  }
+  const foreignCli = layout({ work: { 'b.txt': 'b\n' }, remoteUrl: COMPANY_URL });
+  const foreignRemoteBefore = refOf(foreignCli.remote, 'refs/heads/master');
+  const foreignViaCli = cli(...argsOf(foreignCli));
+  check(foreignViaCli.status === 0 && foreignViaCli.stdout.startsWith('LANDED LOCALLY') && refOf(foreignCli.remote, 'refs/heads/master') === foreignRemoteBefore, `the command line does not push to a company remote: ${foreignViaCli.status} ${foreignViaCli.stdout}${foreignViaCli.stderr}`);
+  for (const option of ['--push', '--publish', '--force', '--allow-remote']) {
+    const refused = cli(...argsOf(foreignCli), option);
+    check(refused.status === 2 && refused.stderr.includes('Usage: node land.mjs'), `no option ${option} can turn publication on: ${refused.status} ${refused.stderr}`);
+  }
+
+  const classified = layout();
+  const urlTable = [
+    ['https://github.com/adrijimcab/claude-global-config.git', true],
+    ['https://github.com/adrijimcab/b100-am-ui-claude-tooling', true],
+    ['https://user@github.com/AdriJimCab/repo.git', true],
+    ['git@github.com:adrijimcab/claude-global-config.git', true],
+    ['ssh://git@github.com/adrijimcab/repo.git', true],
+    ['https://github.com/adrijimcab/repo/extra', false],
+    ['https://github.com/adrijimcab-evil/repo.git', false],
+    ['https://github.com/someone/adrijimcab', false],
+    ['https://github.com.evil.example/adrijimcab/repo.git', false],
+    ['https://githubXcom/adrijimcab/repo.git', false],
+    ['http://github.com/adrijimcab/repo.git', false],
+    ['https://gitlab.base100.local/adrijimcab/repo.git', false],
+    ['git@gitlab.base100.local:adrijimcab/repo.git', false],
+    ['/some/local/path/adrijimcab/repo.git', false],
+    ['', false],
+  ];
+  for (const [url, expected] of urlTable) {
+    must(classified.main, 'config', 'remote.origin.url', url);
+    check(mayPublishTo({ main: classified.main, remote: 'origin' }) === expected, `publication policy for "${url}" is ${expected}`);
+  }
+  must(classified.main, 'config', 'remote.origin.url', OWNER_URL);
+  must(classified.main, 'config', 'remote.origin.pushurl', COMPANY_URL);
+  check(!mayPublishTo({ main: classified.main, remote: 'origin' }), 'an owner url with a company pushurl is not published');
+  must(classified.main, 'config', '--unset', 'remote.origin.pushurl');
+  must(classified.main, 'config', '--add', 'remote.origin.pushurl', OWNER_URL);
+  must(classified.main, 'config', '--add', 'remote.origin.pushurl', COMPANY_URL);
+  check(!mayPublishTo({ main: classified.main, remote: 'origin' }), 'one foreign pushurl among owner ones makes the remote foreign');
+  check(!mayPublishTo({ main: classified.main, remote: 'no-such-remote' }), 'a remote that does not exist is not published');
 
   // ── The command line ──────────────────────────────────────────────────────────────────────────
   const viaCli = layout({ work: { 'b.txt': 'b\n' } });
