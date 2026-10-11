@@ -47,8 +47,17 @@ let passed = 0;
 const failures = [];
 const check = (name, condition, detail) => (condition === true ? (passed += 1) : failures.push(`${name} — ${String(detail).slice(0, 600)}`));
 
+/** A message rendered, or the text of why it could not be: a message that cannot render fails the check that expects it instead of crashing the run. @es Un mensaje renderizado, o el texto de por qué no pudo: un mensaje que no se renderiza hace fallar la comprobación que lo espera en vez de tumbar la corrida. */
+const attempt = (message, params) => {
+  try {
+    return render(message, params);
+  } catch (error) {
+    return `RENDER FAILED: ${error instanceof Error ? error.message : String(error)}`;
+  }
+};
+
 /** The output must contain the table's message for `id`, filled with `params`. @es La salida debe contener el mensaje `id` de la tabla. */
-const says = (name, out, id, params = {}) => check(`${name}: says ${id} in both languages`, out.includes(render(PROMOTE_MESSAGES[id], params)), out);
+const says = (name, out, id, params = {}) => check(`${name}: says ${id} in both languages`, out.includes(attempt(PROMOTE_MESSAGES[id], params)), out);
 const bilingual = (name, out) => check(`${name}: nothing it printed is English only`, monolingualRuns(out).length === 0, monolingualRuns(out).join(' | '));
 const promote = (world, ...flags) => world.run(['promote', '--key', KEY, ...flags]);
 
@@ -145,7 +154,7 @@ const project = (name, { config = { scope: 'demo' }, files = {} } = {}) => makeC
   says('a project rule that has not landed (its step)', out, 'instructions.contract.step', { number: 1, file: instructions, key: KEY });
   says('a project rule that has not landed (how to close)', out, 'instructions.close', { number: 2 });
   says('a project rule that has not landed (the tail)', out, 'instructions.contract.tail');
-  check('a project rule with ONE contract file does not warn about several', !out.includes(render(PROMOTE_MESSAGES['instructions.contract.many'])), out);
+  check('a project rule with ONE contract file does not warn about several', !out.includes(attempt(PROMOTE_MESSAGES['instructions.contract.many'])), out);
   bilingual('a project rule that has not landed', out);
 }
 

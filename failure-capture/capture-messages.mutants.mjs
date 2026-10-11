@@ -38,7 +38,7 @@ const MUTANTS = [
   english('the recurrence notice', "speaker.say('capture.recurrence', { key, count: mine.count });", 'console.log(`RECURRENCE ${key}`);'),
   english('the dismissal refusal', "speaker.complain('dismiss.refused');", "console.error('dismiss REFUSED');"),
   english('the dismissal confirmation', "speaker.say('dismiss.done');", "console.log('DISMISSED');"),
-  english('the ledger line of status', "speaker.say('status.ledger', { scope: ledger.scope, file: ledger.file, bytes, tokens: Math.round(bytes / 4) });", 'console.log(`ledger ${ledger.scope}`);'),
+  english('the ledger line of status', "speaker.say(ledger.scope === PROMOTED_SCOPE ? 'status.ledger.unloaded' : 'status.ledger', { scope: ledger.scope, file: ledger.file, bytes, tokens: Math.round(bytes / 4) });", 'console.log(`ledger ${ledger.scope}`);'),
   english('the keyed count of status', "speaker.say('status.keyed', { count: keys.size });", 'console.log(`keyed ${keys.size}`);'),
   english('the incident count of status', "speaker.say('status.incidents', { count: incidents });", 'console.log(`incidents ${incidents}`);'),
   english('the dismissal count of status', "speaker.say('status.dismissals', { count: dismissals });", 'console.log(`dismissals ${dismissals}`);'),

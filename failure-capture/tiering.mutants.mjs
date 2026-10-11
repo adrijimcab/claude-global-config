@@ -67,7 +67,7 @@ const MUTANTS = [
   ['a multi-line text is archived as if it were one line', STORE, "!line.includes('\\n') && !line.includes('\\r') ? undefined", 'true ? undefined'],
 
   // --- conservation: the deficit decides, and it decides on the whole line
-  ['the deficit is ignored: every shortening is accepted', PROOF, 'return deficits.length === 0 ? { ok: true } : { ok: false, deficits };', 'return { ok: true };'],
+  ['the deficit is ignored: every shortening is accepted', PROOF, 'inventionDeficits(original, shortened, promotion)];\n\n  return deficits.length === 0 ? { ok: true } : { ok: false, deficits };', 'inventionDeficits(original, shortened, promotion)];\n\n  return { ok: true };'],
   ['containment is weakened to a substring, so a longer line holds the original', PROOF, '`\\n${text}\\n`.includes(`\\n${line}\\n`)', 'text.includes(line)'],
   ['the first and last lines of the file are not lines', PROOF, '`\\n${text}\\n`.includes(', 'text.includes('],
   ['the invention check is skipped', PROOF, 'const deficits = [...archiveDeficits(original, evidence), ...inventionDeficits(original, shortened, promotion)];', 'const deficits = [...archiveDeficits(original, evidence)];'],

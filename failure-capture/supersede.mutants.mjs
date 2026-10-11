@@ -87,7 +87,7 @@ const MUTANTS = [
   ['the status of the run is not the exit status', COMMAND, 'dataError)(line);\n\n  return outcome.status;', 'dataError)(line);\n\n  return 0;'],
   ['the state directory the lock lives in is not made', COMMAND, 'function commandSupersede(args) {\n  ensureDirs();\n\n  const outcome', 'function commandSupersede(args) {\n  const outcome'],
   ['the amendment is dated by something other than today', COMMAND, 'by: args.by, date: today(),', "by: args.by, date: '1999-01-01',"],
-  ['the command does not read the project, so it has no ledger', COMMAND, "'condense', 'supersede', 'status']", "'condense', 'status']"],
+  ['the command does not read the project, so it has no ledger', COMMAND, "'condense', 'supersede', 'status', 'route']", "'condense', 'status', 'route']"],
   ['the command amends only the home ledger', COMMAND, 'runSupersede({ load: loadLedgers,', 'runSupersede({ load: () => loadLedgers().slice(0, 1),'],
 ];
 

@@ -42,9 +42,18 @@ let passed = 0;
 const failures = [];
 const check = (name, condition, detail) => (condition === true ? (passed += 1) : failures.push(`${name} — ${String(detail).slice(0, 600)}`));
 
+/** A message rendered, or the text of why it could not be: a message that cannot render fails the check that expects it instead of crashing the run. @es Un mensaje renderizado, o el texto de por qué no pudo: un mensaje que no se renderiza hace fallar la comprobación que lo espera en vez de tumbar la corrida. */
+const attempt = (message, params) => {
+  try {
+    return render(message, params);
+  } catch (error) {
+    return `RENDER FAILED: ${error instanceof Error ? error.message : String(error)}`;
+  }
+};
+
 /** The run's output must contain the table's message for `id`, filled with `params`. @es La salida debe contener el mensaje `id` de la tabla. */
 const says = (name, out, id, params = {}) => {
-  check(`${name}: says ${id} in both languages`, out.includes(render(CAPTURE_MESSAGES[id], params)), out);
+  check(`${name}: says ${id} in both languages`, out.includes(attempt(CAPTURE_MESSAGES[id], params)), out);
   check(`${name}: nothing it printed is English only`, monolingualRuns(out).length === 0, monolingualRuns(out).join(' | '));
 };
 
@@ -109,7 +118,7 @@ const capture = (world, extra = [], { key = KEY, scope = 'global', actor = 'orch
   const world = fresh('capture-recurrence', `${GLOBAL_HEAD}${plain(1)}`);
   const { out } = capture(world);
 
-  check('a recurring lesson: says capture.recurrence in both languages', out.includes(render(CAPTURE_MESSAGES['capture.recurrence'], { key: KEY, count: 2 })), out);
+  check('a recurring lesson: says capture.recurrence in both languages', out.includes(attempt(CAPTURE_MESSAGES['capture.recurrence'], { key: KEY, count: 2 })), out);
 }
 
 {
@@ -192,7 +201,7 @@ const capture = (world, extra = [], { key = KEY, scope = 'global', actor = 'orch
 
   check('no command prints the usage and exits 0', none.status === 0, none.out);
   says('no command', none.out, 'usage');
-  check('an unknown command prints the same usage and exits 1', unknown.status === 1 && unknown.out.includes(render(CAPTURE_MESSAGES.usage)), unknown.out);
+  check('an unknown command prints the same usage and exits 1', unknown.status === 1 && unknown.out.includes(attempt(CAPTURE_MESSAGES.usage)), unknown.out);
 }
 
 {
