@@ -57,6 +57,7 @@ import { PROMOTE_MESSAGES } from './promote-messages.mjs';
 import { facesByFile, staleFiles } from './text-growth.mjs';
 import { HEADER, homeLedgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { commitHeaderRoute, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, routeOutcome } from './ledger-route.mjs';
+import { placeStub } from './stub-placement.mjs';
 import { PROMOTED_SCOPE, areaRulesFile, areaRulesHeader, areaScopes, isAreaScope, stubScopeOf } from './ledger-routes.mjs';
 import { commitBlockRoute, findBlock, planBlockRoute } from './rule-block.mjs';
 import { withLock } from './ledger-lock.mjs';
@@ -678,7 +679,7 @@ function commandPromote(args) {
     if (home === ledger) {
       ledger.lines[index] = stub.line;
     } else {
-      home.lines.push(stub.line);
+      placeStub(home, key, stub.line, readMarker);
       writeLedger(home);
       ledger.lines.splice(index, 1);
     }

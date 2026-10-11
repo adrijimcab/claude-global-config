@@ -25,7 +25,7 @@ const MUTANTS = [
   ['a global lesson\'s stub stays in the loaded ledger', COMMAND, 'const home = ledgerForScope(ledgers, stubScopeOf(ledger.scope));', 'const home = ledger;'],
   ['a project lesson\'s stub is written to the home stubs file', COMMAND, 'const home = ledgerForScope(ledgers, stubScopeOf(ledger.scope));', "const home = ledgerForScope(ledgers, 'promoted');"],
   ['the promoted line is left in the loaded ledger beside its stub', COMMAND, '      ledger.lines.splice(index, 1);\n', ''],
-  ['the stubs file is never written', COMMAND, '      home.lines.push(stub.line);\n      writeLedger(home);\n', '      home.lines.push(stub.line);\n'],
+  ['the stubs file is never written', COMMAND, '      placeStub(home, key, stub.line, readMarker);\n      writeLedger(home);\n', '      placeStub(home, key, stub.line, readMarker);\n'],
   ['every stub goes to the stubs file, even a project\'s', ROUTES, 'export const stubScopeOf = (scope) => (isGlobalFamily(scope) ? PROMOTED_SCOPE : scope);', 'export const stubScopeOf = () => PROMOTED_SCOPE;'],
   ['no stub goes to the stubs file', ROUTES, 'export const stubScopeOf = (scope) => (isGlobalFamily(scope) ? PROMOTED_SCOPE : scope);', 'export const stubScopeOf = (scope) => scope;'],
   ['the stubs file is somewhere the harness loads', ROUTES, "path.join(home, '.claude', 'lessons-promoted.md')", "path.join(home, '.claude', 'rules', 'lessons-promoted.md')"],
