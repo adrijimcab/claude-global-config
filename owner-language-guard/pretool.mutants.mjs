@@ -22,6 +22,7 @@ const MUTANTS = [
   ['sidechain user entries close the step', `${G}/interstitial.mjs`, "entry?.type === 'user' && entry.isSidechain !== true", "entry?.type === 'user'"],
   ['texts come back in reverse order of writing', `${G}/interstitial.mjs`, 'return { texts: texts.reverse(), complete: true };', 'return { texts, complete: true };'],
   ['an unparsable line aborts instead of being skipped', `${G}/interstitial.mjs`, '    } catch {\n      continue;\n    }', '    } catch {\n      break;\n    }'],
+  ['the window loop exits instead of growing', `${G}/interstitial.mjs`, '      window *= 2;', '      break;'],
   ['the ceiling judges texts of unknown age', `${G}/interstitial.mjs`, 'if (window >= MAX_WINDOW) return [];', 'if (window >= MAX_WINDOW) return result.texts;'],
   ['the ceiling is lowered below a large tool result', `${G}/interstitial.mjs`, 'const MAX_WINDOW = 8 << 20;', 'const MAX_WINDOW = 1 << 20;'],
   ['the ceiling is never applied', `${G}/interstitial.mjs`, 'if (window >= MAX_WINDOW) return [];', ''],
@@ -29,6 +30,8 @@ const MUTANTS = [
 
   // pretool.mjs
   ['subagent callers are judged', `${G}/pretool.mjs`, 'isSubagentCaller(payload) || ', ''],
+  ['an empty transcript_path reaches the reader', `${G}/pretool.mjs`, ' || transcript.length === 0) return undefined;', ') return undefined;'],
+  ['the refusal omits the excerpt', `${G}/pretool.mjs`, '{ excerpt: first.excerpt }', '{}'],
   ['the guard never refuses', `${G}/pretool.mjs`, 'if (first === undefined) return undefined;', 'return undefined;'],
   ['the refusal is not a deny', `${G}/pretool.mjs`, "permissionDecision: 'deny'", "permissionDecision: 'ask'"],
   ['the BOM is not stripped', `${G}/pretool.mjs`, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],

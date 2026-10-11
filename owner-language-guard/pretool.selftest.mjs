@@ -77,6 +77,7 @@ try {
   check('subagent caller (transcript under subagents/) is never judged', denied(call(transcript(step(ENGLISH), path.join(scratch, 'subagents')))), false);
   check('missing transcript is allowed', denied(call(path.join(scratch, 'nope.jsonl'))), false);
   check('payload without transcript_path is allowed', denied(call(undefined)), false);
+  check('an empty transcript_path never reaches the reader', evaluate(JSON.stringify({ transcript_path: '' }), () => [ENGLISH]), undefined);
   check('garbage payload is allowed', evaluate('{not json'), undefined);
   check('BOM payload is parsed', denied(evaluate(`﻿${JSON.stringify({ transcript_path: transcript(step(ENGLISH)) })}`)), true);
   check('a reader that throws is allowed', evaluate(JSON.stringify({ transcript_path: 'x' }), () => { throw new Error('boom'); }), undefined);
