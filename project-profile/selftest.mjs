@@ -24,14 +24,17 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { NEAR_EOL_DAYS, supportOf } from './angular-support.mjs';
 import { ancestry, findProjectRoot, frameworkChild, installedVersion, readFacts, readJsonObject } from './facts.mjs';
 import { eslintConfigOf, lowerBoundOf, majorMinorOf, packageManagerOf, PROFILE_PACKAGES, profileOf, readProfile, runProfileCli, standaloneOf, versionOf, zonelessOf } from './profile.mjs';
 import { payloadOf, sessionDirectory, sessionStartOutput } from './session-start.mjs';
 import { toolchainForProfile } from '../gates-kit/toolchain-for.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
 import { docsText, factsText, gatesText, OFFICIAL_RULES_FILE, profileLine, supportText } from './summary-line.mjs';
+
+isolateState('project-profile');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -152,7 +155,7 @@ check('gatesText: Nest and Node with Vitest', [gatesOf('nest', 11, ['jest'])?.[0
 check('gatesText: a chosen toolchain that is not on disk is not named', gatesOf('angular', 21, ['vitest'], { exists: present('angular-20') }), undefined);
 check('gatesText: without a home nothing is named', gatesOf('angular', 21, ['vitest'], { home: undefined }), undefined);
 check('gatesText: several real runners are refused with both runners, never guessed', gatesOf('angular', 21, ['karma', 'vitest']), ['No gates toolchain: the project has several test runners (karma+vitest), so none is chosen.', 'Sin toolchain de gates: el proyecto tiene varios runners de tests (karma+vitest), así que no se elige ninguno.']);
-check('gatesText: the refusal is said even when nothing is installed', gatesOf('node', undefined, ['jest', 'vitest'], { exists: () => false, home: undefined })[0].startsWith('No gates toolchain: the project has several'), true);
+check('gatesText: the refusal is said even when nothing is installed', () => gatesOf('node', undefined, ['jest', 'vitest'], { exists: () => false, home: undefined })[0].startsWith('No gates toolchain: the project has several'), true);
 check('gatesText: Jasmine without Karma is refused', gatesOf('angular', 19, ['jasmine'])[0], 'No gates toolchain: toolchain angular-19 does not pin the test runner the project uses (jasmine).');
 check('gatesText: an Angular major with no toolchain is refused', gatesOf('angular', 18, ['karma'])[0].startsWith('No gates toolchain: no gates toolchain for Angular major 18'), true);
 check('gatesText: a host Node outside the toolchain range is refused', gatesOf('angular', 21, ['vitest'], { hostNode: '25.0.0' })[0].startsWith('No gates toolchain: host Node 25.0.0 is outside the range every package of toolchain angular-21 accepts'), true);
@@ -473,26 +476,35 @@ check('payloadOf: a BOM is tolerated, junk is undefined', [payloadOf('﻿{"cwd":
 
   const linked = path.join(fresh('link'), 'project-profile');
 
-  symlinkSync(HERE, linked, 'dir');
-  check('hook process: runs through a symlinked path too', JSON.parse(run(path.join(linked, 'session-start.mjs'), JSON.stringify({ cwd: app })).stdout || '{}').hookSpecificOutput?.hookEventName, 'SessionStart');
-  check('hook process: importing the module runs nothing', spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(path.join(HERE, 'session-start.mjs'))});`], { input: JSON.stringify({ cwd: app }), encoding: 'utf8', cwd: outside }).stdout, '');
+  // A junction on Windows (a link to a directory that needs no privilege), a symlink elsewhere. @es Junction en Windows (enlace a directorio sin privilegio), symlink en el resto.
+  symlinkSync(HERE, linked, process.platform === 'win32' ? 'junction' : 'dir');
+  check('hook process: runs through a linked path too', JSON.parse(run(path.join(linked, 'session-start.mjs'), JSON.stringify({ cwd: app })).stdout || '{}').hookSpecificOutput?.hookEventName, 'SessionStart');
+  check('hook process: importing the module runs nothing', spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(path.join(HERE, 'session-start.mjs')).href)});`], { input: JSON.stringify({ cwd: app }), encoding: 'utf8', cwd: outside }).stdout, '');
 
   // --- the CLI ---
   const lines = [];
   const write = (line) => lines.push(line);
+  /** The CLI's exit code; a throw becomes a checked value, never a crash. @es El código de salida de la CLI; un throw se compara, nunca revienta. */
+  const cliExit = async (argv) => {
+    try {
+      return await runProfileCli(argv, { write, home: HOME });
+    } catch (error) {
+      return `threw: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  };
 
-  check('cli: a project prints its line, exit 0', [await runProfileCli([app], { write, home: HOME }), lines.at(-1).startsWith('Profile: Angular 22.2')], [0, true]);
-  const jsonExit = await runProfileCli([app, '--json'], { write, home: HOME });
+  check('cli: a project prints its line, exit 0', [await cliExit([app]), lines.at(-1)?.startsWith('Profile: Angular 22.2')], [0, true]);
+  const jsonExit = await cliExit([app, '--json']);
 
   check('cli: --json prints the profile', () => [jsonExit, JSON.parse(lines.at(-1)).framework], [0, 'angular']);
-  check('cli: no project, exit 1, bilingual', [await runProfileCli([outside], { write, home: HOME }), lines.at(-1).includes(' @es ')], [1, true]);
-  check('cli: an unknown flag, exit 2', await runProfileCli(['--yaml'], { write, home: HOME }), 2);
-  check('cli: two directories, exit 2', await runProfileCli([app, outside], { write, home: HOME }), 2);
+  check('cli: no project, exit 1, bilingual', [await cliExit([outside]), lines.at(-1)?.includes(' @es ')], [1, true]);
+  check('cli: an unknown flag, exit 2', await cliExit(['--yaml']), 2);
+  check('cli: two directories, exit 2', await cliExit([app, outside]), 2);
 
   const cli = spawnSync(process.execPath, [path.join(HERE, 'profile.mjs'), app, '--json'], { encoding: 'utf8' });
 
   check('cli process: runs as a program', () => [cli.status, JSON.parse(cli.stdout || '{}').frameworkVersion?.major], [0, 22]);
-  check('cli process: importing it runs nothing', spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(path.join(HERE, 'profile.mjs'))});`], { encoding: 'utf8', cwd: outside }).stdout, '');
+  check('cli process: importing it runs nothing', spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(path.join(HERE, 'profile.mjs')).href)});`], { encoding: 'utf8', cwd: outside }).stdout, '');
 }
 
 rmSync(scratch, { recursive: true, force: true });
