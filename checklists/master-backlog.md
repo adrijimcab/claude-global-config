@@ -181,7 +181,9 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   `lessons/evidence/`); deduplicate text restated across files; prove that each moved block's trigger fires;
   then a fixed-ceiling gate refuses growth. Where text lives is the orchestrator's decision; any change to
   the WORDING of an owner mandate goes to the owner. Queued, reason (3): it edits the same files that
-  `land/odd` rewrites, so it starts after that branch lands.
+  `land/odd` rewrites, so it starts after that branch lands. Owner order 2026-10-11: it is the LAST step
+  before the session stops and before the final integration to master — after every worker lands and
+  after `land/odd`, and before the final report.
 - Stale-session guard warning (measured 2026-10-11): a PreToolUse hook group registered after a session
   started does not fire in that session — the orchestrator's session (started before 03383e3) wrote an
   English line and the following Read was not refused; Stop-hook additions did reach the same session, a
@@ -215,6 +217,10 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
 R1 -> R2 -> R3 (nothing can land from the host until R2 is green) -> B1 with the transcript index ->
 host items H11, H1, H6, H10 as each is unblocked -> token/perf -> `isMain` helper -> summarising gate
 runner -> portability split -> gentle-ai pin -> B7 -> A3/C2 -> deep audit -> Track P when the owner says go.
+
+Session close (owner order 2026-10-11): land every finished worker at checkpoints -> `land/odd` with the v4
+install once b100 finishes FR, dashboard and chart -> always-loaded budget (LAST step) -> final integration
+to master with one full run -> full report of done and pending, recorded in engram.
 
 ## DROPPED (with the reason)
 
