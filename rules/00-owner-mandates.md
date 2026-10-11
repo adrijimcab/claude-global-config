@@ -198,6 +198,25 @@ verify), el ORQUESTADOR hace, en el MISMO turno, las tres cosas:
 3. **SDD:** si la unidad era un cambio SDD, se archiva (`sdd-archive`) cuando su verify está en verde.
    Un verify en rojo no se archiva: se arregla primero.
 
+## Resolver en el momento antes que encolar (directiva del dueño 2026-10-11, global)
+
+Dueño, literal: «TODO lo que vaya saliendo, en vez de enviarlo al backlog, ir haciéndolo para que el backlog
+no crezca, siempre que se pueda, SIEMPRE COMO REGLA».
+
+- Un hallazgo se RESUELVE en el mismo turno en que aparece, de raíz y con sus gates, en vez de encolarse.
+- Va al backlog como PENDIENTE solo si se da una de estas cuatro razones, y la razón se escribe en el ítem:
+  (1) está bloqueado por algo externo (otra sesión retiene el recurso, una versión que no salió);
+  (2) necesita una decisión que solo tiene el dueño (credenciales, permisos, prioridad de negocio, revertir
+  una decisión suya); (3) hacerlo ahora pisaría trabajo en curso (el tope de 3 agentes, ficheros que otro
+  worker está tocando, una ventana de coordinación de recurso compartido abierta); (4) es lo bastante grande
+  para ser su propio cambio con diseño abierto.
+- Lo resuelto en el momento también se registra, pero como HECHO con su comprobante (commit, medición), nunca
+  como pendiente: la traza no se pierde y el backlog no crece.
+@es Resolve now rather than queue: a finding is fixed in the turn it appears, at the root and with its gates;
+it is queued as PENDING only when blocked externally, when it needs a decision only the owner holds, when it
+would preempt work in flight, or when it is large enough to be its own change — and the item names which. What
+is fixed at once is recorded as DONE with its receipt.
+
 ## Backlog maestro — todo hallazgo entra en el momento (directiva del dueño 2026-09-30, global; alcance
 corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
 
