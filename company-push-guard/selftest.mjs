@@ -23,6 +23,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { COMPANY_URL, PERSONAL_URL, createCompanyWorld } from '../selftest-fixtures/company-world.mjs';
 import { parsePushArguments } from './push-arguments.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
+
+// The dispatcher writes hook state; this proof writes it to a private temporary root, never the real one.
+// @es El dispatcher escribe estado de hooks; esta prueba lo escribe en una raíz temporal propia, nunca en la real.
+isolateState('company-push-guard');
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GUARD = join(HERE, 'guard.mjs');
