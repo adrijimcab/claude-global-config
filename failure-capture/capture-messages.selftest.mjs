@@ -12,7 +12,7 @@
  * la prueba falla si una frase vuelve a solo inglés, pierde su mitad española o deja de llevar sus datos.
  */
 
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +31,9 @@ import { isolateState } from '../hook-state/locations.mjs';
 isolateState('failure-capture');
 
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-capture-messages-')));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const KEY = 'message-lesson-key';
 const GLOBAL_HEAD = '# Lessons Ledger — global\n\n---\n';
 const plain = (count) => `- [global] 2026-09-14 — it happened -> RULE: do the thing <!--fc:${KEY}#${String(count)}-->\n`;

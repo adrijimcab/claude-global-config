@@ -22,7 +22,7 @@
  * home que toda sesión carga. Los fixtures se CONSTRUYEN, nunca son los vivos.
  */
 
-import { existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -39,6 +39,9 @@ import { isolateState } from '../hook-state/locations.mjs';
 isolateState('failure-capture');
 
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-capture-areas-')));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const AREA = 'guards';
 const KEY = 'area-lesson-key';
 const OTHER = 'global-lesson-key';

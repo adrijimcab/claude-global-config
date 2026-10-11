@@ -16,7 +16,7 @@
  * lección NO promovida que reincide; y el casi-acierto, un muñón de OTRA clave junto a la que reincide.
  */
 
-import { mkdtempSync, realpathSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -31,6 +31,9 @@ import { isolateState } from '../hook-state/locations.mjs';
 isolateState('failure-capture');
 
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-capture-recurrence-')));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const KEY = 'promoted-lesson-key';
 const LEDGER_HEAD = '# Lessons Ledger — global\n\n---\n';
 const stubOf = (key, count) => `${minimalStub({ date: '2026-09-30', mechanism: '.claude/guard/guard.mjs', marker: `<!--fc:${key}#${String(count)}-->` }).line}\n`;

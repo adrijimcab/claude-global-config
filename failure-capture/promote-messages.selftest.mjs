@@ -14,7 +14,7 @@
  * inglés (los problemas de cierre de `closure.mjs` y las negativas de `promotion.mjs` pasan por el mismo chequeo).
  */
 
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -31,6 +31,9 @@ import { isolateState } from '../hook-state/locations.mjs';
 isolateState('failure-capture');
 
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-capture-promote-messages-')));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const KEY = 'promote-lesson-key';
 const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
 const GLOBAL_HEAD = '# Lessons Ledger — global\n\n---\n';
