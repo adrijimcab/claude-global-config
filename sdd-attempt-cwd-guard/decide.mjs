@@ -12,6 +12,15 @@
  * command are none of this guard's business. Only a command in command position counts: a mention inside
  * `echo`, a quoted message or a heredoc is data, by construction of the shared parser.
  *
+ * gentle-ai v4 (ODD) retired `sdd-attempt`; the same measurement moved to `gentle-ai review assess|start|status`,
+ * which assess a unit's base-to-HEAD range in the repository `--cwd` names, and `--cwd` defaults to "." there
+ * (v4.0.0 internal/cli/review_assess.go:249, review_facade.go:777 and :2126). So under v4 an absent `--cwd`
+ * binds the command's own directory. The v2.9.1 verbs stay covered while a rollback to 2.9.1 is possible.
+ * @es gentle-ai v4 (ODD) retiró `sdd-attempt`; la misma medición pasó a `gentle-ai review assess|start|status`,
+ * que miden el rango base-HEAD de la unidad en el repositorio que nombra `--cwd`, y ahí `--cwd` vale "." por
+ * omisión: bajo v4 un `--cwd` ausente ata el directorio del propio comando. Los verbos de v2.9.1 siguen
+ * cubiertos mientras sea posible volver a 2.9.1.
+ *
  * @es LA DECISIÓN: ¿corre este comando `gentle-ai sdd-attempt <verbo> --cwd <checkout principal>` mientras
  * el trabajo vive en un worktree ENLAZADO? Incidente medido dos veces el 2026-10-11: el ledger mide el
  * árbol que se le indica, y el principal era el equivocado. Un hook no conoce la base de la unidad, así
@@ -26,6 +35,20 @@ import { linkedWorktreesCarryingWork } from './worktree-work.mjs';
 
 /** The sdd-attempt verbs that bind the ledger to a tree. @es Verbos que atan el ledger a un árbol. */
 export const BOUND_VERBS = new Set(['acquire', 'settle', 'begin', 'record', 'finish']);
+
+/** The v4 review verbs that assess a range of the `--cwd` tree. @es Verbos de revisión v4 que miden un rango del árbol `--cwd`. */
+export const RANGE_REVIEW_VERBS = new Set(['assess', 'start', 'status']);
+
+/**
+ * The `--cwd` a gentle-ai invocation binds, from the words after `gentle-ai`, or `undefined` when it binds none:
+ * v2.9.1 `sdd-attempt <bound verb>` binds only an explicit `--cwd`; v4 `review <range verb>` defaults it to ".".
+ * @es El `--cwd` que ata una invocación de gentle-ai, o `undefined` si no ata ninguno.
+ */
+function boundCwd(words) {
+  if (words[0] === 'sdd-attempt' && BOUND_VERBS.has(words[1])) return cwdOption(words.slice(2));
+  if (words[0] === 'review' && RANGE_REVIEW_VERBS.has(words[1])) return cwdOption(words.slice(2)) ?? '.';
+  return undefined;
+}
 
 /** The value of `--cwd` in `args` (`--cwd v` or `--cwd=v`), or `undefined`. @es El valor de `--cwd`. */
 function cwdOption(args) {
@@ -47,9 +70,8 @@ export function boundInvocations(script, dialect, startDirectory, platform = pro
     const at = commandWordIndex(command.words);
 
     if (at === -1 || executableName(command.words[at]) !== 'gentle-ai') continue;
-    if (command.words[at + 1] !== 'sdd-attempt' || !BOUND_VERBS.has(command.words[at + 2])) continue;
 
-    const value = cwdOption(command.words.slice(at + 3));
+    const value = boundCwd(command.words.slice(at + 1));
 
     if (value === undefined || typeof directory !== 'string') continue;
 

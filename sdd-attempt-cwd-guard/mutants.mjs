@@ -14,9 +14,12 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const MUTANTS = [
   // --- decide.mjs: which invocations bind the ledger.
-  ['`status`/`reset`/`inspect` are refused too: the verb set is no longer checked', 'sdd-attempt-cwd-guard/decide.mjs', "|| !BOUND_VERBS.has(command.words[at + 2])", ''],
+  ['`status`/`reset`/`inspect` are refused too: the verb set is no longer checked', 'sdd-attempt-cwd-guard/decide.mjs', " && BOUND_VERBS.has(words[1])", ''],
+  ['the v4 review verbs are not watched', 'sdd-attempt-cwd-guard/decide.mjs', "  if (words[0] === 'review' && RANGE_REVIEW_VERBS.has(words[1])) return cwdOption(words.slice(2)) ?? '.';\n", ''],
+  ['any v4 review verb is watched, `mode status` included', 'sdd-attempt-cwd-guard/decide.mjs', " && RANGE_REVIEW_VERBS.has(words[1])", ''],
+  ['an absent --cwd under v4 binds nothing, although it defaults to "."', 'sdd-attempt-cwd-guard/decide.mjs', " ?? '.';", ';'],
   ['a verb is dropped from the bound set, so `finish` escapes', 'sdd-attempt-cwd-guard/decide.mjs', "'record', 'finish']", "'record']"],
-  ['the `sdd-attempt` word is no longer required, so `sdd-attempts` and `sdd-attempt-status` are read as it', 'sdd-attempt-cwd-guard/decide.mjs', "command.words[at + 1] !== 'sdd-attempt' ||", ''],
+  ['the `sdd-attempt` word is no longer required, so `sdd-attempts` and `sdd-attempt-status` are read as it', 'sdd-attempt-cwd-guard/decide.mjs', "words[0] === 'sdd-attempt' && ", ''],
   ['any executable is read as gentle-ai', 'sdd-attempt-cwd-guard/decide.mjs', "executableName(command.words[at]) !== 'gentle-ai'", 'false'],
   ['the fused `--cwd=value` spelling is no longer read', 'sdd-attempt-cwd-guard/decide.mjs', "|| word.startsWith('--cwd=')", ''],
   ['a relative --cwd is resolved against the process cwd instead of the command cwd', 'sdd-attempt-cwd-guard/decide.mjs', 'path.resolve(directory, nativeSpelling(value, platform))', 'path.resolve(nativeSpelling(value, platform))'],

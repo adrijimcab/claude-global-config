@@ -161,6 +161,16 @@ const cases = [
   // --- verbs that never bind a tree.
   ...['status', 'reset', 'inspect'].map((verb) => ['allow', bash(slash(active.root), `gentle-ai sdd-attempt ${verb} --cwd "${slash(active.repoDir)}"`), `verb ${verb} is none of this guard's business`]),
 
+  // --- gentle-ai v4 (ODD): the review commands that assess a unit's range of the --cwd tree, where --cwd
+  // defaults to ".". @es gentle-ai v4 (ODD): los comandos de revisión que miden un rango del árbol --cwd, con "." por omisión.
+  ...['assess', 'start', 'status'].map((verb) => ['deny', bash(slash(active.root), `gentle-ai review ${verb} --cwd "${slash(active.repoDir)}" --base-ref HEAD~1 --committed-only --json`), `v4 review ${verb} with --cwd main checkout`]),
+  ['deny', bash(slash(active.repoDir), 'gentle-ai review assess --base-ref HEAD~1 --committed-only --json'), 'v4 review assess with NO --cwd, run in the main checkout (the default is ".")', activeWorktree],
+  ['deny', bash(slash(tmpdir()), `cd "${slash(active.repoDir)}" && gentle-ai review assess --json`), 'v4 review assess with no --cwd after the line\'s own cd into the main checkout'],
+  ['allow', bash(slash(activeWorktree), 'gentle-ai review assess --base-ref HEAD~1 --committed-only --json'), 'v4 REMEDY: review assess run inside the unit\'s own worktree'],
+  ['allow', bash(slash(active.root), `gentle-ai review assess --cwd "${slash(activeWorktree)}" --json`), 'v4 REMEDY: review assess --cwd the unit\'s own worktree'],
+  ['allow', bash(slash(active.repoDir), 'gentle-ai review mode status'), 'NEAR MISS v4: review mode status measures no range'],
+  ['allow', bash(slash(active.repoDir), 'gentle-ai review assessment --json'), 'NEAR MISS v4: a verb that only starts like assess'],
+
   // --- what is allowed.
   ['allow', bash(slash(active.root), acquire(slash(activeWorktree))), 'the REMEDY: --cwd is the unit\'s own linked worktree'],
   ['allow', bash(slash(spaced.root), `gentle-ai sdd-attempt acquire --cwd "${slash(spacedWorktree)}"`), 'linked worktree path with spaces'],
