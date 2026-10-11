@@ -190,6 +190,16 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   difference not yet explained. Mechanism to build: a UserPromptSubmit check comparing the session start
   with each guard's registration and telling the session to restart. Queued, not started: the owner said
   to launch nothing new until the five running workers finish; the v4 restart reloads every session anyway.
+  DONE 2026-10-11: built as `stale-session-guard`, landed on master 386d92a. The Stop-versus-PreToolUse
+  difference was explained from code (`hook-dispatch/dispatch.mjs` re-reads its manifest on every run, so
+  guards added to an existing group are live mid-session; only new settings.json groups need a restart).
+- Voice judge re-stop input (reported 2026-10-11 by session b100-am-ui-f8, its measurement): the v2 judge
+  rejected four consecutive final messages of one turn quoting content the later rewrites no longer held. The
+  v3 worker reproduced the rubric path with real-shaped payloads: a clean last message passes 5 of 5 with
+  stop_hook_active true and false, with tools off and on, and rule 1 discriminates. Not reproduced: what the
+  harness actually passes on a re-stop. Mechanism to build: a Stop command hook that records, per stop, the
+  session, stop_hook_active and a hash and first words of last_assistant_message to hook state, so the next
+  occurrence is measured instead of inferred. Pending, reason (1): it needs a live re-stop to measure.
 - B7 — lessons for this session's real bugs via `capture.mjs`, each with its anti-recurrence mechanism;
   the three named by the owner (reconcile order, duplicated stub, monolingual message) have no trace in
   either history: they need the owner's data, never invented.
