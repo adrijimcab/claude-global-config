@@ -53,6 +53,7 @@
 import { resolveTopicKeyById } from '../backlog-owner-guard/resolve-topic-key.mjs';
 import { findAnnouncement } from './announcement.mjs';
 import { judgeMasterUpdates } from './master-update.mjs';
+import { hasMasterDocumentCommit } from './backlog-document-save.mjs';
 import { hasMasterBacklogSave } from './master-save.mjs';
 import { readOffsetState, readTranscriptTail, transcriptSize, writeOffsetState } from './state.mjs';
 
@@ -101,7 +102,7 @@ export function decide(
   // in this fleet holds.
   if (tail === undefined) return undefined;
 
-  if (hasMasterBacklogSave(tail)) return undefined;
+  if (hasMasterBacklogSave(tail) || hasMasterDocumentCommit(tail)) return undefined;
 
   // A `mem_update` has no topic_key of its own: ask the store what each updated observation IS.
   // @es Un `mem_update` no tiene topic_key propio: se pregunta al almacén qué ES cada observación.

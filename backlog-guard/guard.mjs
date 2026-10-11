@@ -52,44 +52,36 @@ function journal(record) {
 }
 
 /** The hook output that blocks the turn. @es La salida de hook que bloquea el turno. */
-function blockOutput({ marker, sessionId, transcriptPath }) {
+function blockOutput({ marker, sessionId }) {
   const context = [
     `BACKLOG-GUARD TRIPPED on the phrase: "${marker}".`,
+    `@es BACKLOG-GUARD SALTÓ por la frase: «${marker}».`,
     '',
-    'Your final message reads like it announces a finding, a defect, some debt, an owner decision left',
-    'pending, or work still queued — and this turn ends with NOTHING saved to the project\'s master',
-    'backlog. Owner directive: every such finding is saved to the master backlog IN THE SAME TURN it',
-    'appears, never left only in chat, an agent report, or a loose note.',
+    'Your final message announces a new pending item ("' + marker + '") and this turn saved nothing to the master backlog.',
+    '@es Tu mensaje final anuncia un ítem pendiente nuevo («' + marker + '») y este turno no guardó nada en el backlog maestro.',
     '',
-    'This hook does NOT claim your finding is real or important. It cannot judge that. It only refuses',
-    'to let an announced-pending finding leave the turn unsaved. Do exactly ONE of these, then stop',
-    'again:',
+    'Do exactly ONE of these, then stop again:',
+    '@es Hacé exactamente UNA de estas, y terminá de nuevo:',
     '',
-    '  A) SAVE IT (default). Read the CURRENT master backlog first (topic_key ends `-master`, e.g.',
-    '     `backlog/1.0.0-master` in b100-am-ui) with `mem_get_observation`, then write the FULL revision',
-    '     back with the new finding added, without losing what was already there — either:',
+    '  A) SAVE IT. Read the CURRENT master backlog first, then write the FULL revision back with the item added:',
+    '     mem_save with topic_key "backlog/<milestone>-master", or mem_update on the master observation id,',
+    '     or commit the versioned document: git commit -- <repo>/checklists/master-backlog.md',
+    '     (also via node .../backup-repo.mjs commit … -- checklists/master-backlog.md).',
+    '  @es A) GUARDALO. Leé primero el backlog maestro ACTUAL y reescribí la revisión COMPLETA con el ítem sumado:',
+    '  @es    mem_save con topic_key "backlog/<hito>-master", o mem_update sobre el id de la observación maestra,',
+    '  @es    o commiteá el documento versionado: git commit -- <repo>/checklists/master-backlog.md',
+    '  @es    (también con node .../backup-repo.mjs commit … -- checklists/master-backlog.md).',
     '',
-    '       mem_save({ topic_key: "backlog/<milestone>-master", content: "<everything, old + new>", … })',
-    '       mem_update({ id: <the master observation\'s own id>, content: "<everything, old + new>" })',
+    '  B) DISMISS IT, with a reason that is written down:',
+    '  @es B) DESCARTALO, con un motivo que queda escrito:',
+    `       node "${DISMISS_CLI}" --session ${sessionId} --marker "${marker}" --reason "why this phrase is not a new pending item here"`,
     '',
-    '     `mem_update` is recognised too: this guard asks the engram store whether the updated id holds a',
-    '     `-master` topic_key. If the store cannot be read, the turn is let through and the degradation is',
-    '     journaled. @es `mem_update` también se reconoce: esta guardia pregunta al almacén de engram si',
-    '     el id actualizado tiene un topic_key `-master`; si el almacén no se puede leer, el turno pasa y',
-    '     la degradación queda en el journal.',
-    '',
-    '  B) DISMISS IT, with a reason that gets written down (not a silent escape — the dismissal log is',
-    '     the only evidence that could ever justify narrowing the marker set):',
-    '',
-    `       node "${DISMISS_CLI}" --session ${sessionId} --marker "${marker}" \\`,
-    '         --reason "why this phrase is not a real pending finding here"',
-    '',
-    'This guard fires at most once per turn. It will not fire again after this pass.'
+    'This guard fires at most once per turn. @es Esta guardia salta como mucho una vez por turno.'
   ].join('\n');
 
   return {
     decision: 'block',
-    reason: `backlog-guard: the turn announces pending work ("${marker}") with nothing saved to the master backlog. Save it or dismiss it with a reason.`,
+    reason: `backlog-guard: the turn announces a new pending item ("${marker}") with nothing saved to the master backlog. Save it or dismiss it with a reason. @es backlog-guard: el turno anuncia un ítem pendiente nuevo («${marker}») sin nada guardado en el backlog maestro. Guardalo o descartalo con un motivo.`,
     hookSpecificOutput: { hookEventName: 'Stop', additionalContext: context }
   };
 }

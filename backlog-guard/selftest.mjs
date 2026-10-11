@@ -27,6 +27,7 @@ import { evaluate } from './guard.mjs';
 import { findAnnouncement } from './announcement.mjs';
 import { findPendingMarker, PENDING_MARKERS } from './markers.mjs';
 import { proseOutsideQuotes } from './prose.mjs';
+import { hasMasterDocumentCommit } from './backlog-document-save.mjs';
 import { replay } from './replay.mjs';
 import { hasMasterBacklogSave, isMasterBacklogTopicKey, topicKeyValuesIn } from './master-save.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
@@ -422,6 +423,9 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
   const turn2 = runGuard(PENDING_MESSAGE);
   check('END TO END turn 2 (pending phrase, save was in the ALREADY-COVERED earlier window): blocked', `${String(turn2.code)}/${turn2.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/deny');
   check('END TO END turn 2: the refusal names the guard', turn2.out.includes('BACKLOG-GUARD TRIPPED'), true);
+  check('END TO END turn 2: the refusal carries the Spanish half', turn2.out.includes('@es BACKLOG-GUARD SALTÓ'), true);
+  check('END TO END turn 2: the refusal names the phrase that tripped it, in both languages', turn2.out.includes('worth flagging') && turn2.out.includes('nuevo («worth flagging») y este turno'), true);
+  check('END TO END turn 2: the refusal offers committing the versioned document', turn2.out.includes('or commit the versioned document') && turn2.out.includes('o commiteá el documento versionado'), true);
   check('END TO END turn 2: the refusal names the dismiss escape hatch', turn2.out.includes('dismiss.mjs'), true);
   check('END TO END turn 2: the refusal is journaled as evidence', journalledFor() - journalBefore, 1);
 
@@ -473,6 +477,28 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
 }
 
 // ---------------------------------------------------------------------------------------------
+// --- the versioned master backlog document, committed, is a save. @es El documento versionado del backlog maestro, commiteado, es un guardado.
+{
+  const call = (command, { id = 'toolu_1', failed = false, tool = 'Bash' } = {}) =>
+    [toolUseLine(tool, { command }).replace('toolu_x', id), JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: failed }] } })].join('\n');
+  const GIT = 'git -C /r commit -m "docs: backlog" -- .claude/checklists/master-backlog.md';
+  const BACKUP = 'node .claude/backup-repo.mjs commit -m "docs: backlog" -- checklists/master-backlog.md';
+
+  check('a successful git commit of the master document is a save', hasMasterDocumentCommit(call(GIT)), true);
+  check('a successful backup-repo commit of the master document is a save', hasMasterDocumentCommit(call(BACKUP)), true);
+  check('a Windows-separator path is recognised', hasMasterDocumentCommit(call(GIT.replaceAll('/', '\\'))), true);
+  check('a failed commit is not a save', hasMasterDocumentCommit(call(GIT, { failed: true })), false);
+  check('a commit with no result is not a save', hasMasterDocumentCommit(toolUseLine('Bash', { command: GIT })), false);
+  check('a commit of another file is not a save', hasMasterDocumentCommit(call('git commit -m x -- src/a.ts')), false);
+  check('a commit without a pathspec is not a save', hasMasterDocumentCommit(call('git commit -m x checklists/master-backlog.md')), false);
+  check('reading the document is not a save', hasMasterDocumentCommit(call('git log -- checklists/master-backlog.md')), false);
+  check('the archive folder is not the document', hasMasterDocumentCommit(call('git commit -m x -- checklists/master-backlog-archive/a.md')), false);
+  check('an empty excerpt is not a save', hasMasterDocumentCommit(''), false);
+  check('decide lets a turn that committed the master document end', verdict(stopPayload(PENDING_MESSAGE), { tail: call(GIT) }).result, 'allow');
+  check('decide still blocks when that commit failed', verdict(stopPayload(PENDING_MESSAGE), { tail: call(GIT, { failed: true }) }).result, 'deny');
+}
+
+
 // --- INTENT: the guard fires on an ANNOUNCED unrecorded item, not on a word. @es INTENCIÓN: dispara ante un ítem ANUNCIADO sin registrar, no ante una palabra.
 check('a code span is not the author words', proseOutsideQuotes('run `lo anoto` now'), 'run   now');
 check('a fenced block is not the author words', proseOutsideQuotes('a\n```\nlo anoto\n```\nb').includes('lo anoto'), false);

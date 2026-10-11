@@ -39,7 +39,7 @@ const UPDATE_TOOL_SUFFIX = 'mem_update';
 const STORE_FAILURES = new Set(['store-unreadable', 'query-failed']);
 
 /** Every object reachable inside parsed JSON `value`, depth-first. @es Cada objeto alcanzable dentro del JSON parseado `value`, en profundidad. */
-function* objectsIn(value) {
+export function* objectsIn(value) {
   if (value === null || typeof value !== 'object') return;
 
   yield value;
@@ -48,7 +48,7 @@ function* objectsIn(value) {
 }
 
 /** The parsed JSON of one transcript line, or `undefined` when it is empty or not JSON. @es El JSON parseado de una línea, o `undefined` si está vacía o no es JSON. */
-function parsedLine(line) {
+export function parsedLine(line) {
   try {
     return JSON.parse(line);
   } catch {
