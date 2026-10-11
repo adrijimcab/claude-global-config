@@ -18,6 +18,7 @@ import path from 'node:path';
 
 import { collisionsOf } from './collisions.mjs';
 import { git, GitFailure, gitOutput } from './git.mjs';
+import { requireIntegrationBranch } from './integration-branch.mjs';
 import { Refusal } from './outcome.mjs';
 import { uncommittedPaths } from './working-tree.mjs';
 
@@ -148,11 +149,12 @@ function requireNoCollision({ main, tip, head }) {
 
 /**
  * @param {{ worktree: string, main: string, branch: string, remote: string }} inputs
- * @returns {{ head: string, tip: string, remoteTip: string, landed: string[] }}
+ * @returns {{ head: string, tip: string, remoteTip: string, landed: string[], integration: string }}
  * @es Devuelve el HEAD que aterriza, la punta compartida, la punta remota y las rutas aterrizadas.
  */
 export function landingRangeOf({ worktree, main, branch, remote }) {
   requireOneRepositoryTwoCheckouts(worktree, main);
+  const integration = requireIntegrationBranch({ main, branch });
   requireCommittedWorktree(worktree);
   requireMainOnSharedBranch(main, branch);
   const head = gitOutput(worktree, ['rev-parse', '--verify', 'HEAD^{commit}']).trim();
@@ -160,5 +162,5 @@ export function landingRangeOf({ worktree, main, branch, remote }) {
   requireSharedTipContained({ worktree, main, branch, head, tip });
   const remoteTip = requireRemoteTipContained({ main, branch, remote, head });
   const landed = requireNoCollision({ main, tip, head });
-  return { head, tip, remoteTip, landed };
+  return { head, tip, remoteTip, landed, integration };
 }

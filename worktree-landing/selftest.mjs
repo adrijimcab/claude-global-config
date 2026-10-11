@@ -36,6 +36,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isolateState } from '../hook-state/locations.mjs';
+import { requireIntegrationBranch } from './integration-branch.mjs';
 import { land } from './land.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
@@ -357,6 +358,67 @@ try {
   must(other, 'commit', '-q', '-m', 'elsewhere');
   must(other, 'push', '-q', 'origin', 'master');
   expectRefused('the remote tip moved', remoteAhead, { reason: 'remote-tip-not-contained', text: 'which the worktree HEAD' });
+
+  // ── The integration branch the project declares ───────────────────────────────────────────────
+  const declare = (fixture, relative, content) => put(fixture.main, relative, content);
+  const MODULE = '.claude/integrate/integration-branches.mjs';
+  const asked = (branch, root) => {
+    try {
+      return { note: requireIntegrationBranch({ main: root, branch }) };
+    } catch (error) {
+      if (!Array.isArray(error.lines)) return { reason: `unexpected ${error.message}`, text: '' };
+      return { reason: error.reason, text: error.lines.join('\n') };
+    }
+  };
+
+  const fleetOk = layout({ work: { 'b.txt': 'b\n' } });
+  declare(fleetOk, '.claude/fleet-kit.json', '{"integrationBranches":["master","develop"]}');
+  const fleetOkReport = expectLanded('fleet-kit first branch is the requested one', fleetOk);
+  check(fleetOkReport.includes('check passed'), `fleet-kit first branch: the report says the check passed: ${fleetOkReport}`);
+
+  const fleetSecond = layout({ work: { 'b.txt': 'b\n' } });
+  declare(fleetSecond, '.claude/fleet-kit.json', '{"integrationBranches":["develop","master"]}');
+  expectRefused('fleet-kit: the requested branch is not the first', fleetSecond, { reason: 'branch-not-integration-branch', text: 'Requested --branch master, but the first declared integration branch is develop' });
+  const fleetNames = layout();
+  declare(fleetNames, '.claude/fleet-kit.json', '{"integrationBranches":["feature/meet","develop"]}');
+  const fleetNamesFile = path.join(fleetNames.main, '.claude/fleet-kit.json');
+  check(asked('feature/meet', fleetNames.main).note?.includes('check passed'), 'fleet-kit [feature/meet, develop] + feature/meet passes');
+  const fleetDevelop = asked('develop', fleetNames.main);
+  check(fleetDevelop.reason === 'branch-not-integration-branch' && fleetDevelop.text.includes('--branch develop') && fleetDevelop.text.includes('is feature/meet') && fleetDevelop.text.includes(fleetNamesFile) && fleetDevelop.text.includes(' @es '), `fleet-kit [feature/meet, develop] + develop is refused naming branch, first branch and file: ${fleetDevelop.text}`);
+  const fleetMain = layout();
+  declare(fleetMain, '.claude/fleet-kit.json', '{"integrationBranches":["main"]}');
+  check(asked('feature/meet', fleetMain.main).reason === 'branch-not-integration-branch', 'fleet-kit [main] + feature/meet is refused');
+
+  const moduleRoot = layout();
+  declare(moduleRoot, MODULE, "export const INTEGRATION_BRANCHES = Object.freeze(['develop', 'main']);\n");
+  const moduleDevelop = asked('develop', moduleRoot.main);
+  check(moduleDevelop.note?.includes('check passed') && moduleDevelop.note.includes(path.join(moduleRoot.main, MODULE)), 'module [develop, main] + develop passes');
+  check(asked('main', moduleRoot.main).reason === 'branch-not-integration-branch', 'module [develop, main] + main is refused');
+  const fleetBeatsModule = layout();
+  declare(fleetBeatsModule, '.claude/fleet-kit.json', '{"integrationBranches":["feature/meet"]}');
+  declare(fleetBeatsModule, MODULE, "export const INTEGRATION_BRANCHES = ['develop'];\n");
+  check(asked('feature/meet', fleetBeatsModule.main).note?.includes('check passed') && asked('develop', fleetBeatsModule.main).reason === 'branch-not-integration-branch', 'fleet-kit outranks the project module');
+  const fleetWithoutList = layout();
+  declare(fleetWithoutList, '.claude/fleet-kit.json', '{"landingGuard":{"mode":"enforce"}}');
+  declare(fleetWithoutList, MODULE, "export const INTEGRATION_BRANCHES = ['develop'];\n");
+  check(asked('develop', fleetWithoutList.main).note?.includes('check passed'), 'a fleet-kit with no integrationBranches falls through to the project module');
+
+  const ungoverned = layout({ work: { 'b.txt': 'b\n' } });
+  check(asked('anything', ungoverned.main).note?.includes('did not apply'), 'no source: the check says it did not apply, without blocking');
+  check(expectLanded('no source lands', ungoverned).includes('did not apply'), 'no source: the landing report says the check did not apply');
+
+  const malformed = layout({ work: { 'b.txt': 'b\n' } });
+  declare(malformed, '.claude/fleet-kit.json', '{ not json');
+  expectRefused('malformed fleet-kit.json', malformed, { reason: 'integration-source-unreadable', text: path.join(malformed.main, '.claude/fleet-kit.json') });
+  const emptyList = layout();
+  declare(emptyList, '.claude/fleet-kit.json', '{"integrationBranches":[]}');
+  check(asked('master', emptyList.main).reason === 'integration-source-unreadable', 'an empty integrationBranches list refuses');
+  const brokenModule = layout();
+  declare(brokenModule, MODULE, 'throw new Error("boom");\n');
+  check(asked('develop', brokenModule.main).reason === 'integration-source-unreadable', 'a project module that throws refuses');
+  const wrongModule = layout();
+  declare(wrongModule, MODULE, "export const INTEGRATION_BRANCHES = 'develop';\n");
+  check(asked('develop', wrongModule.main).reason === 'integration-source-unreadable', 'a project module exporting a non-list refuses');
 
   // ── The verification ──────────────────────────────────────────────────────────────────────────
   const red = layout({ work: { verdict: '1\n' } });

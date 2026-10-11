@@ -16,6 +16,7 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const ARGUMENTS = 'worktree-landing/arguments.mjs';
 const COLLISIONS = 'worktree-landing/collisions.mjs';
+const INTEGRATION = 'worktree-landing/integration-branch.mjs';
 const LAND = 'worktree-landing/land.mjs';
 const PRECONDITIONS = 'worktree-landing/preconditions.mjs';
 const PUBLICATION = 'worktree-landing/publication.mjs';
@@ -59,6 +60,17 @@ const MUTANTS = [
   ['the fast-forward is skipped', PUBLICATION, '  fastForward(main, head);\n', ''],
   ['the push is skipped', PUBLICATION, '  push({ main, branch, remote, head });\n', ''],
   ['the remote tip is not read back', PUBLICATION, '  confirmRemoteTip({ main, branch, remote, head });\n', ''],
+  // The integration branch / La rama de integración
+  ['a branch that is not the first declared one lands', INTEGRATION, 'if (list[0] !== branch) {', 'if (false) {'],
+  ['the LAST declared branch is taken as the integration branch', INTEGRATION, 'if (list[0] !== branch) {', 'if (list.at(-1) !== branch) {'],
+  ['the integration check is not asked by the preconditions', PRECONDITIONS, 'const integration = requireIntegrationBranch({ main, branch });', "const integration = '';"],
+  ['fleet-kit.json is not read', INTEGRATION, 'existsSync(fleetKit) ? fromFleetKit(fleetKit) : undefined', 'undefined'],
+  ['a malformed fleet-kit.json is ignored', INTEGRATION, 'throw unreadable(file, `${error.message}`);', 'return undefined;'],
+  ['a fleet-kit without the list does not fall through to the module', INTEGRATION, " || !('integrationBranches' in parsed)", ''],
+  ['an empty or non-list declaration is accepted', INTEGRATION, 'if (!ok) throw', 'if (false) throw'],
+  ['a project module that fails to import is accepted', INTEGRATION, 'if (run.status !== 0) throw', 'if (false) throw'],
+  ['the project module is not read', INTEGRATION, '(existsSync(ownModule) ? fromOwnModule(ownModule) : undefined)', 'undefined'],
+  ['a repository with no source is refused', INTEGRATION, 'if (list === undefined) {', 'if (false) {'],
   // The command line / La línea de órdenes
   ['an unknown option is accepted', ARGUMENTS, 'if (key === undefined || key in inputs ||', 'if (key in inputs ||'],
   ['a repeated option is accepted', ARGUMENTS, '|| key in inputs ||', '||'],

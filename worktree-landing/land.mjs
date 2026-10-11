@@ -70,6 +70,7 @@ export function land({ worktree, main, branch, remote, check = false, verifyTime
         exitCode: EXIT_LANDED,
         lines: [
           `READY ${range} (${after.landed.length} path(s)); verification: ${summary}. Check mode: nothing was landed. @es LISTO ${range} (${after.landed.length} ruta(s)); verificación: ${summary}. Modo comprobación: no se aterrizó nada.`,
+          after.integration,
         ],
       };
     }
@@ -79,6 +80,7 @@ export function land({ worktree, main, branch, remote, check = false, verifyTime
       lines: [
         `LANDED ${range} on ${branch}, confirmed on ${remote} (${commits.length} commit(s)); verification: ${summary}. @es ATERRIZADO ${range} en ${branch}, confirmado en ${remote} (${commits.length} commit(s)); verificación: ${summary}.`,
         ...commits.map((line) => `    ${line}`),
+        after.integration,
       ],
     };
   } catch (error) {
