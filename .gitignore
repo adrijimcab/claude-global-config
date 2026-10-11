@@ -205,6 +205,13 @@
 !/gentle-ai-sync-guard/
 !/gentle-ai-sync-guard/**
 
+# The stale-session warning (code and proof; its per-session state stays ignored).
+# @es El aviso de sesión desactualizada (código y prueba; su estado por sesión sigue ignorado).
+!/stale-session-guard/
+!/stale-session-guard/*.mjs
+!/stale-session-guard/*.json
+/stale-session-guard/state/
+
 !/owner-language-guard/
 !/owner-language-guard/*.mjs
 !/owner-language-guard/*.json
