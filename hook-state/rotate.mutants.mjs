@@ -50,6 +50,8 @@ const MUTANTS = [
   ['a link is classified like a file', R, "      if (stats.isSymbolicLink()) return { ...entry, kind: UNKNOWN, action: 'unknown' };\n", ''],
   ['a subdirectory of state is not walked', R, '(entry.isDirectory() ? filesUnder(path.join(directory, entry.name), `${prefix}${entry.name}/`) : [`${prefix}${entry.name}`])', '(entry.isDirectory() ? [] : [`${prefix}${entry.name}`])'],
 
+  ['a state directory that is a link is entered', 'hook-state/locations.mjs', 'const isRealDirectory = (candidate) => lstatSync(candidate, { throwIfNoEntry: false })?.isDirectory() === true;', 'const isRealDirectory = (candidate) => lstatSync(candidate, { throwIfNoEntry: false })?.isDirectory() === true || lstatSync(candidate, { throwIfNoEntry: false })?.isSymbolicLink() === true;'],
+
   // --- the sessions and locks that refuse ---
   ['a live session does not refuse', R, "...liveSessions(home, alive).map(({ file, pid }) => ['live-session', { file, pid }]),\n", ''],
   ['a lock does not refuse', R, "...plan.filter((entry) => entry.action === 'lock').map((entry) => ['held-lock', { file: entry.source }])", '...[]'],
