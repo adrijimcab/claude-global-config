@@ -8,10 +8,13 @@
  * fila nombra la decisión que elimina, no la línea que edita.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
+import { ROOT_CONTRACT_DOCS, claimsIn, contractDocs } from './check.mjs';
 
 const C = 'contract-path-check/check.mjs';
 
@@ -42,6 +45,17 @@ const MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const survivors = runMutants({ fleetRoot, paths: ['contract-path-check', 'mutation-proof', 'rules', 'CLAUDE.md', 'route-mandate.md', 'verification-contract.md'], selftest: 'contract-path-check/selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
+// The selftest checks the REAL claims of the contracts, so the snapshot carries every top-level path they claim;
+// otherwise a claim could only be confirmed by the live home, and a path the checkout adds before it lands (a new
+// stash file, say) would turn the baseline red. @es El selftest comprueba las afirmaciones REALES de los
+// contratos, así que la instantánea lleva toda ruta de primer nivel que afirman; si no, una afirmación solo la
+// confirmaría el home vivo, y una ruta que el checkout añade antes de aterrizar pondría rojo el punto de partida.
+const claimedTopLevels = contractDocs(fleetRoot)
+  .filter((doc) => existsSync(path.join(fleetRoot, doc)))
+  .flatMap((doc) => claimsIn(readFileSync(path.join(fleetRoot, doc), 'utf8'), homedir()))
+  .map((claim) => claim.split('/')[0])
+  .filter((name) => existsSync(path.join(fleetRoot, name)));
+const paths = [...new Set(['contract-path-check', 'mutation-proof', 'rules', ...ROOT_CONTRACT_DOCS, ...claimedTopLevels])];
+const survivors = runMutants({ fleetRoot, paths, selftest: 'contract-path-check/selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
 
 process.exit(survivors === 0 ? 0 : 1);
