@@ -7,7 +7,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -53,10 +53,21 @@ try {
   check('processes: a PowerShell array keeps every row', attempt(() => rowsOfJson('[{"ProcessId":1,"CommandLine":"a"},{"ProcessId":2,"CommandLine":"b"}]')).length, 2);
   check('processes: empty output is no rows', attempt(() => rowsOfJson('')), []);
 
-  const real = listProcesses();
+  // The real-OS listing runs with a PRIVATE profile inside this selftest's temp: PowerShell writes its profile
+  // folders there, never into the home of whoever runs the proof. @es El listado real corre con un perfil
+  // PRIVADO dentro del temporal de este selftest.
+  const profile = path.join(scratch, 'profile');
+  const roaming = path.join(profile, 'AppData', 'Roaming');
+  const privateEnv = { ...process.env, USERPROFILE: profile, HOME: profile, APPDATA: roaming, LOCALAPPDATA: path.join(profile, 'AppData', 'Local') };
+
+  mkdirSync(profile);
+
+  const real = listProcesses(privateEnv);
 
   check('processes: the real listing is non-empty rows with numeric pid', real.length > 0 && real.every((row) => Number.isInteger(row.pid) && typeof row.commandLine === 'string'), true);
   check('processes: the real listing contains this very process', real.some((row) => row.pid === process.pid), true);
+
+  check('processes: the listing tool ran inside the private profile', existsSync(roaming), process.platform === 'win32');
 
   // ── gitState: injected runner ──
   const scripted = (answers) => (args) => answers[args.join(' ')] ?? { status: 1, stdout: '' };

@@ -20,6 +20,7 @@ const MUTANTS = [
   ['every process matches', `${W}/processes.mjs`, '&& normalized(entry.commandLine).includes(wanted)', ''],
   ['a null command line crashes the row', `${W}/processes.mjs`, "row.CommandLine ?? ''", 'row.CommandLine'],
   ['empty output is not tolerated', `${W}/processes.mjs`, "json || '[]'", 'json'],
+  ['the listing tool ignores the given environment', `${W}/processes.mjs`, "WINDOWS_LISTING], { encoding: 'utf8', maxBuffer: 64 << 20, env })", "WINDOWS_LISTING], { encoding: 'utf8', maxBuffer: 64 << 20 })"],
   ['a single row is not wrapped', `${W}/processes.mjs`, 'Array.isArray(rows) ? rows : [rows]', 'rows'],
 
   // worktree-git.mjs

@@ -16,15 +16,20 @@ export function rowsOfJson(json) {
   return (Array.isArray(rows) ? rows : [rows]).map((row) => ({ pid: row.ProcessId, commandLine: row.CommandLine ?? '' }));
 }
 
-/** Default listing: `[{ pid, commandLine }]` from the OS. @es Listado por defecto desde el SO. */
-export function listProcesses() {
+/**
+ * Default listing: `[{ pid, commandLine }]` from the OS. `env` is the environment of the listing tool: PowerShell
+ * creates `%USERPROFILE%AppDataRoaming`, so a proof passes a private profile instead of the real one.
+ * @es Listado por defecto desde el SO. `env` es el entorno de la herramienta: PowerShell crea
+ * `%USERPROFILE%AppDataRoaming`, así que una prueba pasa un perfil privado en lugar del real.
+ */
+export function listProcesses(env = process.env) {
   if (process.platform === 'win32') {
-    const run = spawnSync('powershell', ['-NoProfile', '-Command', WINDOWS_LISTING], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    const run = spawnSync('powershell', ['-NoProfile', '-Command', WINDOWS_LISTING], { encoding: 'utf8', maxBuffer: 64 << 20, env });
 
     return rowsOfJson(run.stdout);
   }
 
-  const run = spawnSync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  const run = spawnSync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8', maxBuffer: 64 << 20, env });
 
   return run.stdout.split('\n').filter((line) => line.trim() !== '').map((line) => ({ pid: Number(line.trim().split(' ')[0]), commandLine: line.trim().split(' ').slice(1).join(' ') }));
 }
