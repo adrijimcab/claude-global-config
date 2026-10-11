@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "refs/stash lives in the common git directory, so every linked worktree shares one stack; on 2026-10-11 worker f5's `git stash pop` applied worker f4's lint-staged backup stash (124b632f, 7 spec files) into its own worktree and f4 then failed with 'lint-staged automatic backup is missing'."
+}

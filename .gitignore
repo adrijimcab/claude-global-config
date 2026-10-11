@@ -106,6 +106,9 @@
 !/stash-watch/
 !/stash-watch/**
 /stash-watch/state/
+!/worker-stash-guard/
+!/worker-stash-guard/**
+/worker-stash-guard/state/
 !/premise-judge/
 !/premise-judge/**
 /premise-judge/state/

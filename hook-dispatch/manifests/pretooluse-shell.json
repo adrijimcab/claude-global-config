@@ -8,6 +8,7 @@
     "../../commit-pathspec-guard/guard.mjs",
     "../../cwd-change-guard/guard.mjs",
     "../../vendored-edit-guard/guard.mjs",
-    "../../sdd-attempt-cwd-guard/guard.mjs"
+    "../../sdd-attempt-cwd-guard/guard.mjs",
+    "../../worker-stash-guard/guard.mjs"
   ]
 }
