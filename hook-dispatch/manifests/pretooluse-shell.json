@@ -8,6 +8,7 @@
     "../../commit-pathspec-guard/guard.mjs",
     "../../cwd-change-guard/guard.mjs",
     "../../vendored-edit-guard/guard.mjs",
-    "../../owner-language-guard/pretool.mjs"
+    "../../owner-language-guard/pretool.mjs",
+    "../../sdd-attempt-cwd-guard/guard.mjs"
   ]
 }

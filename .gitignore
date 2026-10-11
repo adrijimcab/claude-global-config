@@ -100,6 +100,9 @@
 !/vendored-edit-guard/
 !/vendored-edit-guard/**
 /vendored-edit-guard/state/
+!/sdd-attempt-cwd-guard/
+!/sdd-attempt-cwd-guard/**
+/sdd-attempt-cwd-guard/state/
 !/stash-watch/
 !/stash-watch/**
 /stash-watch/state/
