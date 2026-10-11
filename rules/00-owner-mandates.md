@@ -222,15 +222,21 @@ corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
 
 **Esta sección vincula al ORQUESTADOR (la sesión principal), NUNCA a un agente delegado.**
 
-- Cada proyecto tiene UN backlog maestro en engram, con `topic_key` `backlog/<hito>-master` (en
-  b100-am-ui: `backlog/1.0.0-master`, observación #972). Es la fuente única de lo que queda.
+- Cada proyecto tiene UN backlog maestro, fuente única de lo que queda. Donde un registro de engram
+  no cabe (tope de 50.000 bytes), vive en un DOCUMENTO VERSIONADO y engram guarda un puntero con su
+  registro de cambios: en `~/.claude`, `checklists/master-backlog.md` (+ `host-backlog.md`); en
+  b100-am-ui, desde el 2026-10-11 (decisión del dueño), `.claude/checklists/master-backlog.md` del repo
+  de respaldo del tooling, con `backlog/1.0.0-master` (#972) congelado y recibiendo una línea de
+  CHANGELOG por cambio. En los demás proyectos, el registro de engram `backlog/<hito>-master`.
 - Todo hallazgo, defecto, deuda, decisión pendiente del dueño o tarea «encolada» que aparezca —de un
   agente, de una medición o de la conversación— se escribe en ese backlog EN EL MISMO TURNO en que
   aparece. Nunca queda solo en el chat, en un reporte de agente o en una nota suelta.
 - **Quién escribe:** SOLO el orquestador llama `mem_save`/`mem_update` sobre un `topic_key`/id de
   backlog maestro. **Un agente delegado NUNCA escribe, actualiza ni borra un registro de backlog
   maestro** — pone su hallazgo en su informe de `SubagentHandback`, y el orquestador lo transcribe al
-  backlog EN EL MISMO TURNO en que lo recibe, sin perder lo que ya había.
+  backlog EN EL MISMO TURNO en que lo recibe, sin perder lo que ya había. Lo mismo vale para el
+  documento de un backlog versionado: solo el orquestador lo edita y lo commitea (pathspec explícito);
+  sus archivos (`master-backlog-archive/`) están congelados.
 - Guardar con el mismo `topic_key` REEMPLAZA el contenido: siempre se lee la revisión actual
   (`mem_get_observation`) y se reescribe la revisión completa, sumando lo nuevo, sin perder nada.
 
