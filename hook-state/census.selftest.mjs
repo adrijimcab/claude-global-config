@@ -15,19 +15,29 @@
  * that is not one; a selftest beside the module or naming its path, isolating by `isolateState(`, by its own
  * `HOOK_STATE_DIR`, or not at all, and one that names nothing.
  *
+ * THE POPULATION: the census reads the tree's TRACKED files (`git ls-files`), never a walk of the directory, so
+ * job scratch and installed plugins that sit untracked in a live home are not this repository's code. Proven on
+ * constructed repositories: a tracked violator is counted, an untracked one is not, a tracked file deleted from
+ * the disk is skipped, a directory that is not a repository is refused with a bilingual message.
+ *
  * @es El censo de `census.mjs` sobre ESTE árbol, más la prueba de discriminación de cada regla sobre árboles
  * construidos. Sobre este árbol: ningún módulo no-test une `state`, nombra una variable de estado ni construye el
  * home a mano fuera de `locations.mjs` (salvo las excusas listadas y en uso); todo selftest que ejercita un
  * módulo que resuelve por el módulo redirige el estado; y cada mecanismo nombrado en un `stateDir('<mecanismo>')`
  * literal tiene sus ficheros clasificados en `KINDS` de `rotate.mjs`, cuyos mecanismos son directorios del árbol.
+ * LA POBLACIÓN: el censo lee los ficheros RASTREADOS del árbol (`git ls-files`), nunca un recorrido del directorio:
+ * el scratch de jobs y los plugins instalados que están sin rastrear en un home vivo no son código de este
+ * repositorio. Se prueba sobre repositorios construidos: un infractor rastreado cuenta, uno sin rastrear no, un
+ * fichero rastreado borrado del disco se omite y un directorio que no es repositorio se rechaza con mensaje bilingüe.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { claudeHomeJoinsOutsideTheModule, importsOf, literalMechanisms, modulesOnTheModule, selftestsNotIsolating, stateJoinsOutsideTheModule, stateVariablesOutsideTheModule } from './census.mjs';
+import { claudeHomeJoinsOutsideTheModule, importsOf, literalMechanisms, moduleFiles, modulesOnTheModule, selftestsNotIsolating, stateJoinsOutsideTheModule, stateVariablesOutsideTheModule, trackedFiles } from './census.mjs';
 import { isolateState } from './locations.mjs';
 import { KINDS } from './rotate.mjs';
 
@@ -49,14 +59,50 @@ function check(name, actual, expected) {
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'census-selftest-'));
 
-/** A constructed tree of `files` (relative path -> text). @es Un árbol construido. */
-function tree(name, files) {
-  const root = path.join(scratch, name);
+/** Runs git in `root`; a failure is the test's failure. @es Corre git en `root`; un fallo es el fallo del test. */
+function git(root, args) {
+  const run = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' });
 
+  if (run.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${root}: ${run.stderr}`);
+
+  return run.stdout;
+}
+
+/** Makes `root` a repository that tracks everything in it (`-f`: a global ignore file must not hide a case). @es Hace de `root` un repositorio que rastrea todo lo que tiene. */
+function track(root) {
+  git(root, ['init', '-q']);
+  git(root, ['add', '-A', '-f']);
+}
+
+/** Writes `files` (relative path -> text) under `root`. @es Escribe `files` bajo `root`. */
+function write(root, files) {
   for (const [relative, text] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
     writeFileSync(path.join(root, relative), text);
   }
+}
+
+/** A constructed tree of `files` (relative path -> text), every file tracked. @es Un árbol construido, con todo rastreado. */
+function tree(name, files) {
+  const root = path.join(scratch, name);
+
+  write(root, files);
+  track(root);
+
+  return root;
+}
+
+/**
+ * The tree under test as a repository of its own: itself when it is the top of a repository, and otherwise (a
+ * mutation campaign's sandbox copy, which sits inside an ignored directory of another repository and tracks
+ * nothing) a repository made over the copy, so the census reads the same files in both.
+ * @es El árbol bajo prueba como repositorio propio: él mismo si es la cima de un repositorio y, si no (la copia
+ * del sandbox de una campaña, que no rastrea nada), un repositorio hecho sobre la copia.
+ */
+function repositoryOf(root) {
+  const prefix = spawnSync('git', ['-C', root, 'rev-parse', '--show-prefix'], { encoding: 'utf8' });
+
+  if (prefix.status !== 0 || prefix.stdout.trim() !== '') track(root);
 
   return root;
 }
@@ -66,6 +112,7 @@ const Q = "'";
 
 try {
   // --- this tree ---
+  repositoryOf(TREE);
   check('this tree: no module outside locations.mjs joins a state segment', stateJoinsOutsideTheModule(TREE), []);
   check('this tree: no module outside locations.mjs names a state variable', stateVariablesOutsideTheModule(TREE), []);
   check('this tree: no module builds the Claude home by hand, and every excuse is in use', claudeHomeJoinsOutsideTheModule(TREE), []);
@@ -74,6 +121,33 @@ try {
   check('this tree: every mechanism named in a literal stateDir has its files classified by rotate.mjs', literalMechanisms(TREE).filter((mechanism) => !classified.has(mechanism)), []);
   check('this tree: the literal mechanisms are found at all', literalMechanisms(TREE).length > 10, true);
   check('this tree: every mechanism rotate.mjs classifies is one a module names, so none is stale', [...classified].filter((mechanism) => mechanism !== '*' && !literalMechanisms(TREE).includes(mechanism)), []);
+
+  // --- the population: tracked files only ---
+  const violation = "const STATE = path.join(HERE, 'state');\n";
+  const population = tree('population', {
+    'hook-state/locations.mjs': LOCATIONS,
+    'guard-a/guard.mjs': violation,
+    'guard-gone/guard.mjs': violation,
+    'guard-a/notes.txt': 'not a module\n'
+  });
+  write(population, { 'guard-b/guard.mjs': violation, 'jobs/af/tmp/scratch.mjs': violation });
+  unlinkSync(path.join(population, 'guard-gone', 'guard.mjs'));
+  check('the population is the tracked .mjs files: untracked ones and a tracked one deleted from the disk are out', moduleFiles(population), ['guard-a/guard.mjs', 'hook-state/locations.mjs']);
+  check('a tracked violator is counted and an untracked one is not', stateJoinsOutsideTheModule(population), [{ file: 'guard-a/guard.mjs', line: 1 }]);
+  const notRepository = path.join(scratch, 'not-a-repository');
+  write(notRepository, { 'guard-a/guard.mjs': 'export const a = 1;\n' });
+  check('a directory that is not a repository is refused, bilingual, never walked', (() => { try { return moduleFiles(notRepository); } catch (error) { return [error.message.includes('not a git repository'), error.message.includes(' @es ')]; } })(), [true, true]);
+
+  check('the tracked list holds paths only, no empty entry from the terminator', trackedFiles(population).includes(''), false);
+  const redirected = { GIT_DIR: process.env.GIT_DIR, GIT_INDEX_FILE: process.env.GIT_INDEX_FILE };
+  process.env.GIT_DIR = path.join(TREE, '.git');
+  process.env.GIT_INDEX_FILE = path.join(scratch, 'no-such-index');
+  const underRedirect = moduleFiles(population);
+  for (const [name, value] of Object.entries(redirected)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+  check('a git redirect in the environment (a hook sets them) does not change the tree read', underRedirect, ['guard-a/guard.mjs', 'hook-state/locations.mjs']);
 
   // --- (a) a state segment joined by hand ---
   const joins = tree('joins', {

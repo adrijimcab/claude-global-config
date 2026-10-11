@@ -9,11 +9,11 @@
  * también corre el censo sobre la copia del árbol del sandbox, así que la campaña copia cada directorio que lee.
  */
 
-import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
+import { trackedFiles } from './census.mjs';
 
 const C = 'hook-state/census.mjs';
 const FLEET = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -27,7 +27,18 @@ const MUTANTS = [
   ['a campaign is read as production', C, '!isSelftest(file) && !isCampaign(file) &&', '!isSelftest(file) &&'],
   ['a dotted selftest name is not a selftest', C, "path.posix.basename(file) === 'selftest.mjs' || file.endsWith('.selftest.mjs')", "path.posix.basename(file) === 'selftest.mjs'"],
   ['a bare mutants.mjs is not a campaign', C, "path.posix.basename(file) === 'mutants.mjs' || file.endsWith('.mutants.mjs')", "file.endsWith('.mutants.mjs')"],
-  ['a file that is not .mjs is read', C, "entry.isFile() && entry.name.endsWith('.mjs')", 'entry.isFile()'],
+  ['a file that is not .mjs is read', C, "file.endsWith('.mjs') && !path.posix.dirname(file)", "!path.posix.dirname(file)"],
+  ['a directory that was never read is read when it holds a tracked file', C, ".split('/').some((segment) => UNWALKED.has(segment))", ".split('/').some(() => false)"],
+
+  // --- which files are the tree's: the tracked ones ---
+  ['untracked files are part of the tree', C, "'ls-files', '-z']", "'ls-files', '-z', '--others', '--cached']"],
+  ['a tracked file deleted from the disk is read', C, ' && existsSync(path.join(root, file)))', ')'],
+  ['git runs in the process directory, not the tree', C, "['-C', root, 'ls-files', '-z']", "['ls-files', '-z']"],
+  ['a git redirect of the environment is honoured', C, "const GIT_REDIRECTS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX'];", 'const GIT_REDIRECTS = [];'],
+  ['a failed git reads as an empty tree', C, 'if (run.status !== 0) {', 'if (run.status !== 0 && false) {'],
+  ['the refusal is English only', C, ' @es El censo no puede listar los ficheros rastreados de ${root}: no es un repositorio git, o git falló (${detail}).', ''],
+  ['the terminator leaves an empty path', C, ".split(NUL).filter((file) => file !== '')", '.split(NUL)'],
+  ['paths are split on newlines', C, '.split(NUL)', ".split('\\n')"],
 
   // --- what a line is ---
   ['a comment is read as code', C, "const isComment = (line) => ['//', '*', '/*'].some((opener) => line.trimStart().startsWith(opener));", 'const isComment = () => false;'],
@@ -66,10 +77,8 @@ const MUTANTS = [
   ['the literal mechanisms are not sorted', C, '  return [...found].sort();\n}\n\n/** Rule (a).', '  return [...found];\n}\n\n/** Rule (a).']
 ];
 
-/** Every directory of the tree the census reads, never a run's output or another tree. @es Cada directorio del árbol que lee el censo. */
-const paths = readdirSync(FLEET, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory() && !['.git', 'node_modules', 'worktrees', 'scratch', 'state', 'state-archive', '.claude'].includes(entry.name))
-  .map((entry) => entry.name);
+/** Every top-level directory that holds a TRACKED file: untracked job scratch and installed plugins are no part of the tree the census reads. @es Cada directorio de primer nivel con algún fichero RASTREADO: el scratch de jobs y los plugins instalados sin rastrear no son parte del árbol que lee el censo. */
+const paths = [...new Set(trackedFiles(FLEET).filter((file) => file.includes('/')).map((file) => file.slice(0, file.indexOf('/'))))].sort();
 
 const survivors = runMutants({
   fleetRoot: FLEET,

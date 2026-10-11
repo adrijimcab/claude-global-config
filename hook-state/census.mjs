@@ -2,6 +2,8 @@
  * The rules that keep `locations.mjs` the ONLY place a module resolves a state, journal or registry path,
  * measured on the tree and read-only. A non-test module is any `.mjs` that is neither a selftest nor a mutants
  * campaign; vendored copies (`fleet-kit/vendor/`, hash-pinned to their source) are not this tree's code.
+ * THE POPULATION is the tree's TRACKED files (`git ls-files`), never a walk of the directory: job scratch and
+ * installed plugins that sit untracked in a live home are not this repository's code.
  *
  *   (a) `stateJoinsOutsideTheModule`: no non-test module joins a path segment `'state'` itself. A line that
  *       holds the quoted word `state` AND a `join(` or `resolve(` call is a module resolving its own state
@@ -28,7 +30,9 @@
  *
  * NO REGEX (M5): line and substring tests.
  *
- * @es Las reglas que mantienen `locations.mjs` como el ÚNICO sitio donde un módulo resuelve una ruta de estado,
+ * @es La población son los ficheros RASTREADOS del árbol (`git ls-files`), nunca un recorrido del directorio: el
+ * scratch de jobs y los plugins instalados sin rastrear en un home vivo no son código de este repositorio.
+ * Las reglas que mantienen `locations.mjs` como el ÚNICO sitio donde un módulo resuelve una ruta de estado,
  * journal o registro, medidas sobre el árbol y de solo lectura. Módulo no-test: todo `.mjs` que no es selftest
  * ni campaña de mutantes; las copias vendorizadas no son código de este árbol. (a) Ningún módulo une un
  * segmento `'state'` por su cuenta. (b) Ninguno nombra `HOOK_STATE_DIR` ni `HOOK_CLAUDE_HOME` en código: se usan
@@ -40,7 +44,8 @@
  * su fichero. SIN REGEX (M5).
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 /** The module's own path, relative to the tree; it is where the resolution belongs. @es La ruta del propio módulo. */
@@ -92,24 +97,39 @@ const isCampaign = (file) => path.posix.basename(file) === 'mutants.mjs' || file
 /** Whether `file` is code of this tree that runs outside a test. @es Si `file` es código de este árbol fuera de un test. */
 const isProduction = (file) => !isSelftest(file) && !isCampaign(file) && !VENDORED.some((prefix) => file.startsWith(prefix));
 
-/** Every `.mjs` file under `root`, relative and POSIX, sorted. @es Cada fichero `.mjs` bajo `root`. */
+/** The variables that make git read another repository than the tree's. @es Las variables que hacen que git lea otro repositorio. */
+const GIT_REDIRECTS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX'];
+
+/** The separator `git ls-files -z` puts between paths. @es El separador que `git ls-files -z` pone entre rutas. */
+const NUL = String.fromCharCode(0);
+
+/**
+ * The files git tracks under `root`, relative and POSIX, as the index holds them. Throws, bilingual, when `root`
+ * is not inside a repository, so a directory that tracks nothing is never read as an empty tree.
+ * @es Los ficheros que git rastrea bajo `root`, relativos y POSIX, según el índice. Lanza, bilingüe, si `root` no
+ * está en un repositorio: un directorio que no rastrea nada nunca se lee como un árbol vacío.
+ */
+export function trackedFiles(root) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !GIT_REDIRECTS.includes(name)));
+  const run = spawnSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8', env, maxBuffer: 256 * 1024 * 1024 });
+
+  if (run.status !== 0) {
+    const detail = (run.stderr ?? '').trim() || run.error?.message || 'no output';
+
+    throw new Error(`The census cannot list the tracked files of ${root}: it is not a git repository, or git failed (${detail}). @es El censo no puede listar los ficheros rastreados de ${root}: no es un repositorio git, o git falló (${detail}).`);
+  }
+
+  return run.stdout.split(NUL).filter((file) => file !== '');
+}
+
+/**
+ * Every tracked `.mjs` file under `root` that is present on the disk and not inside a directory never read,
+ * relative and POSIX, in the index's byte order.
+ * @es Cada fichero `.mjs` rastreado bajo `root`, presente en el disco y fuera de un directorio no leído, en el orden del índice.
+ */
 export function moduleFiles(root) {
-  const found = [];
-  const walk = (directory) => {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const absolute = path.join(directory, entry.name);
-
-      if (entry.isDirectory()) {
-        if (!UNWALKED.has(entry.name)) walk(absolute);
-      } else if (entry.isFile() && entry.name.endsWith('.mjs')) {
-        found.push(path.relative(root, absolute).split(path.sep).join('/'));
-      }
-    }
-  };
-
-  walk(root);
-
-  return found.sort();
+  return trackedFiles(root)
+    .filter((file) => file.endsWith('.mjs') && !path.posix.dirname(file).split('/').some((segment) => UNWALKED.has(segment)) && existsSync(path.join(root, file)));
 }
 
 /** Whether a line is a comment, which describes a path rather than building one. @es Si una línea es un comentario. */
