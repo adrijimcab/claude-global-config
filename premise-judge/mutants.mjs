@@ -23,6 +23,13 @@ const MUTANTS = [
   // --- THE RUBRIC AND ITS WIRING.
   ['the rubric stops passing on stop_hook_active', PROMPT, "  '1. If the input field stop_hook_active is true, answer {\"ok\": true}.',\n", ''],
   ['the rubric drops the own-decision case', PROMPT, '(c) The message states its own decision', '(x) The message states its own decision'],
+  ['the rubric drops case d', PROMPT, '(d) The message reports the state', '(x) The message reports the state'],
+  ['case d loses its measuring tools', PROMPT, '(git, a file read, a process list, a release note)', '(anything)'],
+  ['case d stops sparing the unmeasurable', PROMPT, 'Do not use this case for what cannot be measured this turn.', ''],
+  ['rule 4 lets any unverified claim pass', PROMPT, 'passes ONLY when it cannot be measured this turn', 'passes'],
+  ['case d loses its fix', PROMPT, 'for case d, measure it now and state it with the receipt; ', ''],
+  ['the rubric counts three cases', PROMPT, 'in one of these four cases', 'in one of these three cases'],
+  ['the signature is still v2', PROMPT, 'premise-judge rubric v3.', 'premise-judge rubric v2.'],
   ['the rubric spells the marker literally', PROMPT, 'starts with the word PREMISE-JUDGE followed by a colon', 'starts with PREMISE-JUDGE:'],
   ['the rubric loses its signature line', PROMPT, '  PROMPT_SIGNATURE,\n', ''],
   ['the rubric drifts from the settings entry', PROMPT, 'and whenever you are unsure, answer', 'and when unsure, answer'],
@@ -37,7 +44,7 @@ const MUTANTS = [
   ['a tool result counts as feedback', GUARD, ' && !holdsToolResult(record)', ''],
   ['a tool result is not recognised', GUARD, "value.type === 'tool_result'", "value.type === 'tool_resultX'"],
   ['a nested tool result is not looked for', GUARD, '  return Object.values(value).some(holdsToolResult);', '  return false;'],
-  ['the reason keeps the text before the marker', GUARD, '[value.slice(value.indexOf(MARKER))]', '[value]'],
+  ['the reason keeps the text before the marker', GUARD, '[value.slice(value.indexOf(marker))]', '[value]'],
   ['the reason is not trimmed', GUARD, '.map((text) => text.trim().slice(0, REASON_LIMIT))', '.map((text) => text.slice(0, REASON_LIMIT))'],
   ['the reason is not cut', GUARD, '.map((text) => text.trim().slice(0, REASON_LIMIT))', '.map((text) => text.trim())'],
   ['one reason twice is two reasons', GUARD, 'return [...new Set(reasons)];', 'return reasons;'],
@@ -45,7 +52,7 @@ const MUTANTS = [
 
   // --- WHAT IT JOURNALS.
   ['a reason already journaled is journaled again', GUARD, '    if (known.has(inputDigest)) continue;\n', ''],
-  ['the journal is not read back', GUARD, 'lastRecords(journalPath(MECHANISM), JOURNAL_TAIL)', 'lastRecords(journalPath(MECHANISM), 0)'],
+  ['the journal is not read back', GUARD, 'lastRecords(journalPath(mechanism), JOURNAL_TAIL)', 'lastRecords(journalPath(MECHANISM), 0)'],
   ['no journal yet stops the first block', GUARD, "    if (error.code === 'ENOENT') return new Set();\n", ''],
   ['the key forgets the session', GUARD, 'digestInput(`${session}\\n${reason}`)', 'digestInput(`${reason}`)'],
   ['a missing session id is keyed as a word', GUARD, "typeof payload.session_id === 'string' ? payload.session_id : ''", "typeof payload.session_id === 'string' ? payload.session_id : 'none'"],
@@ -54,7 +61,7 @@ const MUTANTS = [
   ['the mechanism is not the folder', GUARD, "MECHANISM = 'premise-judge'", "MECHANISM = 'premise-judgeX'"],
 
   // --- THE HOOK.
-  ['a run is not counted', GUARD, '    incrementFires(MECHANISM);\n', ''],
+  ['a run is not counted', GUARD, '    for (const { mechanism } of JUDGES) incrementFires(mechanism);\n', ''],
   ['the hook journals nothing', GUARD, '    journalJudgeBlocks(payload);\n', ''],
   ['a BOM-prefixed payload is not decoded', GUARD, "raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw", 'raw'],
   ['the hook returns something', GUARD, '  return undefined;\n}\n\nconst main', '  return {};\n}\n\nconst main'],

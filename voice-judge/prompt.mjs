@@ -1,0 +1,46 @@
+/**
+ * The voice judge: the rubric of the second native `prompt` Stop hook wired in `~/.claude/settings.json`, kept
+ * here as the one source the selftest compares the settings entry against, byte for byte.
+ *
+ * WHY. Owner order 2026-10-11: «Lo de GENTLEMAN, para ti y para todas las sesiones... siempre lo impongo y nunca
+ * pasa». An output style is guidance, not a guarantee (code.claude.com/docs/en/output-styles: "For something that
+ * has to happen every time ... use a hook"), and the brevity rules compete with the voice. So a model judges the
+ * one thing a pattern cannot: whether a reply to the owner reads as a dry log. The premise judge stays
+ * single-purpose and excludes tone, which is why this is a separate hook (design: engram #1410).
+ *
+ * CONTRACT. Same as `../premise-judge/prompt.mjs`: `type: "prompt"`, the hook input replaces `$ARGUMENTS`,
+ * `{"ok": true}` or `{"ok": false, "reason": "..."}`, `ok: false` on Stop feeds the reason back and the turn
+ * continues, and `stop_hook_active` is passed by rule 1 of the rubric. This judge NEVER sets `impossible`.
+ * Its blocks start with `MARKER`, which `../premise-judge/journal-guard.mjs` journals under the `voice-judge`
+ * mechanism so `guard-precision/` measures it like any other guard. The rubric spells the marker in words.
+ *
+ * @es El juez de voz: la rúbrica del segundo hook `prompt` de Stop en `~/.claude/settings.json`, guardada aquí
+ * como la única fuente con la que el selftest compara esa entrada, byte a byte. POR QUÉ: orden del dueño
+ * 2026-10-11; un estilo de salida es una guía, no una garantía, y las reglas de brevedad compiten con la voz.
+ * Un modelo juzga lo que un patrón no puede: si una respuesta al dueño se lee como un log seco. Es un hook
+ * aparte porque el juez de premisas es de un solo propósito y excluye el tono. NUNCA fija `impossible`. Sus
+ * bloqueos empiezan por `MARKER`, que la guardia de journal registra bajo el mecanismo `voice-judge`.
+ */
+
+/** The marker every block reason starts with. @es La marca con que empieza todo motivo de bloqueo. */
+export const MARKER = 'VOICE-JUDGE:';
+
+/** The first line of the rubric: how this hook is told apart among the Stop hooks of a transcript. @es La primera línea de la rúbrica. */
+export const PROMPT_SIGNATURE = 'voice-judge rubric v1.';
+
+/** The timeout of the hook, in seconds: the documented default, written down so the selftest pins it. @es El timeout del hook, en segundos. */
+export const TIMEOUT_SECONDS = 30;
+
+/** The rubric. `$ARGUMENTS` is its only `$`. @es La rúbrica. `$ARGUMENTS` es su único `$`. */
+export const PROMPT = [
+  PROMPT_SIGNATURE,
+  'You review the FINAL message of one assistant turn for voice only. The hook input JSON is: $ARGUMENTS',
+  '',
+  'Rules, in order:',
+  '1. If the input field stop_hook_active is true, answer {"ok": true}.',
+  '2. Judge only the field last_assistant_message.',
+  '3. Answer {"ok": true} when the message is addressed to a subagent or a peer session rather than to the owner (for example a brief with MEASURED: and HYPOTHESIS: lines, or instructions to "the worker"), or when it is one or two lines with no status content.',
+  '4. Answer ok false ONLY when the message is a reply to the owner that reports work or status with more than two lines AND reads as a dry log: lists of commit hashes, commands, file paths or results with no explanation of why each decision was taken, no warm Rioplatense voseo, and no closing that lands. A reply that explains its decisions or speaks with natural voseo passes even if it holds lists. When unsure, answer {"ok": true}.',
+  '5. Never set the field impossible. Never ask for a longer message for its own sake: ask only for what is missing.',
+  '6. Answer with the JSON object only: {"ok": true}, or {"ok": false, "reason": "<reason>"}. The reason starts with the word VOICE-JUDGE followed by a colon, then says what to rewrite in the Gentleman mentor voice: warm Rioplatense voseo, the why of each decision next to its result, and a closing that lands.',
+].join('\n');

@@ -106,6 +106,9 @@
 !/premise-judge/
 !/premise-judge/**
 /premise-judge/state/
+!/voice-judge/
+!/voice-judge/**
+/voice-judge/state/
 !/delegation-receipts/
 !/delegation-receipts/**
 /delegation-receipts/state/

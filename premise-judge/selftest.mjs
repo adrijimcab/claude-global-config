@@ -57,15 +57,22 @@ const check = (label, actual, expected) => {
 
 // --- WIRING. @es CABLEADO.
 const settings = JSON.parse(readFileSync(path.join(HERE, '..', 'settings.json'), 'utf8'));
-const promptHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks ?? []).filter((hook) => hook.type === 'prompt');
+const promptHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks ?? []).filter((hook) => hook.type === 'prompt' && hook.prompt.startsWith(`${PROMPT_SIGNATURE}\n`));
 
-check('settings: exactly one prompt Stop hook', promptHooks.length, 1);
+check('settings: exactly one prompt Stop hook is the premise judge', promptHooks.length, 1);
 check('settings: its prompt is the rubric of prompt.mjs, byte for byte', promptHooks[0]?.prompt === PROMPT, true);
 check('settings: its timeout is the pinned one', promptHooks[0]?.timeout, TIMEOUT_SECONDS);
 check('rubric: starts with its signature', PROMPT.startsWith(`${PROMPT_SIGNATURE}\n`), true);
 check('rubric: one $ and it is $ARGUMENTS', [PROMPT.split('$').length - 1, PROMPT.split('$ARGUMENTS').length - 1], [1, 1]);
 check('rubric: passes on stop_hook_active', PROMPT.includes('If the input field stop_hook_active is true, answer {"ok": true}.'), true);
 check('rubric: judges an own decision justified as the easier path while it names a better one', PROMPT.includes('(c) The message states its own decision or recommendation and justifies it as the easier'), true);
+check('rubric: case d judges a measurable state reported as probable or unverified', PROMPT.includes('(d) The message reports the state of a worker, process, branch, file, gate, release or version as probable, expected, likely or "unverified / not verified" while a tool in this same turn could have measured it now'), true);
+check('rubric: case d names the measuring tools', PROMPT.includes('(git, a file read, a process list, a release note)'), true);
+check('rubric: case d spares what cannot be measured this turn', PROMPT.includes('Do not use this case for what cannot be measured this turn.'), true);
+check('rubric: unverified passes only when it cannot be measured this turn', PROMPT.includes("passes ONLY when it cannot be measured this turn (another machine, the future, a third party's intent, a cost not yet incurred)"), true);
+check('rubric: the fix of case d is to measure and state the receipt', PROMPT.includes('for case d, measure it now and state it with the receipt'), true);
+check('rubric: four cases', PROMPT.includes('in one of these four cases'), true);
+check('rubric: the signature is the v3 line', PROMPT_SIGNATURE, 'premise-judge rubric v3.');
 check('rubric: never holds the literal marker', PROMPT.includes(MARKER), false);
 check('rubric: spells the marker in words', PROMPT.includes('starts with the word PREMISE-JUDGE followed by a colon'), true);
 check('rubric: the marker is what the words spell', MARKER, 'PREMISE-JUDGE:');

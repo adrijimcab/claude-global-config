@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Stop hook — the journal of the premise judge. It NEVER blocks: it records what the native `prompt` Stop hook
- * (`prompt.mjs`) decided, which no other hook can see, so `guard-precision/` can sample and label those blocks
+ * Stop hook — the journal of the prompt judges (premise and voice). It NEVER blocks: it records what the native `prompt` Stop hooks
+ * (`prompt.mjs`, `../voice-judge/prompt.mjs`) decided, which no other hook can see, so `guard-precision/` can sample and label those blocks
  * like any other guard's.
  *
  * HOW. When the judge answers `ok: false`, its reason (which starts with `MARKER`) is fed back to Claude and the
@@ -35,10 +35,23 @@ import { fileURLToPath } from 'node:url';
 
 import { appendRecord, digestInput, incrementFires, journalPath, newId } from '../hook-state/journal.mjs';
 import { lastRecords } from '../hook-state/jsonl-tail.mjs';
+import { MARKER as VOICE_MARKER } from '../voice-judge/prompt.mjs';
 import { MARKER } from './prompt.mjs';
 
 /** The mechanism: this folder's name, as the dispatcher and `guard-precision/` call it. @es El mecanismo. */
 export const MECHANISM = 'premise-judge';
+
+/** The mechanism of the voice judge (`../voice-judge/prompt.mjs`). @es El mecanismo del juez de voz. */
+export const VOICE_MECHANISM = 'voice-judge';
+
+/**
+ * Every prompt judge this guard journals: its mechanism and the marker its block reasons start with.
+ * @es Cada juez de prompt que esta guardia registra: su mecanismo y la marca con que empiezan sus motivos.
+ */
+export const JUDGES = [
+  { mechanism: MECHANISM, marker: MARKER },
+  { mechanism: VOICE_MECHANISM, marker: VOICE_MARKER },
+];
 
 /** Transcript records read back on a continued stop. @es Registros del transcript que se leen en una parada continuada. */
 export const TAIL_RECORDS = 200;
@@ -60,12 +73,12 @@ function holdsToolResult(value) {
   return Object.values(value).some(holdsToolResult);
 }
 
-/** Every string of `value` that holds the marker, from the marker on. @es Cada cadena con la marca, desde la marca. */
-function markedTexts(value) {
-  if (typeof value === 'string') return value.includes(MARKER) ? [value.slice(value.indexOf(MARKER))] : [];
+/** Every string of `value` that holds `marker`, from the marker on. @es Cada cadena con la marca, desde la marca. */
+function markedTexts(value, marker) {
+  if (typeof value === 'string') return value.includes(marker) ? [value.slice(value.indexOf(marker))] : [];
   if (value === null || typeof value !== 'object') return [];
 
-  return Object.values(value).flatMap(markedTexts);
+  return Object.values(value).flatMap((inner) => markedTexts(inner, marker));
 }
 
 /**
@@ -73,10 +86,10 @@ function markedTexts(value) {
  * assistant's nor a tool result, trimmed and cut to `REASON_LIMIT`.
  * @es Los motivos de bloqueo del juez en `records`, distintos y en orden.
  */
-export function judgeReasons(records) {
+export function judgeReasons(records, marker = MARKER) {
   const reasons = records
     .filter((record) => record?.type !== 'assistant' && record?.toolUseResult === undefined && !holdsToolResult(record))
-    .flatMap(markedTexts)
+    .flatMap((record) => markedTexts(record, marker))
     .map((text) => text.trim().slice(0, REASON_LIMIT));
 
   return [...new Set(reasons)];
@@ -86,9 +99,9 @@ export function judgeReasons(records) {
  * The input digests already journaled for the judge; none before its first block (no journal yet).
  * @es Las huellas ya registradas para el juez; ninguna antes de su primer bloqueo (aún sin journal).
  */
-function journaledDigests() {
+function journaledDigests(mechanism) {
   try {
-    return new Set(lastRecords(journalPath(MECHANISM), JOURNAL_TAIL).map((record) => record?.inputDigest));
+    return new Set(lastRecords(journalPath(mechanism), JOURNAL_TAIL).map((record) => record?.inputDigest));
   } catch (error) {
     if (error.code === 'ENOENT') return new Set();
 
@@ -104,18 +117,22 @@ export function journalJudgeBlocks(payload) {
   if (payload?.stop_hook_active !== true || typeof payload.transcript_path !== 'string') return 0;
 
   const session = typeof payload.session_id === 'string' ? payload.session_id : '';
-  const known = journaledDigests();
+  const records = lastRecords(payload.transcript_path, TAIL_RECORDS);
   let added = 0;
 
-  for (const reason of judgeReasons(lastRecords(payload.transcript_path, TAIL_RECORDS))) {
-    const inputDigest = digestInput(`${session}\n${reason}`);
+  for (const { mechanism, marker } of JUDGES) {
+    const known = journaledDigests(mechanism);
 
-    if (known.has(inputDigest)) continue;
+    for (const reason of judgeReasons(records, marker)) {
+      const inputDigest = digestInput(`${session}\n${reason}`);
 
-    // `judgeReasons` gives each reason once, so no digest repeats within this loop.
-    // @es `judgeReasons` da cada motivo una vez: ninguna huella se repite dentro de este bucle.
-    appendRecord(MECHANISM, { kind: 'decision', blockId: newId(), toolUseId: null, inputDigest, event: 'Stop', reason });
-    added += 1;
+      if (known.has(inputDigest)) continue;
+
+      // `judgeReasons` gives each reason once, so no digest repeats within this loop.
+      // @es `judgeReasons` da cada motivo una vez: ninguna huella se repite dentro de este bucle.
+      appendRecord(mechanism, { kind: 'decision', blockId: newId(), toolUseId: null, inputDigest, event: 'Stop', reason });
+      added += 1;
+    }
   }
 
   return added;
@@ -129,7 +146,7 @@ export function evaluate(raw) {
   try {
     const payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
 
-    incrementFires(MECHANISM);
+    for (const { mechanism } of JUDGES) incrementFires(mechanism);
     journalJudgeBlocks(payload);
   } catch {
     // Journaling is evidence, never a decision: a failure here loses a record, not a turn.
