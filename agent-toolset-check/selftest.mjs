@@ -5,9 +5,8 @@
  * tree holds; the last cases run over the real `agents/` and refuse to pass over an empty directory.
  *
  * The state space the decision ranges over, in both directions of every profile. MUST: an executor with Bash
- * / with PowerShell / with neither; a web researcher that loses WebFetch or WebSearch; a blind reviewer that
- * loses Read; `tools: []`. MUST NOT: a blind reviewer that gains Bash, Write, Edit or a web tool; a web
- * researcher that gains Bash; `tools: []` where the profile forbids tools, with and without the
+ * / with PowerShell / with neither; a blind reviewer that loses Read; `tools: []`. MUST NOT: a blind reviewer
+ * that gains Bash, Write, Edit or a web tool; `tools: []` where the profile forbids tools, with and without the
  * `disallowedTools:` that closes it. Reading: a near-miss token (`BashOutput`); no `tools:` line; no
  * frontmatter; a `tools:` line in the body that must not count; a `disallowedTools:` that blocks a tool the
  * profile needs; CRLF line endings. Who is judged: a role nobody classified; a role naming no known profile;
@@ -16,9 +15,9 @@
  *
  * @es Prueba de que `check.mjs` DISCRIMINA. Cada caso construye su propio `agents/` temporal; los últimos
  * casos corren sobre el `agents/` real y se niegan a pasar con un directorio vacío. Espacio de estados, en
- * ambos sentidos de cada perfil. DEBE: un ejecutor con Bash / con PowerShell / con ninguno; un investigador
- * web que pierde WebFetch o WebSearch; un revisor ciego que pierde Read; `tools: []`. NO DEBE: un revisor
- * ciego que gana Bash, Write, Edit o una herramienta web; un investigador web que gana Bash; `tools: []`
+ * ambos sentidos de cada perfil. DEBE: un ejecutor con Bash / con PowerShell / con ninguno; un revisor
+ * ciego que pierde Read; `tools: []`. NO DEBE: un revisor ciego que gana Bash, Write, Edit o una
+ * herramienta web; `tools: []`
  * donde el perfil prohíbe herramientas, con y sin el `disallowedTools:` que lo cierra. Lectura: un
  * casi-acierto (`BashOutput`); sin línea `tools:`; sin frontmatter; una línea `tools:` en el cuerpo que no
  * debe contar; un `disallowedTools:` que bloquea una herramienta que el perfil necesita; finales CRLF.
@@ -54,7 +53,6 @@ const rolesWith = (profile) => Object.keys(ROLE_POLICY).filter((name) => ROLE_PO
 /** One file that satisfies each profile. @es Un fichero que cumple cada perfil. */
 const COMPLIANT = {
   executor: role(['tools: Read, Bash, Grep']),
-  'web-researcher': role(['tools: WebFetch, WebSearch']),
   'blind-reviewer': role(['tools: Read, Glob, Grep']),
 };
 const FORBIDDEN_TO_BLIND = ['Bash', 'PowerShell', 'Write', 'Edit', 'NotebookEdit', 'WebFetch', 'WebSearch'];
@@ -79,29 +77,17 @@ function gapsOf(overrides = {}, { without = [], extra = {}, policy = ROLE_POLICY
 check('a fully compliant set has no gaps', gapsOf().length === 0);
 
 // --- MUST: the executor reaches a command runner.
-const withoutBash = gapsOf({ 'sdd-explore': role(['tools: Read, Grep, Glob, WebFetch']) });
-check('an executor that declares no command runner is a gap', withoutBash.length === 1 && withoutBash[0].role === 'sdd-explore');
+const withoutBash = gapsOf({ 'jd-fix-agent': role(['tools: Read, Grep, Glob, WebFetch']) });
+check('an executor that declares no command runner is a gap', withoutBash.length === 1 && withoutBash[0].role === 'jd-fix-agent');
 check('the gap says why', withoutBash[0]?.problem.includes('Bash'));
-check('PowerShell satisfies the need', gapsOf({ 'sdd-verify': role(['tools: Read, PowerShell']) }).length === 0);
-check('Bash satisfies the need', gapsOf({ 'sdd-apply': role(['tools: Bash']) }).length === 0);
+check('PowerShell satisfies the need', gapsOf({ 'review-risk': role(['tools: Read, PowerShell']) }).length === 0);
+check('Bash satisfies the need', gapsOf({ 'review-resilience': role(['tools: Bash']) }).length === 0);
 check('tools: [] means every tool and satisfies the need', gapsOf({ 'review-risk': role(['tools: []']) }).length === 0);
-check('BashOutput is not Bash', gapsOf({ 'sdd-tasks': role(['tools: Read, BashOutput, KillShell']) }).length === 1);
-check('a token that merely contains Bash is not Bash', gapsOf({ 'sdd-spec': role(['tools: Read, NotBash']) }).length === 1);
-check('an executor may carry web tools: its profile does not forbid them', gapsOf({ 'sdd-explore': role(['tools: Read, Bash, WebFetch, WebSearch']) }).length === 0);
+check('BashOutput is not Bash', gapsOf({ 'review-readability': role(['tools: Read, BashOutput, KillShell']) }).length === 1);
+check('a token that merely contains Bash is not Bash', gapsOf({ 'review-reliability': role(['tools: Read, NotBash']) }).length === 1);
+check('an executor may carry web tools: its profile does not forbid them', gapsOf({ 'jd-fix-agent': role(['tools: Read, Bash, WebFetch, WebSearch']) }).length === 0);
 
-// --- MUST and MUST NOT: the web researcher reaches the web and runs nothing.
-check('a web researcher with exactly the web tools is not a gap', gapsOf({ 'sdd-research': role(['tools: WebFetch, WebSearch']) }).length === 0);
-const lostFetch = gapsOf({ 'sdd-research': role(['tools: WebSearch']) });
-check('a web researcher that loses WebFetch is a gap that names it', lostFetch.length === 1 && lostFetch[0].role === 'sdd-research' && lostFetch[0].problem.includes('WebFetch'));
-const lostSearch = gapsOf({ 'sdd-research': role(['tools: WebFetch']) });
-check('a web researcher that loses WebSearch is a gap that names it', lostSearch.length === 1 && lostSearch[0].problem.includes('WebSearch'));
-check('a web researcher that loses both web tools is two gaps', gapsOf({ 'sdd-research': role(['tools: Read']) }).length === 2);
-const researcherBash = gapsOf({ 'sdd-research': role(['tools: WebFetch, WebSearch, Bash']) });
-check('a web researcher that gains Bash is a gap that names it', researcherBash.length === 1 && researcherBash[0].problem.includes('Bash'));
-check('a web researcher that gains PowerShell is a gap', gapsOf({ 'sdd-research': role(['tools: WebFetch, WebSearch, PowerShell']) }).length === 1);
-check('a web researcher with tools: [] reaches Bash and is a gap', gapsOf({ 'sdd-research': role(['tools: []']) }).length === 1);
-check('a web researcher may read the repository: reading is not execution', gapsOf({ 'sdd-research': role(['tools: Read, WebFetch, WebSearch']) }).length === 0);
-check('a web researcher whose disallowedTools blocks a web tool is a gap', gapsOf({ 'sdd-research': role(['tools: []', 'disallowedTools: Bash, PowerShell, WebFetch']) }).length === 1);
+check('an executor whose disallowedTools blocks its command runners is a gap', gapsOf({ 'jd-fix-agent': role(['tools: []', 'disallowedTools: Bash, PowerShell']) }).length === 1);
 
 // --- MUST and MUST NOT: the blind reviewer reads, changes nothing and runs nothing.
 check('a blind reviewer with read tools only is not a gap', gapsOf({ 'jd-judge-a': role(['tools: Read, Glob']) }).length === 0);
@@ -119,24 +105,24 @@ check('a blind reviewer that loses Read is a gap that names it', blindNoRead.len
 check('a blind reviewer with a near-miss Write token is not a gap', gapsOf({ 'jd-judge-a': role(['tools: Read, WriteLog']) }).length === 0);
 
 // --- what is read.
-check('no tools line is a gap, not a pass', gapsOf({ 'sdd-design': role(['model: sonnet']) }).length === 1);
+check('no tools line is a gap, not a pass', gapsOf({ 'jd-fix-agent': role(['model: sonnet']) }).length === 1);
 check('no tools line is a gap for a blind reviewer too', gapsOf({ 'jd-judge-b': role(['model: opus']) }).length === 1);
-check('no frontmatter is a gap, not a pass', gapsOf({ 'sdd-init': 'tools: Bash\n\nbody only\n' }).length === 1);
+check('no frontmatter is a gap, not a pass', gapsOf({ 'review-risk': 'tools: Bash\n\nbody only\n' }).length === 1);
 check('no frontmatter is a gap for a blind reviewer too', gapsOf({ 'jd-judge-b': 'tools: Read\n\nbody only\n' }).length === 1);
-check('a tools line in the body does not count', gapsOf({ 'sdd-onboard': role(['model: sonnet'], 'tools: Bash') }).length === 1);
-check('an unterminated frontmatter is a gap', gapsOf({ 'sdd-propose': '---\ntools: Bash\n' }).length === 1);
-check('CRLF line endings are read', gapsOf({ 'sdd-archive': role(['tools: Read, Bash']).split('\n').join('\r\n') }).length === 0);
+check('a tools line in the body does not count', gapsOf({ 'review-resilience': role(['model: sonnet'], 'tools: Bash') }).length === 1);
+check('an unterminated frontmatter is a gap', gapsOf({ 'review-readability': '---\ntools: Bash\n' }).length === 1);
+check('CRLF line endings are read', gapsOf({ 'review-reliability': role(['tools: Read, Bash']).split('\n').join('\r\n') }).length === 0);
 check('disallowedTools blocking Bash is a gap even with tools: []', gapsOf({ 'review-refuter': role(['tools: []', 'disallowedTools: Bash']) }).length === 1);
 check('disallowedTools naming another tool is not a gap', gapsOf({ 'review-refuter': role(['tools: []', 'disallowedTools: WebFetch']) }).length === 0);
 
 // --- who is judged.
 const unclassified = gapsOf({}, { extra: { 'brand-new-role.md': COMPLIANT.executor } });
 check('a role nobody classified is a gap', unclassified.length === 1 && unclassified[0].role === 'brand-new-role' && unclassified[0].problem.includes('not classified'));
-const unknownProfile = gapsOf({}, { policy: { ...ROLE_POLICY, 'sdd-verify': 'no-such-profile' } });
-check('a role naming no known profile is a gap', unknownProfile.length === 1 && unknownProfile[0].role === 'sdd-verify' && unknownProfile[0].problem.includes('no-such-profile'));
-check('a non-markdown file is not a role', gapsOf({}, { extra: { 'sdd-explore.md.bak': 'x', 'notes.txt': 'y' } }).length === 0);
-const vanished = gapsOf({}, { without: ['sdd-verify'] });
-check('a classified role whose file is gone is a gap', vanished.length === 1 && vanished[0].role === 'sdd-verify');
+const unknownProfile = gapsOf({}, { policy: { ...ROLE_POLICY, 'review-risk': 'no-such-profile' } });
+check('a role naming no known profile is a gap', unknownProfile.length === 1 && unknownProfile[0].role === 'review-risk' && unknownProfile[0].problem.includes('no-such-profile'));
+check('a non-markdown file is not a role', gapsOf({}, { extra: { 'jd-fix-agent.md.bak': 'x', 'notes.txt': 'y' } }).length === 0);
+const vanished = gapsOf({}, { without: ['review-risk'] });
+check('a classified role whose file is gone is a gap', vanished.length === 1 && vanished[0].role === 'review-risk');
 check('a missing agents directory is a gap', toolsetGaps(path.join(tmpdir(), 'agent-toolset-check-no-such-directory')).length === 1);
 check('declarationOf separates all / declared / problem', declarationOf(role(['tools: []'])).all === true && declarationOf(role(['tools: Bash'])).all === false && declarationOf(role(['tools: Bash'])).declared?.includes('Bash') && declarationOf('x').problem !== undefined);
 check('declarationOf reads disallowedTools', declarationOf(role(['tools: []', 'disallowedTools: Bash, Write'])).disallowed?.join() === 'Bash,Write');

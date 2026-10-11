@@ -11,7 +11,6 @@
  * THE DECISION. Every role file declares a capability PROFILE in `ROLE_POLICY`, and each profile in
  * `PROFILES` states both directions of what the role is: what it must be able to REACH and what it must
  * NOT be able to reach. An `executor` measures or verifies, so it must reach a command runner; a
- * `web-researcher` collects external evidence, so it must reach the web and run nothing; a
  * `blind-reviewer` judges what it is shown, so it must read and must not change, run or fetch anything.
  * No role is exempt: a profile with nothing to demand would be an exemption in disguise, and the selftest
  * refuses it. A role file that no profile claims is a finding, so a new role forces the question instead of
@@ -27,8 +26,7 @@
  * Este módulo lee los conjuntos declarados y rechaza un rol cuyo conjunto ya no encaja con su perfil.
  * Cada rol declara un PERFIL de capacidad en `ROLE_POLICY` y cada perfil de `PROFILES` dice los dos
  * sentidos: lo que el rol DEBE poder alcanzar y lo que NO DEBE poder alcanzar. Un `executor` mide o
- * verifica, así que alcanza un ejecutor de órdenes; un `web-researcher` recoge evidencia externa, así que
- * alcanza la web y no ejecuta nada; un `blind-reviewer` juzga lo que se le muestra, así que lee y no
+ * verifica, así que alcanza un ejecutor de órdenes; un `blind-reviewer` juzga lo que se le muestra, así que lee y no
  * cambia, ejecuta ni descarga nada. Ningún rol está exento: un perfil sin nada que exigir sería una
  * exención disfrazada y el selftest lo rechaza. Un fichero de rol que ningún perfil reclama es un
  * hallazgo. `tools: []` significa todas las herramientas: cumple un DEBE y rompe un NO DEBE, salvo que
@@ -50,32 +48,22 @@ export const EXECUTION_TOOLS = ['Bash', 'PowerShell'];
  */
 export const PROFILES = {
   executor: { requires: [EXECUTION_TOOLS], forbids: [] },
-  'web-researcher': { requires: [['WebSearch'], ['WebFetch']], forbids: EXECUTION_TOOLS },
   'blind-reviewer': { requires: [['Read']], forbids: [...EXECUTION_TOOLS, 'Write', 'Edit', 'NotebookEdit', 'WebFetch', 'WebSearch'] },
 };
 
 /**
- * Every role file and the profile it declares.
- * @es Cada fichero de rol y el perfil que declara.
+ * Every role file and the profile it declares. gentle-ai v4 (ODD, 2026-10-11) retired the SDD phase roles and
+ * their research role; ODD delegates to generic workers, so only the review and judgment-day roles remain.
+ * @es Cada fichero de rol y el perfil que declara. gentle-ai v4 (ODD, 2026-10-11) retiró los roles de fase SDD
+ * y su rol de investigación; ODD delega en workers genéricos, así que solo quedan los de revisión y judgment-day.
  */
 export const ROLE_POLICY = {
-  'sdd-init': 'executor',
-  'sdd-onboard': 'executor',
-  'sdd-explore': 'executor',
-  'sdd-propose': 'executor',
-  'sdd-spec': 'executor',
-  'sdd-design': 'executor',
-  'sdd-tasks': 'executor',
-  'sdd-apply': 'executor',
-  'sdd-verify': 'executor',
-  'sdd-archive': 'executor',
   'jd-fix-agent': 'executor',
   'review-risk': 'executor',
   'review-resilience': 'executor',
   'review-readability': 'executor',
   'review-reliability': 'executor',
   'review-refuter': 'executor',
-  'sdd-research': 'web-researcher',
   'jd-judge-a': 'blind-reviewer',
   'jd-judge-b': 'blind-reviewer',
 };
