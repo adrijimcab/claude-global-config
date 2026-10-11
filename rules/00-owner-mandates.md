@@ -281,8 +281,10 @@ corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
   IA, TODO ESTO A adrijimcab»): el `.claude/`, los artefactos de agentes y toda regla que nombre una
   herramienta de IA viven en `.git/info/exclude` del proyecto (nunca en su `.gitignore` versionado) y se
   respaldan solo en el repo privado de `adrijimcab`. Antes de cada push a un remoto de la empresa, `git grep`
-  sobre lo que se sube busca nombres de herramientas de IA (claude, anthropic, engram, openspec,
-  spec-driven, gentle-ai, copilot, chatgpt, openai) y un hallazgo frena el push.
+  sobre lo que se sube busca NOMBRES de herramientas de IA (claude, anthropic, engram, openspec, gentle-ai,
+  copilot, chatgpt, openai — nunca frases genéricas como «spec-driven», que el inglés corriente usa) y un
+  hallazgo frena el push. Un guard que necesita conocer esos nombres (el de atribución en los commits) lee
+  la lista desde fuera del repo, nunca la versiona.
 - Solo se commitea lo propio y terminado: lo que un agente VIVO está escribiendo lo commitea ese
   agente al terminar (nunca se commitea el estado de trabajo de un actor vivo).
 - Mensajes en inglés, Conventional, sin atribución. Artefactos de ejecución (`state/`, `.runs/`,
