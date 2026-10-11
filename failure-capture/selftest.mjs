@@ -214,7 +214,7 @@ refused('a passing mechanism that never names the lesson', promote(world('unrela
 
 refused('both a mechanism and a no-mechanism reason', promote(world('both'), ['--mechanism', '.claude/good-guard/guard.mjs', '--no-mechanism', REASON]), 'not both');
 
-refused('a no-mechanism reason too short to be a reason', promote(world('thin-reason'), ['--no-mechanism', 'none']), 'reason');
+refused('a no-mechanism reason too short to be a reason', promote(world('thin-reason'), ['--no-mechanism', 'a @es b']), 'reason');
 
 refused('a reason spanning two lines, which would orphan the one-line ledger entry', promote(world('two-line-reason'), ['--no-mechanism', `${REASON}\nsecond line`]), 'one line');
 
