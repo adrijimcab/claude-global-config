@@ -248,8 +248,9 @@ corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
   no cabe (tope de 50.000 bytes), vive en un DOCUMENTO VERSIONADO y engram guarda un puntero con su
   registro de cambios: en `~/.claude`, `checklists/master-backlog.md` (+ `host-backlog.md`); en
   b100-am-ui, desde el 2026-10-11 (decisión del dueño), `.claude/checklists/master-backlog.md` del repo
-  de respaldo del tooling, con `backlog/1.0.0-master` (#972) congelado y recibiendo una línea de
-  CHANGELOG por cambio. En los demás proyectos, el registro de engram `backlog/<hito>-master`.
+  de respaldo del tooling, con `backlog/1.0.0-master` (#972) congelado (sin más líneas: llegó al tope; se
+  reduce a puntero cuando el guard de contenido acepte el documento como archivo; el registro de cambios
+  es el historial git del documento). En los demás proyectos, el registro de engram `backlog/<hito>-master`.
 - Todo hallazgo, defecto, deuda, decisión pendiente del dueño o tarea «encolada» que aparezca —de un
   agente, de una medición o de la conversación— se escribe en ese backlog EN EL MISMO TURNO en que
   aparece. Nunca queda solo en el chat, en un reporte de agente o en una nota suelta.
@@ -257,8 +258,12 @@ corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
   backlog maestro. **Un agente delegado NUNCA escribe, actualiza ni borra un registro de backlog
   maestro** — pone su hallazgo en su informe de `SubagentHandback`, y el orquestador lo transcribe al
   backlog EN EL MISMO TURNO en que lo recibe, sin perder lo que ya había. Lo mismo vale para el
-  documento de un backlog versionado: solo el orquestador lo edita y lo commitea (pathspec explícito);
-  sus archivos (`master-backlog-archive/`) están congelados.
+  documento de un backlog versionado: lo edita, lo commitea (pathspec explícito) y lo sube en el mismo
+  turno la sesión que orquesta ESE proyecto — el de b100-am-ui su sesión de b100, en su repo de respaldo;
+  el global la sesión de `~/.claude`, por `land.mjs` a `master` (decisión del dueño 2026-10-11: «cada
+  proyecto debería subir sus propios commits… y los universales… que se commiteen a master»). Un commit
+  del documento es un dato, no código de hooks: no pide pausa de coordinación. Sus archivos
+  (`master-backlog-archive/`) están congelados.
 - Guardar con el mismo `topic_key` REEMPLAZA el contenido: siempre se lee la revisión actual
   (`mem_get_observation`) y se reescribe la revisión completa, sumando lo nuevo, sin perder nada.
 
