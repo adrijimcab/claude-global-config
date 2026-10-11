@@ -109,6 +109,7 @@ export const KINDS = Object.freeze([
   ['hook-dispatch', 'errors.jsonl', ARCHIVE, 'dispatcher malfunction journal'],
   ['owner-language-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['owner-language-guard', 'guard.log', ARCHIVE, 'guard log'],
+  ['sdd-attempt-cwd-guard', 'journal.jsonl', ARCHIVE, 'refusal and fail-open journal'],
   ['stash-watch', 'observed.jsonl', ARCHIVE, 'observation journal'],
   ['stash-watch', 'noticed.json', KEEP, 'the stash sets each session was shown'],
   ['type-assertion-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],

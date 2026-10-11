@@ -17,7 +17,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -44,6 +44,18 @@ function report(ok, line) {
 
 const slash = (value) => value.split('\\').join('/');
 const cleanups = [];
+
+// Every scratch directory is removed on EVERY exit, a failing or throwing run included.
+// @es Todo directorio temporal se borra en CUALQUIER salida, también en una corrida que falla o lanza.
+process.once('exit', () => {
+  for (const cleanup of cleanups) {
+    try {
+      cleanup();
+    } catch {
+      /* a cleanup that fails must not hide the verdict */
+    }
+  }
+});
 
 /** A repository with one commit; `git(args, cwd)` runs git inside the sandbox environment. @es Un repositorio con un commit. */
 function repository(parent = tmpdir()) {
@@ -101,7 +113,10 @@ const dirtyMain = repository();
 dirtyMain.worktree('wt-idle', 'feat-idle');
 writeFileSync(path.join(dirtyMain.repoDir, 'main-dirt.txt'), 'x');
 
-const spaced = repository(mkdtempSync(path.join(tmpdir(), 'sdd cwd guard ')));
+const spacedParent = mkdtempSync(path.join(tmpdir(), 'sdd cwd guard '));
+const spaced = repository(spacedParent);
+
+cleanups.push(() => rmdirSync(spacedParent));
 const spacedWorktree = spaced.worktree('wt with space', 'feat-space');
 spaced.commitFile(spacedWorktree, 'work.txt');
 
@@ -219,8 +234,6 @@ try {
 } catch (error) {
   report(false, `the wiring is unreadable: ${error instanceof Error ? error.message : String(error)}`);
 }
-
-for (const cleanup of cleanups) cleanup();
 
 console.log(`\n${total - failures}/${total} passed`);
 process.exit(failures === 0 ? 0 : 1);
