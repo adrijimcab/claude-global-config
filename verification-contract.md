@@ -61,3 +61,17 @@ it could have measured this turn (in construction, with its precision measured l
 medir en este turno. El estado de un worker se mide con la última escritura de su transcript, sus
 procesos y su `git log`; los árboles ignorados por git se buscan con `fd -u`. Lo hace cumplir un cuarto
 caso del juez de premisas.
+
+## 7. A user-visible behaviour is proved in a real browser, and the proof discriminates (owner directive 2026-10-11)
+
+Owner, verbatim: «Que todos hagan esas pruebas con playwright y/o en el navegador a partir de ahora», for
+every project. Every worker and every orchestrator proves each behaviour a user can see in a REAL browser —
+Playwright, or the project's own browser runner (a Storybook test runner on a built Storybook, the app or
+demo served locally). A unit test, a harness or a jsdom run is evidence about the code, never about what the
+user sees. The proof must DISCRIMINATE: break the behaviour once, see the browser check go red, restore it,
+see it green, and paste both outputs. For tooling with no UI the equivalent is running the real command on
+the real tree. Each project's agent contract names its own runner, commands and known limits.
+@es Todo comportamiento que un usuario puede ver se prueba en un navegador REAL (Playwright o el runner de
+navegador del proyecto), y la prueba discrimina: se rompe una vez, se ve en rojo, se restaura, se ve en verde,
+y se pegan las dos salidas. Para tooling sin interfaz, el equivalente es correr el comando real sobre el árbol
+real. El contrato de cada proyecto nombra su runner, sus comandos y sus límites conocidos.
