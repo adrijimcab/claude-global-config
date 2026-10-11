@@ -6,12 +6,12 @@
  * repositorio construido con un origin real).
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { listProcesses, processesNaming, rowsOfJson } from './processes.mjs';
+import { listProcesses, processesNaming, rowsOfListing } from './processes.mjs';
 import { gitState } from './worktree-git.mjs';
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'worker-sources-'));
@@ -49,9 +49,12 @@ try {
   check('processes: nothing names an unknown worktree', naming('C:/nowhere'), []);
   check('processes: the caller itself is never reported', naming('C:/Users/me/.claude-wt/feat-one').includes(process.pid), false);
 
-  check('processes: one PowerShell object is one row', attempt(() => rowsOfJson('{"ProcessId":7,"CommandLine":null}')), [{ pid: 7, commandLine: '' }]);
-  check('processes: a PowerShell array keeps every row', attempt(() => rowsOfJson('[{"ProcessId":1,"CommandLine":"a"},{"ProcessId":2,"CommandLine":"b"}]')).length, 2);
-  check('processes: empty output is no rows', attempt(() => rowsOfJson('')), []);
+  const encoded = (text) => Buffer.from(text, 'utf8').toString('base64');
+
+  check('processes: a line with an empty command line is one row with no text', attempt(() => rowsOfListing('7 \r\n')), [{ pid: 7, commandLine: '' }]);
+  check('processes: a line without the encoded half is one row with no text', attempt(() => rowsOfListing('7')), [{ pid: 7, commandLine: '' }]);
+  check('processes: every line is a row, decoded from UTF-8', attempt(() => rowsOfListing(`1 ${encoded('a ñ')}\r\n2 ${encoded('b')}\r\n`)), [{ pid: 1, commandLine: 'a ñ' }, { pid: 2, commandLine: 'b' }]);
+  check('processes: empty output is no rows', attempt(() => rowsOfListing('')), []);
 
   // The real-OS listing runs with a PRIVATE profile inside this selftest's temp: PowerShell writes its profile
   // folders there, never into the home of whoever runs the proof. @es El listado real corre con un perfil
@@ -62,10 +65,27 @@ try {
 
   mkdirSync(profile);
 
-  const real = listProcesses(privateEnv);
+  const listed = attempt(() => listProcesses(privateEnv));
+  const real = listed === 'THROWS' ? [] : listed;
 
+  check('processes: the real listing does not throw', listed === 'THROWS', false);
   check('processes: the real listing is non-empty rows with numeric pid', real.length > 0 && real.every((row) => Number.isInteger(row.pid) && typeof row.commandLine === 'string'), true);
   check('processes: the real listing contains this very process', real.some((row) => row.pid === process.pid), true);
+  // On Windows the System process (pid 4) has no command line; it must still be a row, with empty text.
+  // @es En Windows el proceso System (pid 4) no tiene línea de comandos; igual debe ser una fila, con texto vacío.
+  check('processes: a process without a command line is still listed, with empty text', process.platform !== 'win32' || real.some((row) => row.pid === 4 && row.commandLine === ''), true);
+
+  // A live command line may hold control characters and non-ASCII text; the listing must carry it intact, never
+  // fail to parse nor depend on the console code page. @es Una línea de comandos viva puede tener caracteres de
+  // control y texto no ASCII; el listado debe traerla intacta, sin fallar al parsear ni depender de la página de códigos.
+  const odd = `marker${String.fromCharCode(0x1b)}${String.fromCharCode(0x01)}ñ«»á-end`;
+  const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)', odd], { stdio: 'ignore' });
+
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const withOdd = attempt(() => listProcesses(privateEnv));
+
+  holder.kill();
+  check('processes: a command line with control and non-ASCII characters is listed intact', withOdd === 'THROWS' ? 'THROWS' : withOdd.some((row) => row.pid === holder.pid && row.commandLine.includes(odd)), true);
 
   check('processes: the listing tool ran inside the private profile', existsSync(roaming), process.platform === 'win32');
 
