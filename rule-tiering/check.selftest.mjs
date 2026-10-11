@@ -20,6 +20,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -52,11 +53,9 @@ const CUSTOMIZATIONS = `export const CUSTOMIZATIONS = [
 ];
 `;
 
-const sandbox = path.join(HERE, 'scratch');
-
-mkdirSync(sandbox, { recursive: true });
-
-const root = mkdtempSync(path.join(sandbox, 'check-'));
+// In the system temp directory, never inside the tree under test. @es En el directorio temporal del sistema,
+// nunca dentro del árbol bajo prueba.
+const root = mkdtempSync(path.join(tmpdir(), 'rule-tiering-check-'));
 
 try {
   const repo = path.join(root, 'repo');

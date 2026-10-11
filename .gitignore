@@ -147,11 +147,11 @@
 !/guard-precision/
 !/guard-precision/**
 /failure-capture/state/
-# Proof that a tiering of a loaded rule file conserves it; code only, its selftest sandboxes never. @es
-# Prueba de que un escalonado de un fichero de reglas cargado lo conserva; solo código, nunca sus sandboxes.
+# Proof that a tiering of a loaded rule file conserves it; its selftest sandboxes live in the system temp
+# directory. @es Prueba de que un escalonado de un fichero de reglas cargado lo conserva; los sandboxes de su
+# selftest viven en el directorio temporal del sistema.
 !/rule-tiering/
 !/rule-tiering/*.mjs
-/rule-tiering/scratch/
 
 # Shared modules the global guards import, vendored byte-identical from b100-am-ui (vendored/PROVENANCE.json).
 !/vendored/
