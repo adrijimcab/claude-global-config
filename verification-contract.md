@@ -52,9 +52,9 @@ todo se verifica». "I have not verified this" (§1) is for what CANNOT be measu
 tool can measure it now — a worker's or process's state, a branch, a file, a gate, a version, a release
 note — saying "probably", "it should be", "it fits that", or "unverified" instead of measuring is the
 defect. Measure it, then state it with the receipt. Liveness of a worker is its transcript's last write
-and last record, its processes and its `git log`, read in the same turn (one command:
-`node ~/.claude/worker-status/status.mjs <agent-id>`, once built). Searches over `~/.claude/projects` and
-other git-ignored trees use `fd -u` or a direct path, never a search that skips ignored files.
+and last record, its processes and its `git log`, read in the same turn. The session transcripts live in
+the git-ignored `projects/` directory of the Claude home, so searches there (and in any other git-ignored
+tree) use `fd -u` or a direct path, never a search that skips ignored files.
 Mechanism: a fourth case of the premise judge (Stop `prompt` hook) refuses a reply that hedges a state
 it could have measured this turn (in construction, with its precision measured like the other cases).
 @es Lo que se puede medir ahora se mide, nunca se matiza: «no lo verifiqué» es solo para lo que no se puede
