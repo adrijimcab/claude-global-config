@@ -239,6 +239,18 @@ verify), el ORQUESTADOR hace, en el MISMO turno, las tres cosas:
    informa como trabajo varado.
 3. **SDD:** si la unidad era un cambio SDD, se archiva (`sdd-archive`) cuando su verify está en verde.
    Un verify en rojo no se archiva: se arregla primero.
+4. **Lo encontrado:** todo hallazgo que trae la unidad (del informe del worker o de la integración) se
+   resuelve en ese turno según «Resolver en el momento antes que encolar», y si no puede, entra al
+   backlog con su razón.
+
+Reafirmado por el dueño el 2026-10-11 para toda sesión, también las nuevas: «siempre que se integra un
+agente, se borre su worktree y su rama local si la hizo y que se suba lo hecho a engram y lo encontrado y
+que surja que se arregle». Mecanismo: un guard `Stop` del orquestador que rechaza cerrar el turno mientras
+quede un worktree cuyo contenido ya está integrado (`git cherry` vacío contra su rama de integración),
+limpio y sin actor vivo (en construcción, con selftest que prueba que discrimina).
+@es Al integrar un agente: guardar en engram lo hecho y lo encontrado, borrar su worktree y su rama, y
+arreglar lo que surja; lo hace cumplir un guard `Stop` que rechaza el cierre de turno con un worktree ya
+integrado abierto.
 
 ## Resolver en el momento antes que encolar (directiva del dueño 2026-10-11, global)
 
