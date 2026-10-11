@@ -30,9 +30,8 @@
  */
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { resolve, dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { resolve, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { stateDir } from '../hook-state/locations.mjs';
 import { reason, refusalFor } from './decision.mjs';
@@ -43,15 +42,19 @@ const stateDirectory = () => stateDir('brief-tenancy');
 /**
  * Where the fleet keeps the answer to "which field does tool X carry its text in?".
  *
- * ADDRESSED THROUGH THE HOME DIRECTORY, never by counting `..` segments out of this file: this guard
- * lives inside the repository and that module lives beside the user's own configuration, so a relative
- * path between them encodes how deep this repository happens to sit on disk. Resolved as a file URL
- * because an absolute Windows path is not an importable ESM specifier.
- * @es Dónde guarda la flota la respuesta a «¿en qué campo lleva su texto la herramienta X?». Se
- * direcciona por el directorio personal y no contando segmentos `..`, porque una ruta relativa entre
- * ambos codificaría a qué profundidad está este repositorio en el disco.
+ * LOCATED BESIDE THIS FILE, never through the user's home: both modules belong to the same repository, so
+ * the sibling is wherever this checkout is — the install, a worktree, a selftest sandbox or a mutation
+ * copy. Addressing it through the home made the guard import ANOTHER checkout's module, and fail OPEN,
+ * silently, in every home that held no install (measured in the selftest sandbox; `selftest.mjs` now
+ * replays the incident under an empty home and requires the denial).
+ * @es Dónde guarda la flota la respuesta a «¿en qué campo lleva su texto la herramienta X?». Se ubica JUNTO
+ * A ESTE FICHERO, nunca por el home del usuario: ambos módulos son del mismo repositorio, así que el hermano
+ * está donde esté este checkout (la instalación, un worktree, el sandbox de un selftest o una copia de
+ * mutación). Buscarlo por el home importaba el módulo de OTRO checkout y fallaba ABIERTO, en silencio, en
+ * todo home sin instalación (medido en el sandbox; `selftest.mjs` repite el incidente con un home vacío y
+ * exige la denegación).
  */
-const CARRIERS = pathToFileURL(join(homedir(), '.claude', 'brief-provenance', 'provenance.mjs')).href;
+const CARRIERS = new URL('../brief-provenance/provenance.mjs', import.meta.url).href;
 
 /** The journal is evidence, never a precondition: its failure must not change the decision. @es Diario. */
 function journal(entry) {

@@ -79,7 +79,6 @@ export const STATE_EXCUSES = new Map([]);
 export const HOME_EXCUSES = new Map([
   ['agent-liveness/liveness.mjs', "the harness's session transcripts (`~/.claude/projects`), not hook state"],
   ['brief-feasibility/preflight.mjs', "the harness's session transcripts and the dispatcher manifests, not hook state"],
-  ['brief-tenancy/guard.mjs', "imports the provenance carriers' module from the install, not hook state"],
   ['config-sync-guard/attribution.mjs', "the harness's session transcripts (`~/.claude/projects`), not hook state"],
   ['config-sync-guard/repos.mjs', 'names the `~/.claude` repository whose sync it guards, not hook state'],
   ['failure-capture/capture.mjs', "the owner's promoted-rules file, a tracked document, not hook state"],

@@ -39,7 +39,8 @@ const MUTANTS = [
   ['a tree path is not folded onto its checkout', 'brief-tenancy/named-checkouts.mjs', 'return tree > 0 ? path.slice(0, tree) : path;', 'return path;'],
   ['backslash-spelled paths are not found', 'brief-tenancy/named-checkouts.mjs', "(text.charAt(index + 2) === '/' || text.charAt(index + 2) === BACKSLASH) &&", "text.charAt(index + 2) === '/' &&"],
   ['the guard reads `prompt` for every tool, so SendMessage is blind', 'brief-tenancy/guard.mjs', 'const brief = briefOf(payload);', "const brief = typeof payload?.tool_input?.prompt === 'string' ? { toolName: payload.tool_name, surface: 'delegation', text: payload.tool_input.prompt } : undefined;"],
-  ['the guard never emits its refusal', 'brief-tenancy/guard.mjs', "permissionDecision: 'deny',", "permissionDecision: 'allow',"],
+  ['the guard imports its carrier map through the home again, so a home without the install fails open', 'brief-tenancy/guard.mjs', "const CARRIERS = new URL('../brief-provenance/provenance.mjs', import.meta.url).href;", "const CARRIERS = new URL(`file:///${process.env.USERPROFILE ?? process.env.HOME}/.claude/brief-provenance/provenance.mjs`).href;"],
+  ['the guard never emits its refusal','brief-tenancy/guard.mjs', "permissionDecision: 'deny',", "permissionDecision: 'allow',"],
 
   // --- FAILING TOWARDS "DANGEROUS": correct briefs start being refused.
   ['every named checkout counts as foreign, so the preamble\'s own-tree path refuses', 'brief-tenancy/decision.mjs', 'if (!FOREIGN.has(tenancy.state)) continue;', "if (tenancy.state === 'unknown') continue;"],

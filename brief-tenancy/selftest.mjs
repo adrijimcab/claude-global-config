@@ -35,7 +35,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -44,7 +45,7 @@ import { reason, refusalFor } from './decision.mjs';
 import { mentionedMutations } from './mentioned-mutations.mjs';
 import { namedCheckouts } from './named-checkouts.mjs';
 import { declarationOf } from './tenancy-declaration.mjs';
-import { isolateState } from '../hook-state/locations.mjs';
+import { CLAUDE_HOME_VARIABLE, isolateState } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
 // session reads, and never a line a previous run left behind.
@@ -442,7 +443,38 @@ check(
   'a fixture using `prompt` would agree with the guard by construction and prove nothing'
 );
 
-check('SURFACE: a non-carrier tool (Bash) is untouched', !guardVerdict(payloadFor('Bash', 'npm ci', { toolName: 'Bash', sessionId: 'brief-tenancy-selftest' })).denied);
+/**
+ * Whether the real hook DENIES `payload` when the user's home holds no install at all. The guard is part of
+ * this repository, so it must find its sibling modules beside itself: a guard that located them through the
+ * home failed OPEN in every home without the install, which is exactly how the incident replay passed
+ * unguarded inside the selftest sandbox. The scratch home is removed on every path.
+ * @es Si el hook real DENIEGA `payload` cuando el home del usuario no tiene ninguna instalación. La guardia es
+ * parte de este repositorio, así que debe hallar sus módulos hermanos junto a sí misma: una guardia que los
+ * buscaba por el home fallaba ABIERTO en todo home sin la instalación, y así pasaba sin guardia la repetición
+ * del incidente dentro del sandbox de los selftests. El home de prueba se elimina en todos los caminos.
+ */
+function deniedUnderAnEmptyHome(payload) {
+  const home = mkdtempSync(join(tmpdir(), 'brief-tenancy-empty-home-'));
+
+  try {
+    const env = { ...process.env, HOME: home, USERPROFILE: home, [CLAUDE_HOME_VARIABLE]: join(home, '.claude') };
+    const stdout = execFileSync(process.execPath, [GUARD], { input: JSON.stringify(payload), encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 60_000, env });
+
+    return stdout.includes('"permissionDecision":"deny"');
+  } catch {
+    return false;
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+check(
+  'HOME-INDEPENDENT: the incident replay is DENIED when the home holds no install',
+  deniedUnderAnEmptyHome(payloadFor('Agent', replayed, { toolName: 'Agent', sessionId: 'brief-tenancy-selftest' })),
+  'a guard that imported its carrier map through the home failed OPEN here, silently'
+);
+
+check('SURFACE: a non-carrier tool (Bash) is untouched',!guardVerdict(payloadFor('Bash', 'npm ci', { toolName: 'Bash', sessionId: 'brief-tenancy-selftest' })).denied);
 
 // ── 7. FAILS OPEN ───────────────────────────────────────────────────────────────────────────────────
 
