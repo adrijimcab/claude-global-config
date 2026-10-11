@@ -51,7 +51,7 @@
  */
 
 import { resolveTopicKeyById } from '../backlog-owner-guard/resolve-topic-key.mjs';
-import { findPendingMarker } from './markers.mjs';
+import { findAnnouncement } from './announcement.mjs';
 import { judgeMasterUpdates } from './master-update.mjs';
 import { hasMasterBacklogSave } from './master-save.mjs';
 import { readOffsetState, readTranscriptTail, transcriptSize, writeOffsetState } from './state.mjs';
@@ -78,7 +78,7 @@ export function decide(
   if (payload?.stop_hook_active === true) return undefined;
 
   const message = typeof payload?.last_assistant_message === 'string' ? payload.last_assistant_message : '';
-  const marker = findPendingMarker(message);
+  const marker = findAnnouncement(message);
 
   const sessionId = typeof payload?.session_id === 'string' && payload.session_id.length > 0 ? payload.session_id : 'unknown';
   const transcriptPath = payload?.transcript_path;

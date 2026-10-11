@@ -22,16 +22,27 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const MUTANTS = [
   ['the loop bound is gone: a retry is judged again instead of passing through', 'decide.mjs', 'if (payload?.stop_hook_active === true) return undefined;', ''],
-  ['the pending-phrase requirement is gone: every turn is judged', 'decide.mjs', 'const marker = findPendingMarker(message);', 'const marker = "x";'],
+  ['the pending-phrase requirement is gone: every turn is judged', 'decide.mjs', 'const marker = findAnnouncement(message);', 'const marker = "x";'],
   ['a master-backlog save no longer satisfies a pending announcement', 'decide.mjs', 'if (hasMasterBacklogSave(tail)) return undefined;', ''],
   ['an unreadable transcript stops failing open and blocks instead', 'decide.mjs', 'if (tail === undefined) return undefined;', ''],
   ['the per-turn offset always reads as zero, so an EARLIER turn\'s save always satisfies a LATER one', 'decide.mjs', "const offset = typeof state?.offset === 'number' ? state.offset : 0;", 'const offset = 0;'],
   ['the save-tool-name requirement is dropped: a bare topic_key anywhere in the tail now counts as a save', 'master-save.mjs', 'if (!tail.includes(SAVE_TOOL_MARKER)) return false;', ''],
   ['the "-master" suffix stops mattering: any backlog/* topic_key satisfies, including a per-item note', 'master-save.mjs', "return typeof value === 'string' && value.startsWith(BACKLOG_NAMESPACE_PREFIX) && value.endsWith(MASTER_SUFFIX) && value.length > BACKLOG_NAMESPACE_PREFIX.length + MASTER_SUFFIX.length;", "return typeof value === 'string' && value.startsWith(BACKLOG_NAMESPACE_PREFIX);"],
-  ['the marker list is never consulted: findPendingMarker always reports nothing', 'markers.mjs', 'return PENDING_MARKERS.find((marker) => haystack.includes(marker));', 'return undefined;'],
+  ['the marker list is never consulted: findPendingMarker always reports nothing', 'markers.mjs', "return message.includes('TODO:') ? 'TODO:' : PENDING_MARKERS.find((marker) => haystack.includes(marker));", 'return undefined;'],
   ['the shim stops blocking a decided finding, so the harness lets the turn end', 'guard.mjs', 'if (finding === undefined) return undefined;', 'if (finding !== undefined) return undefined;'],
   ['the shim stops journaling its refusals, so no evidence survives the block', 'guard.mjs', 'journal({ at: new Date().toISOString(), session: finding.sessionId, marker: finding.marker, transcript: finding.transcriptPath });', ''],
   ['the standalone hook stops printing the block, so a decided refusal never reaches the harness', 'guard.mjs', 'if (output !== undefined) console.log(JSON.stringify(output));', ''],
+  // --- intent: announcement, not words
+  ['quoted and code text stops being removed, so a mention counts as an announcement', 'prose.mjs', "prose += ' ';", 'prose += text.slice(index, closeAt);'],
+  ['quote lines stop being removed', 'prose.mjs', "line.trimStart().startsWith('>') ? '' : line", 'line'],
+  ['a delimiter with no closer is dropped instead of kept as text', 'prose.mjs', 'prose += text[index];', "prose += '';"],
+  ['an observation reference stops counting as a record', 'announcement.mjs', "character === '#' && sentence[index + 1] >= '0'", "character === '#' && false && sentence[index + 1] >= '0'"],
+  ['the previous sentence stops being consulted for a record', 'announcement.mjs', 'Math.max(0, index - 1)', 'index'],
+  ['the next sentence stops being consulted for a record', 'announcement.mjs', 'index + 2', 'index + 1'],
+  ['a recorded cue in the sentence stops counting', 'announcement.mjs', 'RECORDED_CUES.some((cue) => sentence.toLowerCase().includes(cue))', 'false'],
+  ['a decided record no longer silences an announcement', 'announcement.mjs', '!pointsAtRecord(sentences, index)', 'true'],
+  ['lowercase "todo:" (everything:) counts as the TODO marker', 'markers.mjs', "message.includes('TODO:')", "haystack.includes('todo:')"],
+  ['the decision judges words again instead of announcements', 'decide.mjs', 'const marker = findAnnouncement(message);', "const marker = message.includes('backlog') ? 'backlog' : undefined;"],
   // --- the mem_update face (found in live use: mem_update carries no topic_key of its own)
   ['a mem_update the store says is a master record no longer satisfies a pending announcement', 'decide.mjs', 'if (master) return undefined;', ''],
   ['the store failing to answer stops failing open: a mem_update with an unreadable store blocks the turn', 'decide.mjs', 'if (unresolved.length > 0) {', 'if (false) {'],
@@ -62,7 +73,7 @@ const FLEET_ROOT = path.resolve(HERE, '..');
 const survivors = runMutants({
   fleetRoot: FLEET_ROOT,
   paths: [
-    ...['decide.mjs', 'guard.mjs', 'markers.mjs', 'master-save.mjs', 'master-update.mjs', 'state.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'].map((file) => `${THIS_DIRECTORY}/${file}`),
+    ...['decide.mjs', 'guard.mjs', 'markers.mjs', 'prose.mjs', 'announcement.mjs', 'master-save.mjs', 'master-update.mjs', 'state.mjs', 'dismiss.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'].map((file) => `${THIS_DIRECTORY}/${file}`),
     'backlog-owner-guard/resolve-topic-key.mjs',
     'hook-state', 'bilingual-output'
   ],

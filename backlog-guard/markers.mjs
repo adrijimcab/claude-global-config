@@ -42,24 +42,31 @@
  * @es Frases que marcan un candidato a anuncio de «queda algo pendiente». Solo minúsculas.
  */
 export const PENDING_MARKERS = Object.freeze([
-  // --- owner-named roots kept literally, where the root itself is specific enough on its own
-  // --- raíces del dueño, mantenidas literales cuando la raíz misma ya es lo bastante específica
+  // --- ANNOUNCING phrases only (owner order 2026-10-11): first-person intent to queue or record, never the
+  // --- bare nouns "backlog" / "hallazgo" (they NAME an item) nor the infinitive "encolar" (it mentions the rule).
+  // --- Solo frases que ANUNCIAN: intención en primera persona de encolar o registrar, nunca los sustantivos
+  // --- sueltos «backlog» / «hallazgo» (nombran un ítem) ni el infinitivo «encolar» (menciona la regla).
   'encolo',
-  'encolar',
-  'encolado',
+  'encolé',
   'queda por',
   'quedan por',
   'sin lanzar',
-  'backlog',
-  'hallazgo',
-  'hallazgos',
+  'lo anoto',
+  'lo apunto',
+  'lo sumo',
+  'lo agrego',
+  'va al backlog',
+  'van al backlog',
+  'sumo al backlog',
+  'agrego al backlog',
+  'paso al backlog',
+  'to the backlog',
+  'hallazgo nuevo',
+  'nuevo hallazgo',
+  'new finding',
 
-  // --- "pendiente" kept as compound phrases, never the bare word (see module docblock)
-  // --- "pendiente" solo en frases compuestas, nunca la palabra sola (ver docblock del módulo)
-  'queda pendiente',
-  'quedan pendientes',
-  'sigue pendiente',
-  'siguen pendientes',
+  // --- "pendiente" kept as compound phrases, never the bare word, and never "sigue/siguen" (continues = not new)
+  // --- "pendiente" solo en frases compuestas, nunca la palabra sola ni «sigue/siguen» (continúa = no es nuevo)
   'lo dejamos como pendiente',
   'lo dejo como pendiente',
   'pendiente de integrar',
@@ -77,21 +84,12 @@ export const PENDING_MARKERS = Object.freeze([
   'falta commitear',
   'falta un commit',
 
-  // --- "todo" kept only as the list/comment marker shape, never the bare Spanish word "todo"
-  //     ("everything") — see module docblock for why the bare word is excluded.
-  // --- "todo" solo como marcador de lista/comentario, nunca la palabra española "todo".
-  'todo:',
-
   // --- English equivalents of the roots above, confirmed against this project's own transcripts
   // --- Equivalentes en inglés de las raíces de arriba, confirmados contra transcripts reales
-  'queued for',
   'queued commit',
-  'still pending',
   'pending tasks',
   'pending task:',
   'left pending',
-  'still open',
-  'remains open',
   'worth flagging',
   'worth your attention',
   'flagging this for',
@@ -115,5 +113,7 @@ export function findPendingMarker(message) {
 
   const haystack = message.toLowerCase();
 
-  return PENDING_MARKERS.find((marker) => haystack.includes(marker));
+  // The list/comment shape "TODO:" is case-sensitive: lowercase "todo:" is the Spanish word "everything".
+  // @es La forma de lista "TODO:" distingue mayúsculas: «todo:» en minúscula es la palabra española.
+  return message.includes('TODO:') ? 'TODO:' : PENDING_MARKERS.find((marker) => haystack.includes(marker));
 }

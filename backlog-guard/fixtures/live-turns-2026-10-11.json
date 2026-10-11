@@ -1,0 +1,446 @@
+[
+ {
+  "at": "2026-09-30T01:45:13.160Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The master backlog WAS saved this turn: mem_update on observation #972 (topic backlog/1.0.0-master), revision 10. The guard only recognises mem_save with a topic_key and misses mem_update of the master observation id; reported to its builder as a false-negative-on-save defect.",
+  "text": "3 de 73 mutantes eliminados, probado en vivo en los dos repos sin tocar ningún fichero trackeado.\n\n- **En discovery-fe:** avanzar `develop` sin una suite en verde registrada queda bloqueado, igual que en la librería. También hay cobertura del diff con Karma, control de entrega y guards de worktrees.\n- **En el backend legado:** no tiene tests ni cobertura, así que esos mecanismos quedan desactivados con el motivo escrito. Siguen activos el control de trabajo sin commitear y los guards de worktrees.\n\nTuve que corregir el `.gitignore` de tu config global: ignora todo por defecto, así que el kit y los dos guards nuevos no se habrían subido nunca.\n\nLos huecos que declaró el agente quedaron en el backlog maestro (revisión 10). El más importante: en los worktrees de agentes de discovery no hay `node_modules`, así que ahí la cobertura del diff todavía no puede calificar."
+ },
+ {
+  "at": "2026-09-30T02:05:28.466Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The message explained the global-mechanism / per-repo-config principle; it announced no new pending item. The work it refers to (porting generic guards to global) was already saved to the master backlog and engram #1041 in the previous turn.",
+  "text": "No, y es una buena pregunta. La línea correcta no es \"todo global\" ni \"todo por proyecto\", sino **el mecanismo global y los datos de cada proyecto en su config**.\n\n**Global:** todo lo que decide sin necesitar saber nada del proyecto.\n- Un brief sin `MEASURED`/`HYPOTHESIS`, un `echo $?` que se come el código de salida, una afirmación sin prueba, reanudar a un agente en vez de lanzar uno nuevo, el backlog.\n- Eso vale igual en b100, en discovery o en un repo que abras el año que viene, así que se registra una sola vez.\n\n**Por proyecto:** todo lo que depende de hechos del repo.\n- Rama de integración, comando de la suite, formato de cobertura, carpetas a calificar.\n- Por ejemplo: en b100 la suite es `ci:test` con Vitest y lcov; en discovery-fe es `test:all` con Karma; en el backend legado **no hay tests**.\n\nSi esto se volviera global con los datos de b100 metidos adentro, en discovery pasaría una de dos cosas:\n- **Falla siempre:** buscaría `ci:test`, que no existe, y bloquearía todo sin motivo.\n- **Pasa siempre en falso:** no encuentra nada que medir y da verde. Es el peor caso, un guard que no puede ponerse en rojo.\n\nPor eso el fleet-kit lee un `.claude/fleet-kit.json` en cada repo: el código es uno solo y los datos son de cada repo.\n\n**Lo que se queda solo en b100 es poco, y por razones reales:**\n- la paridad entre sus dos ficheros de contrato;\n- su flujo de integración por cherry-pick;\n- la cadena `build:ci-pr`.\n\nSi discovery adopta alguno de esos flujos más adelante, entra al "
+ },
+ {
+  "at": "2026-09-30T02:16:05.120Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "False positive: this turn DID save the master backlog via mem_update id 972 (revision 15), after an earlier mem_get_observation of 972 in this session that returned Topic backlog/1.0.0-master; the guard did not attribute that update. Reported to its builder a83d9a0cad0e0e615.",
+  "text": " 1298 errores |\n| Prettier | 179 ficheros |\n| npm audit | 9 críticos y 52 altos |\n| gitleaks | 22 |\n\n- **commitlint:** funciona, pero solo a mano. No puse husky porque el `.git` del monorepo está en la raíz: instalarlo metería hooks en todos los proyectos hermanos de `fuentes/`.\n- **CI:** el monorepo no tiene ninguno, así que no hubo dónde conectar los gates.\n\n**Otros hallazgos del agente** (no toqué código de la aplicación, como pediste):\n- Hacer `require('./app.js')` se cuelga: algún módulo tiene efectos al cargarse.\n- `canvas` no tiene binario precompilado para Node 22 en Windows. Levantar la app en esta máquina necesita Build Tools o cambiar de versión de Node.\n\nQueda todo anotado en el backlog maestro (revisión 15). Sigue en curso la rama de quality gates del discovery-fe."
+ },
+ {
+  "at": "2026-09-30T02:52:48.296Z",
+  "oldMarker": "sigue pendiente",
+  "label": "allow",
+  "reason": "The pending item (owner decision on the discovery-fe typecheck blocker) was already written into master backlog revision 27 in the previous turn; this turn adds nothing new.",
+  "text": "Revisé el estado: nadie cayó por rate limit y todos los agentes siguen trabajando o esperando su propio trabajo en segundo plano. El único muerto por contexto (aa3437) ya tiene reemplazo. Sigue pendiente tu decisión sobre los ~80 errores de typecheck de discovery-fe."
+ },
+ {
+  "at": "2026-09-30T02:56:56.073Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "False positive, second live occurrence after fix 45888ec: this very turn called mem_get_observation(972) and then mem_update(972) with revision 29, yet the guard saw nothing saved. Reported to the builder with this repro.",
+  "text": "El gate `check:bilingual` ya está en la rama de integración. El agente lo rearmó encima del rework de supresiones y juntó los dos cambios sin perder nada. Corrí sus specs ahí: 274 tests en verde. Queda en el árbol sin script npm hasta que llegue a 0, así que no crece ninguna lista de excepciones.\n\nSobre ese árbol, los textos que no son bilingües bajaron de 2716 a 2483, porque los mensajes de ejecución ya se habían corregido. Por carpeta: `scripts` 1456, `src` 896 y el resto 131. Esa es la campaña que lanzo cuando bajen los agentes que están corriendo.\n\nDevelop sigue esperando lo mismo: la corrección del `b100-input`. Ya está anotado en el backlog maestro, revisión 29."
+ },
+ {
+  "at": "2026-09-30T14:27:12.270Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The turn only explained an existing item to the owner and pointed at where it is already recorded: the repo-wide test runner is item 6f of the master backlog, saved in the previous turn as revision 11. No new finding appeared in this turn.",
+  "text": " en vez de inventar un `true`.\n\nEs una anotación en la ficha del proyecto en engram. No rompió nada ni apagó tu regla global.\n\n**Por qué no afecta a este cambio**\n\nEste SDD solo toca `failure-capture/`, y esa carpeta sí tiene su test (`selftest.mjs`, 64 casos en verde) y sus mutantes. Cuando llegue la fase de implementación le paso al agente ese comando concreto y le exijo test primero igual. El trabajo se hace con TDD aunque la ficha diga `false`.\n\n**Lo que queda pendiente, sin apuro**\n\nUn runner que corra los ~25 selftests de una. Sería útil para cualquier cambio futuro que toque varios guards a la vez, y permitiría dejar `strict_tdd: true` en la ficha. Es un cambio aparte y ya está en el backlog (ítem 6f).\n\nMientras tanto la exploración sigue corriendo; en cuanto llegue su informe continúo con la propuesta."
+ },
+ {
+  "at": "2026-09-30T14:32:55.472Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The word names the backlog-owner-guard agent, not a finding; the integrator's config-editor migration is part of batch 2 already tracked in revision 55 and is resolved from its hand-back.",
+  "text": "No hubo cambios de estado. El integrador y el agente del guard del backlog están vivos: escribieron en su transcript en el último minuto. develop sigue en `badfdead`.\n\nUn detalle: la última punta del integrador, `71b1f769`, migra el spec de `config-editor` a un harness. Eso excede lo que le pedí, que era solo arreglar el desvío de `date-range`, y no sé por qué lo hizo; puede ser que algún gate le haya fallado en ese archivo. Se lo pregunto cuando reporte."
+ },
+ {
+  "at": "2026-09-30T17:42:17.464Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "No new finding this turn: plugin release commands given to the owner, and a read-only backlog audit is running; its result is written to revision 60 in the turn it arrives.",
+  "text": "Ya lancé la revisión completa del backlog. Mientras tanto, te paso los comandos para el tag y la publicación del plugin.\n\n## Tag y publicación del plugin 2.0.0 (PowerShell)\n\nLo que medí antes de armarlos:\n- **Desde qué rama se hace:** los tags anteriores (`v1.2.0` y `v1.2.1`) se cortaron desde `develop`, y `main` está detrás de `develop`. Así que el release sale de `develop`.\n- **En qué estado está `develop`:** en `1827373` (la 2.0.0), igual a origin, con el árbol limpio.\n- **Qué hace el comando:** el propio plugin trae `npm run release`, que saca el tag de `package.json` (`v2.0.0`) y no acepta que se lo pases como argumento. Pushea primero la rama y después el tag. Ese tag dispara el pipeline, cuyo job `deploy` publica en el registro y verifica que lo publicado sea exactamente lo que tiene el tag.\n\n```powershell\nSet-Location \"$HOME\\Desktop\\Projects\\plugin-eslint\"\ngit switch develop\ngit pull --ff-only\nnpm run release -- --dry-run\n```\n\nEl `--dry-run` muestra el plan sin ejecutar nada. Si dice `tag v2.0.0` y `commit 1827373…`, lanzás el release:\n\n```powershell\nnpm run release\n```\n\nCuando termine el pipeline del tag en GitLab, verificás que el registro tenga exactamente lo que tiene el tag:\n\n```powershell\nnpm run release:verify-tag -- 2.0.0\n```\n\nSi algo falla, el comando no rompe nada. Rechaza antes de tocar cualquier cosa si el árbol está sucio, si la rama no está pusheada o si el tag ya apunta a otro commit, y en ese caso te dice cómo arreglarlo. Si el push del tag falla, borr"
+ },
+ {
+  "at": "2026-10-01T00:54:12.530Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Everything announced in this reply was already saved to backlog/main-master (#1061, revision 14, section E items 11-13) earlier in this same session; the reply is a Spanish rewrite of that same content.",
+  "text": "Tenés razón, perdón: a mitad del turno me pasé al inglés y no corresponde. Va de nuevo, entero y en castellano.\n\nLa memoria quedó guardada en tres lugares: un archivo local, el mapa en engram (`discovery/migration-map`) y la sección E del backlog maestro. Además hay cinco workers trabajando en segundo plano en los dos estudios.\n\n**Correcciones a lo que me contaste (lo comprobé contra los repos):**\n- **La versión con la lib como dependencia no es la carpeta `_sin_projects`.** Esa carpeta sigue teniendo `projects/b100-am-ui` como workspace, está en un commit más viejo (`16d4698`) y tiene unos 418 cambios sin commitear. Esa versión es en realidad la rama **`origin/integration/npm-library`**, que instala la lib vieja con `git+http://…/b100-am-ui.git#v1.0.0`. Está 5 commits por delante y 24 por detrás de `integration/generate-library`.\n- Con `Projects/discovery-api` tenés razón: es NestJS 11. Lo dejé anotado como aparcado.\n- **El Angular nuevo ya le habla al back de producción.** Su `legacyBaseUrl` apunta a `localhost:3000`, que es el puerto del Express. Para comparar es buena noticia: las dos apps leen los mismos datos.\n\n**Estado actual:** producción está levantada en `:3000`, conectada al MongoDB local, y el login responde. Su tamaño: **47 vistas EJS (20.725 líneas con el JavaScript adentro), 45 archivos de rutas y 43 controllers**. Un solo hilo iba a dejarse cosas, así que repartí el trabajo entre cinco workers:\n\n| Worker | Qué cubre |\n|---|---|\n| A1 | Catálogo de todos los end"
+ },
+ {
+  "at": "2026-10-01T01:03:00.936Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The message only reports that item 120's docs follow-up (f88a54b8) is queued and that item 126 is already recorded; both items are in master revision 86 saved earlier this session, and the recurrence of the global CLAUDE.md import is recorded in the next revision with item 119.",
+  "text": "El ítem 120 quedó cerrado en rama: f88a54b8 documenta el hook nuevo en `docs/PRE-COMMIT.md` y corrige los comentarios de `.husky/pre-commit` y `.husky/pre-push`. a553 ya lo tiene en cola para sumarlo a la tanda, justo después de aa2d6e59.\n\nEl `check:doc-links` rojo que vio el worker en `docs/SCRIPTS.md:539` es el ítem 126, que ya está en el backlog."
+ },
+ {
+  "at": "2026-10-01T01:23:57.016Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "This turn only acknowledged a repeated completion notification for b1, whose findings are already in backlog/main-master revision 15-18 (items 14-34); nothing new was announced.",
+  "text": "Esto es solo el aviso repetido de que B1 terminó. Su informe ya lo tenemos y está anotado en el backlog, así que no hay nada nuevo.\n\nA1, el catálogo de APIs, sigue trabajando.\n\nSigo esperando tu respuesta a la pregunta de antes: **¿me autorizás a agregar la regla de permiso, solo para este proyecto, que deje leer el `.env` de producción y hacer consultas de solo lectura a `localhost:3000` y al Mongo local?**"
+ },
+ {
+  "at": "2026-10-01T03:54:29.478Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The owner asked to see the whole backlog; this turn only read back the open items of master backlog revision 29 (engram #1071, saved last turn). No new finding appeared.",
+  "text": "Este es el backlog completo de lo que queda abierto, según la revisión 29 del backlog maestro (engram #1071). Lo cerrado ya no figura acá.\n\n## 1. Decisiones o coordinación que te tocan\n\n1. **b100-am-ui carga 254.133 caracteres**, muy por encima del techo de 147.000. Hay que recortarlo con el mismo método que usamos acá (archivar el relato textual y dejar cargadas solo las reglas), coordinado con su sesión porque los archivos son suyos.\n2. **Chequeo de presupuesto en cada commit**, sobre todos los proyectos y sin excepciones. Se activa recién cuando b100 esté recortado; si se activa antes, bloquea todo.\n3. **Una clave promovida que es solo de b100** está en las reglas globales y hay que moverla a b100, junto con el detalle específico de b100.\n4. **`node_modules` por proyecto:** falta la auditoría. Antes te había preguntado dónde viste que se compartía y sigue sin respuesta.\n\n## 2. Reglas e instrucciones cargadas\n\n5. **`sdd-verify` todavía pide la verificación completa** (`skills/sdd-verify/SKILL.md:37`). Ese archivo lo pisa `gentle-ai sync`, así que hay que llevar el cambio al overlay, con selftest y mutantes.\n6. **Textos desactualizados** en las reglas:\n   - los conteos de caras («Nine», «Ten», «now six faces») no coinciden con lo que listan;\n   - «see the hooks section below» apunta a una sección que no existe;\n   - el bloque del landing gate apunta a un archivo de evidencia sin nombrar su clave.\n7. **Faltantes de evidencia y de protección:**\n   - 3 claves promovidas no tien"
+ },
+ {
+  "at": "2026-10-01T21:05:40.324Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Everything announced in this reply was saved this same turn to the milestone master backlog/discovery-migration-master (engram #1129) via mem_update: items 82-86 (fourth limit stop with parts on disk, Spanish-translation directive, round 5 receipts, 18 verification units, pace). The guard did not pair the mem_update by id with that master topic key.",
+  "text": "Sigo. Y quedó anotada tu indicación nueva: **cuando terminen todos los agentes, y antes de generar los PDF, se pasan todos los documentos a español. Los PDF van en español.** Es la directiva 17, guardada en la memoria del proyecto, en engram y en el backlog.\n\n**Lo que dejaron los tres agentes chicos antes de cortarse** (la estrategia nueva funcionó, porque escribieron mientras trabajaban):\n\n| Agente | Pantallas hechas | Le faltó |\n|---|---|---|\n| F1 | objectsDictionary, groups, tags, clusters (291 líneas, 116 capturas) | duplicatedCode |\n| F2 | tips, tipsv0, modernizationPlan (175 líneas, 102 capturas) | projectStatistics, sourceTips |\n| F3 | programInfo con todas sus pestañas, brules, sourceInfo (184 líneas, 414 capturas) | network en ejecución |\n\nTodo quedó respaldado en el remoto (`20633a7`).\n\n**Trabajando ahora, con recibo de lanzamiento (tres, que es el tope):**\n- **G1:** las tres pantallas que faltaban del lote 2: duplicatedCode, projectStatistics (con todo lo que hay debajo) y sourceTips.\n- **G2:** la pantalla de network en ejecución. Marca cada ítem de la descripción del código como confirmado, distinto o no ejercitado.\n- **VN-1:** primera unidad de verificación cruzada, sobre la app nueva: login, proyectos, home y las pantallas de detalle, que según el inventario no cargan.\n\n**Preparado para lo que sigue:** la verificación cruzada completa, partida en **18 unidades chicas** con los briefs ya aprobados:\n- 9 de producción;\n- 4 de la app nueva;\n- 4 del catálogo de APIs;"
+ },
+ {
+  "at": "2026-10-01T21:21:41.019Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The master backlog WAS saved this turn: mem_update on observation 1129 (topic backlog/discovery-migration-master) added items 87-89; read back with mem_get_observation, revision 4 holds them. The guard had not yet seen that id's topic_key after context compaction, so the mem_update was not recognised.",
+  "text": "Backlog al día (#1129, ítems 87-89) y resumen de sesión guardado. Estado, cortito:\n\n**Corriendo ahora (tope de 3):**\n- **g2** — pantalla `network` de PROD en runtime (lo último que falta de capturas).\n- **vn-1** — verificación independiente de la app nueva (login, proyectos, home, objetos y rutas de detalle).\n- **vb3-1** — verificación de PROD lote 3 (projects, users, versions, reports, subsystems).\n\n**Lo que dejó g1** (medición suya, la contrasta la unidad vb2-2):\n- `projectStatistics` **no tiene gráficos**: son tablas dentro de tarjetas plegables. Esto refuta lo que suponíamos.\n- `sourceTips` rompe al cargar (`ReferenceError: networkTags`, `flowchart-app.js:1566`) y no es alcanzable desde ningún menú → va a Mejoras con la recomendación de no reconstruirla.\n- `duplicatedCode` vacío en el proyecto VSE → `NEEDS-DB-DATA`.\n- Ojo: g1 solo reabrió 5 de sus capturas; el resto queda sin autocomprobar y vb2-2 tiene que abrirlas todas.\n\n**Corrección de la guarda de seguridad:** la regla por palabras clave abortaba un script estático (`simpleUpload.js`), lo que podía alterar la pantalla bajo prueba. Ya exime los assets estáticos; reconstruí los 18 briefs de verificación y avisé a g2 y vn-1.\n\n**Respaldo:** checkpoint `dbbd8d7` subido y verificado contra el remoto.\n\nQuedan 17 unidades de verificación por lanzar; voy metiendo la siguiente cada vez que se libere un hueco. Después: consolidar → pasar todo a español → diseño SDD → PDF en español."
+ },
+ {
+  "at": "2026-10-02T02:37:02.356Z",
+  "oldMarker": "hallazgo",
+  "label": "allow",
+  "reason": "The master backlog WAS saved this turn (mem_update on observation 1129, items 96-97, 32615 bytes accepted). The guard did not know id 1129 yet: the reads that pair it with its topic_key happened in turns evaluated before the footer-window defect was repaired (b35246d), and this turn updated without a fresh read. The durable record was backfilled from the real transcript with the guard's own extractor and writer; known ids are now 972, 1061, 1129.",
+  "text": "ones confirmadas en runtime, 11 solo desde código, 1 refutada y 3 no reproducidas. Dejó 65 capturas nuevas de página completa (por ejemplo, `projectInfo` mide 1440×3277), en `verification/vn-1r.md`.\n\n**Confirmado en runtime:**\n- **Las cinco rutas de detalle nunca renderizan.** Los 12 casos probados giran 90 segundos. Solo se dispara `POST insightObject/<p>/ids`, que responde `result.docs`, mientras el componente lee `data.docs`.\n- **Usuarios:** la búsqueda y los filtros de rol y de proyecto fallan. El botón «Nuevo usuario» lleva clases de Bootstrap y se pinta como botón por defecto del navegador.\n- **Diccionario de objetos:** sin paginador de filas; la API informa 100 objetos y se ven 8.\n\n**Hallazgos nuevos, los principales:**\n- Todas las casillas de selección de fila de `b100-table` llevan la etiqueta «Seleccionar fila [object Object]».\n- El cuerpo de todas las tablas está limitado a 384 px: la mitad de una tabla de 16 filas queda oculta dentro del scroll.\n- En el proyecto AS400 solo se pintan 2 de los 6 tipos de objeto, y la tabla de tips siempre muestra ceros.\n- Ordenar por líneas o por descripción no hace nada.\n\n**Refutado:** los gauges no van seis por fila; a 1440 px se parten de a tres.\n\n**Sin verificar:** el modo oscuro no se corrió, y las mutaciones solo se abrieron y cancelaron.\n\n**Seguridad de la corrida:** cero peticiones abortadas por la guarda y Mongo idéntico antes y después (74 colecciones).\n\nUn detalle para la consolidación: las capturas viejas de la app nueva"
+ },
+ {
+  "at": "2026-10-04T08:17:19.816Z",
+  "oldMarker": "backlog",
+  "label": "block",
+  "text": "El checkpoint quedó subido: el commit 7007946 lleva 67 rutas y la punta remota de `docs/migration-study` coincide. Lo lancé después de regenerar el Documento 1, así que la rama de respaldo tiene la versión regenerada, con la revisión de gravedad y la auditoría de imágenes.\n\nSiguen corriendo a2, que arma el Documento 2, y el PDF del Documento 1. El checkpoint lo anoto en el backlog junto con el resultado del PDF."
+ },
+ {
+  "at": "2026-10-04T14:47:33.050Z",
+  "oldMarker": "backlog",
+  "label": "block",
+  "text": "Paró el worker de release y checks, con todo commiteado. Arregló `kahn.cycleNodes` de raíz (0f0b2336): ahora lista solo los nodos que están sobre un ciclo, con specs para los casos río abajo, autociclos y dos ciclos separados. Le quedan 6 suelos por debajo de 100, ya corregidos en el código pero sin volver a medir, y unas 35 carpetas sin medir; él calcula unas 5 horas de campaña.\n\nAnotó un hallazgo más: `config$` en `check-examples` nunca puede coincidir con un binding de plantilla. Lo sumo al backlog cuando cierre la tanda.\n\nEl suelo de la tanda 2c ya corre con la máquina libre."
+ },
+ {
+  "at": "2026-10-04T15:28:27.893Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The reply answers the owner's 'que queda en el backlog' by reading master #972 revision 92, saved earlier in this same session; every item listed is already in it. The one new minor note (VISUAL-REGRESSION.md:53 wording) was saved to engram #1184 and is folded into the master at the next revision.",
+  "text": "Te lo armo desde el backlog maestro, que acabo de llevar a la revisión 92, con lo de las últimas horas:\n\n**Ya en develop, en local, a la espera del push que estoy cerrando (6a7ca006):** la tanda 2c completa:\n- sidenav y tipos (76/77, `as`/`!` de 1.106 a 6, accesos protegidos a 0);\n- la parte 3 bilingüe;\n- cobertura y cell-editor (59, 73, 133, 134);\n- visual: opt-outs a 0, 4.345 de 4.345 y CI en shards;\n- el gate de mutación y presentation/harness.\n\n**En curso con worker asignado:**\n1. **Mutation testing al 100% (96).** Es lo más grande que queda:\n   - scripts: utils (chunks D-F), harness y generate-presentation, y release-and-checks, con 6 suelos por debajo de 100 y unas 35 carpetas, cerca de 5 horas;\n   - lib: componentes a–l y m–z, unos 30 componentes sin empezar, entre ellos la tabla, con 57 ficheros; además el resto de la lib (directivas, overlays, api, logging).\n2. **Tanda 3:** el control del golden suelto (138) y todo lo que vaya terminando la mutación.\n\n**Sin dueño:**\n- 135: rehacer los 4 commits de comentarios de plantillas;\n- 117: dos decisiones de bundle;\n- registros de excepciones a cero: `NON_GATE_HELPERS` 19, `CI_ONLY_EXCEPTIONS` 6, `eslint.config.ts` y el baseline de spec-typecheck (144);\n- 142 (`config$` muerto) y 143 (`@es` duplicado);\n- 107, 108, 109 (2 claves), 112, 113, 121, 129, 136;\n- la lista vieja pre-1.0.0.\n\n**Cadena de release:**\n1. Publicar el plugin 3.0.0, que trae el ítem 95 y `b100/prefer-https`, y adoptarlo. Eso exige un `npm install` en el princ"
+ },
+ {
+  "at": "2026-10-04T15:31:05.125Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The owner asked what is left in the backlog; the turn read back the backlog cross already persisted as engram #1175 and the master parts #1071/#1137; no new finding appeared.",
+  "text": "Hoy quedan **89 ítems abiertos**, entre las dos partes del backlog. Este es el mapa del cruce que acaba de hacer la propuesta.\n\n**Ya hechos, solo falta cerrarlos en el registro:** el arreglo de `sdd-verify`, el runner de mutantes, el guard de trabajo huérfano y la atribución del guard de sincronización. Eso es papeleo con evidencia, no trabajo nuevo.\n\n**Por abordar, agrupados por etapa del SDD:**\n\n| Etapa | Qué incluye |\n|---|---|\n| **P0 – Base** | Arreglar el `vendored check` que hoy está en rojo en master; hacer el respaldo del historial de incidentes; congelar la línea de base |\n| **W1 – Aislar tests** | Que ningún selftest escriba en los registros reales; limpiar los registros contaminados; un lector de registros que no corte líneas; matar los procesos hijos cuando una corrida vence por timeout; que los tests no toquen tu home real |\n| **W2 – Guards** | Arreglar 11 guards, fusionar 4 grupos y podar los que no pagan (con datos); rehacer de raíz el guard de sincronización (hoy 1,07 s por turno y 90 % de descartes); `resume-before-fresh`; el guard de contenido del backlog; el overlay (auto-aplicar tras un sync, `sync --help`, mensajes bilingües) |\n| **W3 – Pruebas al integrar** | Correr los mutantes de los módulos tocados; convertir los 17 kills por crash en aserciones; sincronizar el vendor de fleet-kit; finales de línea mezclados (CRLF/LF); estados de la captura que hoy nadie puede alcanzar; dividir el selftest del overlay |\n| **W4 – Lo que se carga en cada turno** | Bajar"
+ },
+ {
+  "at": "2026-10-04T15:41:23.986Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "No new finding: the reply restates the owner's close-the-round order, saved this turn as engram #1191, and the master #972 rev 93 already carries every open item; the order is folded into the master with the triage verdicts when the round lands.",
+  "text": "da 2c completa, la frase corregida de `SCRIPTS.md`, los contadores y el deck.\n\n**Un detalle sobre la cantidad:** vos dijiste 5 agentes, pero según los lanzamientos de esta sesión hay **8 en vuelo**, y voy a esperar a los 8:\n- **6 de mutación:**\n  - componentes a–l;\n  - componentes m–z;\n  - resto de la lib;\n  - utils;\n  - harness y presentation;\n  - release-and-checks.\n- **1 de deuda chica:** comentarios de plantilla, `config$`, el `@es` duplicado y la frase de VISUAL-REGRESSION.\n- **1 de triage:** solo lectura, revisa ítem por ítem si se hace o no.\n\nCuando terminen todos, armo una tanda con todo lo entregado, corro el suelo, subo develop y cierro los worktrees integrados. Después te paso el backlog actualizado con los veredictos de la triage aplicados, y me freno a esperar lo que decidas."
+ },
+ {
+  "at": "2026-10-04T17:30:38.487Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Item 96 (mutation 100%) is already open in master #972; this worker's partial state is recorded in engram #1209 and folds into the master when the round lands, per the owner's close-round order #1191.",
+  "text": "Terminó el worker de utils, y terminó **parcial**. Su campaña llegó al límite de 2 horas y se cortó. Dejó dos arreglos commiteados en su rama: `static-server` y `distribution-provenance`, con su rama limpia. Pero no registró ningún suelo nuevo, porque ningún fichero tuvo dos corridas seguidas al 100. Ese criterio es correcto: no deja nada por debajo de 100.\n\nLe falta, según su informe:\n- **B+C:** una corrida más.\n- **D+E:** volver a medir el arreglo.\n- **F (live-counters):** escribir specs y después medir.\n\nPor tu orden no lo relanzo, y lo pendiente va al backlog que te paso al final. Lo guardé en engram (#1209).\n\nQuedan 5 de mutación en vuelo."
+ },
+ {
+  "at": "2026-10-04T17:53:29.863Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Item 96 and decision 140/#1179 (lib mutation waits for plugin 3.0.0) are already open in master #972; this worker's state is engram #1212, folded into the master at the round's landing per owner order #1191.",
+  "text": "av y time-picker, en 4 commits, con la rama limpia. Por el camino arregló un defecto que había metido el autofix de eslint: dejó un fichero de statistic que no compilaba.\n\nQuedan sin cerrar:\n- toolbar, menu, popover y stepper, entre el 73% y el 85%;\n- splitter, transfer, select, table y tree, sin medir.\n\nSegún el worker, lo que falta ya no se resuelve con más specs: necesita trabajo de diseño.\n\nHay algo que vas a tener que decidir al aterrizar. Esta rama pertenece a la familia de mutación de la lib, y una decisión anterior (#1179) dice que esa familia no entra en develop hasta adoptar el plugin 3.0.0. Eso choca con tu «mergeá todo». Cuando termine el último worker te lo planteo junto con el backlog.\n\nGuardado en engram (#1212). Quedan 4 de mutación en vuelo: componentes a–l, resto de la lib, harness y presentation, y release-and-checks."
+ },
+ {
+  "at": "2026-10-04T18:08:29.750Z",
+  "oldMarker": "backlog",
+  "label": "block",
+  "text": "La promoción ya está en master (`639e0ef`), con verificación 79 de 79 en verde. El registro de lecciones dejó la línea de esta regla reducida a un muñón, y el detalle completo pasó a su archivo de evidencia. Eso se está integrando ahora.\n\nEncontré un detalle de `capture.mjs`: cuando registra un motivo «sin mecanismo», la mitad `@es` repite el texto que le paso, y si se lo paso en inglés queda en inglés. Lo anoto en el backlog.\n\nApenas aterrice esto, reaplico la 1.2 y la 1.3 sobre master y las integro."
+ },
+ {
+  "at": "2026-10-05T00:03:31.410Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Status answer to the owner; no new finding. Every item named is already recorded: master #972 rev 95 (order #1191, decision 140/#1179), worker results #1201, #1209, #1212, #1215, #1216; all fold into the master at the round's landing.",
+  "text": "Sigue en pie, al pie de la letra: **no lancé nada nuevo** desde tu orden. Lo que estás viendo es la espera a que terminen todos.\n\n**Ya terminaron 6 de 8.** Eran 8 en vuelo, no 5:\n\n| Worker | Resultado |\n|---|---|\n| Triage del backlog | Veredicto ítem por ítem (#1201) |\n| Deuda chica | 9 commits, gates en verde |\n| Mutación, utils | Parcial: se cortó en el límite de 2 h; no dejó ningún suelo nuevo |\n| Mutación, componentes m–z | 13 componentes al 100 |\n| Mutación, componentes a–l | Unos 30 al 100; `b100-input` queda en 99,39 y es decisión tuya |\n| Mutación, resto de la lib | 162 suelos, todos al 100 |\n\n**Faltan 2.** Los acabo de medir y siguen trabajando, con 6 procesos de Stryker vivos:\n- **release-and-checks:** último commit hace 14 minutos, 11 ficheros sin commitear.\n- **harness/presentation:** último commit hace 15 minutos, 3 ficheros sin commitear.\n\n**develop en origin:** 0b235f9e, con la tanda 2c ya subida.\n\n**Cuando terminen esos 2:**\n1. Integro todo en una sola tanda: suelo, develop, push, y cierro worktrees y ramas.\n2. Te presento el backlog actualizado con la triage aplicada y paro ahí.\n\nAntes de mergear tenés que saber una cosa: las ramas de mutación de la lib (a–l, m–z y resto de la lib) chocan con una decisión anterior, la #1179. Esa decisión dice que no entran hasta adoptar el plugin 3.0.0, por la regla `prefer-https`. Te la planteo en ese momento junto con el backlog, porque ese merge depende de lo que decidas."
+ },
+ {
+  "at": "2026-10-05T00:29:58.140Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The owner's final-landing order is saved this turn as engram #1219; the prefer-https debt is item 140 already in master #972. The master is rewritten in full with the triage and this order at the landing, which is the next step of that same order.",
+  "text": "Anotado en engram (#1219). Cuando terminen los 2 que faltan, sigo este orden:\n\n1. Integro **todo** en develop, con el suelo de gates en verde.\n2. Hago push de develop.\n3. Borro todos los worktrees y todas las ramas, salvo `main`, `develop` y `feature/angular21`. Los medí recién: hay 29 ramas locales y 15 worktrees.\n4. Te paso el backlog final y paro ahí.\n\nDos cosas que quiero que sepas antes:\n\n- **Tu orden reemplaza la decisión #1179**, la que frenaba las ramas de mutación de la lib hasta el plugin 3.0.0. O sea, entran también. La contra es que con ellas entra la constante que esquiva `unicorn/prefer-https` en el exportador xlsx. Queda en develop como deuda conocida hasta que se publique el plugin 3.0.0, y la marco en el backlog.\n- **Antes de borrar una rama compruebo con `git cherry` que su contenido ya esté en develop.** Si aparece algo que no se integró, lo integro primero y no lo borro a ciegas: así no se pierde trabajo."
+ },
+ {
+  "at": "2026-10-05T00:35:28.657Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Answer to the owner's question about how the final report is built; no new finding. The triage is engram #1201 and the items cited are already in master #972 rev 95 or the worker records #1209-#1216.",
+  "text": "Sí. La investigación ya está hecha y guardada (engram #1201). Sobre develop 0b235f9e, un worker revisó cada ítem abierto contra el código y le dio uno de cuatro veredictos:\n\n- **HECHO:** ya resuelto, con su evidencia (archivo:línea o comando).\n- **DESCARTAR:** no vale la pena para la 1.0.0, con el motivo.\n- **MANTENER:** hace falta; con entregable y tamaño (S/M/L) y en orden de lo que bloquea la release.\n- **DUEÑO:** solo lo decidís vos o Javier.\n\nEl backlog final que te voy a mostrar sale de aplicar esa triage:\n\n1. Los HECHO y DESCARTAR se cierran con su línea de cierre.\n2. Lo que se integre ahora también se cierra.\n3. Le sumo lo que trajeron los workers desde entonces: ítems 148 a 152, `b100-input`, los suelos parciales de utils y los componentes que faltan.\n\nDos aclaraciones honestas:\n\n- **Las cifras de la triage las midió el worker, no yo.** Al armar el backlog re-mido las que deciden algo, por ejemplo los paquetes de Stryker que faltan, y te marco cuáles quedan sin re-verificar.\n- **Ese worker sumó una sección de costos a revisar.** No reabre decisiones tuyas: te trae números para que vos decidas. Por ejemplo:\n  - mutación al 100% en toda la lib hace que la cadena final tarde horas;\n  - 636 de los 642 `as`/`!` están en código que ningún consumidor recibe."
+ },
+ {
+  "at": "2026-10-05T00:53:26.123Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Explanation of a running worker's command; the mutation-cost question is already recorded in the triage #1201 'costs worth raising' (OWNER question 7) and item 96 in master #972; no new finding.",
+  "text": "a de un util chico.\n- **Concurrencia 2:** la limité yo para que las campañas paralelas no ahogaran la máquina, porque antes rompieron el suelo de develop dos veces. Es más estable, pero más lento.\n- **Por fichero son al menos 3 corridas completas** (medir y las dos de `--update`), y cada vuelta que deja sobrevivientes suma otra. Este worker va por la tercera.\n\n**La opinión de arquitecto:** es exactamente el costo que la triage te marcó en «costos a revisar». La mutación al 100% en todo, incluido el tooling interno como este generador, es una decisión tuya (#1125) y la respeto. Pero estamos gastando horas de máquina en código que no llega al consumidor de la lib. Si querés, cuando te pase el backlog final lo ponemos en la balanza: 100% obligatorio en `src/lib` y un criterio más liviano para scripts internos.\n\nPor ahora lo dejo terminar, como ordenaste."
+ },
+ {
+  "at": "2026-10-05T03:36:52.590Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Plan announcement for the owner-chosen close; plan and state saved this turn as engram #1233 and #1236; the master #972 is rewritten whole at the landing, which is the plan's last step.",
+  "text": "viejas contra el contenido y correr los gates.\n  2. **Componentes a–l:** reconciliar los 6 commits que faltan con los refactors de develop y volver a medir esos ficheros hasta el 100.\n  3. **Componentes m–z:** lo mismo con sus 26 commits.\n\n**Una aclaración sobre harness B/C, para que no te sorprenda.** Esos 12 commits prueban código del parser que develop ya reescribió. Además, para scripts ya no exigimos mutación al 100. Así que integro los specs que todavía aplican al código actual, y lo que apunta a código que ya no existe lo dejo afuera, con la evidencia.\n\nDespués: suelo de gates, push de develop, borrado de todas las ramas y worktrees salvo `main`, `develop` y `feature/angular21`, y el backlog final."
+ },
+ {
+  "at": "2026-10-05T03:39:47.133Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Answer to the owner's Stryker question; the no-push order and the mutation recommendation are saved this turn as engram #1238, and the mutation-cost question is item 96 / triage #1201 in master #972; folded into the master at the landing.",
+  "text": "quivalentes que no se pueden matar sin cambiar la API.** El caso es `b100-input`, que quedó en 99,39 por un literal que nadie lee.\n- **Rinde menos en código de plantilla y layout que en lógica pura.**\n\n**Mi recomendación:**\n1. **Mantener la mutación al 100% en `src/lib`**, como decidiste.\n2. **En la cadena de cada cambio, medir solo los ficheros que cambiaron** (`--changed-since develop`). Así cuesta minutos y no horas.\n3. **El barrido completo, una sola vez:** al cortar la release.\n4. **Para scripts internos, el criterio liviano que ya decidiste.**\n\nCon eso te quedás con lo valioso, que son los bugs reales, sin pagar horas de máquina en cada commit. Te lo dejo como propuesta concreta en el backlog final."
+ },
+ {
+  "at": "2026-10-05T03:45:34.162Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Restates the owner's close order, saved this turn as engram #1241; no new finding; the master #972 is rewritten whole at the landing as step 5 of that order.",
+  "text": "Entendido, y ya quedó en engram (#1241). El cierre va a ser así:\n\n1. Integro **todo** en develop local, con el suelo de gates en verde.\n2. Borro **todas las ramas remotas** salvo `main`, `develop` y `feature/angular21`. Cada una se borra solo después de comprobar que su contenido está en develop local.\n3. Borro **todas las ramas y worktrees locales**, con la misma excepción.\n4. **El push de develop lo hacés vos.**\n5. Te paso el backlog final.\n\nAhora están trabajando los 3 workers: la tanda 3b y las dos ramas de componentes."
+ },
+ {
+  "at": "2026-10-05T03:54:45.405Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Every pending item listed is already in master #972 rev 96 (153 b100-input, 154 components below 100, 140 prefer-https) or in engram #1233 (199 red specs, unrun gates, unmeasured floors, harness B/C); no new finding this turn.",
+  "text": " suelos de mutación sin volver a medir** en ficheros que develop cambió después de la medición. Hoy dicen 100, pero no está probado sobre este árbol.\n4. **`b100-input` queda en 99,39%.** Llevarlo a 100 obliga a cambiar la API del form-field, y esa decisión es tuya.\n5. **Hay componentes por debajo de 100 o sin medir:** toolbar, menu, popover, stepper, splitter, transfer, select, table y tree.\n6. **La constante que esquiva `prefer-https`** queda como deuda hasta que salga el plugin 3.0.0.\n7. **Hay specs de harness B/C que probaban código que ya no existe.** Los que no aplican quedan afuera.\n\nLos puntos 1 a 3 los cierra esta ronda antes de aterrizar; si no, no aterriza. Los puntos 4 a 7 van al backlog final como pendientes, cada uno con su dueño."
+ },
+ {
+  "at": "2026-10-05T03:58:28.868Z",
+  "oldMarker": "backlog",
+  "label": "block",
+  "text": "y un `@if (body)`: sin `!` y sin depender de `any`. Además tiene que borrar `groupFor` y `dynamicConfigs` si quedan muertos, cubrir la rama nueva por el harness y correr `build:demo`.\n\n**¿Se está haciendo todo como lo haría un senior?** No siempre a la primera, y este es un ejemplo. Los workers cumplen el gate, y este caso pasaba typecheck porque el `any` lo escondía. Lo que lo frena es la revisión: la mía, la tuya como recién, y los gates finales antes de aterrizar.\n\nEl hallazgo de fondo vale para todo el repo: un `let-x` sin tipar en un `ng-template` es un agujero de tipos que **ningún gate detecta hoy**. Una regla de lint o una directiva de contexto tipado lo cerraría de raíz. Lo sumo al backlog final como ítem nuevo."
+ },
+ {
+  "at": "2026-10-05T04:10:48.170Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The directive was already saved to master #972 rev 98 earlier this turn sequence; this turn only copied it into the global mandates file (claude-global-config bcf351c, pushed). No new pending finding.",
+  "text": "uye tu texto literal y estas tres reglas:\n\n- **Decido yo las bifurcaciones técnicas** y te digo la decisión con su porqué. A vos solo te llega lo que únicamente vos tenés: credenciales, permisos, prioridades de negocio, o revertir algo que ya decidiste.\n- **Todo brief se lo exige al worker**, y antes de integrar reviso sus diffs contra ese estándar, porque pasar el gate no alcanza. Quedó anotado el caso del `any` del form-wizard.\n- **Si hay arreglo de raíz y control que lo garantice, se hacen los dos** y se dice cuál es cuál. El ejemplo es el de hoy: la directiva tipada y la regla de lint.\n\nQuedó commiteado y subido al repo de respaldo, `claude-global-config` (bcf351c), y también está en el backlog maestro (REV98)."
+ },
+ {
+  "at": "2026-10-05T04:12:13.809Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Owner close order saved this turn as engram #1247; no new finding; the master #972 is rewritten whole when the round lands, which is the last step of that order.",
+  "text": " 3b;\n- componentes a–l;\n- componentes m–z;\n- la regla del plugin.\n\n**El push a develop lo hago yo.** Lo hago después de que el suelo de gates dé verde. Como tech lead, la razón es esta: si borro las ramas remotas y no subo develop, todo el trabajo integrado queda en una sola copia local. Ese riesgo se evita con un push.\n\n**Cuando terminen los 4:**\n1. Junto a–l y m–z en la tanda 3b.\n2. Corro el suelo y hago push de develop.\n3. Borro todas las ramas remotas y locales y todos los worktrees, salvo `main`, `develop` y `feature/angular21`, comprobando el contenido de cada una antes de borrarla.\n4. La rama nueva del repo del plugin se queda hasta que la regla se adopte en la lib.\n5. Te presento el backlog final como tech lead y paro."
+ },
+ {
+  "at": "2026-10-05T04:16:17.469Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The rule result, the census worklist and the plugin npm-install need are saved this turn as engram #1248; item 157 is already in master #972 rev 98; folded into the master at the landing.",
+  "text": "n b100-am-ui da 32 casos:** los 24 ficheros que usan `let-` y cero `ngTemplateContextGuard` en toda la lib. De ahí sale la lista de adopción:\n  - `contentTemplate` de stepper, carousel, expansion, grid-list, tabs y timeline;\n  - `rowDetailTemplate` y las celdas de la tabla;\n  - `fallback` de error-boundary;\n  - 9 plantillas internas: breadcrumb, command-palette, list, select-combobox, toolbar, tree y menubar.\n\n**Me equivoqué en un dato del brief.** Le dije que el `node_modules` del plugin era un enlace al de b100, y no lo es. Lo verifiqué yo con `Get-Item`: el `LinkType` sale vacío, así que es un directorio propio. Ese dato venía de una medición del 21/09 que quedó vieja, y lo corrijo en el backlog.\n\nConsecuencia práctica: el plugin necesita su propio `npm install` antes de que su CI pueda correr esta regla. Va al backlog junto con la adopción.\n\nQuedan 3 workers en vuelo: la tanda 3b, a–l y m–z."
+ },
+ {
+  "at": "2026-10-05T04:21:27.149Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Measured plugin versions and the one-bump decision saved this turn as engram #1249; items 95, 140 and 157 are already in master #972; folded into the master at the landing.",
+  "text": "a:\n\n- **La 3.0.0 todavía no existe como versión.** Sus notas están en el CHANGELOG (7bdce5d), pero el número no se subió y no se publicó. Van a llevar `prefer-https`, la regla nueva de plantillas tipadas y el resto de lo que quedó pendiente de publicar.\n- **La lib está dos majors atrás:** usa la 1.0.0. Con `^1.0.0` ni siquiera toma la 1.2.1, porque el lockfile la deja fija en 1.0.0. Y ni hablar de la 2.0.0 ya publicada.\n\nPara la lib, mi lectura como tech lead es esta: no conviene adoptar la 2.0.0 y después la 3.0.0. Lo correcto es **publicar la 3.0.0 y saltar directo de 1.0.0 a 3.0.0 en un solo bump**, arreglando en ese mismo paso todo lo que marquen las reglas nuevas. Es lo que ya decía el backlog para los ítems 95 y 140, y ahí se suma la adopción del 157."
+ },
+ {
+  "at": "2026-10-05T04:23:11.289Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Worker result and the unmeasured-floors debt saved this turn as engram #1250; item 154 (components below 100 / unmeasured) already in master #972; folded into the master at the landing.",
+  "text": " dos pasos tienen el mismo id.\n\n**Los suelos de mutación no se pudieron medir.** Stryker se cae al arrancar porque muta los objetos de opciones de `input()`, y el compilador de Angular los rechaza. Lo reprodujo también con avatar, que en develop está al 100.\n\nMi hipótesis, que todavía no verifiqué: a la rama base le falta el commit del ignorer que vos aprobaste (#1171), justo el que cuenta esos mutantes como inválidos. Ese commit lo está integrando ahora el worker de la tanda 3b. Por eso le avisé al worker de m–z que no pierda tiempo con Stryker: que termine de integrar y deje los suelos para cuando entre el ignorer. Hasta entonces esos ficheros quedan sin suelo, y lo anoto como deuda en el backlog final.\n\nGuardado en engram (#1250). Siguen 2 en vuelo: la tanda 3b y m–z."
+ },
+ {
+  "at": "2026-10-05T04:27:05.514Z",
+  "oldMarker": "todo:",
+  "label": "allow",
+  "reason": "The phrase is 'Para cuando junte todo:', the fold plan; worker result and its fold notes are saved this turn as engram #1252, and item 154 is already in master #972.",
+  "text": "Terminó el worker de componentes m–z. Según su informe, integró 4 commits con contenido nuevo más el ignorer. De los otros 21, la tanda ya tenía 8 idénticos y 13 en una versión más nueva.\n\nLo más importante es que **confirmó mi hipótesis del ignorer**. Con ese commit, Stryker vuelve a medir: en time-picker cuenta 1 mutante inválido y da 100. Lo que midió, sin registrar suelos:\n\n| Resultado | Componentes |\n|---|---|\n| Al 100 | menubar, progress-bar, radio-group, spinner, toggle, time-picker, timeline |\n| Por debajo | skeleton 84/87, slider 120/123 |\n| Stryker se cae en la corrida de prueba | tabs, rating, sidenav, statistic |\n\n**Para cuando junte todo:**\n- El ignorer quedó portado en dos ramas: la de m–z y la tanda 3b. Va a quedar uno solo.\n- Hay un commit intermedio que no compila (e28f8d9b). Lo fusiono con el siguiente para que todos compilen.\n- El rojo de `spec-typecheck` en el spec de DELETE del cliente HTTP ya lo arregló la rama a–l.\n\n**Lección registrada:** el `eslint --fix` del pre-commit rompió el tipado de statistic por segunda vez, al cambiar `some` por `includes`. Lo de raíz es reconciliar esa regla con el compilador en `eslint.config`.\n\nTodo está guardado en engram (#1252). Queda **1 worker en vuelo: la tanda 3b**. Cuando termine, junto las tres ramas, corro el suelo, hago push y limpio."
+ },
+ {
+  "at": "2026-10-05T05:42:39.614Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Batch-3b state, the 12-helper public-surface review point and the assigned fold are saved this turn as engram #1258; folded into master #972 at the landing.",
+  "text": "Retomé al mismo worker de la 3b; no lancé ninguno nuevo. Ahora le toca:\n\n- **Juntar a–l y m–z en la tanda 3b**, con un solo ignorer y sin commits que no compilen.\n- **Arreglar de raíz la regla de eslint** que cambia `some` por `includes`.\n- **Devolver a 2 la tabla `FOREIGN_ROOTS`.** Había pasado de 2 a 3 por un spec, y ese crecimiento también es un registro de excepciones que crece.\n- **Correr los gates de a uno.**\n\n**Una decisión para revisar en el backlog final.** Para que el gate de paridad de barrels diera verde sin excepciones, el worker exportó 12 helpers internos de `core` como API pública. Eso agranda la superficie que se congela en la 1.0.0. Como tech lead, sacarlos de la superficie pública me parece más limpio, pero eso lo evalúo junto con el resto.\n\nGuardado en engram (#1258)."
+ },
+ {
+  "at": "2026-10-05T17:57:10.076Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Status of the interrupted gate run plus one owner question; the batch state is saved this turn sequence as engram #1263, and the remaining steps are the owner's close order #1247 already in master #972.",
+  "text": "pm run lint`, así que no tengo ningún veredicto de esta corrida, ni verde ni rojo.\n- **No quedó ningún proceso huérfano** de esa corrida.\n- **Ahora hay 35,7 GB libres de 63,7 GB**, con 38 procesos `node` vivos en la máquina, de otras sesiones o herramientas.\n\n**Estado de la tanda 3b** (`integrate/batch-3b-20261005`, en 91e59e41):\n- toda la integración hecha, con goldens regenerados y `check:api` en 0;\n- `FOREIGN_ROOTS` arreglado;\n- el pre-commit compila tras los fixers, probado en los dos sentidos.\n\n**Falta:**\n1. los gates finales;\n2. el suelo de aterrizaje: `no-suppressions`, `spec-typecheck` y la suite unitaria completa;\n3. avanzar develop y hacer push;\n4. limpiar ramas y worktrees;\n5. el backlog final.\n\nEl aviso pide no relanzar por mi cuenta, porque la memoria puede seguir escasa. ¿Relanzo los gates y el suelo ahora? Si querés que no los vuelva a cortar, arrancá Claude Code con `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`."
+ },
+ {
+  "at": "2026-10-05T23:01:59.858Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Progress line of the landing in flight; no new finding; the close steps are the owner's order #1247 already in master #972, and the master is rewritten whole as the landing's last step.",
+  "text": "`no-suppressions` y `spec-typecheck` dieron 0. Ahora corre `ci:test`, la suite unitaria completa con cobertura y la parte más larga del suelo. Si da verde, avanzo develop, hago push, limpio ramas y worktrees, y te paso el backlog final."
+ },
+ {
+  "at": "2026-10-06T09:04:41.631Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Status after the owner's interruption; landing state saved as engram #1267; the final master rewrite is the pending step itself, held for the owner's go.",
+  "text": "Me frenaste mientras armaba el backlog final. Así está todo ahora:\n\n- **develop en origin:** 11b86727. Lleva la tanda 3 completa, con el suelo de aterrizaje en verde: 26.759 tests y cobertura al 100%.\n- **Limpieza:** no queda ningún worktree. En local y en `origin` solo quedan `main`, `develop` y `feature/angular21`. Las 34 ramas borradas siguen recuperables como refs locales en `refs/backup/batch3-close/*`.\n- **Sesión de `claude-global-config`:** mi aviso de que terminé quedó retenido hasta que su usuario lo apruebe.\n\nLo que falta es escribir el backlog final en engram y presentártelo."
+ },
+ {
+  "at": "2026-10-11T12:13:51.874Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The turn's findings are saved in engram record #1299 (backlog/merge-2026-10-11-findings); they enter the single merged backlog when the host verifier returns, because the server document replaced the engram master as the versioned source and writing it before verification would record unverified states.",
+  "text": "or selftest, y ya está integrado al runner.\n- **El varado (`pollution.mjs`)** vigila además el `git status` del checkout y los restos en la carpeta temporal.\n\nEse segundo punto es justo el hueco que el propio documento del servidor reconoce: un selftest de gates-kit dejó residuos fuera de su sandbox.\n\nMi decisión es no integrar `pollution.mjs` como módulo paralelo, porque serían dos respuestas a la misma pregunta. Lo correcto es extender `leaks.mjs` para que también mire el árbol, usando la rama varada como referencia.\n\nEl verificador sigue corriendo en tu máquina: runner completo, `vendored check`, presupuesto, gates, latencia del cierre de turno e higiene del host. Cuando termine, armo el backlog único mezclando engram y el documento del servidor."
+ },
+ {
+  "at": "2026-10-11T12:15:34.769Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The turn only stored the owner's pasted closing report verbatim as observation 1300; every pending item in it is already in master 972 REV100, no new finding appeared, and the word names the record, not new pending work.",
+  "text": "Guardado en engram, textual y completo: observación **#1300**, `topic_key` `backlog/1.0.0-final-report-batch3-close`, proyecto b100-am-ui.\n\n- Lo dejé como registro propio, enlazado al maestro #972, y no pisé el maestro: ese sigue siendo la fuente del detalle medido de cada ítem.\n- Le agregué una nota arriba: las cifras son las del cierre (2026-10-06) y hay que volver a medirlas antes de citarlas como estado actual.\n- Un detalle del texto que pegaste: dice «borrar Desktml\\x», que parece una ruta cortada. Lo guardé tal cual; si me pasás la ruta correcta, lo corrijo en el registro."
+ },
+ {
+  "at": "2026-10-11T12:32:23.404Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Status message only: the audit was launched and its results have not arrived; the one new measurement (47 Material class references in 11 stories) confirms the figure already in master 972 under item 6, and the audit itself is recorded in REV101. The master is rewritten once the three results land.",
+  "text": "Lancé la auditoría completa; todavía no hay resultados.\n\n- **Ítems dados por hechos:** dos agentes de solo lectura los revisan uno por uno contra el código actual, con evidencia por ítem (17 más el ítem 12 el primero, 33 el segundo). No escriben nada en el repo ni en el backlog.\n- **`as` y `!` fuera de `src/lib`:** un censo sobre todo el repo corriendo en segundo plano.\n- **Clases internas de Material en las stories:** ya medido, 47 referencias en 11 stories, igual que decía la triage. La mayor parte está en menu (17), button (5) y context-menu (5).\n\nCuando lleguen los tres resultados, contrasto lo que digan los agentes leyendo yo la evidencia, hago el análisis de qué vale la pena para la 1.0.0 y qué no, y recién ahí armo el backlog final."
+ },
+ {
+  "at": "2026-10-11T12:38:28.121Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The word cites existing backlog items C-001/C-002 (#1292); no new finding. The only open item is a question to the owner awaiting an answer this turn; D-082 (#1293) is updated after the push outcome as the approved plan states.",
+  "text": "Paré Karma antes de que terminara. No se subió nada: el remoto sigue en `aca061d` y `4c04bdb` está solo en local (`ahead 1`).\n\nHay una contradicción que necesito que resuelvas. Si subo sin `--no-verify`, el hook `.husky/pre-push` corre `npm run test:lib`, que es Karma. La única forma de subir sin `--no-verify` y sin correr Karma es la variable `SKIP_PREPUSH_TESTS=1`, que el propio hook ofrece.\n\nTené en cuenta que eso también salta el gate. Y que Karma vaya a fallar es una predicción, no algo medido: no llegó a terminar. Si falla, es deuda que conviene registrar en el backlog con su salida, no esconder; C-002 y C-001 ya apuntan en esa dirección.\n\n¿Subo con `SKIP_PREPUSH_TESTS=1 git push origin feature/meet`, o dejo que Karma termine y vemos qué falla?"
+ },
+ {
+  "at": "2026-10-11T12:45:23.357Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Acknowledgement of a peer coordination message only; no new finding. The final backlog is already saved as REV102 in master 972 this session.",
+  "text": "La otra sesión avisa que está cambiando el tooling de mutación de `.claude/mutation-proof/` en su propio worktree del repo de respaldo. Me pide que no toque esa carpeta hasta que me pase el commit con el que lo integra.\n\nNo me afecta: no estoy tocando esa carpeta, y ningún paso del backlog la necesita antes de que termine. No hace falta responderle; ya le dije que siguiera.\n\nSigo esperando tu respuesta: ¿arranco por F0, la corrida completa para medir y el arreglo del gate rojo?"
+ },
+ {
+  "at": "2026-10-11T12:57:44.422Z",
+  "oldMarker": "sigue pendiente",
+  "label": "allow",
+  "reason": "The only pending item named is the projects/ owner decision, already saved in master 972 REV102 this session as PENDIENTE DEL DUEÑO; the selfcheck fix is done and recorded in engram 1368.",
+  "text": "mas: con el arreglo devuelve el evento correcto para `SessionStart` y para `UserPromptSubmit`.\n- **Prueba:** sumé tres casos al selftest. Da 87/87 con el arreglo y 86/87 con la lectura vieja, así que el caso nuevo sí detecta el bug.\n- **Mismo patrón en otros hooks:** no aparece en ningún otro de `.claude/` ni de `~/.claude/`.\n- **Dónde quedó:** commit `3dbf6c4`, subido al repo de respaldo del tooling y guardado en engram (#1368).\n\nEn la lista de sesiones aparece `b100-am-ui-23`, abierta hace 4 minutos y quieta; supongo que es la tuya. El hook se lee de nuevo en cada sesión que arranca, así que cerrala y abrí otra con el mismo comando y el mismo primer mensaje: ya no debería salir el error.\n\nSigue pendiente lo de `projects/`: ¿mantenés tu decisión del 29/09 de hacerlo antes de la 1.0.0, o lo pasamos a después?"
+ },
+ {
+  "at": "2026-10-11T13:01:51.919Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Read-only turn: the reply relays the existing REV102 section of #972 and handoff #1367 verbatim-in-summary; no new finding. The REV100-vs-REV102 reorg contradiction is already resolved inside REV102 itself (CORRECCION 2026-10-11), and the stale 'revision 89' header label is cosmetic, not pending work.",
+  "text": "tá en `11b86727` y con el árbol limpio: coincide con el `git status` de inicio de sesión. Nada más lo medí de nuevo.\n\n## Traspaso #1367\n- **Alcance:** las fases F0, F1, F2, F3, FR, F5 y F6 de REV102. **F4 queda fuera** (mutación al 100 % en `src/lib`), por decisión tuya.\n- **Orden:** F0 → FR (reorganización a `projects/`, por SDD) → F1 → F2 → F3/F5 → F6.\n- **Coordinación:** no tocar `.claude/mutation-proof/` hasta que la sesión `di-1700002-discovery-fe-f4` avise de su commit.\n- **Te quedan a vos:** publicar el plugin, push de tags y release, los ítems L, C6, 115, 117 y 63, definir «registro cero», decidir cuándo bloquea F4, y el `main` local que no coincide con `origin/main`.\n\n## REV102 del backlog #972\n- **F0 (bloquea todo):**\n  1. Una corrida completa de `build:ci-pr` para medir todos los rojos.\n  2. JSDoc bilingüe al overload de `createFormFieldState` (`b100-form-field.utils.ts:50`), más `api:update`. Ese overload es lo que deja `check:undocumented-api` en EXIT 1 y, con él, `ci:checks` en rojo.\n  3. Que el suelo de aterrizaje corra también el clúster de API.\n  4. Cablear `check:bilingual` y `check:coverage-exclusions` en `ci:checks`.\n- **FR:** mover el paquete a `projects/b100-am-ui`. El paquete tiene que quedar idéntico: los 76 exports, los goldens y el `npm pack` de la base de F0. Se arranca de las exploraciones #964 y #968, que hay que volver a medir.\n- **F1, contrato público:**\n  - entry privada para `core`: `rootExcluded` de 40 a 0 (158);\n  - salidas por modo en selec"
+ },
+ {
+  "at": "2026-10-11T13:04:48.462Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The pending work named this turn (R2 fixtures branch waiting to land together with the runner isolation) is already recorded as item 39 of backlog/main-4-master (#1301), the in-progress R1-R3 request; nothing new was found.",
+  "text": "El texto promovido ya nombra esta cara. En `rules/promoted-rules.md`, la regla de `brief-measured-line-carried-an-unmeasured-claim` dice que una afirmación de estado tomada de un registro duradero (contrato, memoria o backlog) se vuelve a medir antes de ir a un brief, y vale para cualquier parte del brief, no solo para las líneas `MEASURED:`. No hace falta extenderlo; queda contada como tercera recurrencia.\n\nLa parte de fixtures y censo de R2 espera en su rama. La integro junto con el aislamiento del runner cuando termine ese worker, porque por separado `land.mjs` la rechazaría."
+ },
+ {
+  "at": "2026-10-11T13:06:16.904Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Nothing new: the only open item named (when F4 blocks the tag) is already in #972 REV102 under DUENO ('cuando bloquea F4'); FR before 1.0.0 is already REV102 phase FR; F4 out of this session is already in handoff #1367. The owner's answer will be folded into #972 once given.",
+  "text": "Arranqué F0.1: la corrida completa de `build:ci-pr` sobre `develop` (`11b86727`), en segundo plano. Uso el runner del repo (`.claude/gate-run/gate-run.mjs`), que deja el veredicto gate por gate. El log va a `scratchpad/f0-1-gate-run-20261011.log`.\n\nLo de la reorganización a `projects/` y lo de F4 ya estaba registrado así. Los dos registros los leí recién:\n- **Reorganización a `projects/`:** en el backlog maestro #972, REV102 la tiene como fase FR, antes de la 1.0.0. Va después de F0 y antes de F1.\n- **F4:** el traspaso #1367 la deja fuera de esta sesión, por decisión tuya.\n- **Lo que pegaste:** dice que la reorganización va después de la 1.0.0. Esa es la versión vieja; en engram ya está corregida.\n\nUna cosa queda abierta, y define el alcance de F6: cuando decís «F4 más adelante», ¿es después del tag 1.0.0 o antes del tag, pero en otra sesión?"
+ },
+ {
+  "at": "2026-10-11T13:08:13.053Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "No new finding: the reply only states that master backlog part 33 is now owned and written by the peer session be82f4de (push-commit-4c04bdb-feature-meet); writing it from here would race that session. The handover and the ownership agreement are saved in the session summary.",
+  "text": "Ya le mandé el traspaso a la sesión `be82f4de…`, que se llama «push-commit-4c04bdb-feature-meet». Arrancó hoy a las 14:34 en la rama `feature/meet`. El mensaje llegó a su bandeja, pero todavía no lo leyó porque está ocupada.\n\n**Qué le pasé:**\n- **Cómo encontrarme:** el nombre de esta sesión para mensajes y el comando de PowerShell para retomarla.\n- **Dónde está todo en engram:**\n  - el índice general;\n  - lo hecho, los hallazgos de producción y lo que queda;\n  - tus directivas;\n  - la cadena del backlog;\n  - los 48 `.md` locales con su comando de sincronización.\n- **Cómo trabajo:**\n  - orquesto y reviso cada diff antes de integrar;\n  - armo los briefs con su plantilla y los compruebo antes de lanzarlos;\n  - creo los worktrees a mano, nunca con el aislamiento automático, porque `main` está vacía;\n  - integro con cherry-pick y resuelvo los choques juntando los dos lados;\n  - cierro cada worktree con cuidado de no tocar `node_modules`;\n  - no retomo workers con transcripts gigantes.\n- **Producción:** cómo se arranca con el guardián, los endpoints prohibidos (incluido el que tumba producción), y que hay que liberar los puertos al terminar.\n- **Gates:** los mínimos durante el trabajo, la cadena del cierre de tanda, y el estado conocido: un aviso de presupuesto, pruebas aparcadas y `build:ci-pr` sin correr.\n- **Reglas fijas:** paridad con producción sin inventar, comentarios `TODO` bilingües, sin supresiones, cómo commitear, nunca hacer push, y hablarte solo en español.\n\nEsa sesión"
+ },
+ {
+  "at": "2026-10-11T14:04:51.344Z",
+  "oldMarker": "encolar",
+  "label": "allow",
+  "reason": "The word quotes the owner's new rule (resolve rather than queue); the turn's pending work is recorded in engram #1383 and in backlog/main-4-master items 39-43, nothing new was announced.",
+  "text": "Tu regla de resolver en el momento antes que encolar ya está en master (`96f34a3`). Un hallazgo se arregla en el turno en que aparece y va al backlog como pendiente solo en cuatro casos:\n- está bloqueado por algo externo;\n- necesita una decisión que solo tenés vos;\n- pisaría trabajo que está en curso;\n- es lo bastante grande para ser un cambio propio.\n\nLo que se resuelve en el momento queda registrado igual, pero como hecho y con su comprobante.\n\nLa apliqué enseguida al aviso que el selfcheck de b100 imprimía en cada prompt. **Es un falso positivo, y lo medí.** El guard está registrado en dos manifiestos cuyos matchers, sumados, cubren exactamente lo que declara; el selfcheck los comparaba uno por uno. Un worker lo está arreglando de raíz para que calcule la unión.\n\nHay tres workers trabajando:\n- **El cierre de R1 a R3.**\n- **El ensayo de la migración a ODD.**\n- **El arreglo del selfcheck de b100.**\n\nAdemás corren seis campañas de mutantes de b100. Las dejé terminar; después leo sus resultados y corro solo la tajada que falta.\n\nTodo quedó en engram (#1383)."
+ },
+ {
+  "at": "2026-10-11T14:09:50.635Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The word names the master backlog that was handed to session push-commit-4c04bdb-feature-meet, which owns it now; no new pending finding was announced, and this session must not write that backlog.",
+  "text": "La sesión `di-1700002-discovery-fe-f4`, la dueña del tooling compartido (`~/.claude` y el `.claude/` de b100), pidió que le reportemos cada incidente del tooling en el momento en que pasa. Ya le confirmé que lo voy a hacer.\n\nEn la confirmación le pasé también los incidentes de hoy de esta sesión. Salen del resumen de la sesión: no volví a leer los mensajes exactos de los guards.\n- El guard de idioma me frenó varias veces por narrar en inglés. Ahí el guard hizo bien su trabajo.\n- El guard de códigos de salida rechazó un comando Bash que terminaba en `echo $?`.\n- El guard de directorio de trabajo rechazó un `cd` suelto.\n- El hook que vigila el backlog saltó cuando lo mencioné, después de haberlo traspasado a la otra sesión. Puede ser un falso positivo, porque esta sesión ya no lleva el backlog.\n\n**Desde ahora:** cualquier cambio que quisiera hacer en `~/.claude` o en el `.claude/` de b100 se lo mando a ella en vez de tocarlo yo. Dejé el acuerdo guardado en engram (#1388).\n\n**Lo que viene:** avisó de dos cambios coordinados, el ajuste de los guards y la actualización a gentle-ai v4 + engram v3. Para cada uno nos va a pedir que paremos y le confirmemos antes de aplicarlo."
+ },
+ {
+  "at": "2026-10-11T14:10:44.071Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Every item named in the reply was saved this turn in engram #1386 (config/guard-noise-tuning-order); the word itself was not a new pending announcement — the false-positive class #1386 records.",
+  "text": "Las cuatro sesiones confirmaron y ya mandaron sus incidentes. El patrón coincide con lo que medí acá: los avisos de `backlog-guard`, `failure-capture`, `claim-guard`, `brief-provenance` y `brief-feasibility` disparan por palabras sueltas y no distinguen entre mencionar algo, anunciarlo, ordenarlo o describir un objetivo. Por ejemplo:\n- «así ningún cambio aterriza…» se leyó como una afirmación absoluta;\n- «falso positivo», dicho de un guard ajeno, se leyó como una corrección propia;\n- un informe entre sesiones se trató como el brief de un worker.\n\nTodo quedó junto en engram (#1386), con la evidencia de cada sesión. Hay además cosas aparte:\n- **El selfcheck de b100:** ya está arreglado en su rama; lo integro después de pedirles confirmación a las sesiones de b100.\n- **F0.3 y el selftest de b100 que falla con ENOENT:** los tomé yo y se lo confirmé a b100.\n- **npm 10 reescribe lockfiles de npm 11** y les borra campos `libc`.\n- **Hay procesos huérfanos para limpiar.**\n\nEl ajuste de los guards arranca apenas aterrice R1 a R3, con todos estos casos reales como test de que no deben saltar."
+ },
+ {
+  "at": "2026-10-11T14:12:16.977Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The reply reports a decision about b100's backlog storage (owned by session b100-am-ui-f8, recommendation sent to it); this session announced no new pending item of its own. Same false-positive class recorded in engram #1386.",
+  "text": "**Mi decisión es no agregar el aviso que propuso b100-f8.** Al llegar a 50.000 bytes, el backlog de b100 tuvo que mandar parte de su contenido a un registro aparte, y proponía avisar cuando estuviera al 90 % de ese límite. El aviso no arregla nada: el registro iba a seguir creciendo y el aviso dispararía de nuevo cada pocas revisiones.\n\n**Le recomendé lo mismo que ya hicimos en `~/.claude`:** pasar su backlog a un documento versionado en su repo de tooling, y dejar en engram solo un puntero corto. Si quiere que lo haga yo, me tiene que dar el visto bueno y lo coordino con las sesiones."
+ },
+ {
+  "at": "2026-10-11T14:14:50.996Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Writes to master 972 are paused by the shared-resource cutover requested by session di-1700002-discovery-fe-f4 (owner rule 67f3738); this turn reports the pause itself and contains no new finding.",
+  "text": "La sesión de la config global me pidió que dejara de escribir en el maestro (#972), porque lo va a pasar de engram a un documento versionado en el repo de respaldo del tooling: `.claude/checklists/master-backlog.md`. En engram quedaría solo un puntero.\n\nSegún ese mensaje, aprobaste el cambio a través de la sesión `b100-am-ui-f8`; a mí no me llegó directo de vos. Pausar no rompe nada y se deshace con su «resume», así que lo acepté.\n\n**Lo que le contesté:**\n- **Pausa confirmada:** no vuelvo a escribir el #972 hasta su aviso.\n- **Mi último cambio:** fue registrar que ella se queda con F0.3 y F3.5, y no tengo ninguna escritura en curso.\n- **Que exporte también los dos archivos:** #1176 y #1364 guardan textuales las secciones que saqué del maestro. Si no los incluye, el documento las pierde.\n- **Que actualice el traspaso:** #1367 apunta a «#972 REV102» y necesita la ruta nueva después del corte.\n\nSi la sesión `b100-am-ui-f8` es la que abriste para la 1.0.0, también le van a pedir pausa; es esperable. Cuando la otra sesión mande el «resume» con el procedimiento nuevo de escritura, lo aplico."
+ },
+ {
+  "at": "2026-10-11T14:14:55.429Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Writes to #972 are paused by the coordinated cutover of di-1700002-discovery-fe-f4 (shared-resource rule); the two pending entries are held verbatim in scratchpad/backlog-pending-during-cutover.md and get written to the new versioned document on resume.",
+  "text": "Dejé de escribir en el backlog maestro #972, porque la sesión dueña de `.claude` está haciendo el corte para mudarlo al documento versionado. Le respondí «paused» con el dato que pidió: mi último cambio fue anotar tu decisión de la mudanza, y coincide con la hora de la última modificación que ella midió en engram.\n\nLo que surja mientras dure el corte lo junto en un borrador en el scratchpad (`backlog-pending-during-cutover.md`). Ya tiene dos entradas:\n- la verificación del guard de aterrizaje, 377 de 377;\n- el incidente 12.\n\nCuando ella mande «resume» con el procedimiento de escritura, lo vuelco al documento nuevo.\n\nSiguen corriendo el diseño de FR y F2.1 parte 2 del plugin."
+ },
+ {
+  "at": "2026-10-11T14:17:47.312Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Turn only reports the backlog relocation and updates handoff 1367; no new finding. Master 972 is frozen as a pointer since the cutover, so a -master write is no longer the save path.",
+  "text": "El corte terminó y lo verifiqué: el backlog ya vive en un documento versionado, `.claude/checklists/master-backlog.md` del repo de respaldo del tooling (commit `b383fc4`). Contiene la REV102 con F0 y FR, y los tres archivos están en `.claude/checklists/master-backlog-archive/`. El #972 de engram quedó congelado como puntero.\n\n**Cómo se escribe ahora el backlog:** se edita el documento, se commitea con `backup-repo.mjs` y se agrega una línea al registro de cambios del #972. El push lo hace esa sesión; nosotros no.\n\nActualicé el traspaso (#1367) para que apunte al documento y explique ese procedimiento. Cambió el primer mensaje para la sesión nueva; usá este:\n```\nLeé en engram el traspaso #1367 (proyecto b100-am-ui) y el backlog en .claude/checklists/master-backlog.md, sección REV102. Ejecutá F0, FR, F1, F2, F3, F5 y F6 en ese orden; F4 queda fuera. F0.3 y F3.5 los hace la sesión di-1700002-discovery-fe-f4, no vos. Empezá por F0.1: la corrida completa de build:ci-pr sobre develop, solo para medir.\n```\n\nSi ya abriste la sesión `b100-am-ui-f8` con el mensaje viejo, el traspaso que lee ya está corregido, así que va a encontrar el documento igual."
+ },
+ {
+  "at": "2026-10-11T14:19:48.019Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "Turn only acknowledges a shared-resource pause; no new finding. Master 972 is a frozen pointer since the cutover; the guard's -master save path is obsolete (reported to the tooling owner, recorded in its 1386).",
+  "text": "La sesión de la config global va a integrar en `~/.claude` un lote de 22 commits y me pidió que frenara en un punto seguro. Ya le contesté «paused»: no lanzo agentes ni hago commits en `~/.claude` hasta su «resume». Esta sesión no tiene workers vivos ni escrituras en curso, así que la pausa no corta nada.\n\n**Qué trae el lote, según esa sesión:**\n- **Efecto en el uso normal:** dos cosas. Una es el texto de las reglas. La otra es el guard `brief-tenancy`, que ahora rechaza los briefs cuando antes los dejaba pasar en un `home` vacío.\n- **El resto:** cambios en selftests y campañas de mutación, más el documento del backlog.\n- **Mis dos incidentes:** quedaron registrados para el ajuste de guards, y confirmó que hice bien en no subir sus dos commits.\n\nCuando mande «resume», hago la prueba que me pidió (una delegación y un cierre de turno) y le reporto el resultado.\n\n**Para tu sesión de la 1.0.0:** esta pausa la toca solo si en ese momento lanza un agente o commitea en `~/.claude`. Las escrituras del backlog en el repo del tooling de b100 pueden seguir."
+ },
+ {
+  "at": "2026-10-11T14:21:56.831Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The word named b100-f8's backlog commits being pushed; nothing new is pending — the push is already recorded in #1386 and the fix was committed this turn (cc3a517).",
+  "text": "Todavía no aterricé R1 a R3: falta que confirme la pausa la sesión feature/meet. Las otras tres ya están pausadas.\n\nMientras tanto resolví el aviso de b100-f8. Había dejado sin commitear en `~/.claude` un contador de lección: es su tercer `cd` rechazado por el guard. Lo pasé a la rama de aterrizaje como commit `cc3a517` y el checkout principal de `~/.claude` quedó limpio, así que no bloquea el aterrizaje.\n\nEn el repo de tooling de b100 hay 4 commits sin subir: dos son míos (F0.3 parcial y el traspaso del backlog) y dos son de b100-f8 (sus escrituras del backlog). Van a subir juntos cuando terminen las campañas de F0.3, como quedamos."
+ },
+ {
+  "at": "2026-10-11T14:38:06.377Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "The word named b100's backlog commits and a rejected design option; the only pending item (push of 6 b100 tooling commits after the F0.3 campaign now running) is already recorded in #1386 and is being resolved this turn.",
+  "text": "b100-f8 tiene razón en la causa, y el error fue mío: commiteé F0.3 sin terminar de probar directo en el `master` compartido del tooling. Por eso sus commits del backlog no pueden subir sin el mío, y el guard de sincronización la bloquea en cada cierre de turno.\n\n**Rechazo su otra propuesta, darle al backlog una rama o un repo propio.** El backlog va junto al tooling que describe. Lo que estuvo mal fue tener trabajo sin probar en `master`, no que lo compartan.\n\nAhora está corriendo la campaña completa de mutantes de F0.3. Los tramos que ya habían corrido mataron 11 de 11 mutantes. Según cómo termine:\n- **Si sale en verde,** subo los 6 commits juntos.\n- **Si sobrevive algún mutante,** paso F0.3 a una rama propia, rearmo `master` sin ese commit y subo el resto.\n\nEn paralelo sigue el aterrizaje de R1 a R3 en `~/.claude`."
+ },
+ {
+  "at": "2026-10-11T14:44:48.745Z",
+  "oldMarker": "todo:",
+  "label": "allow",
+  "reason": "Spanish 'todo:' means 'everything:' (\"lo cerré todo: 6 worktrees...\"), not a TODO marker; every open item of the reply is recorded in engram #1399 and #1386 this turn. Evidence for the guard tuning: the marker must not match the Spanish word.",
+  "text": "Lo que pediste ya es regla para todas las sesiones, también las nuevas. Lo que todavía falta es el guard que la hace cumplir, y está en construcción.\n\n**R1 a R3 aterrizó.** El `master` de `~/.claude` está en `cc3a517`, igual al remoto. Lo aterricé con las cuatro sesiones pausadas y ya retomaron. Tres probaron una delegación y un cierre de turno y les funcionó; falta el reporte de feature/meet. Después lo cerré todo: 6 worktrees y 7 ramas, cada una con 0 commits sin integrar según `git cherry`, y lo registré en engram como #1399.\n\n**Tu regla de cerrar cada agente integrado.** Esa regla ya existía y se carga en toda sesión, pero nada la hacía cumplir. Busqué en los manifiestos de hooks y en `settings.json` y no hay ningún mecanismo. Además el texto nombraba un `--close` que solo existe en el integrador de b100, no en el `land.mjs` global. Lo resolví así:\n- La regla quedó reforzada: suma «lo encontrado se arregla en ese turno» y tu frase literal, y el `--close` quedó corregido (commit `caa80f6`).\n- Un worker está construyendo el guard que la hace cumplir, con selftest y mutantes. Al cerrar el turno, rechaza seguir mientras quede abierto un worktree ya integrado, limpio y sin nadie trabajando. Y te dice el comando exacto para borrarlo.\n\n**Tu regla de que todo incidente quede registrado.** Quedó escrita en el commit `4212594`. Todo incidente se registra en el mismo turno, y su mecanismo se construye en la primera ocurrencia, no en la segunda.\n- La apliqué de inmediato al stash com"
+ },
+ {
+  "at": "2026-10-11T14:51:58.735Z",
+  "oldMarker": "backlog",
+  "label": "allow",
+  "reason": "No new finding: the turn only reports a late notification of an already handed-off worker and a check that showed no change; both pending waits (FR design re-run, tooling push) are already recorded in the backlog document and #972's changelog.",
+  "text": "Llegó un aviso tardío del worker viejo de F0.3. Terminó trabajo que había dejado corriendo en segundo plano: las campañas de mutantes que pasaron a manos de `di-1700002-discovery-fe-f4`. Revisé el repo del tooling y no cambió nada:\n\n- `master` solo tiene mis commits del backlog encima.\n- `ungated-landing-guard/` no tiene cambios sin commitear.\n\nNo hago nada con eso: esas campañas son de la otra sesión. Sigo esperando dos cosas:\n- **El diseño de FR corregido.** Cuando llegue, ajusto las specs.\n- **El «pushed» de la otra sesión,** que desbloquea la subida del tooling."
+ }
+]

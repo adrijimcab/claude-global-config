@@ -24,7 +24,10 @@ import { fileURLToPath } from 'node:url';
 import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs } from './dismiss.mjs';
 import { decide } from './decide.mjs';
 import { evaluate } from './guard.mjs';
+import { findAnnouncement } from './announcement.mjs';
 import { findPendingMarker, PENDING_MARKERS } from './markers.mjs';
+import { proseOutsideQuotes } from './prose.mjs';
+import { replay } from './replay.mjs';
 import { hasMasterBacklogSave, isMasterBacklogTopicKey, topicKeyValuesIn } from './master-save.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
 
@@ -76,11 +79,20 @@ function stopPayload(message, { sessionId = 's-1', transcriptPath = 'C:/fixture/
  * almacén REAL de engram: `store` mapea un id de observación a su topic_key (un id ausente es
  * «not-found»), `storeErrors` mapea un id a un fallo del almacén y cada id consultado queda en `lookups`.
  */
+/** `fn()`, or the string `'threw'` when it throws, so a crash reads as a failed check and not as a crashed run. @es `fn()` o la cadena `'threw'` si lanza: un crash se lee como un check fallido. */
+function settle(fn) {
+  try {
+    return fn();
+  } catch {
+    return 'threw';
+  }
+}
+
 function verdict(payload, { offset = 0, tail = '', size = undefined, store = {}, storeErrors = {} } = {}) {
   const writes = [];
   const lookups = [];
   const degraded = [];
-  const decision = decide(payload, {
+  const decision = settle(() => decide(payload, {
     readState: () => (offset === undefined ? undefined : { offset }),
     writeState: (sessionId, state) => writes.push({ sessionId, state }),
     readTail: () => tail,
@@ -93,9 +105,9 @@ function verdict(payload, { offset = 0, tail = '', size = undefined, store = {},
       return Object.hasOwn(store, id) ? { topicKey: store[id] } : { error: 'not-found' };
     },
     reportDegraded: (info) => degraded.push(info)
-  });
+  }));
 
-  return { result: decision === undefined ? 'allow' : 'deny', writes, lookups, degraded };
+  return { result: decision === 'threw' ? 'threw' : decision === undefined ? 'allow' : 'deny', writes, lookups, degraded };
 }
 
 /** One transcript line holding an engram tool call, in the real nested shape. @es Una línea de transcript con una llamada de herramienta de engram, con la forma anidada real. */
@@ -274,9 +286,9 @@ check('stop_hook_active -> allow, even with a pending phrase and no save', verdi
 // ---------------------------------------------------------------------------------------------
 // STATE 7: malformed payload -> allow + exit 0 (via the real `evaluate()`, not the injected decide())
 // ---------------------------------------------------------------------------------------------
-check('malformed JSON -> evaluate() allows (undefined)', evaluate('NOT JSON AT ALL'), undefined);
-check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
-check('BOM + valid JSON is still parsed (PowerShell 5.1 shape)', evaluate(`\ufeff${JSON.stringify(stopPayload(CLEAN_MESSAGE))}`), undefined);
+check('malformed JSON -> evaluate() allows (undefined)', settle(() => evaluate('NOT JSON AT ALL')), undefined);
+check('empty stdin -> evaluate() allows (undefined)', settle(() => evaluate('')), undefined);
+check('BOM + valid JSON is still parsed (PowerShell 5.1 shape)', settle(() => evaluate(`\ufeff${JSON.stringify(stopPayload(CLEAN_MESSAGE))}`)), undefined);
 
 // ---------------------------------------------------------------------------------------------
 // DIAGNOSTICS: the offset always advances, on every non-bypassed path, so the NEXT turn's window
@@ -296,16 +308,17 @@ check('BOM + valid JSON is still parsed (PowerShell 5.1 shape)', evaluate(`\ufef
 // ---------------------------------------------------------------------------------------------
 check(
   'an unreadable transcript (tail undefined) fails OPEN, never a false block',
-  decide(stopPayload(PENDING_MESSAGE), { readState: () => undefined, writeState: () => {}, readTail: () => undefined, sizeOf: () => undefined }) === undefined,
+  settle(() => decide(stopPayload(PENDING_MESSAGE), { readState: () => undefined, writeState: () => {}, readTail: () => undefined, sizeOf: () => undefined })) === undefined,
   true
 );
 
 // ---------------------------------------------------------------------------------------------
 // DIAGNOSTICS: the marker/topic_key primitives, in isolation.
 // ---------------------------------------------------------------------------------------------
-check('findPendingMarker finds a real owner-named root', findPendingMarker('This is still open and worth flagging.'), 'still open');
+check('findPendingMarker finds a real owner-named root', findPendingMarker('This is left pending and worth flagging.'), 'left pending');
 check('findPendingMarker does not fire on the bare Spanish word "todo" alone', findPendingMarker('Corrí todo el árbol y todo salió verde.'), undefined);
-check('findPendingMarker fires on the list/comment shape "todo:"', findPendingMarker('todo: reconciliar node_modules'), 'todo:');
+check('findPendingMarker fires on the list/comment shape "TODO:"', findPendingMarker('TODO: reconciliar node_modules'), 'TODO:');
+check('findPendingMarker does not fire on the Spanish "todo:" (everything:)', findPendingMarker('Lo cerré todo: seis worktrees.'), undefined);
 check('PENDING_MARKERS is non-empty', PENDING_MARKERS.length > 0, true);
 
 check('topicKeyValuesIn extracts every value, in order', topicKeyValuesIn('a"topic_key":"x"b"topic_key":"y"c'), ['x', 'y']);
@@ -373,7 +386,7 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
     const env = { ...process.env, ENGRAM_DATA_DIR: dataDir };
 
     try {
-      const out = execFileSync(process.execPath, [GUARD_CLI], { input, encoding: 'utf8', env });
+      const out = execFileSync(process.execPath, [GUARD_CLI], { input, encoding: 'utf8', env, stdio: ['pipe', 'pipe', 'pipe'] });
       return { code: 0, out };
     } catch (error) {
       return { code: typeof error?.status === 'number' ? error.status : 'did-not-run', out: `${error?.stdout ?? ''}` };
@@ -447,11 +460,12 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
   check('END TO END turn 7 (store readable again, master id): allowed, and no new degradation journaled', `${verdictOf(turn7)}/${String(degradedJournalledFor() - degradedBefore)}`, '0/allow/1');
 
   // stop_hook_active always allows, real process included.
-  const bypassed = execFileSync(process.execPath, [GUARD_CLI], {
+  const bypassed = settle(() => execFileSync(process.execPath, [GUARD_CLI], {
     input: JSON.stringify(stopPayload(PENDING_MESSAGE, { sessionId, transcriptPath, stopHookActive: true })),
-    encoding: 'utf8'
-  });
-  check('END TO END stop_hook_active: allowed even with a pending phrase', bypassed.includes('"decision":"block"'), false);
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe']
+  }));
+  check('END TO END stop_hook_active: allowed even with a pending phrase', bypassed === 'threw' ? 'threw' : bypassed.includes('"decision":"block"'), false);
 
   function appendToFile(file, text) {
     writeFileSync(file, readFileSync(file, 'utf8') + text, 'utf8');
@@ -459,6 +473,32 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
 }
 
 // ---------------------------------------------------------------------------------------------
+// --- INTENT: the guard fires on an ANNOUNCED unrecorded item, not on a word. @es INTENCIÓN: dispara ante un ítem ANUNCIADO sin registrar, no ante una palabra.
+check('a code span is not the author words', proseOutsideQuotes('run `lo anoto` now'), 'run   now');
+check('a fenced block is not the author words', proseOutsideQuotes('a\n```\nlo anoto\n```\nb').includes('lo anoto'), false);
+check('a quote line is not the author words', proseOutsideQuotes('> lo anoto\nok').includes('lo anoto'), false);
+check('guillemets are a quotation', proseOutsideQuotes('la regla «lo anoto» dice').includes('lo anoto'), false);
+check('an opener with no closer stays visible', proseOutsideQuotes('dijo "lo anoto').includes('lo anoto'), true);
+check('a new announced item still blocks', findAnnouncement('Encontré un defecto. Lo anoto en el backlog cuando cierre la tanda.'), 'lo anoto');
+check('the bare word backlog does not block', findAnnouncement('Revisé el backlog y no cambió nada.'), undefined);
+check('a quoted announcement does not block', findAnnouncement('La regla dice "lo anoto" y la cumplí.'), undefined);
+check('an item already recorded in the same sentence does not block', findAnnouncement('Lo anoto: ya está en el backlog.'), undefined);
+check('an observation cited in the next sentence does not block', findAnnouncement('Va al backlog final.\nLo guardé en engram (#1209).'), undefined);
+check('an observation reference alone records the sentence', findAnnouncement('Lo anoto como #1209.'), undefined);
+check('"sigue pendiente" (continues) is not new', findAnnouncement('Sigue pendiente tu decisión.'), undefined);
+check('the infinitive "encolar" mentions the rule, it does not announce', findAnnouncement('Resolver en el momento en vez de encolar.'), undefined);
+check('an uppercase TODO: still blocks', findAnnouncement('Quedó un TODO: reconciliar.'), 'TODO:');
+check('decide lets a turn that merely names the backlog end', verdict(stopPayload('Revisé el backlog, sin cambios.'), { tail: '' }).result, 'allow');
+check('findAnnouncement of a non-string is undefined', findAnnouncement(undefined), undefined);
+
+{
+  const counts = replay();
+  check('every labelled false positive of the live journals is judged, 60 of them', counts.allow.total, 60);
+  check('at least 58 of the 60 dismissed refusals are now allowed', counts.allow.allowed >= 58, true);
+  check('all 4 genuine announcements still block', counts.block, { total: 4, blocked: 4 });
+}
+
+
 // THE WIRING: the guard is registered for Stop, and the REAL global manifest lists it. Read from
 // `homedir()`, deliberately NOT from a path relative to this file's own location: there is exactly
 // ONE real `~/.claude/hook-dispatch/manifests/stop.json` on the machine, and a mutation-proof sandbox
