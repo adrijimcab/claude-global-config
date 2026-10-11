@@ -234,7 +234,13 @@ function snapshotOf(fixture) {
 
 /** Lands the fixture through the exported function. @es Aterriza el fixture con la función exportada. */
 function landFixture(fixture, extra = {}) {
-  return land({ worktree: fixture.worktree, main: fixture.main, branch: 'master', remote: 'origin', ...extra });
+  try {
+    return land({ worktree: fixture.worktree, main: fixture.main, branch: 'master', remote: 'origin', ...extra });
+  } catch (error) {
+    // An unexpected throw is a failed assertion about the landing, not a crash of the selftest.
+    // @es Un lanzamiento inesperado es una aserción fallida sobre el aterrizaje, no un crash del selftest.
+    return { exitCode: -1, lines: [`UNEXPECTED ${error.message}`, 'Nothing landed. @es No aterrizó nada.'] };
+  }
 }
 
 /** Runs the real command line. @es Ejecuta la línea de órdenes real. */
