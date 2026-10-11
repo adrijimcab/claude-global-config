@@ -66,12 +66,39 @@ function makeRepo() {
   return dir;
 }
 
-function advance(dir, subject) {
+let callCounter = 0;
+
+/** One shell call as the two transcript records Claude Code writes: its tool_use and its tool_result. @es Una llamada de shell como los dos registros del transcript: tool_use y tool_result. */
+function shellCall(command, startMs, endMs, { tool = 'Bash', failed = false } = {}) {
+  const id = `toolu_${(callCounter += 1)}`;
+  const use = { timestamp: new Date(startMs).toISOString(), message: { content: [{ type: 'tool_use', id, name: tool, input: { command } }] } };
+  const result = { timestamp: new Date(endMs).toISOString(), message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: failed }] } };
+
+  return `${JSON.stringify(use)}\n${JSON.stringify(result)}\n`;
+}
+
+/** A commit whose committer date is `atMs`, made without any transcript evidence. @es Un commit con fecha de committer `atMs`, sin evidencia en el transcript. */
+function commitAt(dir, subject, atMs) {
   writeFileSync(join(dir, `${subject}.txt`), subject, 'utf8');
   git(dir, ['add', '-A']);
-  git(dir, ['commit', '-q', '-m', `feat(x): ${subject}`]);
+  execFileSync('git', ['commit', '-q', '-m', `feat(x): ${subject}`], { cwd: dir, env: { ...process.env, GIT_COMMITTER_DATE: new Date(atMs).toISOString() } });
 
   return git(dir, ['rev-parse', 'HEAD']);
+}
+
+const ownCalls = new Map();
+
+/** The transcript text of every commit call `advance` made in `dir`. @es El texto del transcript de cada llamada de commit que `advance` hizo en `dir`. */
+const callsFor = (dir) => ownCalls.get(dir) ?? '';
+
+/** A commit THIS session makes through `git commit`, recorded in `callsFor(dir)`. @es Un commit que ESTA sesión hace con `git commit`, anotado en `callsFor(dir)`. */
+function advance(dir, subject) {
+  const start = Date.now();
+  const hash = commitAt(dir, subject, start);
+
+  ownCalls.set(dir, callsFor(dir) + shellCall(`git commit -m "feat(x): ${subject}"`, start, Date.now()));
+
+  return hash;
 }
 
 /**
@@ -154,7 +181,7 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'landed');
-  writeFileSync(transcript, 'start\nsome ordinary work, no memory call\n', 'utf8');
+  writeFileSync(transcript, `start\nsome ordinary work, no memory call\n${callsFor(dir)}`, 'utf8');
 
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
@@ -173,7 +200,7 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'landed');
-  writeFileSync(transcript, 'start\ncalled mem_save with the decision\n', 'utf8');
+  writeFileSync(transcript, `start\n${callsFor(dir)}called mem_save with the decision\n`, 'utf8');
 
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
@@ -192,7 +219,7 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'after-the-save');
-  writeFileSync(transcript, 'start\ncalled mem_save earlier, before any of this\nplain work now\n', 'utf8');
+  writeFileSync(transcript, `start\ncalled mem_save earlier, before any of this\nplain work now\n${callsFor(dir)}`, 'utf8');
 
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
@@ -210,7 +237,7 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'landed');
-  writeFileSync(transcript, 'start\nno save\n', 'utf8');
+  writeFileSync(transcript, `start\nno save\n${callsFor(dir)}`, 'utf8');
 
   const r = run(dir, { session_id: session, transcript_path: transcript, stop_hook_active: true });
 
@@ -233,7 +260,7 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'landed-after-accents');
-  writeFileSync(transcript, `${multiByteHistory}called mem_save with the decision\n`, 'utf8');
+  writeFileSync(transcript, `${multiByteHistory}${callsFor(dir)}called mem_save with the decision\n`, 'utf8');
 
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
@@ -253,7 +280,7 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'landed-no-save');
-  writeFileSync(transcript, `${multiByteHistory}ordinary work, no memory call — ñ\n`, 'utf8');
+  writeFileSync(transcript, `${multiByteHistory}ordinary work, no memory call — ñ\n${callsFor(dir)}`, 'utf8');
 
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
@@ -302,7 +329,7 @@ function baselined(name, transcriptText = 'start\n') {
   writeFileSync(transcript, SAVED, 'utf8');
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'after-the-idle-stop');
-  writeFileSync(transcript, `${SAVED}plain work\n`, 'utf8');
+  writeFileSync(transcript, `${SAVED}plain work\n${callsFor(dir)}`, 'utf8');
   check('a save made during an idle Stop does not cover later commits', 'block', verdict(run(dir, { session_id: session, transcript_path: transcript })));
 }
 
@@ -310,7 +337,7 @@ function baselined(name, transcriptText = 'start\n') {
   const { dir, transcript, session } = baselined('summary');
 
   advance(dir, 'landed');
-  writeFileSync(transcript, 'start\ncalled mem_session_summary to close out\n', 'utf8');
+  writeFileSync(transcript, `start\n${callsFor(dir)}called mem_session_summary to close out\n`, 'utf8');
   check('a session summary is a save too', 'allow', verdict(run(dir, { session_id: session, transcript_path: transcript })));
 }
 
@@ -322,6 +349,7 @@ function baselined(name, transcriptText = 'start\n') {
   writeFileSync(transcript, SAVED, 'utf8');
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'second');
+  writeFileSync(transcript, SAVED + callsFor(dir), 'utf8');
   check('a save already spent on earlier commits does not cover new ones', 'block', verdict(run(dir, { session_id: session, transcript_path: transcript })));
 }
 
@@ -359,6 +387,7 @@ function baselined(name, transcriptText = 'start\n') {
   // @es El transcript vive en el repo y `advance` lo commiteó, así que el reset lo quitó: se repone.
   writeFileSync(transcript, SAVED, 'utf8');
   check('a HEAD that moved backwards has no new commits to record', 'allow', verdict(run(dir, { session_id: session, transcript_path: transcript })));
+  check('  and the baseline moves back to the reset HEAD', reset, stateOf(session)?.head);
 }
 
 {
@@ -379,6 +408,8 @@ function baselined(name, transcriptText = 'start\n') {
 
   for (let index = 1; index <= 13; index += 1) advance(dir, `c${String(index).padStart(2, '0')}`);
 
+  writeFileSync(transcript, `start\n${callsFor(dir)}`, 'utf8');
+
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
   check('thirteen commits with no save — refuses', 'block', verdict(r));
@@ -392,8 +423,153 @@ function baselined(name, transcriptText = 'start\n') {
   const { dir, transcript, session } = baselined('bom');
 
   advance(dir, 'landed');
-  writeFileSync(transcript, 'start\nno save\n', 'utf8');
+  writeFileSync(transcript, `start\nno save\n${callsFor(dir)}`, 'utf8');
   check('a payload with a byte-order mark is still judged', 'block', verdict(run(dir, `﻿${JSON.stringify({ session_id: session, transcript_path: transcript })}`)));
+}
+
+// --- WHOSE COMMITS. The obligation to record belongs to whoever made the work: only commits created by
+//     this session's own shell calls block it. Peer commits carry a committer date far from every window.
+// @es DE QUIÉN SON LOS COMMITS. Solo bloquean los commits que crearon las llamadas de shell de esta sesión.
+
+const HOUR = 60 * 60 * 1000;
+
+/** The verdict after `lines` are appended to a baselined transcript, plus the full run. @es El veredicto tras añadir `lines` a un transcript con línea base, y la corrida completa. */
+function judged(name, makeCommits) {
+  const { dir, transcript, session } = baselined(name);
+  const lines = makeCommits(dir);
+
+  writeFileSync(transcript, `start\n${lines}`, 'utf8');
+
+  return { dir, ...run(dir, { session_id: session, transcript_path: transcript }) };
+}
+
+{
+  const own = judged('own-nosave', (dir) => (advance(dir, 'mine'), callsFor(dir)));
+
+  check('own commit and no save — refuses', 'block', verdict(own));
+  check('  and it names the own commit', true, own.output.includes('feat(x): mine'));
+  check('  and each commit line is the short hash and subject, without the committer time', false, /\d{10}/.test(own.output));
+  check('  and the refusal is bilingual, with its accents', true, own.output.includes('@es ENGRAM-PERSISTENCE: esta sesión aterrizó trabajo'));
+}
+
+{
+  const saved = judged('own-saved', (dir) => (advance(dir, 'mine'), `${callsFor(dir)}${SAVED}`));
+
+  check('own commit and a save after it — allows', 'allow', verdict(saved));
+}
+
+{
+  const peers = judged('peers-only', (dir) => {
+    commitAt(dir, 'peer-a', Date.now() - 3 * HOUR);
+    commitAt(dir, 'peer-b', Date.now() - 2 * HOUR);
+
+    return 'ordinary work\n';
+  });
+
+  check('only peer commits — allows', 'allow', verdict(peers));
+  check('  and says nothing at all', '', peers.output);
+}
+
+{
+  const quiet = judged('peers-during-other-call', (dir) => {
+    const at = Date.now() - HOUR;
+
+    commitAt(dir, 'peer-during-status', at);
+
+    return shellCall('git status', at - 500, at + 500);
+  });
+
+  check('a peer commit inside a shell call that creates no commits — allows', 'allow', verdict(quiet));
+}
+
+{
+  const mixed = judged('mixed', (dir) => {
+    commitAt(dir, 'peer-before', Date.now() - 2 * HOUR);
+    advance(dir, 'mine-in-the-middle');
+    commitAt(dir, 'peer-after', Date.now() - HOUR);
+
+    return callsFor(dir);
+  });
+
+  check('own and peer commits mixed — refuses', 'block', verdict(mixed));
+  check('  and it lists the own commit', true, mixed.output.includes('feat(x): mine-in-the-middle'));
+  check('  and it lists no peer commit', false, mixed.output.includes('peer-before') || mixed.output.includes('peer-after'));
+}
+
+for (const [label, command, options] of [
+  ['a backup-repo wrapper commit', 'node C:/Users/x/Desktop/Projects/b100/.claude/backup-repo.mjs commit -m "feat(x): wrapped"', {}],
+  ['a land.mjs commit', 'node C:/Users/x/.claude/worktree-landing/land.mjs --worktree a --main b', {}],
+  ['a cherry-pick from PowerShell', 'git -C C:/repo cherry-pick abc123', { tool: 'PowerShell' }],
+  ['a revert', 'git revert --no-edit abc123', {}],
+  ['a merge', 'git merge feature/x', {}],
+  ['an am', 'git am patch.mbox', {}],
+  ['a rebase', 'git rebase main', {}],
+  ['a commit under a -c option', 'git -c user.name=x commit -m y', {}],
+  ['a commit under a long option', 'git --no-pager commit -m y', {}],
+  ['a commit by git.exe at a Windows path', 'C:\\Program Files\\Git\\cmd\\git.exe commit -m y', { tool: 'PowerShell' }],
+  ['a commit after a backslash-separated wrapper path', 'node C:\\Users\\x\\.claude\\backup-repo.mjs commit -m y', {}],
+  ...[';', '&', '|', '(', ')', '"', "'", '`', '\t', '\n', '\r'].map((separator) => [`a commit after the separator ${JSON.stringify(separator)}`, `echo${separator}git commit -m y`, {}]),
+  ['a commit chained after other commands', 'git add -A && git commit -m "feat(x): chained"', {}]
+]) {
+  const made = judged(`wrapper-${(callCounter += 1)}`, (dir) => {
+    const at = Date.now() - 30 * 1000;
+
+    commitAt(dir, 'wrapped', at);
+
+    return shellCall(command, at - 500, at + 500, options);
+  });
+
+  check(`${label} is this session's commit — refuses`, 'block', verdict(made));
+}
+
+for (const [label, command] of [
+  ['a backup-repo call that is not a commit', 'node .claude/backup-repo.mjs status'],
+  ['a git call that only reads', 'git log --oneline -5']
+]) {
+  const read = judged(`reads-${(callCounter += 1)}`, (dir) => {
+    const at = Date.now() - HOUR;
+
+    commitAt(dir, 'peer-under-read', at);
+
+    return shellCall(command, at - 500, at + 500);
+  });
+
+  check(`${label} claims no commit — allows`, 'allow', verdict(read));
+}
+
+{
+  const failed = judged('failed-call', (dir) => {
+    const at = Date.now() - HOUR;
+
+    commitAt(dir, 'peer-under-failed-call', at);
+
+    return shellCall('git commit -m "feat(x): rejected by the hook"', at - 500, at + 500, { failed: true });
+  });
+
+  check('a commit call that failed created nothing — a commit inside its window is not claimed', 'allow', verdict(failed));
+}
+
+{
+  const fastForward = judged('fast-forward', (dir) => {
+    commitAt(dir, 'their-work-1', Date.now() - 5 * HOUR);
+    commitAt(dir, 'their-work-2', Date.now() - 4 * HOUR);
+
+    return shellCall('git merge --ff-only origin/feature', Date.now() - 1000, Date.now());
+  });
+
+  check('HEAD moved by a fast-forward of someone else\'s work — allows', 'allow', verdict(fastForward));
+}
+
+{
+  // A peer re-baselines silently: after the allowed peer-only Stop, the next own commit is still judged.
+  const { dir, transcript, session } = baselined('peer-then-own');
+
+  commitAt(dir, 'peer-first', Date.now() - 2 * HOUR);
+  writeFileSync(transcript, 'start\nwork\n', 'utf8');
+  run(dir, { session_id: session, transcript_path: transcript });
+  advance(dir, 'mine-later');
+  writeFileSync(transcript, `start\nwork\n${callsFor(dir)}`, 'utf8');
+  check('after peer commits were skipped, a later own commit still refuses', 'block', verdict(run(dir, { session_id: session, transcript_path: transcript })));
 }
 
 const failures = results.filter((ok) => !ok).length;

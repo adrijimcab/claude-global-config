@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const GUARD = 'engram-persistence/guard.mjs';
+const OWN = 'engram-persistence/own-commits.mjs';
 const SATISFIED = "tail.includes(marker))) {\n    writeState(sessionId, { head, offset: size ?? 0 });";
 
 const MUTANTS = [
@@ -36,11 +37,47 @@ const MUTANTS = [
   ['a satisfied guard keeps its old baseline, so the same save is spent twice', GUARD, SATISFIED, "tail.includes(marker))) {\n    void sessionId;"],
   // Fail open / Falla abierto
   ['an unreadable transcript crashes the guard instead of re-baselining', GUARD, 'if (tail === undefined) {', 'if (false) {'],
-  ['an unresolvable recorded head re-baselines instead of leaving state alone', GUARD, 'return; // the range is unreadable (rebased, gone) — no honest verdict', 'subjects = []; // the range is unreadable (rebased, gone) — no honest verdict'],
+  ['an unresolvable recorded head re-baselines instead of leaving state alone', GUARD, 'return; // the range is unreadable (rebased, gone) — no honest verdict', 'landed = []; // the range is unreadable (rebased, gone) — no honest verdict'],
+  // Whose commits / De quién son los commits
+  ['every commit of the range is this session\'s, whoever made it', GUARD, 'commitsMadeBySession(landed, tail).map(', 'landed.map('],
+  ['the committer time is compared in seconds against windows in milliseconds', GUARD, 'committedAtMs: Number(seconds) * 1000', 'committedAtMs: Number(seconds)'],
+  ['a commit line keeps its committer time in the refusal', GUARD, 'line: `${hash}${entry.slice(hash.length + 1 + seconds.length)}`', 'line: entry'],
+  ['a commit whose time is outside every commit window is still claimed', OWN, 'commits.filter((commit) => withinWindow(windows, commit.committedAtMs))', 'commits.filter(() => windows.length > 0)'],
+  ['a call that failed still claims the commits inside its window', OWN, '!call.failed && createsCommits(call.command)', 'createsCommits(call.command)'],
+  ['a shell call that creates no commits still claims the commits inside its window', OWN, '!call.failed && createsCommits(call.command)', '!call.failed'],
+  ['git cherry-pick no longer creates commits', OWN, "'cherry-pick', ", ''],
+  ['git merge no longer creates commits', OWN, "'merge', ", ''],
+  ['git revert no longer creates commits', OWN, "'revert', ", ''],
+  ['git am no longer creates commits', OWN, "'am', ", ''],
+  ['git rebase no longer creates commits', OWN, ", 'rebase'", ''],
+  ['git commit no longer creates commits', OWN, "new Set(['commit', ", "new Set(["],
+  ['land.mjs no longer creates commits', OWN, "COMMIT_WRAPPERS = ['land.mjs']", 'COMMIT_WRAPPERS = []'],
+  ['any backup-repo.mjs call creates commits', OWN, "tokens[index + 1] === 'commit'", 'true'],
+  ['backup-repo.mjs commit no longer creates commits', OWN, "tokens[index + 1] === 'commit'", 'false'],
+  ['the git program is only recognised by the bare name git', OWN, "name === 'git' || name === 'git.exe'", "name === 'git'"],
+  ['the program name keeps its directory', OWN, ".split('/').at(-1)", ''],
+  ['a Windows backslash path is not normalised', OWN, "token.replaceAll('\\\\', '/')", 'token'],
+  ['the -C option is read as the verb', OWN, "new Set(['-C', '-c'])", "new Set(['-c'])"],
+  ['the -c option is read as the verb', OWN, "new Set(['-C', '-c'])", "new Set(['-C'])"],
+  ['an option value is not skipped', OWN, 'at += 1;\n    else', 'void at;\n    else'],
+  ['a long option is read as the verb', OWN, "!tokens[at].startsWith('-')", 'true'],
+  ['a semicolon no longer separates tokens', OWN, "[' ', '\\t', '\\n', '\\r', ';',", "[' ', '\\t', '\\n', '\\r',"],
+  ['an ampersand no longer separates tokens', OWN, "';', '&', '|'", "';', '|'"],
+  ['a pipe no longer separates tokens', OWN, "'&', '|', '('", "'&', '('"],
+  ['an opening parenthesis no longer separates tokens', OWN, "'|', '(', ')'", "'|', ')'"],
+  ['a closing parenthesis no longer separates tokens', OWN, "'(', ')', '\"'", "'(', '\"'"],
+  ['a double quote no longer separates tokens', OWN, "')', '\"', \"'\"", "')', \"'\""],
+  ['a single quote no longer separates tokens', OWN, "'\"', \"'\", '`'", "'\"', '`'"],
+  ['a backtick no longer separates tokens', OWN, "\"'\", '`']", "\"'\"]"],
+  ['a tab no longer separates tokens', OWN, "[' ', '\\t', ", "[' ', "],
+  ['a newline no longer separates tokens', OWN, "'\\t', '\\n', '\\r'", "'\\t', '\\r'"],
+  ['a carriage return no longer separates tokens', OWN, "'\\n', '\\r', ';'", "'\\n', ';'"],
+  ['empty tokens between adjacent separators are kept', OWN, "if (current !== '') tokens.push(current);", 'tokens.push(current);'],
+  ['the last token of a command is dropped', OWN, "current === '' ? tokens : [...tokens, current]", 'tokens'],
   ['a HEAD that moved backwards is refused with no commits to name', GUARD, 'if (subjects.length === 0) {', 'if (false) {'],
-  ['an empty git log is read as one blank commit subject', GUARD, "subjects = log === '' ? [] : log.split('\\n').slice(0, 12);", "subjects = log.split('\\n').slice(0, 12);"],
+  ['an empty git log is parsed as one blank commit instead of none', GUARD, "return log === ''\n    ? []", 'return false\n    ? []'],
   ['the refusal lists thirteen subjects', GUARD, ".slice(0, 12)", ".slice(0, 13)"],
-  ['the refusal lists every subject', GUARD, "log.split('\\n').slice(0, 12)", "log.split('\\n')"],
+  ['the refusal lists every subject', GUARD, '.map((commit) => commit.line).slice(0, 12)', '.map((commit) => commit.line)'],
   ['a payload with a byte-order mark is not judged', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
 ];
 

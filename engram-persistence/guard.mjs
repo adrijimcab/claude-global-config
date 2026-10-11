@@ -21,6 +21,13 @@
  * and looks for a save. So a save made before the commits does not satisfy the commits — the order
  * is part of the check, which is what stops a stale save from covering new work.
  *
+ * WHOSE COMMITS. On a branch several sessions share, HEAD also moves for work this session never did, and
+ * a session cannot honestly record that. So the moved range is filtered to the commits this session's OWN
+ * shell calls created (`own-commits.mjs`); a range holding only other sessions' commits is not an
+ * obligation and the guard says nothing. @es En una rama compartida HEAD se mueve también por trabajo que
+ * esta sesión no hizo y que no puede registrar con honestidad: el rango se filtra a los commits que crearon
+ * las llamadas de shell de ESTA sesión; un rango solo de otras sesiones no obliga y el guard calla.
+ *
  * WHY IT NAMES THE COMMITS. A refusal that says "save something" is a refusal you satisfy with
  * anything. This one lists the commit subjects that would otherwise go unrecorded, because those
  * subjects ARE the content the save owes.
@@ -42,6 +49,7 @@ import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stateDir } from '../hook-state/locations.mjs';
+import { commitsMadeBySession } from './own-commits.mjs';
 
 /** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
 const stateDirectory = () => stateDir('engram-persistence');
@@ -103,11 +111,26 @@ function transcriptSince(path, offset) {
   }
 }
 
+/** The commits of `range` (`old..new`) as `[{ line, committedAtMs }]`, newest first. @es Los commits de `range` como `[{ line, committedAtMs }]`, el más nuevo primero. */
+function commitsIn(range) {
+  const log = git(['log', '--format=%h %ct %s', range]);
+
+  return log === ''
+    ? []
+    : log.split('\n').map((entry) => {
+        const [hash, seconds] = entry.split(' ', 2);
+
+        return { line: `${hash}${entry.slice(hash.length + 1 + seconds.length)}`, committedAtMs: Number(seconds) * 1000 };
+      });
+}
+
 function reason(subjects) {
   return [
-    'ENGRAM-PERSISTENCE: work landed on the integration branch and nothing was saved to memory.',
+    'ENGRAM-PERSISTENCE: work THIS session landed on the integration branch and nothing was saved to memory.',
+    '@es ENGRAM-PERSISTENCE: esta sesión aterrizó trabajo en la rama de integración y no guardó nada en la memoria.',
     '',
-    'Commits since the last recorded save:',
+    'Commits this session made since the last recorded save:',
+    '@es Commits que esta sesión hizo desde el último guardado:',
     ...subjects.map((subject) => `  ${subject}`),
     '',
     'Engram is this project\'s persistent memory — this session\'s context dies, engram does not. The',
@@ -119,7 +142,13 @@ function reason(subjects) {
     '',
     'This checks whether HEAD MOVED, not whether the turn felt important, because a commit is the',
     'project\'s own definition of work that landed. A save made BEFORE these commits does not cover',
-    'them: the check reads only the transcript written since the last save, so order counts.'
+    'them: the check reads only the transcript written since the last save, so order counts. Only commits',
+    'made by this session\'s own shell calls count; commits other sessions made on the branch do not.',
+    '',
+    '@es Llama a mem_save (o mem_session_summary) con lo que realmente pasó: la decisión y su motivo, la',
+    '@es medición y el comando que la produjo, qué queda abierto. Luego termina de nuevo. Se comprueba si',
+    '@es HEAD se movió por commits de ESTA sesión (los de otras sesiones en la misma rama no cuentan), y un',
+    '@es guardado ANTERIOR a esos commits no los cubre: importa el orden.'
   ].join('\n');
 }
 
@@ -173,14 +202,18 @@ function decide(payload) {
     return;
   }
 
-  let subjects = [];
+  let landed = [];
 
   try {
-    const log = git(['log', '--oneline', `${state.head}..${head}`]);
-    subjects = log === '' ? [] : log.split('\n').slice(0, 12);
+    landed = commitsIn(`${state.head}..${head}`);
   } catch {
     return; // the range is unreadable (rebased, gone) — no honest verdict
   }
+
+  // Only what THIS session's own shell calls created is its to record; the rest of the range is other
+  // sessions' work on a shared branch. @es Solo lo que crearon las llamadas de shell de ESTA sesión le toca
+  // registrar; el resto del rango es trabajo de otras sesiones en una rama compartida.
+  const subjects = commitsMadeBySession(landed, tail).map((commit) => commit.line).slice(0, 12);
 
   if (subjects.length === 0) {
     writeState(sessionId, { head, offset: size ?? 0 });
