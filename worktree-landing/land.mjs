@@ -10,7 +10,9 @@
  *   1. preconditions (`preconditions.mjs`): two checkouts of one repository, a fully committed worktree,
  *      the main checkout on the shared branch, a HEAD that contains both the local and the remote tip, and
  *      no landed path colliding with the main checkout's uncommitted work or with a differing ignored file;
- *   2. verification (`verification.mjs`): the repository's test command, run in the worktree;
+ *   2. verification (`verification.mjs`): the worktree's test command, run in the worktree — the unit suite
+ *      the project declares in its `.claude/fleet-kit.json` `unitSuite`, else `selftest-runner/run.mjs`
+ *      (`test-command.mjs`); with neither, the landing is refused;
  *   3. the preconditions again, which must name the SAME head and tip: what lands is what was verified;
  *   4. publication (`publication.mjs`): fast-forward, then push and the remote tip read back ONLY when the
  *      remote is one of the owner's backups (`remote-policy.mjs`: github.com/adrijimcab/*); any other remote
@@ -31,7 +33,8 @@
  * delante del remoto, así que CUALQUIER commit que llegue a esa rama se publica en minutos. El único momento
  * seguro para que un commit llegue ahí es después de verificarlo, y es la única forma en que esta
  * herramienta lo mueve. Secuencia, un solo proceso, nada escrito antes del último paso: precondiciones;
- * verificación en el worktree; las precondiciones otra vez, que deben dar el MISMO head y punta (lo que
+ * verificación en el worktree (la suite unitaria que declara el `unitSuite` de `.claude/fleet-kit.json` del
+ * proyecto, o si no `selftest-runner/run.mjs`; sin ninguna, se rechaza); las precondiciones otra vez, que deben dar el MISMO head y punta (lo que
  * aterriza es lo verificado); publicación (fast-forward y, SOLO si el remoto es un respaldo del dueño
  * (`remote-policy.mjs`: github.com/adrijimcab/*), push y relectura de la punta remota). Cualquier otro
  * remoto no se empuja jamás: se hace fast-forward de la rama local, el informe dice «ATERRIZADO EN LOCAL ...
@@ -78,7 +81,7 @@ export function land({ worktree, main, branch, remote, check = false, verifyTime
   const inputs = { worktree, main, branch, remote };
   try {
     const before = landingRangeOf(inputs);
-    const summary = verifyWorktree(worktree, { timeoutMs: verifyTimeoutMs });
+    const summary = verifyWorktree(worktree, { main, timeoutMs: verifyTimeoutMs });
     const after = landingRangeOf(inputs);
     requireUnmoved(before, after);
     const range = `${after.tip}..${after.head}`;

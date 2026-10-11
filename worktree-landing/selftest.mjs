@@ -39,6 +39,7 @@ import { isolateState } from '../hook-state/locations.mjs';
 import { requireIntegrationBranch } from './integration-branch.mjs';
 import { land } from './land.mjs';
 import { mayPublishTo } from './remote-policy.mjs';
+import { testCommandOf } from './test-command.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
 // session reads, and never a line a previous run left behind.
@@ -443,6 +444,45 @@ try {
   expectRefused('no test command', layout({ work: { 'b.txt': 'b\n' }, removed: ['selftest-runner/run.mjs'] }), { reason: 'test-command-missing', text: 'has no test command' });
   expectRefused('the head moved while verifying', layout({ work: { verdict: 'commit\n' } }), { reason: 'moved-during-verification', text: 'what would land is not what was verified' });
   expectRefused('the verification left the worktree dirty', layout({ work: { verdict: 'dirty\n' } }), { reason: 'worktree-uncommitted', text: '    left-behind.txt' });
+
+  // ── The project's declared unit suite: `.claude/fleet-kit.json` `unitSuite` of the MAIN checkout names an npm
+  // script and the directory it runs in, inside the WORKTREE; it wins over the selftest runner, and a project
+  // without that runner (Discovery) still lands. @es La suite declarada del proyecto gana sobre el runner. ──
+  const SUITE_PACKAGE = JSON.stringify({ name: 'fixture-app', private: true, scripts: { 'test:all': 'node suite.mjs' } });
+  const SUITE = "import { readFileSync } from 'node:fs';\nconst verdict = readFileSync(new URL('../suite-verdict', import.meta.url), 'utf8').trim();\nconsole.log(verdict === '0' ? 'SUITE-GREEN-MARK' : 'SUITE-RED-MARK');\nprocess.exit(Number(verdict));\n";
+  const suiteLayout = (verdict) => {
+    const fixture = layout({ work: { 'app/package.json': SUITE_PACKAGE, 'app/suite.mjs': SUITE, 'suite-verdict': `${verdict}\n` }, removed: ['selftest-runner/run.mjs'] });
+    declare(fixture, '.claude/fleet-kit.json', JSON.stringify({ unitSuite: { npmScript: 'test:all', cwd: 'app' } }));
+    return fixture;
+  };
+  const suiteGreenReport = expectLanded('declared unit suite green, no selftest runner', suiteLayout(0));
+  check(suiteGreenReport.includes('SUITE-GREEN-MARK') && suiteGreenReport.includes('npm run test:all'), `declared unit suite green: the report names the suite and its last line: ${suiteGreenReport}`);
+  // A suite's failure exit is any non-zero code: 3 here, so a check that knew only exit 1 would miss it.
+  // @es La salida de fallo de una suite es cualquier código distinto de cero: aquí 3.
+  const suiteRedReport = expectRefused('declared unit suite red', suiteLayout(3), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'SUITE-RED-MARK' });
+  check(suiteRedReport.includes('(exit 3)'), `declared unit suite red: the report names the suite's own exit: ${suiteRedReport}`);
+  const malformedSuite = layout();
+  declare(malformedSuite, '.claude/fleet-kit.json', '{ not json');
+  let malformedReason;
+  try {
+    testCommandOf({ worktree: malformedSuite.worktree, main: malformedSuite.main });
+    malformedReason = 'resolved';
+  } catch (error) {
+    malformedReason = error.reason ?? `unexpected ${error.message}`;
+  }
+  check(malformedReason === 'test-command-unreadable', `a malformed fleet-kit.json refuses the test command itself: ${malformedReason}`);
+  check(suiteRedReport.includes('npm run test:all'), `declared unit suite red: the report names the suite: ${suiteRedReport}`);
+  const suiteWins = layout({ work: { 'app/package.json': SUITE_PACKAGE, 'app/suite.mjs': SUITE, 'suite-verdict': '1\n' } });
+  declare(suiteWins, '.claude/fleet-kit.json', JSON.stringify({ unitSuite: { npmScript: 'test:all', cwd: 'app' } }));
+  expectRefused('a declared unit suite wins over a green selftest runner', suiteWins, { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'SUITE-RED-MARK' });
+  for (const [label, unitSuite] of [['no npm script', { cwd: 'app' }], ['a script with a shell metacharacter', { npmScript: 'test;rm', cwd: 'app' }], ['a directory outside the worktree', { npmScript: 'test:all', cwd: '../elsewhere' }]]) {
+    const unreadable = suiteLayout(0);
+    declare(unreadable, '.claude/fleet-kit.json', JSON.stringify({ unitSuite }));
+    expectRefused(`declared unit suite with ${label}`, unreadable, { reason: 'test-command-unreadable', text: path.join(unreadable.main, '.claude/fleet-kit.json') });
+  }
+  const fleetWithoutSuite = layout({ work: { 'b.txt': 'b\n' } });
+  declare(fleetWithoutSuite, '.claude/fleet-kit.json', JSON.stringify({ landingGuard: { mode: 'enforce' } }));
+  expectLanded('near miss: a fleet-kit.json without unitSuite falls back to the selftest runner', fleetWithoutSuite);
 
   // ── The publication ───────────────────────────────────────────────────────────────────────────
   const rejected = layout({ work: { 'b.txt': 'b\n' } });

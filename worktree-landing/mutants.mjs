@@ -21,6 +21,7 @@ const LAND = 'worktree-landing/land.mjs';
 const PRECONDITIONS = 'worktree-landing/preconditions.mjs';
 const PUBLICATION = 'worktree-landing/publication.mjs';
 const REMOTE_POLICY = 'worktree-landing/remote-policy.mjs';
+const TEST_COMMAND = 'worktree-landing/test-command.mjs';
 const VERIFICATION = 'worktree-landing/verification.mjs';
 const WORKING_TREE = 'worktree-landing/working-tree.mjs';
 
@@ -48,9 +49,19 @@ const MUTANTS = [
   ['the verification runs in the main checkout, not the worktree', LAND, 'verifyWorktree(worktree, {', 'verifyWorktree(main, {'],
   ['a red verification lands', VERIFICATION, 'if (run.status === 0) return', 'if (run.status === 0 || run.status === EXIT_VERIFICATION_RED) return'],
   ['a not-measured verification exits like a red one', VERIFICATION, '    EXIT_REFUSED,\n  );', '    EXIT_VERIFICATION_RED,\n  );'],
-  ['the red lines are not printed', VERIFICATION, '...redLinesOf(output)],\n      EXIT_VERIFICATION_RED,', '],\n      EXIT_VERIFICATION_RED,'],
+  ['the red lines are not printed', VERIFICATION, '...redLines],\n      EXIT_VERIFICATION_RED,', '],\n      EXIT_VERIFICATION_RED,'],
   ['the green lines are printed as red', VERIFICATION, "line !== '' && !line.startsWith('GREEN ')", "line !== ''"],
-  ['a missing test command is not refused', VERIFICATION, 'if (!existsSync(runner)) {', 'if (false) {'],
+  ['the runner output is read like a declared suite', VERIFICATION, 'test.anyNonZeroIsRed ? suiteTailOf(output) : runnerRedLinesOf(output)', 'suiteTailOf(output)'],
+  ['a declared suite failing with an exit other than 1 is not red', VERIFICATION, '(test.anyNonZeroIsRed && run.status !== null)', 'false'],
+  ['the green summary does not name the test command', VERIFICATION, 'return `${test.label}: ${', 'return `${'],
+  ['a missing test command is not refused', TEST_COMMAND, 'if (existsSync(runner)) {', 'if (true) {'],
+  ['the declared unit suite is not read', TEST_COMMAND, 'const suite = declaredSuite(main);', 'const suite = undefined;'],
+  ['the declared suite runs at the worktree root, not its directory', TEST_COMMAND, 'cwd: path.join(worktree, suite.directory)', 'cwd: worktree'],
+  ['the declared suite runs in the main checkout, not the worktree', TEST_COMMAND, 'cwd: path.join(worktree, suite.directory)', 'cwd: path.join(main, suite.directory)'],
+  ['a fleet-kit without unitSuite does not fall back to the runner', TEST_COMMAND, " || !('unitSuite' in parsed)", ''],
+  ['a malformed fleet-kit.json is ignored by the test command', TEST_COMMAND, 'throw unreadable(file, error.message);', 'return undefined;'],
+  ['a script name with shell metacharacters is accepted', TEST_COMMAND, "|| ![...script].every((character) => SCRIPT_CHARACTERS.includes(character))", ''],
+  ['a suite directory outside the worktree is accepted', TEST_COMMAND, " || !staysInside(directory)", ''],
   ['the timeout is not passed to the test command', VERIFICATION, 'timeout: timeoutMs,', 'timeout: 0,'],
   ['a timeout is not told apart from other endings', VERIFICATION, "if (run.error?.code === 'ETIMEDOUT') {", 'if (false) {'],
   ['the preconditions are not asked again after the verification', LAND, 'const after = landingRangeOf(inputs);', 'const after = before;'],
