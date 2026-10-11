@@ -1,0 +1,4 @@
+{
+  "names": ["claude", "anthropic", "engram", "openspec", "gentle-ai", "copilot", "chatgpt", "openai"],
+  "hosts": ["gitlab.base100.local"]
+}
