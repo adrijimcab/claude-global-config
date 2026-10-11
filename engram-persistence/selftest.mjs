@@ -504,6 +504,8 @@ for (const [label, command, options] of [
   ['a merge', 'git merge feature/x', {}],
   ['an am', 'git am patch.mbox', {}],
   ['a rebase', 'git rebase main', {}],
+  ['a bare commit with the verb as the last token', 'git commit', {}],
+  ['a commit with two spaces before the verb', 'git  commit -m y', {}],
   ['a commit under a -c option', 'git -c user.name=x commit -m y', {}],
   ['a commit under a long option', 'git --no-pager commit -m y', {}],
   ['a commit by git.exe at a Windows path', 'C:\\Program Files\\Git\\cmd\\git.exe commit -m y', { tool: 'PowerShell' }],
