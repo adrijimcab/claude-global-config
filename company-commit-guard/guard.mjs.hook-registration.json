@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a `git commit` into a company repository (a remote on a company host) whose message, committed paths or added lines name an AI tool would put AI tooling into the company's history — owner order 2026-10-11: nothing about AI reaches the company repositories, the control lives only in ~/.claude."
+}
