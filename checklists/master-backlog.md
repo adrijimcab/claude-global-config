@@ -173,6 +173,12 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   one (a v4 sync would leave a UserPromptSubmit hook that exits 1 on every prompt).
 - 200-line rule: only b100 `AGENT-LEDGER.md` (467 lines) exceeds it.
 - Path-scoped rules from `~/.claude/rules/` inside subagents: unverified (host check, like H2).
+- Stale-session guard warning (measured 2026-10-11): a PreToolUse hook group registered after a session
+  started does not fire in that session — the orchestrator's session (started before 03383e3) wrote an
+  English line and the following Read was not refused; Stop-hook additions did reach the same session, a
+  difference not yet explained. Mechanism to build: a UserPromptSubmit check comparing the session start
+  with each guard's registration and telling the session to restart. Queued, not started: the owner said
+  to launch nothing new until the five running workers finish; the v4 restart reloads every session anyway.
 - B7 — lessons for this session's real bugs via `capture.mjs`, each with its anti-recurrence mechanism;
   the three named by the owner (reconcile order, duplicated stub, monolingual message) have no trace in
   either history: they need the owner's data, never invented.
