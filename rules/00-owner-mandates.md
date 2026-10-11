@@ -274,7 +274,15 @@ corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
   - `~/.claude/**` → `adrijimcab/claude-global-config` (`git -C ~/.claude …`, rama `master`);
   - `<b100-am-ui>/.claude/**` → `adrijimcab/b100-am-ui-claude-tooling`
     (`node .claude/backup-repo.mjs …`, rama `master`);
+  - `<di_1700002_discovery_fe>/.claude/**` → `adrijimcab/di-1700002-discovery-fe-claude-tooling`
+    (`node .claude/backup-repo.mjs …`, rama `master`; creado el 2026-10-11 con autorización del dueño);
   - un repo de proyecto nuevo con `.claude/` propio declara aquí su repo de respaldo antes de usarlo.
+- **Nada de IA va al remoto de la empresa** (directiva del dueño 2026-10-11: «NO SE SUBE A BASE 100 NADA DE
+  IA, TODO ESTO A adrijimcab»): el `.claude/`, los artefactos de agentes y toda regla que nombre una
+  herramienta de IA viven en `.git/info/exclude` del proyecto (nunca en su `.gitignore` versionado) y se
+  respaldan solo en el repo privado de `adrijimcab`. Antes de cada push a un remoto de la empresa, `git grep`
+  sobre lo que se sube busca nombres de herramientas de IA (claude, anthropic, engram, openspec,
+  spec-driven, gentle-ai, copilot, chatgpt, openai) y un hallazgo frena el push.
 - Solo se commitea lo propio y terminado: lo que un agente VIVO está escribiendo lo commitea ese
   agente al terminar (nunca se commitea el estado de trabajo de un actor vivo).
 - Mensajes en inglés, Conventional, sin atribución. Artefactos de ejecución (`state/`, `.runs/`,
