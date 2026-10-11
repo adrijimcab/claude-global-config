@@ -16,29 +16,21 @@
  *     before the next one starts, in process (the `onLine` hook) and through the real command line (a
  *     handshake: the second selftest only passes once the parent has SEEN the first one's line).
  *   - HOW A LINE IS WRITTEN: whole, with its newline, across partial writes and a pipe that is momentarily full.
- *   - WHERE A SELFTEST'S STATE GOES: a fresh, empty `HOOK_STATE_DIR` per selftest, never shared, removed after.
- *   - WHAT IS A LEAK: a file of the live state (the constructed Claude home's `<m>/state`, the tree's own
- *     `<m>/state`, the runner's own `HOOK_STATE_DIR`) created, changed (even at the same size) or removed, also
- *     inside a state directory the selftest created; RED whatever the exit, each path named, in order. NOT a
- *     leak: reading the live state, writing outside a state directory, writing through a link out of one.
+ * Where a selftest runs and what counts as an escape from its sandbox are `sandbox.selftest.mjs`'s.
  *
  * @es Auto-test del runner de selftests de todo el repositorio, contra repos git CONSTRUIDOS aquí. Estados:
  * qué ficheros son selftests (patrones, casi-aciertos, sin seguir, ignorados directos o a profundidad 3),
  * qué raíz (absoluta, relativa, subdirectorio, no repo, nada descubierto), cómo termina uno (verde, salida
  * no cero, señal, timeout, fichero ausente) y qué puede elegir el operador (nada: se rechaza todo filtro).
- * Y dónde va el estado de cada selftest (un `HOOK_STATE_DIR` nuevo y vacío por selftest, nunca compartido,
- * borrado después) y qué es una fuga (un fichero del estado vivo creado, cambiado aunque sea al mismo tamaño o
- * borrado: ROJO sea cual sea la salida, con cada ruta en orden); leer, escribir fuera de un directorio de
- * estado o a través de un enlace que sale de él no lo es.
+ * Dónde corre un selftest y qué cuenta como fuga de su sandbox es de `sandbox.selftest.mjs`.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { discoverSelftests } from './discovery.mjs';
+import { RUN, cli, fixtureKit } from './fixtures.mjs';
 import { runSelftests } from './run.mjs';
 import { writeLineSync } from './stream.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
@@ -49,83 +41,9 @@ import { isolateState } from '../hook-state/locations.mjs';
 // vivo que lee una sesión real, ni con líneas de una corrida anterior.
 isolateState('selftest-runner');
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const RUN = path.join(HERE, 'run.mjs');
 const GREEN = 'process.exit(0)\n';
 const RED = "console.log('BOOM-MARK'); process.exit(1)\n";
-const sandboxes = [];
-let failures = 0;
-let assertions = 0;
-
-/**
- * Records one assertion and reports it when it fails.
- * @es Registra una aserción y la informa cuando falla.
- * @param {boolean} ok
- * @param {string} label
- */
-function check(ok, label) {
-  assertions += 1;
-  if (!ok) {
-    failures += 1;
-    console.error(`FAIL ${label} @es FALLO ${label}`);
-  }
-}
-
-/** Runs git inside a fixture. @es Ejecuta git dentro de un fixture. */
-function git(cwd, ...args) {
-  return spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
-}
-
-/** A directory that is not inside any git repository. @es Directorio fuera de todo repo git. */
-function bareDir() {
-  const dir = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'selftest-runner-')));
-  sandboxes.push(dir);
-  return dir;
-}
-
-/** Writes a fixture file, creating its directories. @es Escribe un fichero del fixture, creando sus directorios. */
-function put(root, relative, content) {
-  mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
-  writeFileSync(path.join(root, relative), content);
-}
-
-/**
- * Builds a repository: `tracked` files are added to the index, `loose` files are written afterwards
- * (untracked, or ignored when `ignore` matches them).
- * @es Construye un repo: `tracked` va al índice; `loose` se escribe después (sin seguir, o ignorado).
- */
-function repo({ tracked = {}, loose = {}, ignore = '' }) {
-  const root = bareDir();
-  git(root, 'init', '-q');
-  put(root, '.gitignore', ignore);
-  for (const [name, content] of Object.entries(tracked)) put(root, name, content);
-  git(root, 'add', '-A');
-  for (const [name, content] of Object.entries(loose)) put(root, name, content);
-  const top = git(root, 'rev-parse', '--show-toplevel').stdout.trim();
-  check(realpathSync.native(top) === root, `fixture is its own repository top level: ${root}`);
-  return root;
-}
-
-/** Runs the real runner as a process. @es Ejecuta el runner real como proceso. */
-function cli(cwd, ...args) {
-  return spawnSync(process.execPath, [RUN, ...args], { cwd, encoding: 'utf8' });
-}
-
-/**
- * Runs the real runner over `root` with a constructed Claude home and no `HOOK_STATE_DIR` of its own, unless
- * `extra` sets one; `LEAK_TARGET` tells a fixture selftest which path to write.
- * @es Ejecuta el runner real con un home de Claude construido y sin `HOOK_STATE_DIR` propio, salvo que `extra` lo fije.
- */
-function cliIn(root, home, extra = {}) {
-  const env = { ...process.env, HOOK_CLAUDE_HOME: home, ...extra };
-
-  if (extra.HOOK_STATE_DIR === undefined) delete env.HOOK_STATE_DIR;
-
-  return spawnSync(process.execPath, [RUN, '--root', root], { cwd: root, encoding: 'utf8', env });
-}
-
-/** A fixture selftest that runs `body` against the path in `LEAK_TARGET`. @es Un selftest de fixture que actúa sobre `LEAK_TARGET`. */
-const touching = (body) => `import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';\nimport path from 'node:path';\nconst target = process.env.LEAK_TARGET;\n${body}\nprocess.exit(0);\n`;
+const { check, bareDir, repo, finish } = fixtureKit('selftest-runner selftest');
 
 /** Discovered paths, an untracked one marked with `*`. @es Rutas descubiertas; las sin seguir llevan `*`. */
 function found(root) {
@@ -181,6 +99,8 @@ const withRed = repo({
     'a/selftest.mjs': RED,
     'z/selftest.mjs': `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(sentinel)}, 'ran');\n`,
   },
+  // Ignored, so the sentinel is not a change to the tree under test. @es Ignorado, así el centinela no cambia el árbol.
+  ignore: `${sentinel}\n`,
 });
 const red = cli(withRed, '--root', withRed);
 check(red.status === 1, `one red selftest exits 1: ${red.status}`);
@@ -237,7 +157,7 @@ const watched = runSelftests({
 check(JSON.stringify(lines) === JSON.stringify(watched.report), 'the lines delivered one by one are exactly the returned report: none lost, none repeated');
 check(linesSeenAtSpawn.length === 3 && linesSeenAtSpawn[0] === 0 && linesSeenAtSpawn[1] === 1, `the first selftest's line is delivered BEFORE the second one starts: ${linesSeenAtSpawn}`);
 check(linesSeenAtSpawn[2] > linesSeenAtSpawn[1] && /^RED\s+b\/selftest\.mjs/.test(lines[1]), `a red selftest's line and its output are delivered before the third starts: ${linesSeenAtSpawn}`);
-check(lines.at(-1) === '2/3 green' && watched.exitCode === 1, 'the summary line stays last and the exit status stays 1');
+check(lines.at(-1) === '2/3 green @es 2/3 en verde' && watched.exitCode === 1, 'the summary line stays last and the exit status stays 1');
 
 const quiet = runSelftests({ root: streamed });
 check(quiet.report.join('\n') === watched.report.join('\n'), 'without a hook the report is the same, so existing callers are unaffected');
@@ -251,6 +171,7 @@ const handshake = repo({
     'a/selftest.mjs': GREEN,
     'b/selftest.mjs': "import { existsSync } from 'node:fs';\nconst deadline = Date.now() + 8000;\nwhile (!existsSync('release') && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));\nprocess.exit(existsSync('release') ? 0 : 1);\n",
   },
+  ignore: 'release\n',
 });
 const live = await new Promise((resolve) => {
   const child = spawn(process.execPath, [RUN, '--root', handshake], { cwd: handshake });
@@ -335,91 +256,9 @@ const alwaysFull = () => {
 const gaveUp = written((chunks, fd, bytes, offset, length) => alwaysFull(chunks, fd, bytes, offset, length), 'never accepted', { retries: 3 });
 check(gaveUp.error?.code === 'EAGAIN' && attempts === 4, `a pipe that never drains is given up on after the bounded retries, raising EAGAIN: attempts ${attempts}`);
 
-// ── Isolation: a fresh state home per selftest ───────────────────────────────────────────────────
-// `a` records the state home it was given and leaves a file in it; `b` must get a different, empty one.
-// @es `a` anota el home de estado que recibió y deja un fichero; `b` debe recibir otro, vacío.
-const claudeHomeOf = () => {
-  const home = bareDir();
-  mkdirSync(path.join(home, 'guard-x', 'state', 'nested'), { recursive: true });
-  writeFileSync(path.join(home, 'guard-x', 'state', 'nested', 'journal.jsonl'), '{"line":1}\n');
-  mkdirSync(path.join(home, 'projects'), { recursive: true });
-  return home;
-};
-const isolatedHome = claudeHomeOf();
-const isolation = repo({
-  tracked: {
-    'a/selftest.mjs': "import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';\nimport path from 'node:path';\nconst home = process.env.HOOK_STATE_DIR;\nif (!home || !path.isAbsolute(home) || !existsSync(home) || readdirSync(home).length !== 0) process.exit(3);\nwriteFileSync('seen.txt', home);\nmkdirSync(path.join(home, 'guard-x'), { recursive: true });\nwriteFileSync(path.join(home, 'guard-x', 'journal.jsonl'), 'from a');\n",
-    'b/selftest.mjs': "import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';\nimport path from 'node:path';\nconst home = process.env.HOOK_STATE_DIR;\nconst theirs = readFileSync(path.join('..', 'a', 'seen.txt'), 'utf8');\nwriteFileSync('seen.txt', home);\nprocess.exit(home && home !== theirs && existsSync(home) && readdirSync(home).length === 0 ? 0 : 4);\n",
-  },
-});
-const isolated = cliIn(isolation, isolatedHome);
-check(isolated.status === 0 && isolated.stdout.includes('2/2 green'), `each selftest gets its own fresh, empty HOOK_STATE_DIR: ${isolated.status} ${isolated.stdout}`);
-const givenHomes = ['a', 'b'].map((name) => (existsSync(path.join(isolation, name, 'seen.txt')) ? readFileSync(path.join(isolation, name, 'seen.txt'), 'utf8') : ''));
-check(givenHomes.every((home) => home !== '' && !existsSync(home)), `each state home is removed when its selftest ends: ${givenHomes}`);
-check(givenHomes.every((home) => !home.startsWith(isolatedHome) && !home.startsWith(isolation)), 'a state home is neither in the live Claude home nor in the tree');
-
-// ── Leaks: the live state written by a selftest turns it RED ─────────────────────────────────────
-const leakCase = (body, target, extra = {}) => {
-  const home = extra.home ?? claudeHomeOf();
-  const tree = repo({ tracked: { 'a/selftest.mjs': touching(body) } });
-  const resolved = typeof target === 'function' ? target({ home, tree }) : target;
-  const run = cliIn(tree, home, { LEAK_TARGET: resolved, ...(extra.env ?? {}) });
-  return { ...run, home, tree, target: resolved };
-};
-const journalIn = ({ home }) => path.join(home, 'guard-x', 'state', 'nested', 'journal.jsonl');
-
-const appended = leakCase("appendFileSync(target, 'more\\n');", journalIn);
-check(appended.status === 1 && appended.stdout.includes('RED    a/selftest.mjs (exit 0, leaked into the live state)'), `a selftest that exits 0 but appends to a live journal is RED: ${appended.status} ${appended.stdout}`);
-check(appended.stdout.includes(`    changed ${appended.target}`), `the changed live file is named: ${appended.stdout}`);
-check(appended.stdout.includes('of the live state @es ') && appended.stdout.includes('0/1 green'), 'the leak report is bilingual and the summary counts the selftest red');
-
-const sameSize = leakCase("writeFileSync(target, '{\"line\":2}\\n');", journalIn);
-check(sameSize.status === 1 && sameSize.stdout.includes(`    changed ${sameSize.target}`), `a rewrite at the same size is a change: ${sameSize.stdout}`);
-
-const removed = leakCase('rmSync(target);', journalIn);
-check(removed.status === 1 && removed.stdout.includes(`    removed ${removed.target}`), `a removed live file is named: ${removed.stdout}`);
-
-const created = leakCase("mkdirSync(path.dirname(target), { recursive: true });\nwriteFileSync(target, 'x');", ({ home }) => path.join(home, 'guard-new', 'state', 'refusals.jsonl'));
-const createdDir = path.join(created.home, 'guard-new', 'state');
-check(created.status === 1 && created.stdout.includes(`    created ${createdDir}\n    created ${created.target}`), `a state directory the selftest created is a leak, every path named in order: ${created.stdout}`);
-
-const ownTree = leakCase("mkdirSync(path.dirname(target), { recursive: true });\nwriteFileSync(target, 'x');", ({ tree }) => path.join(tree, 'guard-y', 'state', 'refusals.jsonl'));
-check(ownTree.status === 1 && ownTree.stdout.includes(`    created ${ownTree.target}`), `a state directory the selftest created in the tree is a leak too: ${ownTree.stdout}`);
-const treeHome = claudeHomeOf();
-const treeWithState = repo({ tracked: { 'a/selftest.mjs': touching("appendFileSync(target, 'x');"), 'guard-y/state/refusals.jsonl': 'old\n' } });
-const treeLeak = cliIn(treeWithState, treeHome, { LEAK_TARGET: path.join(treeWithState, 'guard-y', 'state', 'refusals.jsonl') });
-check(treeLeak.status === 1 && treeLeak.stdout.includes(`    changed ${path.join(treeWithState, 'guard-y', 'state', 'refusals.jsonl')}`), `a write into the tree's own <m>/state is a leak: ${treeLeak.stdout}`);
-
-const outerRoot = bareDir();
-writeFileSync(path.join(outerRoot, 'outer.jsonl'), 'outer\n');
-const underOuter = leakCase("appendFileSync(target, 'x');", path.join(outerRoot, 'outer.jsonl'), { env: { HOOK_STATE_DIR: outerRoot } });
-check(underOuter.status === 1 && underOuter.stdout.includes(`    changed ${path.join(outerRoot, 'outer.jsonl')}`), `a runner under its own HOOK_STATE_DIR watches that root: ${underOuter.stdout}`);
-
-const failedAndLeaked = leakCase("appendFileSync(target, 'x');\nconsole.log('BOOM-MARK');\nprocess.exit(1);", journalIn);
-check(failedAndLeaked.stdout.includes('RED    a/selftest.mjs (exit 1, leaked into the live state)') && failedAndLeaked.stdout.includes('BOOM-MARK') && failedAndLeaked.stdout.includes(`    changed ${failedAndLeaked.target}`), `a red selftest that also leaked reports both: ${failedAndLeaked.stdout}`);
-
-// A removal that sorts BEFORE a creation: found in the opposite order, so only a sort lists them right.
-// @es Un borrado que ordena ANTES que una creación: se encuentran al revés, así que solo un orden los lista bien.
-const twoLeaks = leakCase("rmSync(target);\nappendFileSync(path.join(path.dirname(path.dirname(target)), 'z-last.jsonl'), 'x');", journalIn);
-const order = [twoLeaks.stdout.indexOf(`removed ${twoLeaks.target}`), twoLeaks.stdout.indexOf(`created ${path.join(twoLeaks.home, 'guard-x', 'state', 'z-last.jsonl')}`)];
-check(order[0] > 0 && order[1] > order[0], `the leaked paths are listed in path order: ${order}`);
-
-// NOT leaks: reading, writing outside a state directory, writing through a link that leaves one.
-// @es NO son fugas: leer, escribir fuera de un directorio de estado, escribir por un enlace que sale de él.
-const reading = leakCase("readFileSync(target, 'utf8');", journalIn);
-check(reading.status === 0 && reading.stdout.includes('1/1 green'), `reading the live state is not a leak: ${reading.stdout}`);
-const elsewhere = leakCase("writeFileSync(target, 'x');", ({ home }) => path.join(home, 'projects', 'transcript.jsonl'));
-check(elsewhere.status === 0, `a write outside every state directory is not a leak: ${elsewhere.stdout}`);
-const linkedHome = claudeHomeOf();
-const outsideLink = bareDir();
-symlinkSync(outsideLink, path.join(linkedHome, 'guard-x', 'state', 'linked'), 'junction');
-const throughLink = leakCase("writeFileSync(target, 'x');", path.join(outsideLink, 'beyond.jsonl'), { home: linkedHome });
-check(throughLink.status === 0, `a write through a link out of a state directory is not followed: ${throughLink.stdout}`);
-
 // ── Nothing to filter with ───────────────────────────────────────────────────────────────────────
 const filtered = cli(allGreen, '--root', allGreen, '--only', 'a/selftest.mjs');
 check(filtered.status === 2, `an option that would filter is refused: ${filtered.status}`);
+check(filtered.stderr.startsWith('Usage: node run.mjs [--root <dir>].') && filtered.stderr.includes(' @es Uso:') && filtered.stdout === '', `the refusal is bilingual usage on stderr: ${filtered.stderr}`);
 
-for (const dir of sandboxes) rmSync(dir, { recursive: true, force: true });
-console.log(`selftest-runner selftest: ${assertions - failures}/${assertions} assertions passed @es aserciones superadas`);
-process.exit(failures === 0 ? 0 : 1);
+finish();

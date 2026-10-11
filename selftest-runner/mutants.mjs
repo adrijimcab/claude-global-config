@@ -17,7 +17,6 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const DISCOVERY = 'selftest-runner/discovery.mjs';
 const RUN = 'selftest-runner/run.mjs';
 const STREAM = 'selftest-runner/stream.mjs';
-const LEAKS = 'selftest-runner/leaks.mjs';
 
 const MUTANTS = [
   // Which files are selftests / Qué ficheros son selftests
@@ -41,11 +40,11 @@ const MUTANTS = [
   ['a git failure is not refused, so a non-repository reads as an empty listing', DISCOVERY, 'if (result.error || result.status !== 0) {', 'if (false) {'],
   // The verdict / El veredicto
   ['the verdict is green whatever ran', RUN, 'exitCode: green === discovered.entries.length ? EXIT_GREEN : EXIT_RED', 'exitCode: EXIT_GREEN'],
-  ['a red selftest stops the run (fail-fast), so later selftests never run', RUN, 'emit(...indent(failure.output));', 'emit(...indent(failure.output));\n    break;'],
-  ['a red selftest no longer prints its output', RUN, 'emit(...indent(failure.output));', ''],
-  ['the summary counts every selftest as green', RUN, '`${green}/${discovered.entries.length} green`', '`${discovered.entries.length}/${discovered.entries.length} green`'],
+  ['a red selftest stops the run (fail-fast), so later selftests never run', RUN, '...whyRed(outcome));', '...whyRed(outcome));\n    break;'],
+  ['a red selftest no longer prints its output', RUN, 'return [...lines, ...indent(failure.output)];', 'return lines;'],
+  ['the summary counts every selftest as green', RUN, '{ green, total: discovered.entries.length }', '{ green: discovered.entries.length, total: discovered.entries.length }'],
   ['zero discovered selftests is a green run', RUN, 'if (discovered.entries.length === 0) {', 'if (false) {'],
-  ['a discovery failure exits like a red selftest instead of not-measured', RUN, 'return { exitCode: EXIT_NOT_MEASURED, report: [error.message] };', 'return { exitCode: EXIT_RED, report: [error.message] };'],
+  ['a discovery failure exits like a red selftest instead of not-measured', RUN, 'return { exitCode: EXIT_NOT_MEASURED, report: [error.message], notMeasured: error.message };', 'return { exitCode: EXIT_RED, report: [error.message], notMeasured: error.message };'],
   ['a selftest that ends without exit status 0 (a signal) is green', RUN, 'if (result.status === 0) return null;', 'if (result.status === 0 || result.status === null) return null;'],
   ['a timeout is no longer told apart from other failures', RUN, "if (result.error?.code === 'ETIMEDOUT') {", 'if (false) {'],
   ['the timeout is not passed to the child, so a selftest that outlives it is left to finish and reads as green', RUN, 'timeout: timeoutMs,', 'timeout: 0,'],
@@ -54,11 +53,12 @@ const MUTANTS = [
   ['the UNTRACKED label is dropped from the report', RUN, "const label = entry.untracked ? ' UNTRACKED' : '';", "const label = '';"],
   // When a line appears / Cuándo aparece una línea
   ['no line is delivered through the hook, so nothing is seen before the end', RUN, '      onLine(line);\n', ''],
-  ['only the summary line is delivered through the hook, so selftest lines wait for the end', RUN, '      onLine(line);', "      if (line.endsWith(' green')) onLine(line);"],
+  ['only the summary line is delivered through the hook, so selftest lines wait for the end', RUN, '      onLine(line);', "      if (line.includes(' en verde')) onLine(line);"],
   ['the returned report loses the lines it delivered', RUN, '      report.push(line);\n', ''],
   ['the command line passes no hook, so it streams nothing', RUN, '{ root: parsed.root, onLine: writeLineSync }', '{ root: parsed.root, onLine: undefined }'],
-  ['a run that measured nothing explains itself on stdout', RUN, 'if (exitCode === EXIT_NOT_MEASURED) console.error(', 'if (exitCode === EXIT_NOT_MEASURED) console.log('],
-  ['a measured run prints its report a second time on stderr', RUN, 'if (exitCode === EXIT_NOT_MEASURED) console.error(', 'if (true) console.error('],
+  ['a run that measured nothing explains itself on stdout', RUN, 'if (notMeasured !== undefined) speaker.dataError(notMeasured);', 'if (notMeasured !== undefined) speaker.data(notMeasured);'],
+  ['a measured run prints a line on stderr', RUN, 'if (notMeasured !== undefined) speaker.dataError(notMeasured);', 'if (true) speaker.dataError(notMeasured);'],
+  ['the usage refusal goes to stdout', RUN, "speaker.complain('usage');", "speaker.say('usage');"],
   // How a line is written / Cómo se escribe una línea
   ['the line is written without its newline', STREAM, "Buffer.from(`${line}\\n`, 'utf8')", "Buffer.from(`${line}`, 'utf8')"],
   ['a short write is taken as complete', STREAM, 'offset += write(fd, bytes, offset, bytes.length - offset);', 'write(fd, bytes, offset, bytes.length - offset);\n      offset = bytes.length;'],
@@ -68,27 +68,8 @@ const MUTANTS = [
   ['a pipe that never drains is retried forever', STREAM, 'refusals > retries', 'false'],
   ['the retry bound is off by one', STREAM, 'refusals > retries', 'refusals >= retries'],
   ['the line goes to stderr instead of stdout', STREAM, 'fd = 1,', 'fd = 2,'],
-
-  // Where a selftest's state goes / Dónde va el estado de un selftest
-  ['the child is not given a state home of its own, so it writes wherever it resolves', RUN, '    env: { ...process.env, [STATE_ROOT_VARIABLE]: stateHome },\n', ''],
-  ['every selftest shares one state home', RUN, "const stateHome = mkdtempSync(path.join(tmpdir(), 'selftest-state-'));", "const stateHome = path.join(tmpdir(), 'selftest-state-shared');"],
-  ['the state home is left behind', RUN, '    rmSync(stateHome, { recursive: true, force: true });\n', ''],
-  // What is a leak / Qué es una fuga
-  ['a selftest that leaked but exited 0 is green', RUN, 'if (failure === null && leaks.length === 0) {', 'if (failure === null) {'],
-  ['the leaked paths are not printed', RUN, "      emit(...leaks.map((leak) => `    ${leak.change} ${leak.path}`));\n", ''],
-  ['a leak is not named as one in the RED line', RUN, "const leaked = leaks.length === 0 ? '' : ', leaked into the live state';", "const leaked = '';"],
-  ['the second snapshot is the first one again', RUN, 'return { failure, leaks: leaksBetween(before, snapshotLiveState(root)) };', 'return { failure, leaks: leaksBetween(before, before) };'],
-  ['the snapshot is taken after the selftest, so nothing differs', RUN, '    const before = snapshotLiveState(root);\n    const failure = exitOf({ root, entry, timeoutMs, spawn, stateHome });', '    const failure = exitOf({ root, entry, timeoutMs, spawn, stateHome });\n    const before = snapshotLiveState(root);'],
-  ['the Claude home is not watched', LEAKS, 'const homes = [claudeHome(), path.resolve(treeRoot)];', 'const homes = [path.resolve(treeRoot)];'],
-  ['the tree under test is not watched', LEAKS, 'const homes = [claudeHome(), path.resolve(treeRoot)];', 'const homes = [claudeHome()];'],
-  ["the runner's own HOOK_STATE_DIR is not watched", LEAKS, '  if (process.env[STATE_ROOT_VARIABLE]) directories.push(stateRoot());\n', ''],
-  ['a link out of the live state is followed', LEAKS, "import { lstatSync, readdirSync } from 'node:fs';", "import { statSync as lstatSync, readdirSync } from 'node:fs';"],
-  ['only the top of a state directory is recorded', LEAKS, '  for (const name of readdirSync(directory)) record(path.join(directory, name), into);\n', ''],
-  ['a rewrite at the same size is not a change', LEAKS, 'return `${stats.size}:${stats.mtimeMs}`;', 'return `${stats.size}`;'],
-  ['a created file is not a leak', LEAKS, "    if (!before.has(entry)) leaks.push({ path: entry, change: 'created' });\n    else if", '    if (!before.has(entry)) continue;\n    else if'],
-  ['a changed file is not a leak', LEAKS, "    else if (before.get(entry) !== signature) leaks.push({ path: entry, change: 'changed' });\n", ''],
-  ['a removed file is not a leak', LEAKS, "    if (!after.has(entry)) leaks.push({ path: entry, change: 'removed' });", '    void entry;'],
-  ['the leaks are not sorted', LEAKS, 'return leaks.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));', 'return leaks;'],
+  // Where a selftest runs and what is an escape: `sandbox.mutants.mjs`.
+  // @es Dónde corre un selftest y qué es una fuga: `sandbox.mutants.mjs`.
 
   // What the operator can choose / Lo que puede elegir el operador
   ['an option after `--root <dir>` is accepted, so a filter can be passed', RUN, "if (argv.length === 2 && argv[0] === '--root') return { root: argv[1] };", "if (argv[0] === '--root') return { root: argv[1] };"],
