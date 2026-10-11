@@ -119,6 +119,13 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
 
 ## QUEUED (not started)
 
+- Voice judge: restore the Rioplatense voseo criterion (2026-10-11). Measured in the live settings.json:
+  rubric v2 judges structure (prose vs enumerations) and asks for warmth, but no rule fails a reply to
+  the owner written in Spanish with "tú"/"usted" instead of "vos"; v1 had "no warm Rioplatense voseo" as a
+  fail criterion, and output-styles/gentleman.md:56 asks for Rioplatense voseo. Add it as its own rule,
+  calibrated on real replies (owner-accepted voseo replies must pass, a neutral-Spanish prose reply must
+  fail) through voice-judge/measure.mjs. Waiting for the owner's go (no new launches until the report).
+
 - B1 — Stop fast path when repos are clean + incremental transcript index + git spawn counter (an
   instrument to find spawns to cut, not a speed-up by itself; the owner asked for it on 2026-10-06) +
   target <= 300 ms (host timing = H6).
