@@ -14,7 +14,7 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-10-04 — worker-claim-about-unreachable-file-committed-as-fact: no mechanism <!--fc:worker-claim-about-unreachable-file-committed-as-fact#14-->
 - [promoted] 2026-09-29 — guard-that-cannot-go-red: mechanism .claude/entry-point-check/check.mjs <!--fc:guard-that-cannot-go-red#14-->
 - [promoted] 2026-09-22 — promotion-to-contract-read-as-prevention: mechanism .claude/failure-capture/capture.mjs <!--fc:promotion-to-contract-read-as-prevention#2-->
-- [promoted] 2026-10-01 — contract-doc-names-a-mechanism-nobody-verifies: mechanism ~/.claude/contract-path-check/check.mjs <!--fc:contract-doc-names-a-mechanism-nobody-verifies#1-->
+- [promoted] 2026-10-01 — contract-doc-names-a-mechanism-nobody-verifies: mechanism ~/.claude/contract-path-check/check.mjs <!--fc:contract-doc-names-a-mechanism-nobody-verifies#2-->
 - [promoted] 2026-09-16 — gitignored-deliverable-destroyed-by-worktree-autoclean: mechanism .claude/worktree-work/worktree-work.mjs <!--fc:gitignored-deliverable-destroyed-by-worktree-autoclean#1-->
 - [promoted] 2026-09-22 — collision-fixed-by-deleting-unread-side: mechanism .claude/collision-guard/guard.mjs <!--fc:collision-fixed-by-deleting-unread-side#3-->
 - [promoted] 2026-09-30 — audit-verdict-from-commit-subjects-not-from-reading: no mechanism <!--fc:audit-verdict-from-commit-subjects-not-from-reading#12-->
@@ -31,4 +31,4 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-10-01 — replied-to-owner-in-english: no mechanism <!--fc:replied-to-owner-in-english#11-->
 - [promoted] 2026-10-04 — root-cause-stated-before-measured: no mechanism <!--fc:root-cause-stated-before-measured#2-->
 - [promoted] 2026-10-02 — brief-had-workers-open-every-image: no mechanism <!--fc:brief-had-workers-open-every-image#2-->
-- [promoted] 2026-10-05 — brief-measured-line-carried-an-unmeasured-claim: no mechanism <!--fc:brief-measured-line-carried-an-unmeasured-claim#4-->
+- [promoted] 2026-10-05 — brief-measured-line-carried-an-unmeasured-claim: no mechanism <!--fc:brief-measured-line-carried-an-unmeasured-claim#5-->
