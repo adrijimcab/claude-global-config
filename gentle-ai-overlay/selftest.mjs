@@ -497,7 +497,7 @@ test('check.mjs --json: the lazy sections report syncSafe, every other kind does
   const safe = report.results.filter((entry) => entry.syncSafe === true).map((entry) => entry.id);
   expect(
     safe.join(','),
-    'lazy-blocking-prompts,lazy-delegated-verification,lazy-review-contract,lazy-delegation-restatement,lazy-routing-ladder,lazy-skill-discovery,lazy-skill-registry-protocol,lazy-odd-reference,lazy-rdd-user-owned',
+    'lazy-blocking-prompts,lazy-review-contract,lazy-orchestrator-mental-model,lazy-delegation-and-verification,lazy-routing-and-hand-off,lazy-skill-registry-protocol,lazy-odd-reference,lazy-rdd-user-owned,lazy-remote-authorization',
     'sync-safe ids',
   );
 });

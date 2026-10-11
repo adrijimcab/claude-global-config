@@ -115,17 +115,17 @@ export function registerReapplyCases({ test, expect, newRoot, put, read, install
     lazyEntries().forEach((entry) => expect(readTextOrNull(path.join(context.home, entry.stash)) !== null, true, `${entry.name}: stash written`));
   });
 
-  test('dispatcher: a raw v2/v3 render moves the sections both renders share, keeps its `### Delegation Rules` loaded and names the refusal', () => {
+  test('dispatcher: a raw v2/v3 render moves the sections both renders share, keeps its delegation span loaded and names the refusal', () => {
     const context = loadedHome({ reviewGlobal: '' }, fullOrchestratorMd({ eol: '\r\n', regionId: 'sdd-orchestrator' }));
     const original = claudeOf(context);
-    const delegation = lazyEntryNamed('delegation-restatement');
+    const delegation = lazyEntryNamed('delegation-and-verification');
     const message = JSON.parse(dispatchPost(context, shellPayload('gentle-ai sync')).stdout).systemMessage;
     const after = claudeOf(context);
     expect(inspectSection(after, review).form, 'moved', 'review contract moved');
     const span = (text) => text.slice(text.indexOf(delegation.start), text.indexOf(delegation.end));
     expect(span(after), span(original), 'the v3 delegation span is untouched');
     expect(readTextOrNull(path.join(context.home, delegation.stash)), null, 'no v4 stash written');
-    expect(message.includes('lazy-delegation-restatement') && message.includes('could not be re-applied'), true, `refusal named (${message})`);
+    expect(message.includes('lazy-delegation-and-verification') && message.includes('could not be re-applied'), true, `refusal named (${message})`);
   });
 
   test('dispatcher: a raw sync leaves a customization sync can ERASE alone (an enabled telemetry is not re-applied by the hook)', () => {

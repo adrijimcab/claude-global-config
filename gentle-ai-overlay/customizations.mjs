@@ -113,18 +113,7 @@ const LAZY_SECTIONS = [
     regions: ORCHESTRATOR_REGIONS,
     stash: `${LAZY_DIR}/blocking-prompt-contracts.md`,
     pointer: {
-      en: 'The blocking-prompt contracts (lossless relay of a prompt, menu or choice envelope meant for the user; the Gentle AI provider-defect handoff) are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, or a `gentle-ai` invocation exits non-zero or refuses.',
-    },
-  },
-  {
-    name: 'delegated-verification',
-    label: 'verification contracts',
-    start: '#### Delegated Verification Gate (MANDATORY)',
-    end: '#### Review Execution Contract',
-    regions: ORCHESTRATOR_REGIONS,
-    stash: `${LAZY_DIR}/delegated-verification-contracts.md`,
-    pointer: {
-      en: 'The verification contracts (Delegated Verification Gate, Native Checking Contract) are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, when a delegated writer returns work, and before deciding what verification or checking a finished change needs.',
+      en: 'Blocking-prompt contracts (lossless relay of a prompt, menu or choice envelope for the user; Gentle AI provider-defect handoff): `{stash}`. READ IT IN FULL, and follow it as if written here, as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, or a `gentle-ai` invocation exits non-zero or refuses.',
     },
   },
   // Owner decision 2026-10-01: the review execution contract is loaded only while gentle-ai reviews may
@@ -143,46 +132,47 @@ const LAZY_SECTIONS = [
     loadedWhile: 'reviews-may-run',
     stash: `${LAZY_DIR}/review-execution-contract.md`,
     pointer: {
-      en: 'Receipt-driven development is off globally, so this contract is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, before any `gentle-ai review` command other than `gentle-ai review mode status`, before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as `gentle-ai review mode status` reports `effective: on`.',
+      en: 'Receipt-driven development is off globally, so this contract is not loaded: `{stash}`. READ IT IN FULL, and follow it as if written here, before any `gentle-ai review` command other than `gentle-ai review mode status`, before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as `gentle-ai review mode status` reports `effective: on`.',
     },
   },
   // gentle-ai v4 (ODD) only: the spans below exist in the `orchestrator` and `agent-routing` regions that v4
-  // renders, so `regions` names the v4 ids alone and a v2/v3 render never matches them. Measured 2026-10-11 on
-  // a v4.0.0 render in an emulated home: they hold 22,177 of the 39,821 characters that stayed loaded after
-  // the sections above moved. @es Solo gentle-ai v4 (ODD): estos tramos existen en las regiones
-  // `orchestrator` y `agent-routing` que genera v4, así que `regions` nombra solo los ids de v4 y un render
-  // v2/v3 nunca coincide. Medido el 2026-10-11 sobre un render de v4.0.0 en un home emulado.
+  // renders, so `regions` names the v4 ids alone and a v2/v3 render never matches them (it is refused, never
+  // moved under a v4 pointer). Measured 2026-10-11 on a v4.0.0 render in an emulated home: with them the
+  // always-loaded set fell from 88,826 to under the 66,000-character target. @es Solo gentle-ai v4 (ODD): estos
+  // tramos existen en las regiones `orchestrator` y `agent-routing` que genera v4, así que `regions` nombra solo
+  // los ids de v4 y un render v2/v3 nunca coincide (se rechaza, nunca se mueve bajo un puntero de v4). Medido el
+  // 2026-10-11 sobre un render de v4.0.0 en un home emulado.
   {
-    name: 'delegation-restatement',
-    label: 'orchestrator delegation rules',
-    start: '### Delegation Rules',
-    end: '#### Delegated Verification Gate (MANDATORY)',
+    name: 'orchestrator-mental-model',
+    label: 'orchestrator mental model',
+    start: '### Mental Model',
+    end: '### Lossless Blocking Prompts (MANDATORY)',
     regions: ['orchestrator'],
-    stash: `${LAZY_DIR}/orchestrator-delegation-rules.md`,
+    stash: `${LAZY_DIR}/orchestrator-mental-model.md`,
     pointer: {
-      en: 'The orchestrator Delegation Rules table and its own list of delegation triggers are not loaded here: `### Mandatory Delegation Triggers` under `## Implementation Routing`, always loaded, binds the same triggers. Their exact text is in `{stash}`. READ THAT FILE IN FULL when that section does not settle whether a piece of work stays inline or goes to a delegated worker.',
+      en: 'Mental Model and "ODD is the default workflow" restate `## Implementation Routing` (always loaded): `{stash}`. READ IT IN FULL when it is unclear whether to act as coordinator or executor.',
     },
   },
   {
-    name: 'routing-ladder',
-    label: 'routing ladder and delegation hand-off rules',
+    name: 'delegation-and-verification',
+    label: 'language, delegation and verification contracts',
+    start: '### Language Domain Contract',
+    end: '#### Review Execution Contract',
+    regions: ['orchestrator'],
+    stash: `${LAZY_DIR}/delegation-and-verification.md`,
+    pointer: {
+      en: 'Language Domain Contract, Delegation Rules and its triggers (restated, always loaded, under `## Implementation Routing`), Delegated Verification Gate, Native Checking Contract: `{stash}`. READ IT IN FULL, and follow it as if written here, before launching a delegated worker, when a delegated writer returns work, and before deciding what verification a finished change needs.',
+    },
+  },
+  {
+    name: 'routing-and-hand-off',
+    label: 'routing ladder, hand-off rules and skill discovery',
     start: '#### Cost and Context Balance',
-    end: '### Delivery strategy',
-    regions: ['orchestrator'],
-    stash: `${LAZY_DIR}/routing-ladder-and-hand-off.md`,
-    pointer: {
-      en: 'Cost and Context Balance, the Work Routing Ladder, the Canonical Lightweight Workflows, the Allowed edit surfaces contract (MANDATORY for every writer) and the Key Learnings closing block are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL before launching any delegated worker (explorer, writer or verifier), and before recovering from a tooling or worktree incident.',
-    },
-  },
-  {
-    name: 'skill-discovery',
-    label: 'intent-driven skill discovery',
-    start: '### Intent-Driven Skill Discovery',
     end: '### Safety',
     regions: ['orchestrator'],
-    stash: `${LAZY_DIR}/intent-driven-skill-discovery.md`,
+    stash: `${LAZY_DIR}/routing-and-hand-off.md`,
     pointer: {
-      en: 'Intent-driven skill discovery is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL when a request names or implies a workflow a skill may cover and the injected skill list does not show that skill.',
+      en: 'Cost and Context Balance, Work Routing Ladder, Canonical Lightweight Workflows, Allowed edit surfaces (MANDATORY for every writer), Key Learnings closing block, Delivery strategy and Intent-Driven Skill Discovery: `{stash}`. READ IT IN FULL before launching a delegated worker, before recovering from a tooling or worktree incident, and when a request implies a skill the injected list does not show.',
     },
   },
   {
@@ -193,7 +183,7 @@ const LAZY_SECTIONS = [
     regions: ['orchestrator'],
     stash: `${LAZY_DIR}/skill-registry-protocol.md`,
     pointer: {
-      en: 'The skill registry protocol (resolving `.atl/skill-registry.md` and passing exact `SKILL.md` paths to workers under `## Skills to load before work`) is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL before the first delegation of a session, and when a worker reports `skill_resolution`.',
+      en: 'Skill Registry Protocol (`.atl/skill-registry.md`; exact `SKILL.md` paths passed under `## Skills to load before work`): `{stash}`. READ IT IN FULL before the first delegation of a session and when a worker reports `skill_resolution`.',
     },
   },
   {
@@ -204,7 +194,7 @@ const LAZY_SECTIONS = [
     regions: ['agent-routing'],
     stash: `${LAZY_DIR}/odd-reference.md`,
     pointer: {
-      en: 'The ODD reference detail (research and assumption challenges, the feature document `odd/tasks/<feature>.md` and its engram mirror, resume, the test-first policy, per-commit review assessment, and the delivery strategy) is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL before creating, resuming or updating a feature document, before the first write of substantial authorized work, and before any work-unit commit or pull request.',
+      en: 'ODD reference detail (research, the feature document `odd/tasks/<feature>.md` and its engram mirror, resume, test-first policy, per-commit review assessment, delivery strategy): `{stash}`. READ IT IN FULL before creating, resuming or updating a feature document, before the first write of substantial authorized work, and before any work-unit commit or pull request.',
     },
   },
   {
@@ -215,7 +205,20 @@ const LAZY_SECTIONS = [
     regions: ['agent-routing'],
     stash: `${LAZY_DIR}/receipt-driven-development-switch.md`,
     pointer: {
-      en: 'The rules for the receipt-driven development switch (`gentle-ai review mode enable|disable|status`: opt-in, off by default, never enabled on the user\'s behalf) are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.',
+      en: 'Rules of the receipt-driven development switch (`gentle-ai review mode enable|disable|status`; opt-in, off by default, never enabled on the user\'s behalf): `{stash}`. READ IT IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.',
+    },
+  },
+  // The core of the rule stays loaded in the pointer itself; the stash holds its full text. @es El núcleo de la
+  // regla sigue cargado en el propio puntero; el depósito guarda su texto completo.
+  {
+    name: 'remote-authorization',
+    label: 'remote operation authorization',
+    start: '## Remote operation authorization',
+    end: '<!-- /gentle-ai:remote-authorization -->',
+    regions: ['remote-authorization'],
+    stash: `${LAZY_DIR}/remote-operation-authorization.md`,
+    pointer: {
+      en: 'Remote execution, file transfer, and inspecting or using SSH agents, credentials or authenticated sessions need the user\'s explicit authorization of destination, operation and credential; local-development permission is not it. Full rules: `{stash}`. READ IT IN FULL before any such step.',
     },
   },
 ];

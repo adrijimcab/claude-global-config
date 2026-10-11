@@ -70,7 +70,7 @@ export function registerLazySectionCases({ test, expect, newRoot, put, read, ins
   // The v4-only spans name the v4 region ids alone: inside a v2/v3 render their anchors (`### Delegation Rules`
   // is rendered by both) must never be moved under a v4 pointer. @es Los tramos exclusivos de v4 nombran solo los
   // ids de región de v4: dentro de un render v2/v3 sus anclas nunca se mueven bajo un puntero de v4.
-  const V4_ONLY = ['delegation-restatement', 'routing-ladder', 'skill-discovery', 'skill-registry-protocol', 'odd-reference'];
+  const V4_ONLY = ['orchestrator-mental-model', 'delegation-and-verification', 'routing-and-hand-off', 'skill-registry-protocol', 'odd-reference'];
   for (const name of V4_ONLY) {
     test(`lazy list: "${name}" is v4-only, so its span inside the v2/v3 orchestrator region is refused, never moved`, () => {
       const entry = lazyEntryNamed(name);
@@ -149,7 +149,7 @@ export function registerLazySectionCases({ test, expect, newRoot, put, read, ins
   test('section: a moved pointer that differs from the declared one is repointed in any line ending, and a restore ignores the pointer', () => {
     for (const eol of ['\n', '\r\n']) {
       const moved = lazy(orchestratorMd({ eol }));
-      const stale = moved.text.replace('READ THAT FILE IN FULL', 'read it sometime');
+      const stale = moved.text.replace('READ IT IN FULL', 'read it sometime');
       expect(stale !== moved.text, true, 'the fixture is stale');
       const fixed = lazy(stale, moved.stash);
       expect(fixed.outcome, 'repointed', `outcome (${JSON.stringify(eol)})`);
@@ -236,7 +236,7 @@ export function registerLazySectionCases({ test, expect, newRoot, put, read, ins
 
   test('section: two sections of one file are independent, in either order', () => {
     const first = lazyEntryNamed('blocking-prompts');
-    const second = lazyEntryNamed('delegated-verification');
+    const second = lazyEntryNamed('review-contract');
     const text = [
       '# Owner pointer',
       region('sdd-orchestrator', [first.start, '', 'First body — ñandú.', '', first.end, '', '', second.start, '', 'Second body — 日本.', '', second.end, 'Tail.'].join('\n')),

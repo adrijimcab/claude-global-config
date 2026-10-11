@@ -46,35 +46,31 @@ function orchestratorRegion({ span = REVIEW_SPAN, regionId = 'sdd-orchestrator' 
 export function fullOrchestratorMd({ eol = '\n', regionId = 'orchestrator' } = {}) {
   const v4 = regionId === 'orchestrator';
   const blocking = lazyEntryNamed('blocking-prompts');
-  const delegation = lazyEntryNamed('delegation-restatement');
-  const delegated = lazyEntryNamed('delegated-verification');
-  const ladder = lazyEntryNamed('routing-ladder');
-  const discovery = lazyEntryNamed('skill-discovery');
+  const delegation = lazyEntryNamed('delegation-and-verification');
+  const routing = lazyEntryNamed('routing-and-hand-off');
   const registry = lazyEntryNamed('skill-registry-protocol');
   const odd = lazyEntryNamed('odd-reference');
   const rdd = lazyEntryNamed('rdd-user-owned');
   const onlyV4 = (lines) => (v4 ? lines : []);
+  // Both renders carry the language, delegation and verification headings; only the v4 one may move them.
+  // @es Ambos renders llevan los encabezados de idioma, delegación y verificación; solo el de v4 puede moverlos.
   const body = [
     '# Agent Teams',
     '',
+    ...onlyV4([lazyEntryNamed('orchestrator-mental-model').start, '', 'Model — ñandú.', '']),
     blocking.start,
     '',
     'Blocking prompts body — ñandú 日本.',
     '',
-    blocking.end,
+    delegation.start,
     '',
     'Language body.',
     '',
-    // Both renders carry `### Delegation Rules`; only the v4 one may move it. @es Ambos renders llevan `### Delegation Rules`; solo el de v4 puede moverlo.
-    delegation.start,
+    '### Delegation Rules',
     '',
     'Delegation table — ñandú.',
     '',
-    '#### Mandatory Delegation Triggers',
-    '',
-    'Triggers.',
-    '',
-    delegated.start,
+    '#### Delegated Verification Gate (MANDATORY)',
     '',
     'Gate body.',
     '',
@@ -82,15 +78,14 @@ export function fullOrchestratorMd({ eol = '\n', regionId = 'orchestrator' } = {
     '',
     'Checking body.',
     '',
-    `${REVIEW_SPAN}${ladder.start}`,
+    `${REVIEW_SPAN}${routing.start}`,
     '',
     'Cost.',
     '',
-    ...onlyV4(['### Work Routing Ladder', '', 'Ladder — 日本.', '', '### Allowed edit surfaces (MANDATORY)', '', 'Surfaces.', '', ladder.end, '', 'Delivery.', '']),
-    ...onlyV4([discovery.start, '', 'Discovery — ñandú.', '', discovery.end, '', 'Safety rules.', '', registry.start, '', 'Registry — 日本.', '']),
+    ...onlyV4(['### Work Routing Ladder', '', 'Ladder — 日本.', '', '### Intent-Driven Skill Discovery', '', 'Discovery — ñandú.', '', routing.end, '', 'Safety rules.', '', registry.start, '', 'Registry — 日本.', '']),
   ].join('\n');
-  const routing = ['## Implementation Routing', '', '### ODD protocol (MANDATORY, in this order, on every request)', '', 'Protocol.', '', ...onlyV4([odd.start, '', 'ODD detail — ñandú 日本.', '']), rdd.start, '', 'Switch rules — 日本.', '', region('remote-authorization', 'Remote.')].join('\n');
-  return ['# Owner pointer', '', region('persona', 'Persona.'), '', region(regionId, body), '', region('agent-routing', routing), ''].join('\n').split('\n').join(eol);
+  const agentRouting = ['## Implementation Routing', '', '### ODD protocol (MANDATORY, in this order, on every request)', '', 'Protocol.', '', ...onlyV4([odd.start, '', 'ODD detail — ñandú 日本.', '']), rdd.start, '', 'Switch rules — 日本.', '', region('remote-authorization', [lazyEntryNamed('remote-authorization').start, '', 'Remote rules — ñandú.'].join('\n'))].join('\n');
+  return ['# Owner pointer', '', region('persona', 'Persona.'), '', region(regionId, body), '', region('agent-routing', agentRouting), ''].join('\n').split('\n').join(eol);
 }
 
 /**
