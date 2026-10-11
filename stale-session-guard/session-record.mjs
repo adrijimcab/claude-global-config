@@ -13,13 +13,12 @@ import path from 'node:path';
 
 import { isMechanismName, stateDir } from '../hook-state/locations.mjs';
 
-/** The mechanism name that owns this state. @es El nombre del mecanismo dueño de este estado. */
-export const MECHANISM = 'stale-session-guard';
-
 /** Whether `sessionId` is safe to use as a file name. @es Si `sessionId` sirve como nombre de fichero. */
 export const isRecordableSession = isMechanismName;
 
-const recordFile = (sessionId) => path.join(stateDir(MECHANISM), `${sessionId}.json`);
+// The mechanism is named literally so the state census can see which files this module owns.
+// @es El mecanismo se nombra literalmente para que el censo de estado vea qué ficheros posee este módulo.
+const recordFile = (sessionId) => path.join(stateDir('stale-session-guard'), `${sessionId}.json`);
 
 /**
  * The record of `sessionId`, or `undefined` when there is none or it cannot be read.

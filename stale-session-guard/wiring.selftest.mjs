@@ -15,6 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isolateState } from '../hook-state/locations.mjs';
 
 const tree = path.resolve(import.meta.dirname, '..');
 const results = [];
@@ -33,10 +34,13 @@ check('exactly one UserPromptSubmit command is registered for the warning', regi
 
 const command = (registered[0]?.command ?? 'exit 99').split('$HOME/.claude').join(tree.split('\\').join('/'));
 const home = mkdtempSync(path.join(os.tmpdir(), 'wiring-home-'));
-const state = mkdtempSync(path.join(os.tmpdir(), 'wiring-state-'));
+
+// The state root is redirected for this process and inherited by every command it runs.
+// @es La raíz de estado se redirige para este proceso y la heredan todos los comandos que ejecuta.
+isolateState('stale-session-guard');
 
 try {
-  const run = (payload) => spawnSync(command, { shell: true, input: JSON.stringify(payload), encoding: 'utf8', env: { ...process.env, HOOK_CLAUDE_HOME: home, HOOK_STATE_DIR: state } });
+  const run = (payload) => spawnSync(command, { shell: true, input: JSON.stringify(payload), encoding: 'utf8', env: { ...process.env, HOOK_CLAUDE_HOME: home } });
   const dispatch = (manifest) => ({ matcher: '', hooks: [{ type: 'command', command: `node "$HOME/.claude/hook-dispatch/dispatch.mjs" "$HOME/.claude/hook-dispatch/manifests/${manifest}.json"` }] });
   const transcript = path.join(home, 't.jsonl');
   const payload = { session_id: 'b6959f54-7808-45ca-bb88-cf53c0ecf9cf', transcript_path: transcript, cwd: home, prompt_id: 'f9f7bdd3-c568-46b8-a6d0-acb19dc2cf5a', permission_mode: 'auto', hook_event_name: 'UserPromptSubmit', prompt: 'say hi' };
@@ -65,7 +69,6 @@ try {
   check('the same change is not warned twice', [again.status, again.stdout], [0, '']);
 } finally {
   rmSync(home, { recursive: true, force: true });
-  rmSync(state, { recursive: true, force: true });
 }
 
 const failed = results.filter((ok) => !ok).length;
