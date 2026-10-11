@@ -18,11 +18,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { isolateState } from '../hook-state/locations.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STATE = mkdtempSync(path.join(tmpdir(), 'voice-judge-state-'));
 const WORK = mkdtempSync(path.join(tmpdir(), 'voice-judge-work-'));
 
 process.env.HOOK_STATE_DIR = STATE;
+isolateState('voice-judge');
 
 /**
  * COMPLETION SENTINEL: an import that ran a module's `main()` would end this process half way, green.
@@ -64,6 +67,7 @@ check('rubric: the signature is not the premise judge\'s', PROMPT_SIGNATURE.incl
 check('rubric: one $ and it is $ARGUMENTS', [PROMPT.split('$').length - 1, PROMPT.split('$ARGUMENTS').length - 1], [1, 1]);
 check('rubric: passes on stop_hook_active', PROMPT.includes('If the input field stop_hook_active is true, answer {"ok": true}.'), true);
 check('rubric: judges only the final message', PROMPT.includes('Judge only the field last_assistant_message.'), true);
+check('rubric: never judges earlier messages or the transcript', PROMPT.includes('Never judge earlier messages or anything you could read through transcript_path.'), true);
 check('rubric: passes a message addressed to a subagent or peer', PROMPT.includes('addressed to a subagent or a peer session rather than to the owner (for example a brief with MEASURED: and HYPOTHESIS: lines'), true);
 check('rubric: passes one or two lines with no status', PROMPT.includes('one or two lines with no status content'), true);
 check('rubric: rule 4 looks at what carries the reply, prose or enumerations', PROMPT.includes('Look at what CARRIES it: full-sentence prose paragraphs that tell what happened and why, or enumerations'), true);
@@ -74,12 +78,15 @@ check('rubric: prose with a supporting list passes', PROMPT.includes('when prose
 check('rubric: unsure passes', PROMPT.includes('When unsure, answer {"ok": true}.'), true);
 check('rubric: the signature is the v3 line', PROMPT_SIGNATURE, 'voice-judge rubric v3.');
 check('rubric: a Spanish reply with tu or usted forms fails', PROMPT.includes('answer {"ok": false} when it addresses him with tú or usted forms (tienes, tiene usted, puedes, quieres, su as his possessive) instead of Rioplatense voseo (tenés, podés, querés, vos)'), true);
-check('rubric: quoted text, code and other people's words do not count for voseo', PROMPT.includes('Quoted text, code and other people's words do not count.'), true);
+check('rubric: quoted text, code and the words of other people do not count for voseo', PROMPT.includes('Quoted text, code and the words of other people do not count.'), true);
 check('rubric: tu alone is not a tuteo marker', PROMPT.includes('tu alone is normal in voseo and does not count'), true);
 check('rubric: a cold, stiff or bureaucratic reply fails', PROMPT.includes('reads cold, stiff or bureaucratic'), true);
 check('rubric: the wanted voice is simpatico, comfortable and pleasant', PROMPT.includes('simpático, comfortable and pleasant, the voice of a warm Argentine mentor'), true);
 check('rubric: slang is limited to one or two natural expressions', PROMPT.includes('one or two natural Rioplatense expressions at most, and a reply overloaded with slang until it is a caricature fails too'), true);
 check('rubric: the reason asks for voseo and warmth', PROMPT.includes('speak to the owner in voseo (vos, tenés, podés) with a warm, pleasant, simpático tone'), true);
+check('rubric: a short reply passes before the coldness rule is applied', PROMPT.indexOf('one or two lines with no status content') < PROMPT.indexOf('reads cold, stiff or bureaucratic'), true);
+check('rubric: coldness is register only, voseo first person is not cold', PROMPT.includes('Judge register only, never structure or length: a reply in the first person that speaks to him directly in voseo'), true);
+check('rubric: the subject of a verb is checked before citing a tú form', PROMPT.includes('before citing a tú form check its subject'), true);
 check('rubric: a short reply is judged for voseo before it passes', PROMPT.indexOf('addresses him with tú or usted') < PROMPT.indexOf('one or two lines with no status content'), true);
 check('rubric: never sets impossible', PROMPT.includes('Never set the field impossible.'), true);
 check('rubric: never asks for length for its own sake', PROMPT.includes('Never ask for a longer message for its own sake'), true);
