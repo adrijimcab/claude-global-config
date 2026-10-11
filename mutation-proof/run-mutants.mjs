@@ -41,6 +41,13 @@
  *    ONCE into a snapshot; the plan, the baseline and every mutant are measured against that one copy, so a
  *    campaign describes a single tree rather than whatever each mutant happened to copy.
  *
+ * WHAT IS COPIED IS DERIVED, NOT LISTED. The snapshot holds the folder of every file in the relative-import
+ * closure of the selftest and of every mutated file (`import-closure.mjs`). A campaign used to list those
+ * folders in `paths` by hand; the closure differs per install, so one vendored campaign could not be right in
+ * both, and every install edited its copy. `paths` is still accepted and ADDED, for what a selftest reads
+ * without importing (fixtures on disk, a script it spawns). An import that cannot be followed — a missing
+ * file, a specifier that climbs out of the fleet — stops the run with `EXIT_NOT_MEASURED` and names it.
+ *
  * A RUNTIME CRASH IS A KILL, BUT A WEAK ONE, AND IT IS REPORTED APART. A mutant that makes the mechanism
  * throw (a `ReferenceError`, a `TypeError` on a path the selftest drives) was loaded, run and reached, and the
  * selftest refused to pass. What separates it from a syntax error is that the mutated code EXECUTED, and
@@ -59,13 +66,16 @@
  * @es Prueba que un selftest DISCRIMINA. Se rechaza lo que haría falsa la cifra: un texto a mutar que no
  * aparece EXACTAMENTE una vez (REFUSED), una línea base que no está en verde (sale con 2, nada medido), un
  * mutante que no parsea (BROKEN, superviviente) y una instantánea que se mueve (se copia una sola vez). Un
- * crash en ejecución es una muerte DÉBIL: se informa aparte (CRASHED) y `crashKills` decide si falla.
+ * crash en ejecución es una muerte DÉBIL: se informa aparte (CRASHED) y `crashKills` decide si falla. Lo que
+ * se copia se DERIVA del cierre de imports relativos del selftest y de cada fichero mutado; `paths` se SUMA
+ * para lo que el selftest lee sin importar, y un import que no se puede seguir detiene la corrida nombrándolo.
  */
 
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { copiedPaths, importClosure } from './import-closure.mjs';
 import { classifyKill } from './kill-kind.mjs';
 
 /** What a kill by crash does to the verdict. @es Qué hace al veredicto una muerte por crash. */
@@ -97,9 +107,9 @@ export function occurrencesOf(text, needle) {
 
 /**
  * @param options.fleetRoot The `.claude/` directory holding the mechanism.
- * @param options.paths Everything the selftest needs, relative to `fleetRoot` — directories or single files —
- *   copied into each sandbox. A missing one reddens the baseline, so the run stops rather than measure a
- *   selftest that cannot pass.
+ * @param options.paths Optional. What the selftest needs WITHOUT importing it, relative to `fleetRoot` —
+ *   directories or single files — added to the derived import closure. What it imports is never listed here.
+ *   A missing need reddens the baseline, so the run stops rather than measure a selftest that cannot pass.
  * @param options.selftest The selftest path, relative to `fleetRoot`.
  * @param options.mutants `[label, file relative to fleetRoot, original text, replacement]`.
  * @param options.timeoutMs Per-run selftest timeout.
@@ -118,18 +128,19 @@ export function runMutants(options) {
   }
 }
 
-function measure({ fleetRoot, paths, selftest, mutants, timeoutMs = 900_000, crashKills = 'report' }) {
+function measure({ fleetRoot, paths = [], selftest, mutants, timeoutMs = 900_000, crashKills = 'report' }) {
   if (!CRASH_POLICIES.has(crashKills)) throw new NotMeasured(`crashKills must be 'report' or 'fail', got ${JSON.stringify(crashKills)}; no policy is picked on the caller's behalf`);
   if (mutants.length === 0) throw new NotMeasured('the campaign holds no mutant, and 0/0 killed is not a proof');
 
-  const sandboxRoot = sandboxRootOf(fleetRoot, paths);
+  const copied = copiedPathsOf(fleetRoot, paths, selftest, mutants);
+  const sandboxRoot = sandboxRootOf(fleetRoot, copied);
   const snapshot = mkdtempSync(path.join(sandboxRoot, 'snapshot-'));
-  const sandboxes = { root: sandboxRoot, snapshot, paths };
+  const sandboxes = { root: sandboxRoot, snapshot, copied };
 
   try {
-    for (const needed of paths) cpSync(path.join(fleetRoot, needed), path.join(snapshot, needed), { recursive: true, filter: (source) => !RUN_OUTPUT.has(path.basename(source)) });
+    for (const needed of copied) cpSync(path.join(fleetRoot, needed), path.join(snapshot, needed), { recursive: true, filter: (source) => !RUN_OUTPUT.has(path.basename(source)) });
 
-    const plans = mutants.map((mutant) => planOf(mutant, snapshot, paths));
+    const plans = mutants.map((mutant) => planOf(mutant, snapshot, copied));
 
     for (const { label, refusal } of plans) if (refusal !== undefined) console.log(`REFUSED  ${label} — ${refusal}`);
 
@@ -156,6 +167,24 @@ function measure({ fleetRoot, paths, selftest, mutants, timeoutMs = 900_000, cra
 }
 
 /**
+ * The paths a campaign copies: the folders of the import closure of the selftest and of every mutated file
+ * inside the fleet that exists, plus the explicit `paths`. A mutated file outside the fleet, or missing, is
+ * not walked: its own mutant is refused, and the rest of the campaign still measures.
+ * @es Lo que copia una campaña: las carpetas del cierre de imports del selftest y de cada fichero mutado que
+ * existe dentro de la flota, más `paths`. Un fichero mutado ausente o de fuera no se recorre: se rechaza su mutante.
+ */
+function copiedPathsOf(fleetRoot, paths, selftest, mutants) {
+  const mutated = mutants.map(([, file]) => file).filter((file) => isInside(fleetRoot, path.join(fleetRoot, file)) && existsSync(path.join(fleetRoot, file)));
+  const closure = importClosure({ root: fleetRoot, entries: [selftest, ...mutated] });
+
+  if (closure.problems.length > 0) {
+    throw new NotMeasured(`the imports of the selftest and its mutated files cannot all be copied, so a sandbox would not hold them @es los imports del selftest y de sus ficheros mutados no se pueden copiar todos, así que un sandbox no los tendría:\n${closure.problems.map((problem) => `  - ${problem}`).join('\n')}`);
+  }
+
+  return [...new Set([...copiedPaths(closure.files), ...paths])];
+}
+
+/**
  * Sandboxes live INSIDE the fleet directory, not in the system temp dir: a mechanism that locates its
  * repository from its own path (the integrate selftest finds the installed node_modules that way) must
  * still be inside that repository when it runs as a copy. `.claude/` is ignored, so nothing is tracked.
@@ -166,9 +195,9 @@ function measure({ fleetRoot, paths, selftest, mutants, timeoutMs = 900_000, cra
  * (ERR_FS_CP_EINVAL), and every runner that needed that directory died in 0 s with no verdict.
  * @es Los sandboxes viven dentro de `.claude/scratch`, fuera de toda ruta copiada.
  */
-function sandboxRootOf(fleetRoot, paths) {
+function sandboxRootOf(fleetRoot, copied) {
   const sandboxRoot = path.join(fleetRoot, 'scratch', 'mutation-proof');
-  const enclosing = paths.find((needed) => isInside(path.join(fleetRoot, needed), sandboxRoot));
+  const enclosing = copied.find((needed) => isInside(path.join(fleetRoot, needed), sandboxRoot));
 
   if (enclosing !== undefined) throw new NotMeasured(`the sandbox root ${sandboxRoot} lies inside the copied path ${enclosing}; no mutant can run`);
 
@@ -184,15 +213,15 @@ function isInside(container, candidate) {
 }
 
 /** Decides, before anything runs, whether a mutant can mean what its label says. @es Decide si un mutante puede significar lo que dice su etiqueta. */
-function planOf([label, file, original, replacement], snapshot, paths) {
+function planOf([label, file, original, replacement], snapshot, copied) {
   const plan = { label, file, original, replacement };
-  const refusal = refusalOf(plan, snapshot, paths);
+  const refusal = refusalOf(plan, snapshot, copied);
 
   return refusal === undefined ? plan : { ...plan, refusal };
 }
 
-function refusalOf({ file, original, replacement }, snapshot, paths) {
-  if (!paths.some((needed) => isInside(needed, file))) return `${file} is outside the copied paths (${paths.join(', ')})`;
+function refusalOf({ file, original, replacement }, snapshot, copied) {
+  if (!copied.some((needed) => isInside(needed, file))) return `${file} is outside the copied paths (${copied.join(', ')})`;
   if (!PARSE_CHECKED.has(path.extname(file))) return `${file} has no parse check, so a syntax-broken mutant could not be told from a kill`;
   if (original.length === 0) return 'the text to mutate is empty';
   if (original === replacement) return 'the replacement is identical to the original, so nothing would change';
@@ -305,11 +334,11 @@ function spliced(source, original, replacement) {
 }
 
 /** Copies the snapshot into a fresh sandbox, prepares it, measures it, and always removes it. @es Copia, prepara, mide y borra un sandbox. */
-function inSandbox({ root, snapshot, paths }, prepare, measureIn) {
+function inSandbox({ root, snapshot, copied }, prepare, measureIn) {
   const sandbox = mkdtempSync(path.join(root, 'mutant-'));
 
   try {
-    for (const needed of paths) cpSync(path.join(snapshot, needed), path.join(sandbox, needed), { recursive: true });
+    for (const needed of copied) cpSync(path.join(snapshot, needed), path.join(sandbox, needed), { recursive: true });
 
     prepare(sandbox);
 

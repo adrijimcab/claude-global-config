@@ -76,6 +76,9 @@ export const VENDORED = Object.freeze([
   'mutation-proof/scope.selftest.mjs',
   'mutation-proof/scope.mutants.mjs',
   'mutation-proof/scope-repository.selftest.mjs',
+  'mutation-proof/import-closure.mjs',
+  'mutation-proof/import-closure.selftest.mjs',
+  'mutation-proof/import-closure.mutants.mjs',
   'write-targets/redirect-targets.mjs',
   'write-targets/shell-writes.mjs',
   'write-targets/tool-call-writes.mjs'

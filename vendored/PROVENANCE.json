@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-06T21:49:07.890Z",
+  "syncedAt": "2026-10-11T13:15:15.080Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -44,7 +44,7 @@
     },
     {
       "path": "mutation-proof/run-mutants.mjs",
-      "sha256": "c69f62b8625df95a6b8164223cb3aace8255a2495540e03bf2753c468c5ed2ad"
+      "sha256": "3273a1c917a291ec71d74037fe4fb99c5349852fc079a9bf4b598e0fafac9032"
     },
     {
       "path": "mutation-proof/kill-kind.mjs",
@@ -52,11 +52,11 @@
     },
     {
       "path": "mutation-proof/selftest.mjs",
-      "sha256": "fef69e87c695b174bed6a5a84b3236797a1b90fce04fad10fb07b8cd09e34b02"
+      "sha256": "5068a1d9020aead519cb21eab63b450aceb4967fc2079b8f7c7343b4cecb6ac3"
     },
     {
       "path": "mutation-proof/mutants.mjs",
-      "sha256": "7e1f469cc1031f201f2a2eea5a7014feb8f1cadfb41cd39bbfaee6f9fe6b77f7"
+      "sha256": "399b59df45185fc1a65b64e48dd23f1c098e15078450738f3b017e9d4a983640"
     },
     {
       "path": "mutation-proof/kill-kind.selftest.mjs",
@@ -64,7 +64,7 @@
     },
     {
       "path": "mutation-proof/kill-kind.mutants.mjs",
-      "sha256": "ac2ffb844cbcc622ab3f51ddf9152fdebb0bd7b9dfbadf4a8d0e895772dcb563"
+      "sha256": "84788932652723f55f255b82c5d2515681dd9886dbe2c4d115fc21dc374ea773"
     },
     {
       "path": "mutation-proof/campaign-plan.mjs",
@@ -80,15 +80,27 @@
     },
     {
       "path": "mutation-proof/scope.selftest.mjs",
-      "sha256": "14c4e7485134b51f828b3746be6b26dcd49becc8271ee3f1a9f032e8672c901b"
+      "sha256": "fa54b00f92202ac9f50fda104603e658c8fa26e5de74081725f04c7551b34566"
     },
     {
       "path": "mutation-proof/scope.mutants.mjs",
-      "sha256": "25bbfcfdee1b53ab0dac1e9c726ee3159990274cd5521bea54673945833f5678"
+      "sha256": "1094157100ddc612a0d100aeb7b80b2e104111acb6a44f9c87d74c6c95a3e105"
     },
     {
       "path": "mutation-proof/scope-repository.selftest.mjs",
       "sha256": "3235c422bd1cedab588ae621d2cdefe26a2257073fd5228b695e4f603412de0f"
+    },
+    {
+      "path": "mutation-proof/import-closure.mjs",
+      "sha256": "acb7e99acf944d216f85106f2c49576f3dbe41f9abd1881218c5cc8eb80ea5e8"
+    },
+    {
+      "path": "mutation-proof/import-closure.selftest.mjs",
+      "sha256": "da9a1e23aca1846ac206fb3df637e8d20ada3d62b0bec857cb79df5366dea6a8"
+    },
+    {
+      "path": "mutation-proof/import-closure.mutants.mjs",
+      "sha256": "11c99478300eed51862355257c9a7fac58f0e5783dd4377e1a39c8efe93f1ddb"
     },
     {
       "path": "write-targets/redirect-targets.mjs",

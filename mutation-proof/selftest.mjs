@@ -6,8 +6,11 @@
  * Nothing is read from a live guard, whose legitimate edits would otherwise redden this proof.
  *
  * The state space is the runner's verdicts: KILLED, SURVIVED, BROKEN, REFUSED (absent, ambiguous, no parse
- * check, outside the copied paths) and NOT MEASURED (red baseline, a sandbox missing a file the selftest
- * needs, unparseable original, empty campaign). Each is
+ * check, outside the copied paths, a mutated file that is missing or beside the fleet) and NOT MEASURED (red
+ * baseline, a sandbox missing a file the selftest reads without importing, an import that resolves to no
+ * file, unparseable original, empty campaign). What is COPIED is exercised too: a module imported from a
+ * folder no `paths` names, a file only the campaign names, a file read beside the selftest (so folders are
+ * copied, not single files), and an explicit `paths` entry added to the derived set. Each is
  * exercised, and so are the two cases that must NOT be caught by a refusal: a runtime crash is a kill (printed
  * apart as CRASHED: `kill-kind.selftest.mjs` owns how a crash is told from an assertion), and a replacement
  * carrying `$&` is written literally. The fixture selftest logs every run it makes, so "refused
@@ -45,21 +48,33 @@ export const first = 'twin';
 export const second = 'twin';
 `;
 
-/** A top-level FILE the fixture selftest imports: `paths` must copy single files, not only directories. */
+/** A top-level FILE the fixture selftest imports: the closure copies a root-level file, never the root. */
 const EXPECTED = "export const EXPECTED_GREETING = 'hello x';\n";
+
+/** A module in ANOTHER folder the fixture selftest imports: no `paths` names `lib/`, the closure copies it. */
+const HELPER = 'export function isEven(n) {\n  return n % 2 === 0;\n}\n';
+
+/** A file only a campaign names: the selftest never loads it, so a mutant there survives, but runs. */
+const UNUSED = "export const unused = 'unused';\n";
 
 /** A live file beside the fleet's copied paths: no mutant may ever write to it. */
 const OUTSIDE = "export const outside = 'outside';\n";
 
-const GREEN_ASSERTIONS = `[isAdult(18) === true, isAdult(17) === false, describe(5) === 'young', greeting('x') === EXPECTED_GREETING]`;
+const GREEN_ASSERTIONS = `[isAdult(18) === true, isAdult(17) === false, describe(5) === 'young', greeting('x') === EXPECTED_GREETING, isEven(4), sibling === 'sibling\\n']`;
 const RED_ASSERTIONS = `[isAdult(18) === false]`;
 
-const fixtureSelftest = (assertions) => `import { appendFileSync } from 'node:fs';
+/**
+ * The fixture selftest READS `sibling.txt` from its own folder without importing it, so a closure that copied
+ * single files instead of their folders would leave it behind. `prelude` adds lines before the results.
+ */
+const fixtureSelftest = (assertions, prelude = '') => `import { appendFileSync, readFileSync } from 'node:fs';
 import { describe, greeting, isAdult } from './decide.mjs';
 import { EXPECTED_GREETING } from '../expected.mjs';
-
+import { isEven } from '../lib/helper.mjs';
+${prelude}
 appendFileSync(process.env.MUTATION_PROOF_RUN_LOG, 'run\\n');
 
+const sibling = readFileSync(new URL('./sibling.txt', import.meta.url), 'utf8');
 const results = ${assertions};
 const passed = results.filter(Boolean).length;
 
@@ -71,16 +86,23 @@ const cases = [];
 const check = (name, holds) => cases.push({ name, holds });
 
 /** Builds a fixture fleet, runs one campaign over it, and reports what the runner said and did. */
-function campaign({ assertions = GREEN_ASSERTIONS, extraFiles = {}, paths = ['mech', 'expected.mjs'], mutants }) {
-  const fleet = mkdtempSync(path.join(os.tmpdir(), 'mutation-proof-fixture-'));
-  const runLog = path.join(fleet, 'runs.log');
+function campaign({ assertions = GREEN_ASSERTIONS, prelude = '', extraFiles = {}, paths, mutants }) {
+  // The fleet sits inside a parent of its own, so a file BESIDE the fleet exists for a mutant to name.
+  const parent = mkdtempSync(path.join(os.tmpdir(), 'mutation-proof-fixture-'));
+  const fleet = path.join(parent, 'fleet');
+  const runLog = path.join(parent, 'runs.log');
 
   try {
-    mkdirSync(path.join(fleet, 'mech'));
-    mkdirSync(path.join(fleet, 'other'));
+    for (const folder of ['mech', 'other', 'lib', 'tool', 'fixtures']) mkdirSync(path.join(fleet, folder), { recursive: true });
+    mkdirSync(path.join(parent, 'neighbour'));
     writeFileSync(path.join(fleet, 'mech', 'decide.mjs'), MECHANISM);
-    writeFileSync(path.join(fleet, 'mech', 'selftest.mjs'), fixtureSelftest(assertions));
+    writeFileSync(path.join(fleet, 'mech', 'selftest.mjs'), fixtureSelftest(assertions, prelude));
+    writeFileSync(path.join(fleet, 'mech', 'sibling.txt'), 'sibling\n');
+    writeFileSync(path.join(fleet, 'lib', 'helper.mjs'), HELPER);
+    writeFileSync(path.join(fleet, 'tool', 'unused.mjs'), UNUSED);
+    writeFileSync(path.join(fleet, 'fixtures', 'data.txt'), 'data\n');
     writeFileSync(path.join(fleet, 'other', 'outside.mjs'), OUTSIDE);
+    writeFileSync(path.join(parent, 'neighbour', 'outside.mjs'), OUTSIDE);
     writeFileSync(path.join(fleet, 'expected.mjs'), EXPECTED);
     writeFileSync(runLog, '');
 
@@ -91,7 +113,7 @@ function campaign({ assertions = GREEN_ASSERTIONS, extraFiles = {}, paths = ['me
     writeFileSync(
       script,
       `import { runMutants } from ${JSON.stringify(pathToFileURL(RUNNER).href)};
-const survivors = runMutants({ fleetRoot: ${JSON.stringify(fleet)}, paths: ${JSON.stringify(paths)}, selftest: 'mech/selftest.mjs', mutants: ${JSON.stringify(mutants)} });
+const survivors = runMutants({ fleetRoot: ${JSON.stringify(fleet)},${paths === undefined ? '' : ` paths: ${JSON.stringify(paths)},`} selftest: 'mech/selftest.mjs', mutants: ${JSON.stringify(mutants)} });
 process.exit(survivors === 0 ? 0 : 1);
 `
     );
@@ -104,10 +126,11 @@ process.exit(survivors === 0 ? 0 : 1);
       output,
       runs: occurrencesOf(readFileSync(runLog, 'utf8'), 'run\n'),
       outsideAfter: readFileSync(path.join(fleet, 'other', 'outside.mjs'), 'utf8'),
+      neighbourAfter: readFileSync(path.join(parent, 'neighbour', 'outside.mjs'), 'utf8'),
       verdictOf: (label) => output.split('\n').find((line) => line.includes(label))?.slice(0, 8).trim()
     };
   } finally {
-    rmSync(fleet, { recursive: true, force: true });
+    rmSync(parent, { recursive: true, force: true });
   }
 }
 
@@ -126,7 +149,11 @@ const LABELS = {
   crash: 'describe reads a name that does not exist',
   dollar: 'a replacement carrying a dollar pattern',
   typescript: 'a TypeScript file',
-  outside: 'a path that climbs out of the sandbox onto a live file'
+  outside: 'a path that climbs out of the sandbox onto a live file',
+  imported: 'a decision in a module the selftest imports from another folder',
+  unused: 'a file only the campaign names',
+  missingFile: 'a mutated file that does not exist',
+  neighbour: 'an existing file beside the fleet'
 };
 
 const mixed = campaign({
@@ -141,7 +168,11 @@ const mixed = campaign({
     [LABELS.dollar, 'mech/decide.mjs', "'hello '", "'$&'"],
     [LABELS.typescript, 'mech/notes.ts', '"note"', '"other"'],
     // From any sandbox under <fleet>/scratch/mutation-proof/, three levels up is the fleet itself.
-    [LABELS.outside, '../../../other/outside.mjs', "'outside'", "'inside'"]
+    [LABELS.outside, '../../../other/outside.mjs', "'outside'", "'inside'"],
+    [LABELS.imported, 'lib/helper.mjs', 'n % 2 === 0', 'n % 2 === 1'],
+    [LABELS.unused, 'tool/unused.mjs', "'unused'", "'used'"],
+    [LABELS.missingFile, 'mech/absent.mjs', 'x', 'y'],
+    [LABELS.neighbour, '../neighbour/outside.mjs', "'outside'", "'inside'"]
   ]
 });
 
@@ -154,8 +185,12 @@ check('a runtime crash on a path the selftest drives is a kill, printed apart as
 check('a replacement carrying $& is written literally, so it is KILLED, not BROKEN', mixed.verdictOf(LABELS.dollar) === 'KILLED');
 check('a file with no parse check is REFUSED', mixed.verdictOf(LABELS.typescript) === 'REFUSED');
 check('a path that climbs out of the sandbox is REFUSED, and the live file it names is untouched', mixed.verdictOf(LABELS.outside) === 'REFUSED' && mixed.outsideAfter === OUTSIDE);
-check('only the baseline and the four runnable mutants ran: refused and BROKEN mutants never run', mixed.runs === 5);
-check('the tally counts refused and BROKEN mutants as survivors', mixed.output.includes('3/9 mutants killed (2 by assertion, 1 by crash)'));
+check('a mutant in a module the selftest imports from a folder no `paths` names is planned and KILLED, not refused', mixed.verdictOf(LABELS.imported) === 'KILLED');
+check('a file only the campaign names is copied too, so its mutant runs and SURVIVES instead of being refused', mixed.verdictOf(LABELS.unused) === 'SURVIVED');
+check('a mutated file that does not exist is REFUSED on its own, not a run that measures nothing', mixed.verdictOf(LABELS.missingFile) === 'REFUSED' && mixed.output.includes('mech/absent.mjs does not exist'));
+check('an existing file beside the fleet is never copied, so its mutant is REFUSED and the file is untouched', mixed.verdictOf(LABELS.neighbour) === 'REFUSED' && mixed.neighbourAfter === OUTSIDE);
+check('only the baseline and the six runnable mutants ran: refused and BROKEN mutants never run', mixed.runs === 7);
+check('the tally counts refused and BROKEN mutants as survivors', mixed.output.includes('4/13 mutants killed (3 by assertion, 1 by crash)'));
 check('a campaign with survivors exits 1', mixed.status === 1);
 
 // ── a clean campaign ────────────────────────────────────────────────────────────────────────────────
@@ -177,9 +212,20 @@ const unparseable = campaign({
 check('an UNMUTATED file that does not parse refuses to measure: BROKEN would mean nothing', unparseable.status === EXIT_NOT_MEASURED && unparseable.output.includes('UNMUTATED mech/unparsed.mjs does not parse'));
 check('an unparseable original stops the run before the baseline', unparseable.runs === 0);
 
-const incomplete = campaign({ paths: ['mech'], mutants: [[LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18']] });
+const READS_FIXTURE = "const data = readFileSync(new URL('../fixtures/data.txt', import.meta.url), 'utf8');\n";
+const FIXTURE_ASSERTIONS = GREEN_ASSERTIONS.replace(']', ", data === 'data\\n']");
 
-check('a campaign whose paths omit a file the selftest needs refuses to measure, not "every mutant killed"', incomplete.status === EXIT_NOT_MEASURED && incomplete.verdictOf(LABELS.kill) === undefined);
+const incomplete = campaign({ prelude: READS_FIXTURE, assertions: FIXTURE_ASSERTIONS, mutants: [[LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18']] });
+
+check('a campaign that omits a file the selftest READS but never imports refuses to measure, not "every mutant killed"', incomplete.status === EXIT_NOT_MEASURED && incomplete.verdictOf(LABELS.kill) === undefined);
+
+const withFixtures = campaign({ prelude: READS_FIXTURE, assertions: FIXTURE_ASSERTIONS, paths: ['fixtures'], mutants: [[LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18']] });
+
+check('an explicit `paths` entry is ADDED to the derived files, so the fixture it names is there', withFixtures.status === 0 && withFixtures.verdictOf(LABELS.kill) === 'KILLED');
+
+const ghost = campaign({ prelude: "import { ghost } from './ghost.mjs';\n", mutants: [[LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18']] });
+
+check("a selftest importing a file that does not exist refuses to measure, naming the specifier, before anything runs", ghost.status === EXIT_NOT_MEASURED && ghost.output.includes("'./ghost.mjs'") && ghost.runs === 0);
 
 const empty = campaign({ mutants: [] });
 

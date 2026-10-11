@@ -25,17 +25,26 @@ const MUTANTS = [
   // ── the refusals that keep those fixes honest ───────────────────────────────────────────────────────
   ['an absent target is run instead of refused', RUNNER, 'if (count === 0) return', 'if (false) return'],
   ['a file with no parse check is run unchecked', RUNNER, 'if (!PARSE_CHECKED.has(path.extname(file))) return', 'if (false) return'],
-  ['a path outside the copied paths is not refused, so a mutant can climb out of its sandbox and write a live file', RUNNER, 'if (!paths.some((needed) => isInside(needed, file))) return', 'if (false) return'],
+  ['a path outside the copied paths is not refused, so a mutant can climb out of its sandbox and write a live file', RUNNER, 'if (!copied.some((needed) => isInside(needed, file))) return', 'if (false) return'],
   ['an unparseable original is accepted, so BROKEN no longer means the mutation broke it', RUNNER, '    requireParseableOriginals(plans, snapshot);\n', ''],
   ['the mutation is applied with String.replace, which rewrites $& in the replacement', RUNNER, 'return source.slice(0, at) + replacement + source.slice(at + original.length);', 'return source.replace(original, replacement);'],
   ['a refused mutant is counted as killed', RUNNER, 'runMutant(plan, sandboxes, selftest, timeoutMs) : undefined;', "runMutant(plan, sandboxes, selftest, timeoutMs) : 'assertion';"],
   ['an empty campaign reports 0/0 killed and exits clean', RUNNER, "if (mutants.length === 0) throw new NotMeasured(", "if (false) throw new NotMeasured("],
-  ['overlapping occurrences are not counted, so "aa" in "aaa" reads as exactly once', RUNNER, 'text.indexOf(needle, at + 1)', 'text.indexOf(needle, at + needle.length)']
+  ['overlapping occurrences are not counted, so "aa" in "aaa" reads as exactly once', RUNNER, 'text.indexOf(needle, at + 1)', 'text.indexOf(needle, at + needle.length)'],
+
+  // ── what is copied: derived from the import closure, plus the explicit paths ────────────────────────
+  ['nothing is derived, so the selftest runs without what it imports', RUNNER, 'entries: [selftest, ...mutated] });', 'entries: [] });'],
+  ['a mutated file is not walked, so a file only the campaign names is refused', RUNNER, 'entries: [selftest, ...mutated] });', 'entries: [selftest] });'],
+  ['a missing mutated file is walked, so one bad mutant stops the whole campaign', RUNNER, ' && existsSync(path.join(fleetRoot, file)));', ');'],
+  ['a mutated file beside the fleet is walked and copied', RUNNER, '.filter((file) => isInside(fleetRoot, path.join(fleetRoot, file)) && ', '.filter((file) => '],
+  ['an import that cannot be followed is ignored, so the baseline runs short of it', RUNNER, 'if (closure.problems.length > 0) {', 'if (false) {'],
+  ['the refusal does not name the import it could not follow', RUNNER, ":\\n${closure.problems.map((problem) => `  - ${problem}`).join('\\n')}`);", '`);'],
+  ['the explicit paths are not added to the derived ones', RUNNER, '[...copiedPaths(closure.files), ...paths]', '[...copiedPaths(closure.files)]'],
+  ['the closure copies its files, not their folders', RUNNER, '[...copiedPaths(closure.files), ...paths]', '[...closure.files, ...paths]']
 ];
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'mutation-proof/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'
