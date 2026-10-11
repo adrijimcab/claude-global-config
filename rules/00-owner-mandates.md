@@ -158,10 +158,10 @@ confirmación de cada una, liberar los procesos que retienen el recurso solo cua
 aplicar con respaldo y rollback, avisar que sigan (y reinicien si hace falta) y prueben, y dar el cambio
 por hecho solo cuando todas reportan que está bien; un fallo activa el rollback.
 
-## Standing workflow premise — SDD + full contract + tooling leverage + senior audit stance (owner directive 2026-07-28)
+## Standing workflow premise — ODD + full contract + tooling leverage + senior audit stance (owner directive 2026-07-28; ODD since 2026-10-11)
 
-The route a change takes (SDD where the design is open, direct where it is settled), the full agent
-contract, and proof by the project's real full gate set are stated in `~/.claude/sdd-mandate.md`, which
+The route a change takes (tracked ODD where the design is open, direct where it is settled), the full
+agent contract, and proof by the project's real full gate set are stated in `~/.claude/route-mandate.md`, which
 `~/.claude/rules/10-contracts.md` imports in every project. That file is the SINGLE SOURCE; its text is
 not repeated here (M8).
 
@@ -229,16 +229,18 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
 
 ## Cierre de toda unidad de trabajo terminada (directiva del dueño 2026-10-01, global, todo proyecto)
 
-Cuando una unidad de trabajo TERMINA (un worker entrega, algo se integra o aterriza, un SDD pasa el
-verify), el ORQUESTADOR hace, en el MISMO turno, las tres cosas:
+Cuando una unidad de trabajo TERMINA (un worker entrega, algo se integra o aterriza, una tarea o
+feature ODD queda verificada), el ORQUESTADOR hace, en el MISMO turno, las tres cosas:
 1. **Engram:** guarda el resultado (qué quedó, dónde, con qué evidencia) y lo refleja en el backlog
    maestro.
 2. **Worktree y rama:** los elimina cuando su contenido ya está integrado. Condiciones: medirlo con
    `git cherry` (patch-id, nunca solo la ancestría); el worktree está limpio; su actor está parado; y
    en Windows no se sigue ningún junction. Si NO está integrado, no se borra: se integra primero, o se
    informa como trabajo varado.
-3. **SDD:** si la unidad era un cambio SDD, se archiva (`sdd-archive`) cuando su verify está en verde.
-   Un verify en rojo no se archiva: se arregla primero.
+3. **ODD:** si la unidad era una feature ODD, se cierra: su documento `odd/tasks/<feature>.md` queda
+   con cada tarea marcada solo con su evidencia observada y el id del commit que la cerró, y su espejo
+   de engram `odd/<feature>/tasks` se actualiza con el documento entero. Una comprobación en rojo no se
+   cierra: se arregla primero.
 4. **Lo encontrado:** todo hallazgo que trae la unidad (del informe del worker o de la integración) se
    resuelve en ese turno según «Resolver en el momento antes que encolar», y si no puede, entra al
    backlog con su razón.
@@ -247,7 +249,7 @@ Reafirmado por el dueño el 2026-10-11 para toda sesión, también las nuevas: �
 agente, se borre su worktree y su rama local si la hizo y que se suba lo hecho a engram y lo encontrado y
 que surja que se arregle». Mecanismo: un guard `Stop` del orquestador que rechaza cerrar el turno mientras
 quede un worktree cuyo contenido ya está integrado (`git cherry` vacío contra su rama de integración),
-limpio y sin actor vivo (en construcción, con selftest que prueba que discrimina).
+limpio y sin actor vivo, y que la sesión creó o en el que trabajó (`integrated-worktree-guard`).
 @es Al integrar un agente: guardar en engram lo hecho y lo encontrado, borrar su worktree y su rama, y
 arreglar lo que surja; lo hace cumplir un guard `Stop` que rechaza el cierre de turno con un worktree ya
 integrado abierto.

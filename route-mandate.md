@@ -1,19 +1,21 @@
 # Route + full-contract mandate — binding, every session, every project
 
-Every change takes one of three routes, chosen by how settled its DESIGN is — never by its size, its
-risk, or how urgent it feels. Points 2 and 3 bind on all three.
+Every change runs through Organic Driven Development (ODD, gentle-ai v4) and takes one of two routes,
+chosen by how settled its DESIGN is — never by its size, its risk, or how urgent it feels. Points 2 and 3
+bind on both.
 
-1. **SDD where the design is open.** This paragraph is the owner's standing explicit request for the
-   SDD route, which is what the orchestrator contract requires before SDD is selected. It covers a new
-   feature, a new project, a refactor that crosses a module boundary or changes a public API, and any
-   change whose approach is still undecided when the work starts. Run the workflow end to end via its
-   skills, in order:
-   `sdd-explore → sdd-propose → sdd-spec → sdd-design → sdd-tasks → sdd-apply → sdd-verify → sdd-archive`
+1. **Tracked ODD where the design is open.** A new feature, a new project, a refactor that crosses a
+   module boundary or changes a public API, and any change whose approach is still undecided when the
+   work starts. Explore first, resolve the open decisions (research with sources, or one question to the
+   owner for a decision only the owner holds), and TRACK before the first write: the feature document
+   `odd/tasks/<feature>.md` and its engram mirror `odd/<feature>/tasks` carry the objective, the decided
+   design and why, the task list, and the checks of each task. Implement task by task, each closed by a
+   work-unit Conventional Commit whose id is recorded in the document; close with the verified outcome.
+   Use `judgment-day` for adversarial review and the `review-*` lenses where the risk tier calls for them.
    **Direct (inline or delegated) where the design is settled.** A fix whose root cause has been
    measured and whose solution has one evident shape, or a contained change inside one module, goes
    direct: root cause first, then the change, then the gates. When a direct change turns out to need a
-   design decision nobody has made, stop and move it to the SDD route rather than deciding it in the
-   diff.
+   design decision nobody has made, stop and track it as above rather than deciding it in the diff.
 
 2. **Bind the FULL agent contract.** Every delegated agent must receive the project's complete contract
    (`.claude/AGENT-LEDGER.md` for Claude Code — injected by the `Task|Agent` PreToolUse hook — and its
@@ -25,14 +27,13 @@ risk, or how urgent it feels. Points 2 and 3 bind on all three.
    set green, MEASURED, as that project's own `CLAUDE.md` or agent contract declares it (in b100-am-ui,
    `build:ci-pr` = `ci:lint` + `ci:checks` + `npm test -- --all` + `build:demo`) — never a
    self-selected subset. That full run happens ONCE, at the end, by the orchestrator on the tree being
-   integrated; during the work every phase and worker (SDD apply and verify included) runs only the
-   gates that read what it changed.
+   integrated; during the work every task and worker runs only the gates that read what it changed.
 
 **Trivial scope (typo, rename, comment tweak, a genuinely one-line no-logic change):** goes direct
-inline; the contract (senior stance, no patches) and the gates still bind.
+inline with no feature document; the contract (senior stance, no patches) and the gates still bind.
 
-If SDD or a skill is genuinely unavailable in the current environment, say so plainly and apply the
-stance + gates manually — never silently drop the process and never fake it.
+If ODD tracking or a skill is genuinely unavailable in the current environment, say so plainly and apply
+the stance + gates manually — never silently drop the process and never fake it.
 
 ## Tooling leverage — reach for the BEST tool, and seek one for anything new
 

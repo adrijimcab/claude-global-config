@@ -2,7 +2,7 @@
  * Finds the paths a contract document names under `~/.claude/` that the filesystem does not confirm.
  *
  * WHY THIS EXISTS (`contract-doc-names-a-mechanism-nobody-verifies`). The always-injected contract files
- * (`CLAUDE.md`, `rules/*.md`, `sdd-mandate.md`, `verification-contract.md`) describe mechanisms by path, and
+ * (`CLAUDE.md`, `rules/*.md`, `route-mandate.md`, `verification-contract.md`) describe mechanisms by path, and
  * nothing checked those paths: one of them named a script that did not exist and a hook that never called
  * it, and only running the documented command exposed it. Prose that describes a mechanism decays like prose
  * that describes code, and an always-injected file decays invisibly because it is read as authority. A path
@@ -33,7 +33,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 /** The contract documents at the repository root. @es Los documentos de contrato de la raíz. */
-export const ROOT_CONTRACT_DOCS = ['CLAUDE.md', 'sdd-mandate.md', 'verification-contract.md'];
+export const ROOT_CONTRACT_DOCS = ['CLAUDE.md', 'route-mandate.md', 'verification-contract.md'];
 
 /** The directory whose every `.md` is a loaded rule. @es El directorio cuyos `.md` son reglas cargadas. */
 export const RULES_DIRECTORY = 'rules';

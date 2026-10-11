@@ -67,7 +67,7 @@ function populate(directory, files) {
 /** A fresh repository and home with `repo` and `home` files, plus all three root contracts unless given. @es Un repo y un home frescos. */
 function scenario({ repo = {}, home = {} }) {
   const base = mkdtempSync(path.join(tmpdir(), 'contract-path-check-'));
-  const rootFiles = { 'CLAUDE.md': '', 'sdd-mandate.md': '', 'verification-contract.md': '', ...repo };
+  const rootFiles = { 'CLAUDE.md': '', 'route-mandate.md': '', 'verification-contract.md': '', ...repo };
   populate(path.join(base, 'repo'), rootFiles);
   populate(path.join(base, 'home', '.claude'), home);
   mkdirSync(path.join(base, 'home', '.claude'), { recursive: true });
@@ -137,9 +137,9 @@ const noRules = scenario({});
 check('a repository with no rules directory still lists the root contracts', contractDocs(noRules.root).length === 3);
 rmSync(noRules.base, { recursive: true, force: true });
 const absent = scenario({});
-rmSync(path.join(absent.root, 'sdd-mandate.md'));
+rmSync(path.join(absent.root, 'route-mandate.md'));
 const absentResult = inspectContracts({ root: absent.root, home: absent.home });
-check('an absent contract document is itself a finding', absentResult.unresolved.length === 1 && absentResult.unresolved[0].doc === 'sdd-mandate.md');
+check('an absent contract document is itself a finding', absentResult.unresolved.length === 1 && absentResult.unresolved[0].doc === 'route-mandate.md');
 rmSync(absent.base, { recursive: true, force: true });
 
 // --- the count is real, so an empty scan cannot read as clean.

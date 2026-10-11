@@ -34,7 +34,7 @@ const MUTANTS = [
   ['the checkout no longer confirms a claim', C, "existsSync(path.join(root, ...relative.split('/'))) ||", 'false ||'],
   ['an absent contract document passes silently', C, "unresolved.push({ doc, claim: '(the document itself is missing)' });", ''],
   ['a non-markdown rules file is scanned', C, ".filter((name) => name.endsWith('.md'))", '.filter(() => true)'],
-  ['a root contract is dropped from the scan', C, "['CLAUDE.md', 'sdd-mandate.md', 'verification-contract.md']", "['CLAUDE.md', 'sdd-mandate.md']"],
+  ['a root contract is dropped from the scan', C, "['CLAUDE.md', 'route-mandate.md', 'verification-contract.md']", "['CLAUDE.md', 'route-mandate.md']"],
   ['a missing rules directory is read anyway', C, 'const rules = existsSync(rulesDirectory)', 'const rules = true'],
   ['the inspected count never moves', C, 'inspected += 1;', ''],
   ['a claim is never confirmed', C, 'if (!isConfirmed(claim, { root, home }))', 'if (true)'],
@@ -42,6 +42,6 @@ const MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const survivors = runMutants({ fleetRoot, paths: ['contract-path-check', 'mutation-proof', 'rules', 'CLAUDE.md', 'sdd-mandate.md', 'verification-contract.md'], selftest: 'contract-path-check/selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
+const survivors = runMutants({ fleetRoot, paths: ['contract-path-check', 'mutation-proof', 'rules', 'CLAUDE.md', 'route-mandate.md', 'verification-contract.md'], selftest: 'contract-path-check/selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
 
 process.exit(survivors === 0 ? 0 : 1);
