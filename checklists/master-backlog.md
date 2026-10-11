@@ -184,6 +184,13 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   `land/odd` rewrites, so it starts after that branch lands. Owner order 2026-10-11: it is the LAST step
   before the session stops and before the final integration to master — after every worker lands and
   after `land/odd`, and before the final report.
+- Premise judge labelled sample, deferral reasons (reported 2026-10-12 by session b100-am-ui-f8, its
+  measurement): a backlog item was written PENDING with reason 3 ("would preempt work in flight") without
+  measuring it, and the premise judge's measure-now case caught it. Decision: no separate guard. A guard keyed
+  on the words "reason 3" would be a match over prose, beaten by rewording, and it would duplicate a case that
+  already fired. Add the incident as a labelled fail fixture, and its measured counterpart as a pass fixture,
+  to the premise judge's calibration set, re-measured over 5 runs. Pending, reason (4): the calibration set is
+  its own unit with the rest of the judge's measured precision work.
 - Voice judge v3 over-applies rule 8 (measured 2026-10-11 in the orchestrator session): it rejected four
   consecutive replies written entirely as prose paragraphs, with no bullets, tables or lists, citing "datos de
   estado" (names, counts, references inside sentences). Rule 8 fails only ENUMERATIONS that carry a status
