@@ -65,6 +65,15 @@ function censusSafely(repository, dependencies) {
   }
 }
 
+/** The turn decision, or a marker when it throws, so a broken decision fails checks instead of crashing the run. @es La decisión del turno, o un marcador si lanza. */
+function decideSafely(payload, dependencies) {
+  try {
+    return decide(payload, dependencies);
+  } catch (error) {
+    return { threw: error.message };
+  }
+}
+
 /** A path with forward slashes, as the refusal prints it. @es Una ruta con barras normales, como la imprime el rechazo. */
 const slash = (somePath) => somePath.replaceAll('\\', '/');
 
@@ -275,7 +284,7 @@ try {
   check('state: an untracked file is work', workingTreeState(dirty).work.includes('untracked-notes.txt'));
   check('state: an ignored REAL directory is work', workingTreeState(ignoredWork).work.some((entry) => entry.startsWith('build')));
   check('state: an ignored junction is a link, not work', (() => { const state = workingTreeState(linked); return state.work.length === 0 && state.links.some((entry) => entry.startsWith('node_modules')); })());
-  check('state: a non-repository is not measured, never clean', workingTreeState(path.join(root, 'nowhere')).measured === false);
+  check('state: a non-repository is not measured, never clean', (() => { try { return workingTreeState(path.join(root, 'nowhere')).measured === false; } catch { return false; } })());
 
   // ---- the census -------------------------------------------------------------------------------
   const liveSet = new Set([path.resolve(live).toLowerCase()]);
@@ -370,7 +379,7 @@ try {
 
   // ---- the turn ---------------------------------------------------------------------------------
   const stateDir = path.join(root, 'state');
-  const turn = (extra = {}, options = {}) => decide({ session_id: 's1', cwd: root, transcript_path: transcript, ...extra }, { stateDir, isLive, ...options });
+  const turn = (extra = {}, options = {}) => decideSafely({ session_id: 's1', cwd: root, transcript_path: transcript, ...extra }, { stateDir, isLive, ...options });
   const first = turn();
 
   check('turn: a removable worktree refuses the turn', first?.decision === 'block');
@@ -387,7 +396,7 @@ try {
   check('turn: nothing was removed by the guard', [integrated, picked, linked, followsLine, junctionTarget, path.join(junctionTarget, 'precious.txt')].every((entry) => existsSync(entry)));
   check('turn: the junction target survived the census (its content is intact)', readFileSync(path.join(junctionTarget, 'precious.txt'), 'utf8') === 'must survive\n');
 
-  check('turn: the own cwd of the hook names a repository even with no transcript', decide({ session_id: 'cwd-only', cwd: main }, { stateDir: path.join(root, 'cwd-state'), isLive })?.decision === 'block');
+  check('turn: the own cwd of the hook names a repository even with no transcript', decideSafely({ session_id: 'cwd-only', cwd: main }, { stateDir: path.join(root, 'cwd-state'), isLive })?.decision === 'block');
   check('turn: the same set in the same session passes (once per set)', turn() === undefined);
   check('turn: a new session is shown the set again', turn({ session_id: 's2' })?.decision === 'block');
   check('turn: stop_hook_active passes', turn({ session_id: 's3', stop_hook_active: true }) === undefined);
@@ -409,14 +418,14 @@ try {
 
   writeFileSync(quiet, `${JSON.stringify({ cwd: main2 })}\n`);
 
-  const onlyNotes = (session) => decide({ session_id: session, cwd: root, transcript_path: quiet }, { stateDir, isLive: (worktreePath) => path.resolve(worktreePath).toLowerCase() !== path.resolve(noUpstream).toLowerCase() ? true : false });
+  const onlyNotes = (session) => decideSafely({ session_id: session, cwd: root, transcript_path: quiet }, { stateDir, isLive: (worktreePath) => path.resolve(worktreePath).toLowerCase() !== path.resolve(noUpstream).toLowerCase() ? true : false });
   const notice = onlyNotes('n1');
 
   check('notice: nothing removable but a worktree not judged -> a non-blocking systemMessage', notice?.decision === undefined && typeof notice?.systemMessage === 'string' && notice.systemMessage.includes('NOT JUDGED') && notice.systemMessage.includes('root commit'));
   check('notice: it is bilingual', notice?.systemMessage?.includes('  @es ') === true && notice.systemMessage.includes('NO JUZGADO'));
   check('notice: it fires once per set', onlyNotes('n1') === undefined);
 
-  check('nothing to say: a session that worked in no repository is silent', decide({ session_id: 'z1', cwd: path.join(root, 'nowhere'), transcript_path: path.join(root, 'absent.jsonl') }, { stateDir, isLive }) === undefined);
+  check('nothing to say: a session that worked in no repository is silent', decideSafely({ session_id: 'z1', cwd: path.join(root, 'nowhere'), transcript_path: path.join(root, 'absent.jsonl') }, { stateDir, isLive }) === undefined);
 
   // ---- noticed sets -----------------------------------------------------------------------------
   const memory = path.join(root, 'memory');
