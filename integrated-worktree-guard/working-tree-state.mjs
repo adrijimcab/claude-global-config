@@ -9,7 +9,8 @@
  * at content that lives elsewhere. It is not work, so it does not make a worktree look dirty; but it is
  * returned apart as `links`, because deleting a link the wrong way FOLLOWS it and destroys the target
  * (`recursive-delete-followed-a-junction`), so the caller must name each one in its removal advice. No path
- * is exempted by name: a real `node_modules` directory counts as work, a junction to one does not.
+ * is exempted by name: a real `node_modules` directory counts as work, a junction to one does not. The one
+ * other exemption is an ignored entry DECLARED as process output (`declared-run-output.mjs`), named by its producer.
  *
  * `measured: false` is "git could not tell", never "clean".
  *
@@ -25,6 +26,7 @@
 import { lstatSync } from 'node:fs';
 import path from 'node:path';
 
+import { undeclaredPartOf } from './declared-run-output.mjs';
 import { readGit } from './git-read.mjs';
 
 const IGNORED = '!!';
@@ -62,6 +64,7 @@ export function workingTreeState(worktree) {
     if (TWO_FIELD_STATUSES.has(status[0]) || TWO_FIELD_STATUSES.has(status[1])) at += 1;
 
     if (status === IGNORED && isLink(worktree, entry)) links.push(entry);
+    else if (status === IGNORED) work.push(...undeclaredPartOf(worktree, entry));
     else work.push(entry);
   }
 
