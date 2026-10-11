@@ -17,7 +17,7 @@
  * clave es ÚNICA entre los ledgers visibles: una recurrencia se suma donde ya está.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -91,11 +91,26 @@ export function ledgerForScope(ledgers, scope) {
   return ledger;
 }
 
-/** Writes a ledger, collapsing trailing blank lines to one. @es Escribe un ledger. */
+/**
+ * Writes a ledger, collapsing trailing blank lines to one. The text goes to a temporary file beside the
+ * ledger and is renamed over it, so a crash or a failed write leaves the previous ledger whole, never a
+ * truncated one, and a caller that removes something once this returns can rely on it being on disk.
+ * @es Escribe un ledger, colapsando las líneas en blanco finales a una. El texto va a un fichero temporal
+ * junto al ledger y se renombra encima: una caída o una escritura fallida deja el ledger anterior entero,
+ * nunca uno truncado, y quien borre algo al volver esta función puede contar con que ya está en disco.
+ */
 export function writeLedger(ledger) {
   const lines = [...ledger.lines];
 
   while (lines.length > 1 && lines[lines.length - 1] === '' && lines[lines.length - 2] === '') lines.pop();
 
-  writeFileSync(ledger.file, lines.join('\n'), 'utf8');
+  const temp = `${ledger.file}.${String(process.pid)}.tmp`;
+
+  try {
+    writeFileSync(temp, lines.join('\n'), 'utf8');
+    renameSync(temp, ledger.file);
+  } catch (error) {
+    rmSync(temp, { force: true });
+    throw error;
+  }
 }

@@ -255,6 +255,7 @@ function reconcile() {
     const folded = [];
     const ledgersOf = ledgerCache();
     const touched = new Set();
+    const consumed = [];
 
     for (const file of pending.sort()) {
       const full = path.join(spoolDir(), file);
@@ -300,11 +301,23 @@ function reconcile() {
         folded.push({ ...entry, count, recurrence: true });
       }
 
+      consumed.push({ full, entry });
+    }
+
+    // The ledgers go to disk FIRST. A spool entry is removed, and its incident logged, only once every
+    // ledger it touched is written: a crash or a failed write in between leaves the entry in the spool for
+    // the next capture to fold, where the reverse order would lose the lesson. The cost is stated: a crash
+    // after the ledgers and before the unlink folds an entry twice (a recurrence), never zero times.
+    // @es Los ledgers van PRIMERO a disco. Una entrada del spool se borra, y su incidente se registra, solo
+    // con cada ledger que tocó ya escrito: una caída o una escritura fallida entre medias deja la entrada en
+    // el spool para que la siguiente captura la pliegue; el orden inverso perdería la lección. Coste: una
+    // caída tras los ledgers y antes del borrado pliega una entrada dos veces (una recurrencia), nunca cero.
+    for (const ledger of touched) writeLedger(ledger);
+
+    for (const { full, entry } of consumed) {
       appendFileSync(incidentsFile(), `${JSON.stringify(entry)}\n`, 'utf8');
       unlinkSync(full);
     }
-
-    for (const ledger of touched) writeLedger(ledger);
 
     return folded;
   });
