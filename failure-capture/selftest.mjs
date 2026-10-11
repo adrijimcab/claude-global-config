@@ -56,6 +56,15 @@ process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let passed = 0;
 const failures = [];
 
+/** `execFileSync` answering the text of its fault instead of throwing, so a command that fails fails the check that expects its output rather than crashing the run. @es `execFileSync` que responde el texto de su fallo en vez de lanzar, para que un comando que falla haga fallar la comprobación que espera su salida en vez de tumbar la corrida. */
+function execFaulted(...input) {
+  try {
+    return execFileSync(...input);
+  } catch (error) {
+    return `COMMAND FAILED: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
 function check(name, condition, detail) {
   if (condition === true) {
     passed += 1;
@@ -272,7 +281,7 @@ refused(
 
   const status = await closed;
   const after = readFileSync(ledgerFile, 'utf8');
-  const stubs = readFileSync(path.join(path.dirname(ledgerFile), 'lessons-promoted.md'), 'utf8');
+  const stubs = ((file) => (existsSync(file) ? readFileSync(file, 'utf8') : ''))(path.join(path.dirname(ledgerFile), 'lessons-promoted.md'));
 
   check('promote that waited for the lock closes the lesson', status === 0 && stubs.includes('[promoted]') && stubs.includes('<!--fc:lesson-under-test#2-->') && !after.includes('<!--fc:lesson-under-test#'), `exit ${String(status)}: ${after}\n${stubs}`);
   check('...and keeps the line written while it waited, because it read the ledger under the lock', after.includes('<!--fc:late-lesson#1-->'), after);
@@ -493,7 +502,7 @@ refused(
   capture('project-only-lesson', 'global');
   check('alcance: la recurrencia de una clave del proyecto se suma EN EL PROYECTO aunque llegue con alcance global', repoLedger().includes('<!--fc:project-only-lesson#2-->') && !homeLedger().includes('project-only-lesson'), repoLedger());
 
-  const keys = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'keys'], { cwd: target.repo, encoding: 'utf8', env: worldEnv(target.home, { loop: target.loop }) });
+  const keys = execFaulted(process.execPath, [path.join(target.loop, 'capture.mjs'), 'keys'], { cwd: target.repo, encoding: 'utf8', env: worldEnv(target.home, { loop: target.loop }) });
   check('alcance: `keys` lista las claves de LOS DOS ledgers', keys.includes('project-only-lesson') && keys.includes('global-new-lesson') && keys.includes(KEY), keys);
 }
 
@@ -503,7 +512,7 @@ refused(
   // A project lesson is promoted into the PROJECT's contract, not the global rules file (`promotion-target.mjs`).
   // @es Una lección de proyecto se promueve al contrato del PROYECTO, no al fichero global de reglas.
   write(target.repo, { '.claude/CLAUDE.md': '# Project instructions\n\n- project-promoted: written down.\n' });
-  const run = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'promote', '--key', 'project-promoted', '--no-mechanism', REASON], {
+  const run = execFaulted(process.execPath, [path.join(target.loop, 'capture.mjs'), 'promote', '--key', 'project-promoted', '--no-mechanism', REASON], {
     cwd: target.repo,
     encoding: 'utf8',
     env: worldEnv(target.home, { loop: target.loop }),
@@ -512,7 +521,7 @@ refused(
 
   check('alcance: promover una clave del ledger del PROYECTO colapsa SU línea, en SU archivo', repoLedger.includes('[promoted]') && repoLedger.includes('project-promoted'), `${run}\n${repoLedger}`);
 
-  const projectStatus = execFileSync(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: worldEnv(target.home, { loop: target.loop }) });
+  const projectStatus = execFaulted(process.execPath, [path.join(target.loop, 'capture.mjs'), 'status'], { cwd: target.repo, encoding: 'utf8', env: worldEnv(target.home, { loop: target.loop }) });
 
   check('alcance: ...y `status` ve el muñón del ledger del PROYECTO: la clave ya no está pendiente', projectStatus.includes('keyed lessons') && !projectStatus.includes('project-promoted (2x)'), projectStatus);
 
