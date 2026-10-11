@@ -35,7 +35,7 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -56,10 +56,15 @@ const GUARD = path.join(HERE, 'guard.mjs');
  * A real, already-installed `typescript` package on this machine, to junction into the fixture repo —
  * never a name this selftest invents. Tried in order; the first that exists wins. Throws loudly (never
  * guesses) when NONE of them do, because a selftest that silently skipped its own real-parser proof would
- * be exactly the `guard-that-cannot-go-red` defect this proof exists to avoid.
+ * be exactly the `guard-that-cannot-go-red` defect this proof exists to avoid. The projects are looked up under
+ * the account's home as the OPERATING SYSTEM reports it (`userInfo().homedir`), never `homedir()`: the selftest
+ * runner points `HOME`/`USERPROFILE` at an empty sandbox, and this is a read-only machine dependency, not state.
+ * @es Los proyectos se buscan bajo el home de la cuenta según el SISTEMA OPERATIVO (`userInfo().homedir`), nunca
+ * `homedir()`: el runner de selftests apunta `HOME`/`USERPROFILE` a un sandbox vacío, y esto es una dependencia
+ * de la máquina, de solo lectura, no estado.
  */
 function findRealTypeScript() {
-  const candidates = ['Desktop/Projects/b100-am-ui', 'Desktop/Projects/discovery-api', 'Desktop/Projects/plugin-eslint', 'Desktop/Projects/plugin-stylelint'].map((project) => path.join(homedir(), project, 'node_modules', 'typescript'));
+  const candidates = ['Desktop/Projects/b100-am-ui', 'Desktop/Projects/discovery-api', 'Desktop/Projects/plugin-eslint', 'Desktop/Projects/plugin-stylelint'].map((project) => path.join(userInfo().homedir, project, 'node_modules', 'typescript'));
   const found = candidates.find((candidate) => existsSync(candidate));
 
   if (found === undefined) throw new Error(`no installed 'typescript' package found among: ${candidates.join(', ')} — this selftest needs one real repository with TypeScript installed to junction into its fixture`);
@@ -335,7 +340,10 @@ for (const [label, input] of [['garbage', 'NOT JSON AT ALL'], ['empty', ''], ['B
 // runner, `HERE` is a sandboxed COPY holding only `type-assertion-guard/` and `mutation-proof/`, and
 // `settings.json` / the dispatcher manifests live one level up in the real, undeployed-elsewhere tree.
 // This guard's own `guard.mjs.hook-registration.json` DOES travel with the sandbox, so it alone is read
-// from `HERE`.
+// from `HERE`. Under the selftest runner the home is a sandbox, so the tree under test is read from the
+// `SELFTEST_TREE` it sets (`selftest-runner/run.mjs`).
+// @es Bajo el runner de selftests el home es un sandbox, así que el árbol bajo prueba se lee de `SELFTEST_TREE`.
+const TREE = process.env.SELFTEST_TREE || path.join(homedir(), '.claude');
 {
   const declaration = JSON.parse(readFileSync(path.join(HERE, 'guard.mjs.hook-registration.json'), 'utf8'));
   const matcher = declaration.registrations.find((one) => one.event === 'PreToolUse')?.matcher;
@@ -343,13 +351,13 @@ for (const [label, input] of [['garbage', 'NOT JSON AT ALL'], ['empty', ''], ['B
   check('the declaration registers Edit|Write|MultiEdit, which the decision covers', matcher, 'Edit|Write|MultiEdit');
 }
 {
-  const manifestFile = path.join(homedir(), '.claude', 'hook-dispatch', 'manifests', 'pretooluse-authoring.json');
+  const manifestFile = path.join(TREE, 'hook-dispatch', 'manifests', 'pretooluse-authoring.json');
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
 
   check('the dispatcher manifest lists this guard for PreToolUse', manifest.event === 'PreToolUse' && manifest.guards.includes('../../type-assertion-guard/guard.mjs'), true);
 }
 {
-  const settings = JSON.parse(readFileSync(path.join(homedir(), '.claude', 'settings.json'), 'utf8'));
+  const settings = JSON.parse(readFileSync(path.join(TREE, 'settings.json'), 'utf8'));
   const wired = (settings.hooks?.PreToolUse ?? []).some((entry) => entry.matcher === 'Edit|Write|MultiEdit' && entry.hooks.some((hook) => typeof hook.command === 'string' && hook.command.includes('pretooluse-authoring.json')));
 
   check('settings.json wires Edit|Write|MultiEdit to the dispatcher with this guard\'s manifest', wired, true);

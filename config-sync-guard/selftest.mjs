@@ -828,9 +828,12 @@ check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason'
   check('the declaration registers Stop', declaration.registrations?.[0]?.event, 'Stop');
 
   // Read from `homedir()`, deliberately NOT relative to `HERE`: a mutation-proof sandbox copies this
-  // selftest into a throwaway directory with no sibling `hook-dispatch/` at all.
+  // selftest into a throwaway directory with no sibling `hook-dispatch/` at all. Under the selftest runner
+  // the home is a sandbox, so the tree under test is read from the `SELFTEST_TREE` it sets.
   // @es Leído desde `homedir()`, nunca relativo a `HERE`: un sandbox de mutación no tiene `hook-dispatch/` hermano.
-  const manifestPath = path.join(homedir(), '.claude', 'hook-dispatch', 'manifests', 'stop.json');
+  // Bajo el runner de selftests el home es un sandbox, así que el árbol bajo prueba se lee de `SELFTEST_TREE`.
+  const tree = process.env.SELFTEST_TREE || path.join(homedir(), '.claude');
+  const manifestPath = path.join(tree, 'hook-dispatch', 'manifests', 'stop.json');
   const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { guards: [] };
   check('the REAL global Stop manifest lists config-sync-guard', manifest.guards.some((entry) => entry.includes('config-sync-guard/guard.mjs')), true);
 }

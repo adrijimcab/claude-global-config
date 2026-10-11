@@ -463,15 +463,18 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
 // ONE real `~/.claude/hook-dispatch/manifests/stop.json` on the machine, and a mutation-proof sandbox
 // copies this selftest into a throwaway directory that has no sibling `hook-dispatch/` at all — a
 // path relative to `HERE` would silently read nothing there and this check would stop meaning
-// anything the moment it runs inside a mutant sandbox.
+// anything the moment it runs inside a mutant sandbox. Under the selftest runner the home is a sandbox,
+// so the tree under test is read from `SELFTEST_TREE`, which the runner sets (`selftest-runner/run.mjs`).
 // @es EL CABLEADO: el manifiesto REAL, leído desde `homedir()` a propósito, nunca relativo a la
 // ubicación de este fichero — un sandbox de mutación copia este selftest a un directorio sin
-// `hook-dispatch/` hermano, y una ruta relativa a `HERE` leería nada ahí en silencio.
+// `hook-dispatch/` hermano, y una ruta relativa a `HERE` leería nada ahí en silencio. Bajo el runner
+// de selftests el home es un sandbox, así que el árbol bajo prueba se lee de `SELFTEST_TREE`.
 {
   const declaration = JSON.parse(readFileSync(path.join(HERE, 'guard.mjs.hook-registration.json'), 'utf8'));
   check('the declaration registers Stop', declaration.registrations?.[0]?.event, 'Stop');
 
-  const manifestPath = path.join(homedir(), '.claude', 'hook-dispatch', 'manifests', 'stop.json');
+  const tree = process.env.SELFTEST_TREE || path.join(homedir(), '.claude');
+  const manifestPath = path.join(tree, 'hook-dispatch', 'manifests', 'stop.json');
   const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { guards: [] };
   check('the REAL global Stop manifest lists backlog-guard', manifest.guards.some((entry) => entry.includes('backlog-guard/guard.mjs')), true);
 }
