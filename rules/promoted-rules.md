@@ -98,6 +98,7 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   RULE: (1) `mem_save` the old sections VERBATIM into a new record in the same project whose `topic_key` is the target's `topic_key` + `-archive` + a suffix (`backlog/1.0.0-master-archive-1`); (2) read the archive back (`mem_get_observation`) to get its id; (3) resend the target WITHOUT those sections, plus one line `ARCHIVED: #<archive id>` (several ids per line, comma-separated).
 
 - **`contract-doc-names-a-mechanism-nobody-verifies`** — A path, script name, hook or wiring quoted from a memory or contract document is a HYPOTHESIS until the filesystem confirms it; confirm it before quoting it to a worker or to the owner, and fix the document in the same turn when it moved.
+  RULE (face of 2026-10-11, b100-am-ui-f8): this covers how something is DEPLOYED or PUBLISHED too — before a question to the owner or a decision rests on it, read the pipeline or config that does it in the same turn. A licence question about a "public GitLab Pages showcase" came from a memory title; the CI file showed a downloadable artifact and no Pages.
 
 - **`delegated-role-toolset-narrower-than-its-contract`** — Before delegating to a named role, check that its declared toolset can satisfy its task: a role asked to MEASURE or VERIFY needs execution (Bash). When it cannot, fix the role definition, never work around it in the brief.
 
