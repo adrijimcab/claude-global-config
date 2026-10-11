@@ -78,6 +78,14 @@
             "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/pretooluse-authoring.json\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/pretooluse-language.json\""
+          }
+        ]
       }
     ],
     "PostToolUse": [

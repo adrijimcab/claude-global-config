@@ -1,0 +1,6 @@
+{
+  "event": "PreToolUse",
+  "guards": [
+    "../../owner-language-guard/pretool.mjs"
+  ]
+}
