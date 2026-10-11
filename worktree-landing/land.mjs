@@ -12,7 +12,15 @@
  *      no landed path colliding with the main checkout's uncommitted work or with a differing ignored file;
  *   2. verification (`verification.mjs`): the repository's test command, run in the worktree;
  *   3. the preconditions again, which must name the SAME head and tip: what lands is what was verified;
- *   4. publication (`publication.mjs`): fast-forward, push, and the remote tip read back.
+ *   4. publication (`publication.mjs`): fast-forward, then push and the remote tip read back ONLY when the
+ *      remote is one of the owner's backups (`remote-policy.mjs`: github.com/adrijimcab/*); any other remote
+ *      is never pushed: the local branch is fast-forwarded, the report says "LANDED LOCALLY ... NOT
+ *      published" and prints the exact `git -C <main> push <remote> <branch>` for the owner. No flag turns
+ *      the push on; `--check` reports which of the two would happen.
+ * Two rules decide before anything is written: the requested --branch must be the FIRST integration branch
+ * the project declares (`integration-branch.mjs`: `.claude/fleet-kit.json` `integrationBranches`, else
+ * `.claude/integrate/integration-branches.mjs`; a repository declaring neither is not governed and the
+ * report says the check did not apply), and an unreadable declaration refuses.
  * Exit 0 landed (or ready, with `--check`), 1 verification red, 2 refused precondition or git failure.
  *
  * Usage: node land.mjs --worktree <dir> --main <dir> --branch <shared branch> --remote <remote> [--check]
@@ -24,7 +32,15 @@
  * seguro para que un commit llegue ahí es después de verificarlo, y es la única forma en que esta
  * herramienta lo mueve. Secuencia, un solo proceso, nada escrito antes del último paso: precondiciones;
  * verificación en el worktree; las precondiciones otra vez, que deben dar el MISMO head y punta (lo que
- * aterriza es lo verificado); publicación (fast-forward, push y relectura de la punta remota). Salida 0
+ * aterriza es lo verificado); publicación (fast-forward y, SOLO si el remoto es un respaldo del dueño
+ * (`remote-policy.mjs`: github.com/adrijimcab/*), push y relectura de la punta remota). Cualquier otro
+ * remoto no se empuja jamás: se hace fast-forward de la rama local, el informe dice «ATERRIZADO EN LOCAL ...
+ * NO publicado» e imprime el `git -C <main> push <remoto> <rama>` exacto para el dueño. Ninguna bandera
+ * activa el push; `--check` informa cuál de los dos ocurriría. Dos reglas deciden antes de escribir nada:
+ * la --branch pedida debe ser la PRIMERA rama de integración que declara el proyecto
+ * (`integration-branch.mjs`: `integrationBranches` de `.claude/fleet-kit.json`, o si no
+ * `.claude/integrate/integration-branches.mjs`; un repositorio sin ninguna declaración no está gobernado y
+ * el informe dice que la comprobación no aplicó), y una declaración ilegible rechaza. Salida 0
  * aterrizado (o listo, con `--check`), 1 verificación en rojo, 2 precondición rechazada o fallo de git.
  */
 
