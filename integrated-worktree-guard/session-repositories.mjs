@@ -12,6 +12,12 @@
  * `commondir` that leads back to the main checkout's `.git` directory. A path inside a linked worktree, or
  * in one already removed, so resolves to the same main checkout as one inside the main checkout.
  *
+ * WHICH WORKTREES THE SESSION OWNS. Ownership is per WORKTREE, never per repository: reaching the main
+ * checkout (reading a rule, running a script there) makes a session a visitor of the repository, not the
+ * owner of every worktree it has. A session owns a linked worktree when one of its paths lies inside it,
+ * and a `git worktree add` it ran counts as a path inside the worktree it created
+ * (`added-worktree-path.mjs`). `ownsWorktree` answers that question for one worktree directory.
+ *
  * THE TRANSCRIPT IS STREAMED in fixed chunks and never loaded whole: a long session's transcript is tens of
  * megabytes. `transcriptRead: false` says the transcript could not be read, so the caller knows the list is
  * only what the hook itself named.
@@ -22,7 +28,10 @@
  * y cada destino de `git -C`, resueltos por el parser compartido: una MENCIÓN no es una ruta de trabajo.
  * Una ruta se vuelve repo subiendo hasta el `.git` más cercano, sin lanzar procesos: un `.git` directorio es
  * un checkout principal; un `.git` FICHERO es un worktree enlazado, cuyo `commondir` vuelve al principal. El
- * transcript se lee por TROZOS, nunca entero. `transcriptRead: false` dice que no se pudo leer.
+ * transcript se lee por TROZOS, nunca entero. `transcriptRead: false` dice que no se pudo leer. La propiedad es por
+ * WORKTREE, nunca por repo: tocar el checkout principal (leer una regla, correr un script ahí) hace a la sesión
+ * visitante del repo, no dueña de cada worktree que tiene. Es dueña de un worktree enlazado cuando una de sus
+ * rutas cae dentro, y un `git worktree add` que ejecutó cuenta como una ruta dentro del worktree que creó.
  */
 
 import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs';
@@ -30,6 +39,7 @@ import path from 'node:path';
 
 import { gitInvocations } from '../shell-command/git-invocations.mjs';
 import { dialectOfTool } from '../shell-command/shell-command.mjs';
+import { addedWorktreePath } from './added-worktree-path.mjs';
 
 const CHUNK_BYTES = 1024 * 1024;
 const NEWLINE = 0x0a;
@@ -64,7 +74,7 @@ function* recordsOf(file) {
   }
 }
 
-/** Directories a Bash or PowerShell call's git invocations act in. @es Directorios en que actúan las invocaciones de git de una llamada de shell. */
+/** Directories a Bash or PowerShell call's git invocations act in, and the worktrees they add. @es Directorios en que actúan las invocaciones de git de una llamada de shell y los worktrees que añaden. */
 function gitDirectoriesOf(toolName, command, cwd) {
   const dialect = dialectOfTool(toolName);
 
@@ -72,7 +82,11 @@ function gitDirectoriesOf(toolName, command, cwd) {
 
   const directories = [];
 
-  for (const { directory, gitOptions } of gitInvocations(command, dialect, cwd)) {
+  for (const invocation of gitInvocations(command, dialect, cwd)) {
+    const { directory, gitOptions } = invocation;
+    const added = addedWorktreePath(invocation);
+
+    if (added !== undefined) directories.push(added);
     if (typeof directory === 'string') directories.push(directory);
 
     gitOptions.forEach((option, at) => {
@@ -122,10 +136,12 @@ function mainOfLinked(directory, dotGitFile) {
 }
 
 /**
- * The main checkout of the repository `somePath` lies in, or `undefined` when it lies in none.
- * @es El checkout principal del repo en que cae `somePath`, o `undefined` si en ninguno.
+ * Where `somePath` lies: the main checkout of its repository and, when the nearest `.git` is a linked
+ * worktree's, that worktree's root. `undefined` when it lies in no repository.
+ * @es Dónde cae `somePath`: el checkout principal de su repo y, si el `.git` más cercano es el de un worktree
+ * enlazado, la raíz de ese worktree. `undefined` si no cae en ningún repo.
  */
-export function mainCheckoutOf(somePath) {
+function locate(somePath) {
   let directory = path.resolve(somePath);
 
   for (;;) {
@@ -137,8 +153,8 @@ export function mainCheckoutOf(somePath) {
       entry = undefined;
     }
 
-    if (entry?.isDirectory()) return directory;
-    if (entry?.isFile()) return mainOfLinked(directory, path.join(directory, '.git'));
+    if (entry?.isDirectory()) return { main: directory };
+    if (entry?.isFile()) return { main: mainOfLinked(directory, path.join(directory, '.git')), linkedRoot: directory };
 
     const parent = path.dirname(directory);
 
@@ -146,6 +162,12 @@ export function mainCheckoutOf(somePath) {
     directory = parent;
   }
 }
+
+/**
+ * The main checkout of the repository `somePath` lies in, or `undefined` when it lies in none.
+ * @es El checkout principal del repo en que cae `somePath`, o `undefined` si en ninguno.
+ */
+export const mainCheckoutOf = (somePath) => locate(somePath)?.main;
 
 /** A path as one identity: real, absolute, case-folded where the filesystem is. @es Una ruta como identidad única. */
 function identityOf(directory) {
@@ -162,11 +184,13 @@ function identityOf(directory) {
 
 /**
  * @param {{ transcriptPath?: string, directories?: string[] }} input The transcript and the directories the hook named.
- * @returns {{ repositories: string[], transcriptRead: boolean }} Distinct main checkouts, first seen first.
- * @es Checkouts principales distintos, el primero visto primero.
+ * @returns {{ repositories: string[], ownsWorktree: (worktreePath: string) => boolean, transcriptRead: boolean }}
+ *   Distinct main checkouts, first seen first; and whether the session OWNS a linked worktree.
+ * @es Checkouts principales distintos, el primero visto primero; y si la sesión es DUEÑA de un worktree enlazado.
  */
 export function repositoriesWorkedIn({ transcriptPath, directories = [] }) {
   const seen = new Map();
+  const inside = new Set();
   const visited = new Set();
   let transcriptRead = false;
 
@@ -176,9 +200,11 @@ export function repositoriesWorkedIn({ transcriptPath, directories = [] }) {
     if (visited.has(key)) return;
     visited.add(key);
 
-    const main = mainCheckoutOf(somePath);
+    const located = locate(somePath);
 
-    if (main !== undefined && !seen.has(identityOf(main))) seen.set(identityOf(main), main);
+    if (located === undefined) return;
+    if (!seen.has(identityOf(located.main))) seen.set(identityOf(located.main), located.main);
+    if (located.linkedRoot !== undefined) inside.add(identityOf(located.linkedRoot));
   };
 
   for (const directory of directories) if (typeof directory === 'string' && directory !== '') note(directory);
@@ -192,5 +218,5 @@ export function repositoriesWorkedIn({ transcriptPath, directories = [] }) {
     }
   }
 
-  return { repositories: [...seen.values()], transcriptRead };
+  return { repositories: [...seen.values()], ownsWorktree: (worktreePath) => inside.has(identityOf(path.resolve(worktreePath))), transcriptRead };
 }

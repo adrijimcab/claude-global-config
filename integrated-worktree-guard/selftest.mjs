@@ -18,6 +18,11 @@
  *   - THE REPOSITORIES: from a transcript's `cwd`, a path-bearing tool input, a `git -C` target; NOT from a
  *     mention in `echo`; a path inside a linked worktree and one inside the main checkout are one repository;
  *     an unreadable transcript is reported.
+ *   - THE OWNERSHIP: one main checkout, two sessions, three linked worktrees: a session that only read the main
+ *     checkout is offered none; the creator (a `git worktree add`, with -C and a relative path) is offered what it
+ *     created; a session that worked inside one is offered that one; a mention in `echo` creates nothing.
+ *   - THE DECLARED OUTPUT: ignored mutation-proof scratch reads as clean; an undeclared ignored entry beside it,
+ *     under it, or one that merely looks like it, still reads as work; the declared path matches the runner's.
  *   - THE TURN: refuses once per session and set; a new worktree changes the set; a new session is shown it
  *     again; `stop_hook_active`, a subagent and `SubagentStop` pass; stranded/skipped only: a non-blocking
  *     notice, once.
@@ -29,15 +34,16 @@
  * veredicto de cada worktree (integrado por ff y por cherry-pick, no integrado, varado por no seguido o por
  * ignorado, con junction, vivo, locked, desacoplado, el principal), la base de integración (upstream, copia
  * propia, rama por defecto real, rama por defecto raíz, upstream distinto), la vivacidad, los repos
- * derivados del transcript, el turno (una vez por conjunto), la salida y el shim real.
+ * derivados del transcript, la propiedad por worktree (la sesión que solo leyó el principal no es dueña de nada), la salida de proceso declarada (el scratch de mutation-proof es limpio, un ignorado sin declarar sigue siendo trabajo), el turno (una vez por conjunto), la salida y el shim real.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { DECLARED_RUN_OUTPUT, undeclaredPartOf } from './declared-run-output.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 import { decide, evaluate, sharedLiveness } from './guard.mjs';
 import { integrationBase } from './integration-base.mjs';
@@ -289,7 +295,7 @@ try {
   // ---- the census -------------------------------------------------------------------------------
   const liveSet = new Set([path.resolve(live).toLowerCase()]);
   const isLive = (worktreePath) => liveSet.has(path.resolve(worktreePath).toLowerCase());
-  const verdicts = censusSafely(main, { isLive });
+  const verdicts = censusSafely(main, { isLive, owns: () => true });
   const kindOf = (directory) => verdicts.find((verdict) => path.resolve(verdict.path).toLowerCase() === path.resolve(directory).toLowerCase())?.kind;
 
   check('census: integrated by fast-forward, clean, idle -> removable', kindOf(integrated) === 'removable');
@@ -305,14 +311,14 @@ try {
   check('census: a prunable worktree (directory gone) -> skipped', verdicts.find((verdict) => verdict.branch === 'feat/gone')?.reason?.includes('prunable') === true);
   check('census: a worktree whose status git cannot read -> skipped with that reason, never removable', verdicts.find((verdict) => verdict.branch === 'feat/broken')?.reason?.includes('could not read its status') === true);
   check('census: a failed git cherry -> skipped, never removable', (() => {
-    const failing = censusSafely(main, { isLive, readCherry: () => undefined });
+    const failing = censusSafely(main, { isLive, owns: () => true, readCherry: () => undefined });
 
     return failing.find((verdict) => verdict.branch === 'feat/int')?.reason?.includes('git cherry') === true && failing.every((verdict) => verdict.kind !== 'removable');
   })());
   check('census: the main checkout is never in the census', verdicts.every((verdict) => path.resolve(verdict.path).toLowerCase() !== path.resolve(main).toLowerCase()));
-  check('census: an unlistable repository answers undefined', censusOf(path.join(root, 'nowhere'), { isLive }) === undefined);
+  check('census: an unlistable repository answers undefined', censusOf(path.join(root, 'nowhere'), { isLive, owns: () => true }) === undefined);
 
-  const verdicts2 = censusSafely(main2, { isLive: () => false });
+  const verdicts2 = censusSafely(main2, { isLive: () => false, owns: () => true });
   const kind2 = (branch) => verdicts2.find((verdict) => verdict.branch === branch)?.kind;
 
   check('census: no upstream on a root default -> skipped, with the reason', kind2('feature/noup') === 'skipped' && verdicts2.find((verdict) => verdict.branch === 'feature/noup')?.reason?.includes('root commit') === true);
@@ -356,12 +362,15 @@ try {
   })());
 
   const transcript = path.join(root, 'transcript.jsonl');
+  // This session works inside EVERY fixture worktree (ownership is per worktree) and also reads the main checkout;
+  // the worktree whose .git points nowhere is left out, because it would read as a repository of its own.
+  const touches = [main, main2, main3].flatMap((repo) => linkedWorktrees(repo) ?? []).filter((item) => item.branch !== 'feat/broken').map((item) => ({ type: 'tool_use', name: 'Read', input: { file_path: path.join(item.path, 'x.txt') } }));
 
-  writeFileSync(transcript, `${JSON.stringify({ cwd: root, message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: path.join(integrated, 'int.txt') } }, { type: 'tool_use', name: 'Read', input: { file_path: path.join(main, 'base.txt') } }, { type: 'tool_use', name: 'Read', input: { file_path: path.join(picked, 'picked.txt') } }] } })}\nnot json\n${JSON.stringify({ cwd: noUpstream })}\n`);
+  writeFileSync(transcript, `${JSON.stringify({ cwd: root, message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: path.join(integrated, 'int.txt') } }, { type: 'tool_use', name: 'Read', input: { file_path: path.join(main, 'base.txt') } }, { type: 'tool_use', name: 'Read', input: { file_path: path.join(picked, 'picked.txt') } }, ...touches] } })}\nnot json\n${JSON.stringify({ cwd: noUpstream })}\n`);
 
   const derived = repositoriesWorkedIn({ transcriptPath: transcript });
 
-  check('repo: two repositories worked in are derived once each, as main checkouts', derived.transcriptRead && derived.repositories.length === 2 && derived.repositories.some((repo) => repo.toLowerCase() === main.toLowerCase()) && derived.repositories.some((repo) => repo.toLowerCase() === main2.toLowerCase()), JSON.stringify(derived));
+  check('repo: three repositories worked in are derived once each, as main checkouts', derived.transcriptRead && derived.repositories.length === 3 && [main, main2, main3].every((expected) => derived.repositories.some((repo) => repo.toLowerCase() === expected.toLowerCase())), JSON.stringify(derived));
   const big = path.join(root, 'big-transcript.jsonl');
   const padding = 'x'.repeat(700 * 1024);
 
@@ -401,7 +410,7 @@ try {
   check('turn: nothing was removed by the guard', [integrated, picked, linked, followsLine, junctionTarget, path.join(junctionTarget, 'precious.txt')].every((entry) => existsSync(entry)));
   check('turn: the junction target survived the census (its content is intact)', readFileSync(path.join(junctionTarget, 'precious.txt'), 'utf8') === 'must survive\n');
 
-  check('turn: the own cwd of the hook names a repository even with no transcript', decideSafely({ session_id: 'cwd-only', cwd: main }, { stateDir: path.join(root, 'cwd-state'), isLive })?.decision === 'block');
+  check('turn: the main checkout as the hook cwd names a repository but owns none of its worktrees', decideSafely({ session_id: 'cwd-only', cwd: main }, { stateDir: path.join(root, 'cwd-state'), isLive }) === undefined);
   check('turn: the same set in the same session passes (once per set)', turn() === undefined);
   check('turn: a new session is shown the set again', turn({ session_id: 's2' })?.decision === 'block');
   check('turn: stop_hook_active passes', turn({ session_id: 's3', stop_hook_active: true }) === undefined);
@@ -416,12 +425,13 @@ try {
 
   commit(newest, 'newest.txt', 'newest\n', 'newest');
   integrateByCherryPick('feat/newest');
+  appendFileSync(transcript, `${JSON.stringify({ cwd: newest })}${String.fromCharCode(10)}`);
   check('turn: a NEW removable worktree changes the set and refuses again in the same session', turn()?.decision === 'block');
 
   // only stranded + skipped: non-blocking notice once
   const quiet = path.join(root, 'quiet-transcript.jsonl');
 
-  writeFileSync(quiet, `${JSON.stringify({ cwd: main2 })}\n`);
+  writeFileSync(quiet, `${JSON.stringify({ cwd: noUpstream })}\n`);
 
   const onlyNotes = (session) => decideSafely({ session_id: session, cwd: root, transcript_path: quiet }, { stateDir, isLive: (worktreePath) => path.resolve(worktreePath).toLowerCase() !== path.resolve(noUpstream).toLowerCase() ? true : false });
   const notice = onlyNotes('n1');
@@ -431,6 +441,109 @@ try {
   check('notice: it fires once per set', onlyNotes('n1') === undefined);
 
   check('nothing to say: a session that worked in no repository is silent', decideSafely({ session_id: 'z1', cwd: path.join(root, 'nowhere'), transcript_path: path.join(root, 'absent.jsonl') }, { stateDir, isLive }) === undefined);
+
+  // ---- ownership: ONE shared main checkout, two sessions, three linked worktrees ----------------
+  // wtA: created by session A (a `git worktree add` in its transcript), integrated.
+  // wtB: created by nobody visible, session B worked INSIDE it, integrated.
+  // wtC: created by nobody in either transcript, integrated: nobody's, so nobody is offered it.
+  const own = repository('repo-own', 'develop');
+
+  commit(own, '.gitignore', 'scratch/\n', 'own1');
+  commit(own, 'base.txt', 'base\n', 'own2');
+  git(own, 'push', '--quiet', '-u', 'origin', 'develop');
+  git(own, 'remote', 'set-head', 'origin', 'develop');
+
+  const integrateOwn = (branch, file) => {
+    const directory = worktree(own, branch, 'origin/develop');
+
+    commit(directory, file, `${file}\n`, branch);
+    git(own, 'merge', '--quiet', '--ff-only', branch);
+    git(own, 'push', '--quiet', 'origin', 'develop');
+
+    return directory;
+  };
+  const wtA = integrateOwn('own/a', 'a.txt');
+  const wtB = integrateOwn('own/b', 'b.txt');
+  const wtC = integrateOwn('own/c', 'c.txt');
+  const bash = (command) => ({ message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] }, cwd: own });
+  const read = (file) => ({ message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: file } }] }, cwd: own });
+  const transcriptOf = (name, records) => {
+    const file = path.join(root, `${name}.jsonl`);
+
+    writeFileSync(file, `${records.map((record) => JSON.stringify(record)).join('\n')}\n`);
+
+    return file;
+  };
+  const sessionA = transcriptOf('session-a', [bash(`git -C "${own}" worktree add -b own/a "${wtA}" origin/develop`), read(path.join(own, 'base.txt'))]);
+  const sessionB1 = transcriptOf('session-b1', [read(path.join(own, 'base.txt'))]);
+  const sessionB2 = transcriptOf('session-b2', [read(path.join(own, 'base.txt')), { message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: path.join(wtB, 'b.txt') } }] }, cwd: own }]);
+  const ownState = path.join(root, 'own-state');
+  const idle = () => false;
+  const offered = (session, transcriptPath) => {
+    const output = decideSafely({ session_id: session, cwd: root, transcript_path: transcriptPath }, { stateDir: ownState, isLive: idle });
+    const reasonOf = output?.reason ?? '';
+
+    return [wtA, wtB, wtC].filter((directory) => reasonOf.includes(`worktree remove "${slash(directory)}"`));
+  };
+
+  check('ownership: a session that only READ a file in the main checkout is offered none of the worktrees', offered('own-b1', sessionB1).length === 0);
+  check('ownership: the session that created a worktree is offered it, and only it', (() => { const names = offered('own-a', sessionA); return names.length === 1 && names[0] === wtA; })());
+  check('ownership: a session that worked inside a worktree is offered it, and only it', (() => { const names = offered('own-b2', sessionB2); return names.length === 1 && names[0] === wtB; })());
+  check('ownership: a worktree nobody created or worked in is offered to no session', ![sessionA, sessionB1, sessionB2].some((file, at) => offered(`own-c${at}`, file).includes(wtC)));
+  check('declared output: the path declared here is the one the (vendored) mutation runner writes to', (() => {
+    const runner = readFileSync(path.join(HERE, '..', 'mutation-proof', 'run-mutants.mjs'), 'utf8');
+    const [declared] = DECLARED_RUN_OUTPUT;
+
+    return runner.includes(`path.join(fleetRoot, ${declared.segments.map((segment) => `'${segment}'`).join(', ')})`);
+  })());
+  check('ownership: repositoriesWorkedIn answers per worktree', (() => {
+    const ownsA = repositoriesWorkedIn({ transcriptPath: sessionA }).ownsWorktree;
+    const ownsB1 = repositoriesWorkedIn({ transcriptPath: sessionB1 }).ownsWorktree;
+
+    return ownsA(wtA) === true && ownsA(wtB) === false && ownsB1(wtA) === false && ownsB1(path.join(own, 'nothing')) === false;
+  })());
+  check('ownership: a worktree CREATED by a git worktree add with a relative path and -C is attributed', (() => {
+    const owns = repositoriesWorkedIn({ transcriptPath: transcriptOf('session-rel', [{ ...bash(`git -C "${own}" worktree add -b own/a ../${path.basename(wtA)} origin/develop`), cwd: root }]) }).ownsWorktree;
+
+    return owns(wtA) === true && owns(wtB) === false;
+  })());
+  check('ownership: git worktree remove and list create nothing', (() => {
+    const owns = repositoriesWorkedIn({ transcriptPath: transcriptOf('session-remove', [bash(`git -C "${own}" worktree remove "${wtC}"`), bash(`git -C "${own}" worktree list`)]) }).ownsWorktree;
+
+    return owns(wtC) === false;
+  })());
+  check('ownership: a worktree MENTIONED in an echo of git worktree add is not created by the session', repositoriesWorkedIn({ transcriptPath: transcriptOf('session-echo', [bash(`echo git -C "${own}" worktree add "${wtC}"`)]) }).ownsWorktree(wtC) === false);
+  check('ownership: the census lists only the worktrees the question accepts', (() => {
+    const verdicts = censusSafely(own, { isLive: idle, owns: (directory) => path.resolve(directory) === path.resolve(wtB) });
+
+    return verdicts.length === 1 && path.resolve(verdicts[0].path) === path.resolve(wtB);
+  })());
+
+  // ---- declared process output: mutation-proof scratch ------------------------------------------
+  const scratchOnly = worktree(own, 'own/scratch-only', 'origin/develop');
+  const scratchMixed = worktree(own, 'own/scratch-mixed', 'origin/develop');
+  const scratchOther = worktree(own, 'own/scratch-other', 'origin/develop');
+  const scratchLookalike = worktree(own, 'own/scratch-lookalike', 'origin/develop');
+
+  mkdirSync(path.join(scratchOnly, 'scratch', 'mutation-proof', 'mutant-1', 'deep'), { recursive: true });
+  writeFileSync(path.join(scratchOnly, 'scratch', 'mutation-proof', 'mutant-1', 'deep', 'copy.mjs'), 'export {};\n');
+  mkdirSync(path.join(scratchMixed, 'scratch', 'mutation-proof', 'mutant-1'), { recursive: true });
+  writeFileSync(path.join(scratchMixed, 'scratch', 'mutation-proof', 'mutant-1', 'copy.mjs'), 'export {};\n');
+  writeFileSync(path.join(scratchMixed, 'scratch', 'keep-me.txt'), 'the only copy\n');
+  mkdirSync(path.join(scratchOther, 'scratch', 'other'), { recursive: true });
+  writeFileSync(path.join(scratchOther, 'scratch', 'other', 'result.txt'), 'the only copy\n');
+  mkdirSync(path.join(scratchLookalike, 'scratch', 'mutation-proof'), { recursive: true });
+  writeFileSync(path.join(scratchLookalike, 'scratch', 'mutation-proof-notes.txt'), 'the only copy\n');
+
+  const only = (directory) => ({ isLive: idle, owns: (candidate) => path.resolve(candidate) === path.resolve(directory) });
+
+  check('declared output: a worktree whose only ignored entry is mutation-proof scratch holds no work', (() => { const state = workingTreeState(scratchOnly); return state.measured && state.work.length === 0; })());
+  check('declared output: an undeclared ignored file beside the declared scratch is still work', (() => { const state = workingTreeState(scratchMixed); return state.work.length === 1 && state.work[0].endsWith('keep-me.txt'); })());
+  check('declared output: an undeclared ignored directory under scratch is still work', workingTreeState(scratchOther).work.some((entry) => entry.startsWith('scratch/other')));
+  check('declared output: a sibling whose name merely starts like the declared path is still work', workingTreeState(scratchLookalike).work.some((entry) => entry.endsWith('mutation-proof-notes.txt')));
+  check('declared output: a directory that cannot be read beside the declared path is returned whole, as work', undeclaredPartOf(path.join(root, 'nowhere'), 'scratch/').join() === 'scratch/');
+  check('declared output: a worktree holding only declared scratch is removable end to end', censusSafely(own, only(scratchOnly))[0]?.kind === 'removable');
+  check('declared output: an undeclared ignored entry reads as stranded end to end', censusSafely(own, only(scratchOther))[0]?.kind === 'stranded');
 
   // ---- noticed sets -----------------------------------------------------------------------------
   const memory = path.join(root, 'memory');

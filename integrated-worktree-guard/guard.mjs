@@ -21,8 +21,9 @@
  *     decide what the fleet leaves behind.
  *   - AT MOST ONCE per session and set of worktrees (`noticed-sets.mjs`): cleared by being SEEN.
  *
- * WHICH REPOSITORIES: the ones this session worked in, read from its transcript's tool calls
- * (`session-repositories.mjs`), plus the hook's own `cwd`.
+ * WHICH WORKTREES: the ones THIS session owns, read from its transcript's tool calls
+ * (`session-repositories.mjs`): it created them or worked inside them. Visiting the main checkout of a
+ * repository owns none of its worktrees. The hook's own `cwd` adds nothing: a worktree it stands in is held.
  *
  * FAILS OPEN on every malfunction of its own and records each in `state/observed.jsonl`: a guard able to
  * wedge a session is a larger hazard than the clutter it removes, and a silent failure is indistinguishable
@@ -95,7 +96,7 @@ export function decide(payload, { stateDir = defaultStateDir(), isLive = sharedL
   if (isSubagentCaller(payload) || payload?.hook_event_name === 'SubagentStop') return undefined;
 
   const standingIn = typeof payload?.cwd === 'string' ? payload.cwd : undefined;
-  const { repositories, transcriptRead } = repositoriesWorkedIn({ transcriptPath: payload?.transcript_path, directories: [standingIn, process.env.CLAUDE_PROJECT_DIR] });
+  const { repositories, ownsWorktree, transcriptRead } = repositoriesWorkedIn({ transcriptPath: payload?.transcript_path });
 
   if (!transcriptRead) note(stateDir, { event: 'transcript-unread', transcript: payload?.transcript_path ?? null });
 
@@ -105,7 +106,7 @@ export function decide(payload, { stateDir = defaultStateDir(), isLive = sharedL
   const skipped = [];
 
   for (const main of repositories) {
-    const verdicts = censusOf(main, { isLive: holdsSession });
+    const verdicts = censusOf(main, { isLive: holdsSession, owns: ownsWorktree });
 
     if (verdicts === undefined) {
       note(stateDir, { event: 'unmeasured', repository: main });

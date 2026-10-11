@@ -61,15 +61,16 @@ function classify(mainRoot, worktree, isLive, readCherry) {
 
 /**
  * @param {string} mainRoot The main checkout of the repository.
- * @param {{ isLive: (worktreePath: string) => boolean, readCherry?: (mainRoot: string, base: string, branch: string) => string | undefined }} dependencies
- *   The liveness question and the `git cherry` reader, injected so a selftest can make either fail.
- * @returns {Array<object> | undefined} One verdict per linked worktree, or `undefined` when git could not list them.
- * @es Un veredicto por worktree enlazado, o `undefined` si git no pudo listarlos.
+ * @param {{ isLive: (worktreePath: string) => boolean, owns: (worktreePath: string) => boolean, readCherry?: (mainRoot: string, base: string, branch: string) => string | undefined }} dependencies
+ *   The liveness question, the ownership question (does the session this census is for own the worktree?, no default: a
+ *   census that owned everything is the defect this parameter removes) and the `git cherry` reader, injected so a selftest can make any fail.
+ * @returns {Array<object> | undefined} One verdict per OWNED linked worktree, or `undefined` when git could not list them.
+ * @es Un veredicto por worktree enlazado PROPIO, o `undefined` si git no pudo listarlos.
  */
-export function censusOf(mainRoot, { isLive, readCherry = (root, base, branch) => readGit(root, ['cherry', base, branch]) }) {
+export function censusOf(mainRoot, { isLive, owns, readCherry = (root, base, branch) => readGit(root, ['cherry', base, branch]) }) {
   const worktrees = linkedWorktrees(mainRoot);
 
   if (worktrees === undefined) return undefined;
 
-  return worktrees.map((worktree) => classify(mainRoot, worktree, isLive, readCherry));
+  return worktrees.filter((worktree) => owns(worktree.path)).map((worktree) => classify(mainRoot, worktree, isLive, readCherry));
 }

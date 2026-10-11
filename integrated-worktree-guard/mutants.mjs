@@ -20,6 +20,8 @@ const LISTING = 'integrated-worktree-guard/linked-worktrees.mjs';
 const REPOS = 'integrated-worktree-guard/session-repositories.mjs';
 const NOTICED = 'integrated-worktree-guard/noticed-sets.mjs';
 const REPORT = 'integrated-worktree-guard/report.mjs';
+const ADDED = 'integrated-worktree-guard/added-worktree-path.mjs';
+const DECLARED = 'integrated-worktree-guard/declared-run-output.mjs';
 
 const MUTANTS = [
   // --- the turn
@@ -35,7 +37,6 @@ const MUTANTS = [
   ['a removable worktree only produces a notice, never a refusal', GUARD, 'if (removable.length > 0) {', 'if (false) {'],
   ['an empty fleet still speaks (the quiet exit is skipped)', GUARD, 'if (removable.length + stranded.length + skipped.length === 0) {', 'if (false) {'],
   ['the refusal drops the stranded and skipped notes', GUARD, 'refusalText(removable, { stranded, skipped })', 'refusalText(removable)'],
-  ['the main checkout\'s own cwd is not offered to the repository finder', GUARD, "directories: [standingIn, process.env.CLAUDE_PROJECT_DIR]", 'directories: []'],
 
   // --- the census
   ['a locked worktree is judged', CENSUS, 'if (worktree.locked) return skipped(', 'if (false) return skipped('],
@@ -49,6 +50,9 @@ const MUTANTS = [
   ['a branch is integrated when it merely HAS commits (the + test is inverted)', CENSUS, 'line.startsWith(UNINTEGRATED_LINE)', "line.startsWith('-')"],
   ['integration is judged by ancestry instead of patch-id', CENSUS, "readCherry(mainRoot, base.base, worktree.branch)", "readGit(mainRoot, ['rev-list', '--left-right', `${base.base}...${worktree.branch}`])"],
   ['the links of a removable worktree are not reported', CENSUS, 'links: state.links }', 'links: [] }'],
+
+  ['the census judges worktrees the session does not own', CENSUS, 'worktrees.filter((worktree) => owns(worktree.path))', 'worktrees'],
+  ['the turn judges every worktree of a repository, owned or not', GUARD, 'owns: ownsWorktree', 'owns: () => true'],
 
   // --- the integration base
   ['an upstream that is the branch\'s own remote copy is trusted', BASE, 'isOwnCopy: merge === `${HEADS_PREFIX}${branch}`', 'isOwnCopy: false'],
@@ -73,10 +77,28 @@ const MUTANTS = [
   ['a tool input path names no repository', REPOS, "const PATH_FIELDS = ['file_path', 'path', 'notebook_path', 'cwd'];", 'const PATH_FIELDS = [];'],
   ['a record\'s cwd names no repository', REPOS, "const paths = typeof record?.cwd === 'string' ? [record.cwd] : [];", 'const paths = [];'],
   ['a git -C target names no repository', REPOS, "if (option === '-C' && typeof gitOptions[at + 1] === 'string' && typeof directory === 'string') directories.push(path.resolve(directory, gitOptions[at + 1]));", ''],
-  ['a mention of git in a command is read as a command', REPOS, 'for (const { directory, gitOptions } of gitInvocations(command, dialect, cwd)) {', "for (const { directory, gitOptions } of gitInvocations(`git ${command}`, dialect, cwd)) {"],
+  ['a mention of git in a command is read as a command', REPOS, 'for (const invocation of gitInvocations(command, dialect, cwd)) {', 'for (const invocation of gitInvocations(`git ${command}`, dialect, cwd)) {'],
   ['a record straddling a read chunk is dropped', REPOS, 'pending = Buffer.concat([pending, buffer.subarray(0, read)]);', 'pending = buffer.subarray(0, read);'],
   ['a failed transcript read is reported as read', REPOS, '      transcriptRead = true;\n    } catch {\n      transcriptRead = false;', '      transcriptRead = true;\n    } catch {\n      transcriptRead = true;'],
-  ['a repository is listed once per path that names it', REPOS, 'if (main !== undefined && !seen.has(identityOf(main))) seen.set(identityOf(main), main);', 'if (main !== undefined) seen.set(`${identityOf(main)}|${somePath}`, main);'],
+  ['a repository is listed once per path that names it', REPOS, 'if (!seen.has(identityOf(located.main))) seen.set(identityOf(located.main), located.main);', 'seen.set(`${identityOf(located.main)}|${somePath}`, located.main);'],
+
+  ['visiting the main checkout makes a session the owner of its worktrees', REPOS, 'ownsWorktree: (worktreePath) => inside.has(identityOf(path.resolve(worktreePath)))', 'ownsWorktree: (worktreePath) => seen.has(identityOf(mainCheckoutOf(worktreePath) ?? worktreePath))'],
+  ['working inside a worktree does not make a session its owner', REPOS, 'if (located.linkedRoot !== undefined) inside.add(identityOf(located.linkedRoot));', ''],
+  ['a worktree the session creates is not attributed to it', REPOS, 'if (added !== undefined) directories.push(added);', ''],
+  ['the worktree root of a linked checkout is lost', REPOS, "linkedRoot: directory };", 'linkedRoot: undefined };'],
+
+  // --- the worktree a git worktree add creates
+  ['any git worktree subcommand is read as an add', ADDED, "args[0] !== 'add'", 'false'],
+  ['a branch name given to -b is read as the path', ADDED, 'if (OPTIONS_WITH_VALUE.has(args[at])) at += 1;', 'if (OPTIONS_WITH_VALUE.has(args[at])) continue;'],
+  ['-C is ignored when resolving the created path', ADDED, 'base = path.resolve(base, gitOptions[at + 1]);', 'base = base;'],
+  ['the created path is not resolved against the directory of the line', ADDED, 'return path.resolve(base, args[at]);', 'return args[at];'],
+
+  // --- the declared process output
+  ['every ignored entry under scratch is taken for declared output', DECLARED, "segments: ['scratch', 'mutation-proof']", "segments: ['scratch']"],
+  ['the declared output is not recognised', DECLARED, 'if (startsWith(segments, declared)) return [];', ''],
+  ['an entry that contains the declared path is not expanded', DECLARED, 'if (startsWith(declared, segments)) {', 'if (false) {'],
+  ['an unreadable directory beside the declared output reads as clean', DECLARED, 'return [entry];\n      }', 'return [];\n      }'],
+  ['ignored work is exempt from the declaration check', STATE, 'else if (status === IGNORED) work.push(...undeclaredPartOf(worktree, entry));', 'else if (status === IGNORED) work.push(entry);'],
 
   // --- the memory of shown sets
   ['every session is remembered, unbounded', NOTICED, '.slice(0, REMEMBERED_SESSIONS)', ''],
