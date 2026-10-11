@@ -184,6 +184,12 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   `land/odd` rewrites, so it starts after that branch lands. Owner order 2026-10-11: it is the LAST step
   before the session stops and before the final integration to master — after every worker lands and
   after `land/odd`, and before the final report.
+- Uncommitted work during a long run (recurred 2026-10-11, `worker-work-left-uncommitted-across-a-stop` 2x: a
+  worker an hour without a commit, then the orchestrator's own inline land.mjs fix uncommitted while its
+  mutation campaign ran). Mechanism to build: the mutation runner and the selftest runner refuse to start in a
+  worktree whose tracked or untracked non-ignored files differ from HEAD, naming them, so a long proof always
+  runs on committed work. Pending, reason (3): `mutation-proof/run-mutants.mjs` is vendored byte-identical and
+  pinned; the change goes through its source and the vendored sync, and a campaign is running on it now.
 - Company guards, wider (requested 2026-10-11 by session b100-am-ui-f8 before it deletes its own denylist;
   the 8-name list in `company-config/company-config.json` measured the same day): match AI tool PATHS by
   path segment (`.cursor/`, `.gemini/`, `.codex/`, `.opencode/`, `.kimi/`, `.windsurf/`, `.aider*`, `.atl/`,
