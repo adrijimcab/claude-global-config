@@ -1,0 +1,81 @@
+# Quality stage: four BLOCKING jobs (styles lint, secrets, dependency audit, Lighthouse). No job may
+# carry `allow_failure`: a gate that cannot fail the pipeline is a report, and a report nobody must act
+# on is how debt hides. A gate that is not ready is not added yet; it is added the day it measures zero.
+# Replace every <PLACEHOLDER> and keep the scripts in `package.json` in sync (see README.md here).
+# @es Etapa de calidad: cuatro jobs BLOQUEANTES (lint de estilos, secretos, auditoría de dependencias,
+# Lighthouse). Ningún job puede llevar `allow_failure`: un gate que no puede hacer fallar el pipeline es un
+# informe, y un informe que nadie debe atender es como se esconde la deuda. Un gate que aún no está listo
+# no se agrega todavía; se agrega el día en que mide cero. Reemplazar cada <PLACEHOLDER> y mantener los
+# scripts de `package.json` sincronizados (ver README.md de esta carpeta).
+
+stages:
+  - quality
+
+variables:
+  NODE_IMAGE: "node:20.11.1"
+  GITLEAKS_IMAGE: "zricethezav/gitleaks:v8.18.4"
+
+# The registry token is a masked CI/CD variable named REGISTRY_TOKEN, defined on the GitLab side; it is
+# read by `.npmrc` as `${REGISTRY_TOKEN}` and never written to a tracked file.
+# @es El token del registro es una variable de CI/CD enmascarada llamada REGISTRY_TOKEN, definida del lado
+# de GitLab; `.npmrc` la lee como `${REGISTRY_TOKEN}` y nunca se escribe en un fichero versionado.
+.node_job:
+  stage: quality
+  image: $NODE_IMAGE
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+  before_script:
+    - npm ci --ignore-scripts
+
+# Styles: Stylelint with the shared SCSS plugin, configured in `.stylelintrc.cjs`. Only rules that
+# measured zero offenders are enabled there, so any finding is a regression and blocks the merge.
+# @es Estilos: Stylelint con el plugin SCSS compartido, configurado en `.stylelintrc.cjs`. Allí solo se
+# activan reglas que midieron cero infractores, así que todo hallazgo es una regresión y bloquea el merge.
+quality:styles:
+  extends: .node_job
+  script:
+    - npm run lint:styles
+
+# Secrets: gitleaks over the working tree with `.gitleaks.toml` (default ruleset, entropy 3.5, an
+# allowlist limited to inert fixtures, each with its reason). A leaked secret is rotated, never allowlisted.
+# @es Secretos: gitleaks sobre el árbol de trabajo con `.gitleaks.toml` (reglas por defecto, entropía
+# 3.5, lista de permitidos limitada a fixtures inertes, cada uno con su motivo). Un secreto filtrado se
+# rota, nunca se agrega a la lista de permitidos.
+quality:secrets:
+  stage: quality
+  image:
+    name: $GITLEAKS_IMAGE
+    entrypoint: [""]
+  script:
+    - gitleaks detect --source . --config .gitleaks.toml --no-git --redact -v
+
+# Dependency audit: a known vulnerability of high severity or worse fails the job. Fix it by upgrading
+# the dependency; an advisory with no fix is handled in `package.json` `overrides` with the advisory id
+# and a review date in the commit, never by lowering the level or by `allow_failure`.
+# Alternative: `osv-scanner --lockfile=package-lock.json`.
+# @es Auditoría de dependencias: una vulnerabilidad conocida de severidad alta o peor hace fallar el job.
+# Se corrige actualizando la dependencia; un aviso sin corrección se trata en `overrides` de
+# `package.json` con el id del aviso y una fecha de revisión en el commit, nunca bajando el nivel ni con
+# `allow_failure`. Alternativa: `osv-scanner --lockfile=package-lock.json`.
+quality:dependency-audit:
+  extends: .node_job
+  script:
+    - npm audit --audit-level=high
+
+# Lighthouse CI: builds the app, serves the build output and asserts the budgets of `.lighthouserc.cjs`
+# (median of 3 runs, accessibility score at least 0.9 as an error). Chromium comes from the Debian package.
+# @es Lighthouse CI: construye la app, sirve la salida del build y verifica los presupuestos de
+# `.lighthouserc.cjs` (mediana de 3 corridas, puntaje de accesibilidad de al menos 0.9 como error). Chromium
+# viene del paquete de Debian.
+quality:lighthouse:
+  extends: .node_job
+  variables:
+    CHROME_PATH: /usr/bin/chromium
+  script:
+    - apt-get update -qq && apt-get install -y -qq chromium
+    - npm run build
+    - npx --no-install lhci autorun

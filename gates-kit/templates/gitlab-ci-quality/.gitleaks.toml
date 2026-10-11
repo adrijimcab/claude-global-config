@@ -1,0 +1,33 @@
+# Secret scanning. Extends the default gitleaks ruleset and pins the generic-api-key rule to entropy
+# 3.5, which cuts base64 / hash / UUID noise. The `[extend.entropy]` table some guides show is not a gitleaks
+# key: gitleaks accepts it without error and ignores it, so entropy is set on the rule itself.
+# @es Escaneo de secretos. Extiende las reglas por defecto de gitleaks y fija la regla generic-api-key en
+# entropía 3.5, lo que reduce el ruido de base64 / hashes / UUID. La tabla `[extend.entropy]` que algunas
+# guías muestran no es una clave de gitleaks: la acepta sin error y la ignora, por eso la entropía se fija
+# en la propia regla.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+entropy = 3.5
+
+# The ONLY exception surface of this gate. An entry is allowed only for a path that is a fixture or an
+# artifact that cannot hold a live secret, and it carries its reason in the comment line above it. A real
+# secret is rotated and removed, never allowlisted.
+# @es La ÚNICA superficie de excepción de este gate. Una entrada se permite solo para una ruta que es un
+# fixture o un artefacto que no puede contener un secreto vivo, y lleva su motivo en la línea de comentario
+# anterior. Un secreto real se rota y se quita, nunca se agrega a la lista de permitidos.
+[allowlist]
+paths = [
+  # Reason: the example file holds placeholder values by definition.
+  # @es Motivo: el fichero de ejemplo contiene valores de relleno por definición.
+  '''\.env\.example''',
+  # Reason: unit-test fixtures use fake credentials on purpose.
+  # @es Motivo: los fixtures de pruebas unitarias usan credenciales falsas a propósito.
+  '''.*\.spec\.ts$''',
+  # Reason: the lockfile holds package integrity hashes, which look like high-entropy secrets.
+  # @es Motivo: el lockfile contiene hashes de integridad de paquetes, que parecen secretos de alta entropía.
+  '''package-lock\.json'''
+]

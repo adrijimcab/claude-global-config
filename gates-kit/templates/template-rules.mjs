@@ -28,6 +28,8 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
+import { inspectQualityFolder, isQualityStage } from './quality-stage-rules.mjs';
+
 /** The G1 to G6 anchors: id and exact heading line. @es Las anclas G1 a G6: id y línea de título exacta. */
 const ANCHORS = [
   ['G1', '## G1 Zero suppression'],
@@ -117,7 +119,8 @@ export function inspectTemplate(text) {
 
 /**
  * Walks `root`: one entry `{ name, problems }` per folder, in file system order; a folder without its
- * contract file reports `missing-file`. Plain files are not templates.
+ * contract file reports `missing-file`; a folder holding `.gitlab-ci.yml` is a CI quality stage, judged by
+ * `quality-stage-rules.mjs`. Plain files are not templates.
  * @es Recorre `root`: una entrada por carpeta, en el orden del sistema de ficheros; sin su fichero informa
  * `missing-file`. Los ficheros sueltos no son plantillas.
  */
@@ -126,6 +129,8 @@ export function inspectDirectory(root) {
 
   return names.map((name) => {
     const file = path.join(root, name, CONTRACT_FILE);
+
+    if (isQualityStage(path.join(root, name))) return { name, problems: inspectQualityFolder(path.join(root, name)) };
 
     return { name, problems: existsSync(file) ? inspectTemplate(readFileSync(file, 'utf8')) : [{ id: 'missing-file' }] };
   });
