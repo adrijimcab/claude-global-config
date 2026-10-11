@@ -7,6 +7,7 @@
     "../../collision-guard/guard.mjs",
     "../../commit-pathspec-guard/guard.mjs",
     "../../cwd-change-guard/guard.mjs",
-    "../../vendored-edit-guard/guard.mjs"
+    "../../vendored-edit-guard/guard.mjs",
+    "../../owner-language-guard/pretool.mjs"
   ]
 }

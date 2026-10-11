@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse"
+    }
+  ],
+  "why": "interstitial lines written just before a tool call reached the owner in English (replied-to-owner-in-english, 8 recurrences); the Stop guard only judges the turn's end, this one judges the line before each shell, authoring and delegation call."
+}

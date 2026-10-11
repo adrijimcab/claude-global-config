@@ -84,7 +84,7 @@ export function turnTextsFromLines(lines) {
  * recién después se decodifica (lección medida en engram-persistence: cortar un string decodificado
  * con un offset en bytes cae fuera de lugar con texto multibyte).
  */
-function tailLines(descriptor, size, bytes) {
+export function tailLines(descriptor, size, bytes) {
   const start = Math.max(0, size - bytes);
   const from = start === 0 ? 0 : start - 1;
   const buffer = Buffer.alloc(size - from);
