@@ -44,3 +44,20 @@ not a claim, it is a vibe.
 
 A wrong statement is a defect. Treat it like one: identify why the wrong statement was producible,
 and close that path — not merely the individual fact.
+
+## 6. What can be measured now is measured, never hedged (owner directive 2026-10-11)
+
+Owner, verbatim: «siempre se verifica TODO» and «hacer de esto una regla también o hook o lo necesario,
+todo se verifica». "I have not verified this" (§1) is for what CANNOT be measured in this turn. When a
+tool can measure it now — a worker's or process's state, a branch, a file, a gate, a version, a release
+note — saying "probably", "it should be", "it fits that", or "unverified" instead of measuring is the
+defect. Measure it, then state it with the receipt. Liveness of a worker is its transcript's last write
+and last record, its processes and its `git log`, read in the same turn (one command:
+`node ~/.claude/worker-status/status.mjs <agent-id>`, once built). Searches over `~/.claude/projects` and
+other git-ignored trees use `fd -u` or a direct path, never a search that skips ignored files.
+Mechanism: a fourth case of the premise judge (Stop `prompt` hook) refuses a reply that hedges a state
+it could have measured this turn (in construction, with its precision measured like the other cases).
+@es Lo que se puede medir ahora se mide, nunca se matiza: «no lo verifiqué» es solo para lo que no se puede
+medir en este turno. El estado de un worker se mide con la última escritura de su transcript, sus
+procesos y su `git log`; los árboles ignorados por git se buscan con `fd -u`. Lo hace cumplir un cuarto
+caso del juez de premisas.
