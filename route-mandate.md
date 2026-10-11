@@ -7,7 +7,9 @@ is — never by its size, its risk, or how urgent it feels. Points 2 and 3 bind 
    module boundary or changes a public API, and any change whose approach is undecided when the work
    starts. Explore, resolve the open decisions, and TRACK before the first write: `odd/tasks/<feature>.md`
    and its engram mirror `odd/<feature>/tasks` carry the decided design and why, the tasks and their
-   checks. Each task closes with a work-unit commit recorded in the document. Use `judgment-day` for
+   checks. Each task closes with a work-unit commit recorded in the document. Every step that measures
+   a unit (the document, its commit, `gentle-ai review assess --cwd --base-ref`) runs in the unit's own
+   worktree with its own base, never the integration checkout. Use `judgment-day` for
    adversarial review and the `review-*` lenses where the risk tier calls for them.
    **Direct (inline or delegated) where the design is settled.** A fix whose root cause has been
    measured and whose solution has one evident shape, or a contained change inside one module, goes
