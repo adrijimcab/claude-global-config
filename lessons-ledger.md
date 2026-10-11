@@ -41,3 +41,5 @@ One line per RULE (a repeat folds into its line and bumps the counter). Loaded a
 - [global] 2026-10-11 — RULE: before citing a third-party API as precedent or evidence, read the project's manifest and the importing source to confirm that is the library in use; cite that library's docs. Evidence: lessons/evidence/claim-checked-against-a-library-the-project-does-not-use.md <!--fc:claim-checked-against-a-library-the-project-does-not-use#1-->
 
 - [global] 2026-10-11 — RULE: before handing a decision to the owner, split it into the part only the owner holds and the technical part, decide the technical part with its reason, and verify the origin of any target before relaying it. Evidence: lessons/evidence/technical-fork-handed-to-the-owner.md <!--fc:technical-fork-handed-to-the-owner#1-->
+
+- [global] 2026-10-12 — RULE: a deferral reason is a state claim; before writing PENDING with reason 3, grep the remaining tasks and every live worktree's diff for the path, and if nothing touches it, resolve it now. Evidence: lessons/evidence/backlog-deferral-reason-not-measured.md <!--fc:backlog-deferral-reason-not-measured#1-->
