@@ -387,6 +387,11 @@ try {
   const reason = first?.reason ?? '';
 
   check('turn: the refusal names every removable worktree and branch', [integrated, picked, linked, followsLine].every((directory) => reason.includes(slash(directory))) && reason.includes('feat/int') && reason.includes('feat/picked') && reason.includes('feature/follows'));
+  check('turn: the English half also gives the branch deletion after the removal', (() => {
+    const english = reason.slice(0, reason.indexOf('  @es '));
+
+    return english.indexOf(`worktree remove "${slash(integrated)}"`) !== -1 && english.indexOf(`worktree remove "${slash(integrated)}"`) < english.indexOf('branch -D "feat/int"');
+  })());
   check('turn: the refusal gives the exact removal, in order', reason.indexOf(`git -C "${slash(main)}" worktree remove "${slash(integrated)}"`) !== -1 && reason.indexOf(`worktree remove "${slash(integrated)}"`) < reason.indexOf(`branch -D "feat/int"`));
   check('turn: the refusal never lists live, unintegrated, dirty, locked or detached worktrees as removable', [live, unintegrated, backup, dirty, ignoredWork, locked, detached, noUpstream].every((directory) => !reason.includes(`worktree remove "${slash(directory)}"`)));
   check('turn: the refusal names the junction precaution', reason.includes('node_modules') && reason.includes('cmd /c rmdir'));
