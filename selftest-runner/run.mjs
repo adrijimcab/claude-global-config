@@ -7,38 +7,51 @@
  *
  * Usage: node run.mjs [--root <dir>]
  *
- * Each selftest's GREEN or RED line (and, for a RED one, its output) is printed the moment that selftest
- * ends, so a long run is watchable; the summary line comes last. Streaming changes WHEN lines appear, never
- * which lines, their order, or the exit code.
+ * Each selftest's GREEN or RED line (and, for a RED one, why) is printed the moment that selftest ends, so a
+ * long run is watchable; the summary line comes last. Streaming changes WHEN lines appear, never which lines,
+ * their order, or the exit code.
  *
- * ISOLATION AND THE LEAK DETECTOR. Each selftest runs with a fresh, empty `HOOK_STATE_DIR` of its own, removed
- * when it ends, so every module that resolves its state through `hook-state/locations.mjs` writes there and a
- * selftest never sees the state another one left. The live state (`leaks.mjs` says which directories) is
- * snapshotted before and after each selftest; any file created, changed or removed there turns that selftest RED,
- * whatever its exit code, with the offending paths.
+ * ISOLATION BY CONSTRUCTION. Each selftest runs in a private sandbox of its own (`sandbox.mjs`), removed when it
+ * ends: `HOME` and `USERPROFILE` are an empty sandbox home, `HOOK_CLAUDE_HOME` its empty `.claude`,
+ * `HOOK_STATE_DIR` a fresh state root outside that home, and `TMP`, `TEMP` and `TMPDIR` a private temp directory.
+ * THE TREE UNDER TEST is passed explicitly as `SELFTEST_TREE` (the absolute top level `--root` resolves to): a
+ * selftest that has to read the tree reads it from there, never through `homedir()`, which now names the
+ * sandbox.
+ *
+ * THE LEAK VERDICT (`sandbox-verdict.mjs`) looks only at what no other process writes: anything left in the
+ * sandbox home (a module that bypassed the state seam), anything left in the private temp directory, and any
+ * change to the tree's `git status` across the selftest. Any of them turns the selftest RED whatever its exit,
+ * each path named. The real home is not watched, so a live session writing it during a run cannot make the run
+ * red. A tree git cannot read stops the run, exit 2: no later selftest could be judged.
  *
  * @es Ejecuta todos los selftests del repositorio y da UN veredicto: 0 todo verde, 1 alguno rojo, 2 no
- * medido. La línea GREEN o RED de cada selftest (y, si es RED, su salida) se imprime en cuanto ese selftest
- * termina, para poder seguir una corrida larga; el resumen va al final. El flujo cambia CUÁNDO aparecen las
- * líneas, nunca cuáles, su orden ni el código de salida. Cada selftest corre en su propio proceso y con su
- * directorio como cwd. No hay opción de filtro, salto ni corte al primer fallo, a propósito: un subconjunto elegido no es un veredicto del repositorio, y
- * un selftest rojo de partida se informa ROJO, nunca se omite. Para uno solo, se invoca con node.
- * AISLAMIENTO Y DETECTOR DE FUGAS: cada selftest corre con su propio `HOOK_STATE_DIR` nuevo y vacío, que se
- * borra al acabar, así todo módulo que resuelve por `locations.mjs` escribe ahí y ningún selftest ve el estado
- * que dejó otro. El estado vivo (`leaks.mjs` dice qué directorios) se fotografía antes y después de cada
- * selftest; cualquier fichero creado, cambiado o borrado ahí lo pone ROJO, sea cual sea su salida, con las rutas.
+ * medido. La línea GREEN o RED de cada selftest (y, si es RED, el porqué) se imprime en cuanto ese selftest
+ * termina; el resumen va al final. El flujo cambia CUÁNDO aparecen las líneas, nunca cuáles, su orden ni el
+ * código de salida. Cada selftest corre en su propio proceso y con su directorio como cwd. No hay opción de
+ * filtro, salto ni corte al primer fallo, a propósito: un subconjunto elegido no es un veredicto del
+ * repositorio. AISLAMIENTO POR CONSTRUCCIÓN: cada selftest corre en un sandbox privado (`sandbox.mjs`) que se
+ * borra al acabar: `HOME` y `USERPROFILE` son un home vacío, `HOOK_CLAUDE_HOME` su `.claude` vacío,
+ * `HOOK_STATE_DIR` una raíz de estado nueva fuera de ese home, y `TMP`, `TEMP` y `TMPDIR` un temporal privado.
+ * EL ÁRBOL BAJO PRUEBA se pasa explícito en `SELFTEST_TREE` (el nivel superior absoluto de `--root`): un
+ * selftest que necesita leer el árbol lo lee de ahí, nunca por `homedir()`. EL VEREDICTO DE FUGAS
+ * (`sandbox-verdict.mjs`) mira solo lo que ningún otro proceso escribe: lo que quede en el home del sandbox, lo
+ * que quede en el temporal privado y cualquier cambio del `git status` del árbol; cualquiera pone el selftest
+ * ROJO, sea cual sea su salida, con cada ruta. El home real no se vigila, así una sesión viva que lo escriba no
+ * puede poner roja la corrida. Un árbol que git no puede leer detiene la corrida con 2.
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { STATE_ROOT_VARIABLE } from '../hook-state/locations.mjs';
+import { makeSpeaker } from '../bilingual-output/speaker.mjs';
 import { DiscoveryError, discoverSelftests } from './discovery.mjs';
-import { leaksBetween, snapshotLiveState } from './leaks.mjs';
+import { MESSAGES } from './messages.mjs';
+import { createSandbox, removeSandbox, sandboxEnv } from './sandbox.mjs';
+import { escapesOf } from './sandbox-verdict.mjs';
 import { writeLineSync } from './stream.mjs';
+import { TreeStatusError, treeStatus } from './tree-status.mjs';
 
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 const EXIT_GREEN = 0;
@@ -46,51 +59,57 @@ const EXIT_RED = 1;
 const EXIT_NOT_MEASURED = 2;
 const OUTPUT_LIMIT_BYTES = 64 * 1024 * 1024;
 
+const speaker = makeSpeaker(MESSAGES);
+
 /**
- * Runs one selftest under its own fresh state home, removed afterwards. Returns why it is red (its exit) and the
- * live state it touched; `failure` is null when it exited green.
- * @es Ejecuta un selftest con su propio home de estado nuevo, que se borra después. Devuelve por qué está rojo
- * (su salida) y el estado vivo que tocó; `failure` es null si salió en verde.
+ * Runs one selftest in a sandbox of its own, removed afterwards. Returns why it is red (its exit) and what it
+ * left outside its seams; `failure` is null when it exited green. Throws `TreeStatusError` when git cannot
+ * read the tree before or after it.
+ * @es Ejecuta un selftest en un sandbox propio, que se borra después. Devuelve por qué está rojo (su salida) y
+ * lo que dejó fuera de sus costuras; `failure` es null si salió en verde. Lanza `TreeStatusError` si git no
+ * puede leer el árbol antes o después.
  */
 function runOne({ root, entry, timeoutMs, spawn }) {
-  const stateHome = mkdtempSync(path.join(tmpdir(), 'selftest-state-'));
+  const sandbox = createSandbox();
+
   try {
-    const before = snapshotLiveState(root);
-    const failure = exitOf({ root, entry, timeoutMs, spawn, stateHome });
-    return { failure, leaks: leaksBetween(before, snapshotLiveState(root)) };
+    const treeBefore = treeStatus(root);
+    const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root }) });
+    const treeAfter = treeStatus(root);
+
+    return { failure, escapes: escapesOf({ sandbox, tree: root, treeBefore, treeAfter }) };
   } finally {
-    rmSync(stateHome, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 }
 
 /**
- * Runs one selftest with `HOOK_STATE_DIR` at `stateHome`. Returns why it is red, or null when it is green.
- * @es Ejecuta un selftest con `HOOK_STATE_DIR` en `stateHome`. Devuelve por qué está rojo, o null si está verde.
+ * Runs one selftest with `env`. Returns why it is red, or null when it is green.
+ * @es Ejecuta un selftest con `env`. Devuelve por qué está rojo, o null si está verde.
  */
-function exitOf({ root, entry, timeoutMs, spawn, stateHome }) {
+function exitOf({ root, entry, timeoutMs, spawn, env }) {
   const file = path.join(root, entry.path);
   try {
     statSync(file);
   } catch {
-    return { exit: 'missing', reason: 'file missing on disk @es fichero ausente en disco', output: '' };
+    return { exit: 'missing', reason: speaker.line('missing'), output: '' };
   }
   const result = spawn(process.execPath, [file], {
     cwd: path.dirname(file),
     encoding: 'utf8',
     timeout: timeoutMs,
     maxBuffer: OUTPUT_LIMIT_BYTES,
-    env: { ...process.env, [STATE_ROOT_VARIABLE]: stateHome },
+    env,
   });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   if (result.error?.code === 'ETIMEDOUT') {
-    const seconds = Math.round(timeoutMs / 1000);
-    return { exit: 'timeout', reason: `timed out after ${seconds}s @es agotó el tiempo tras ${seconds}s`, output };
+    return { exit: 'timeout', reason: speaker.line('timed-out', { seconds: Math.round(timeoutMs / 1000) }), output };
   }
   if (result.error) {
-    return { exit: 'error', reason: `${result.error.message} @es no se pudo ejecutar`, output };
+    return { exit: 'error', reason: speaker.line('not-run', { reason: result.error.message }), output };
   }
   if (result.status === 0) return null;
-  const signal = result.signal ? `killed by ${result.signal} @es terminado por ${result.signal}` : '';
+  const signal = result.signal ? speaker.line('killed-by', { signal: result.signal }) : '';
   return { exit: result.status ?? 'signal', reason: signal, output };
 }
 
@@ -102,17 +121,31 @@ function indent(text) {
     .map((line) => `    ${line}`);
 }
 
+/** The report lines of a red selftest after its RED line. @es Las líneas del informe de un selftest rojo tras su línea RED. */
+function whyRed({ failure, escapes }) {
+  const lines = [];
+
+  if (escapes.length > 0) {
+    lines.push(speaker.line('escaped', { count: escapes.length }));
+    lines.push(...escapes.map((escape) => speaker.line(`escape-${escape.area}-${escape.change}`, { path: escape.path })));
+  }
+  if (failure === null) return lines;
+  if (failure.reason !== '') lines.push(failure.reason);
+
+  return [...lines, ...indent(failure.output)];
+}
+
 /**
  * `spawn` is injectable so a result no host produces on demand (a POSIX signal death) can be fed to the
  * verdict; it defaults to `spawnSync`.
  * @es `spawn` es inyectable para poder alimentar al veredicto un resultado que ningún host produce a
  * demanda (muerte por señal POSIX); por defecto es `spawnSync`.
  * `onLine` receives each report line as it is produced, before the next selftest starts; the returned
- * `report` is the same lines, so a caller that ignores the hook sees the old behaviour.
+ * `report` is the same lines. `notMeasured`, present only with exit 2, is why nothing (more) was measured.
  * @es `onLine` recibe cada línea del informe al producirse, antes de que empiece el siguiente selftest; el
- * `report` devuelto son las mismas líneas, así que quien ignore el gancho ve el comportamiento de siempre.
+ * `report` devuelto son las mismas líneas. `notMeasured`, solo con salida 2, dice por qué no se midió (más).
  * @param {{ root: string, timeoutMs?: number, spawn?: typeof spawnSync, onLine?: (line: string) => void }} options
- * @returns {{ exitCode: number, report: string[] }}
+ * @returns {{ exitCode: number, report: string[], notMeasured?: string }}
  * @es Devuelve el código de salida y las líneas del informe.
  */
 export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spawnSync, onLine = () => {} }) {
@@ -121,13 +154,11 @@ export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spa
     discovered = discoverSelftests(root);
   } catch (error) {
     if (!(error instanceof DiscoveryError)) throw error;
-    return { exitCode: EXIT_NOT_MEASURED, report: [error.message] };
+    return { exitCode: EXIT_NOT_MEASURED, report: [error.message], notMeasured: error.message };
   }
   if (discovered.entries.length === 0) {
-    return {
-      exitCode: EXIT_NOT_MEASURED,
-      report: [`No selftest found in ${discovered.root}; nothing was measured. @es No se encontró ningún selftest en ${discovered.root}; no se midió nada.`],
-    };
+    const nothing = speaker.line('nothing-found', { root: discovered.root });
+    return { exitCode: EXIT_NOT_MEASURED, report: [nothing], notMeasured: nothing };
   }
 
   const report = [];
@@ -140,23 +171,22 @@ export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spa
   let green = 0;
   for (const entry of discovered.entries) {
     const label = entry.untracked ? ' UNTRACKED' : '';
-    const { failure, leaks } = runOne({ root: discovered.root, entry, timeoutMs, spawn });
-    if (failure === null && leaks.length === 0) {
+    let outcome;
+    try {
+      outcome = runOne({ root: discovered.root, entry, timeoutMs, spawn });
+    } catch (error) {
+      if (!(error instanceof TreeStatusError)) throw error;
+      const notMeasured = speaker.line('tree-unreadable', { tree: error.tree, selftest: entry.path, reason: error.reason });
+      return { exitCode: EXIT_NOT_MEASURED, report: [...report, notMeasured], notMeasured };
+    }
+    if (outcome.failure === null && outcome.escapes.length === 0) {
       green += 1;
       emit(`GREEN  ${entry.path} (exit 0)${label}`);
       continue;
     }
-    const leaked = leaks.length === 0 ? '' : ', leaked into the live state';
-    emit(`RED    ${entry.path} (exit ${failure === null ? 0 : failure.exit}${leaked})${label}`);
-    if (leaks.length > 0) {
-      emit(`    wrote ${leaks.length} path(s) of the live state @es escribió ${leaks.length} ruta(s) del estado vivo:`);
-      emit(...leaks.map((leak) => `    ${leak.change} ${leak.path}`));
-    }
-    if (failure === null) continue;
-    if (failure.reason !== '') emit(`    ${failure.reason}`);
-    emit(...indent(failure.output));
+    emit(`RED    ${entry.path} (exit ${outcome.failure === null ? 0 : outcome.failure.exit})${label}`, ...whyRed(outcome));
   }
-  emit(`${green}/${discovered.entries.length} green`);
+  emit(speaker.line('summary', { green, total: discovered.entries.length }));
   return { exitCode: green === discovered.entries.length ? EXIT_GREEN : EXIT_RED, report };
 }
 
@@ -164,14 +194,12 @@ export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spa
  * Reads the command line: nothing, or `--root <dir>`; anything else is refused, so no filter can exist.
  * @es Lee la línea de órdenes: nada, o `--root <dir>`; todo lo demás se rechaza, así no puede existir filtro.
  * @param {string[]} argv
- * @returns {{ root: string } | { error: string }}
+ * @returns {{ root: string } | { error: true }}
  */
 function parseArgs(argv) {
   if (argv.length === 0) return { root: process.cwd() };
   if (argv.length === 2 && argv[0] === '--root') return { root: argv[1] };
-  return {
-    error: `Usage: node run.mjs [--root <dir>]. No filter or skip option exists. @es Uso: node run.mjs [--root <dir>]. No existe ninguna opción de filtro ni de salto.`,
-  };
+  return { error: true };
 }
 
 /**
@@ -181,13 +209,13 @@ function parseArgs(argv) {
 function main() {
   const parsed = parseArgs(process.argv.slice(2));
   if ('error' in parsed) {
-    console.error(parsed.error);
+    speaker.complain('usage');
     return EXIT_NOT_MEASURED;
   }
-  const { exitCode, report } = runSelftests({ root: parsed.root, onLine: writeLineSync });
-  // A run that measured nothing streamed nothing: its explanation goes to stderr, whole.
-  // @es Una corrida que no midió nada no emitió nada: su explicación va entera a stderr.
-  if (exitCode === EXIT_NOT_MEASURED) console.error(report.join('\n'));
+  const { exitCode, notMeasured } = runSelftests({ root: parsed.root, onLine: writeLineSync });
+  // Why nothing (more) was measured goes to stderr; the lines already streamed are not repeated.
+  // @es Por qué no se midió (más) va a stderr; las líneas ya emitidas no se repiten.
+  if (notMeasured !== undefined) speaker.dataError(notMeasured);
   return exitCode;
 }
 
