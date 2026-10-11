@@ -173,6 +173,15 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   one (a v4 sync would leave a UserPromptSubmit hook that exits 1 on every prompt).
 - 200-line rule: only b100 `AGENT-LEDGER.md` (467 lines) exceeds it.
 - Path-scoped rules from `~/.claude/rules/` inside subagents: unverified (host check, like H2).
+- Always-loaded budget (measured 2026-10-11): about 79,000 characters load every turn (`CLAUDE.md` 17,040,
+  `00-owner-mandates.md` 23,336, `promoted-rules.md` 19,500, `lessons-ledger.md` 13,364, verification contract
+  3,746, `sdd-mandate.md` 3,839). The 66,000 target is in no tracked file (rg over ~/.claude excluding
+  `projects/`), so it is re-derived first. Plan: classify every block as binding-every-turn, area-specific
+  (moves to a `paths:`-scoped rule or to the delegation-time injection) or history (moves to
+  `lessons/evidence/`); deduplicate text restated across files; prove that each moved block's trigger fires;
+  then a fixed-ceiling gate refuses growth. Where text lives is the orchestrator's decision; any change to
+  the WORDING of an owner mandate goes to the owner. Queued, reason (3): it edits the same files that
+  `land/odd` rewrites, so it starts after that branch lands.
 - Stale-session guard warning (measured 2026-10-11): a PreToolUse hook group registered after a session
   started does not fire in that session — the orchestrator's session (started before 03383e3) wrote an
   English line and the following Read was not refused; Stop-hook additions did reach the same session, a
