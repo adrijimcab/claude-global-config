@@ -9,7 +9,7 @@
  * escritura MIENTE (un fichero que vuelve distinto de lo escrito).
  */
 
-import { commitHeaderRoute, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, provesHeaderRoute, provesRoute, routeOutcome } from './ledger-route.mjs';
+import { commitHeaderRoute as rawCommitHeaderRoute, commitRoute as rawCommitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute as rawPlanStubRoute, provesHeaderRoute, provesRoute as rawProvesRoute, routeOutcome } from './ledger-route.mjs';
 
 const HEADER = '# Stubs\n\n---\n';
 const stub = (key, count = 2) => `- [promoted] 2026-09-30 — ${key}: no mechanism <!--fc:${key}#${String(count)}-->`;
@@ -19,6 +19,19 @@ const lines = (...entries) => entries.join('\n').split('\n');
 let passed = 0;
 const failures = [];
 const check = (name, condition, detail) => (condition === true ? (passed += 1) : failures.push(`${name} — ${String(detail).slice(0, 600)}`));
+
+/** The two route functions with a fault turned into a refusal, so a fault fails the check that expects an answer instead of crashing the run. @es Las dos funciones de ruta con un fallo convertido en negativa, para que un fallo haga fallar la comprobación que espera una respuesta en vez de tumbar la corrida. */
+const answered = (work) => {
+  try {
+    return work();
+  } catch (error) {
+    return { ok: false, deficits: [`threw: ${error instanceof Error ? error.message : String(error)}`], problems: [`threw: ${error instanceof Error ? error.message : String(error)}`] };
+  }
+};
+const planStubRoute = (input) => answered(() => rawPlanStubRoute(input));
+const provesRoute = (input) => answered(() => rawProvesRoute(input));
+const commitRoute = (input) => answered(() => rawCommitRoute(input));
+const commitHeaderRoute = (input) => answered(() => rawCommitHeaderRoute(input));
 
 const SOURCE = ['# Ledger', '', '---', lesson('keep-one'), stub('first-key', 14), lesson('keep-two'), stub('second-key'), ''];
 
@@ -63,7 +76,8 @@ for (const [name, source, destination] of [
 // --- the proof
 const before = { source: SOURCE, destination: lines('# Stubs', '', '---', '', stub('old-key', 5), '') };
 const planned = planStubRoute({ source: before.source, destination: before.destination, header: HEADER });
-const after = { source: planned.source, destination: planned.destination };
+const after = { source: planned.source ?? [], destination: planned.destination ?? [] };
+check('the planned stub route succeeds (a plan that fails has nothing to prove)', planned.ok === true, JSON.stringify(planned));
 const verdict = (patch) => provesRoute({ before, after: { ...after, ...patch } });
 const named = (result, fragment) => !result.ok && result.deficits.some((deficit) => deficit.includes(fragment) && deficit.includes(' @es '));
 
@@ -96,7 +110,7 @@ function memory(initial) {
   const proof = commitRoute({ before, plan: planned, io: world.io });
 
   check('commit with honest writes: proved, both written, destination first', proof.ok && world.state.writes.join() === 'destination,source', JSON.stringify(world.state.writes));
-  check('...and the files are the planned ones', world.state.source.join('\n') === planned.source.join('\n') && world.state.destination.join('\n') === planned.destination.join('\n'));
+  check('...and the files are the planned ones', world.state.source?.join('\n') === planned.source?.join('\n') && world.state.destination?.join('\n') === planned.destination?.join('\n'));
 }
 
 {
