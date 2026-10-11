@@ -70,6 +70,9 @@ const MUTANTS = [
   ['a fleet-kit without the list does not fall through to the module', INTEGRATION, " || !('integrationBranches' in parsed)", ''],
   ['an empty or non-list declaration is accepted', INTEGRATION, 'if (!ok) throw', 'if (false) throw'],
   ['a project module that fails to import is accepted', INTEGRATION, 'if (run.status !== 0) throw', 'if (false) throw'],
+  ['check mode always says it would publish', LAND, 'mayPublishTo({ main, remote })\n            ? `Publication', 'true\n            ? `Publication'],
+  ['check mode always says it would land locally only', LAND, 'mayPublishTo({ main, remote })\n            ? `Publication', 'false\n            ? `Publication'],
+  ['check mode names the wrong remote when it would publish', LAND, 'would publish to ${remote}.', 'would publish to origin.'],
   ['the project module is not read', INTEGRATION, '(existsSync(ownModule) ? fromOwnModule(ownModule) : undefined)', 'undefined'],
   ['a repository with no source is refused', INTEGRATION, 'if (list === undefined) {', 'if (false) {'],
   // Where it publishes / Dónde publica
