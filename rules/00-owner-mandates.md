@@ -102,6 +102,26 @@ carried on. **The line stops.**
    pass is not watching it work (`guard-that-cannot-go-red`).
 5. Only then resume.
 
+## EVERY INCIDENT IS RECORDED, AND GETS ITS MECHANISM AT THE FIRST OCCURRENCE (owner directive 2026-10-11)
+
+Owner, verbatim: «DEJAR TODO LO QUE VAYA SALIENDO COMO REGLA, PARA QUE NO VUELVA A PASAR MAS, TODO, CADA
+COSA QUE PASE».
+
+A written rule alone does not prevent a repeat (`memory-used-where-a-hook-must-enforce`,
+`promotion-to-contract-read-as-prevention`), so the owner's "rule" is applied in this form:
+
+1. **Every incident is recorded the same turn** — mine, a worker's, a peer session's, the environment's —
+   with `~/.claude/failure-capture/capture.mjs` under a key (an existing key when it is the same lesson), so
+   recurrence is counted.
+2. **The mechanism is built at the FIRST occurrence when one is possible**: a guard, gate or check with a
+   selftest that proves it discriminates, landed under the shared-resource rule. The second-occurrence rule
+   above remains the floor for what has no mechanism yet.
+3. **Where no mechanism is possible**, the record says why, and the rule text goes to the lessons file of its
+   area (loaded only when that area is touched), never into the always-loaded set.
+@es Todo incidente se registra en el mismo turno con `capture.mjs`; su mecanismo (guard, gate o chequeo con un
+selftest que pruebe que discrimina) se construye en la PRIMERA ocurrencia cuando es posible; si no lo es, el
+registro dice por qué y el texto va al fichero de lecciones de su área, nunca al conjunto que se carga siempre.
+
 ## A CHANGE TO A SHARED RESOURCE IS COORDINATED WITH EVERY LIVE SESSION (owner directive 2026-10-11)
 
 Owner, verbatim: «notificar a todas las sesiones que paren de hacer lo que están haciendo, hacer el update y
