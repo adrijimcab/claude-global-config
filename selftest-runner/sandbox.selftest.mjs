@@ -108,6 +108,8 @@ const seen = ['a', 'b'].map((name) => (existsSync(seenFile(name)) ? JSON.parse(r
 check(probeRun.status === 0 && probeRun.stdout.includes('2/2 green'), `two clean children are GREEN: ${probeRun.status} ${probeRun.stdout}${quoted(probeRun.stderr)}`);
 for (const [index, given] of seen.entries()) {
   const label = `child ${index}`;
+  check(typeof given.homedir === 'string', `${label}: recorded what it was given`);
+  if (typeof given.homedir !== 'string') continue;
   check(given.HOME === given.homedir && given.USERPROFILE === given.homedir, `${label}: HOME and USERPROFILE are what homedir() returns: ${given.HOME} ${given.USERPROFILE} ${given.homedir}`);
   check(given.claude === path.join(given.homedir, '.claude'), `${label}: HOOK_CLAUDE_HOME is the sandbox home's .claude: ${given.claude}`);
   check(JSON.stringify(given.homeList) === '[".claude"]' && JSON.stringify(given.claudeList) === '[]', `${label}: the home holds only an empty .claude: ${given.homeList} ${given.claudeList}`);
@@ -238,7 +240,13 @@ const unreadable = repo({
 const stopped = runIn(unreadable, realWorld());
 check(stopped.status === 2 && stopped.stderr.includes('Cannot read git status of the tree') && stopped.stderr.includes('a/selftest.mjs') && stopped.stderr.includes('@es '), `a tree git cannot read stops the run, not measured: ${stopped.status} ${quoted(stopped.stderr)}`);
 check(!existsSync(path.join(unreadable, 'b', 'ran')) && !stopped.stdout.includes('green'), `nothing after it runs and no summary is printed: ${stopped.stdout}`);
-const inProcess = runSelftests({ root: repo({ tracked: { 'a/selftest.mjs': script("renameSync(path.join('..', '.git'), path.join('..', 'moved-git'));") } }) });
+const inProcess = (() => {
+  try {
+    return runSelftests({ root: repo({ tracked: { 'a/selftest.mjs': script("renameSync(path.join('..', '.git'), path.join('..', 'moved-git'));") } }) });
+  } catch (error) {
+    return { threw: error.message };
+  }
+})();
 check(inProcess.exitCode === 2 && inProcess.notMeasured?.startsWith('Cannot read git status') && inProcess.report.at(-1) === inProcess.notMeasured, `in process the reason is returned and closes the report: ${JSON.stringify(inProcess)}`);
 
 finish();
