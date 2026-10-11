@@ -31,6 +31,7 @@ config que necesita a su propio árbol y la conecta a sus propios scripts/CI.
 | `gate-command-rules.mjs` | Every gate command names its reporter (ESLint `--format`, `tsc --pretty false`, Vitest `--reporter`, Jest/Karma/Stryker `--reporters`, dependency-cruiser `--output-type`) so a log reader sees a stable report, and never passes `eslint --quiet` |
 | `run-tool.mjs` | The launcher every gate runs its package through: finds the binary under `GATES_KIT_TOOLCHAIN`, exits 3 rather than pass when it cannot |
 | `findings-register.mjs` | The per-repository findings register (`.claude/FINDINGS.jsonl`): append-only findings and closures with receipts; `list`, `validate`, `add`, `close`. Every `templates/<stack>/AGENT-CONTRACT.md` names its path |
+| `templates/gitlab-ci-quality/`, `gitlab-ci-quality.md` | The copyable GitLab CI quality stage (styles lint, gitleaks, dependency audit, Lighthouse CI; all blocking) with the lint standard, the `.npmrc` pattern and its checker; the page holds the zero-offenders adoption rule and the open company items. Its files name nothing of this kit, because they land in company repositories |
 
 @es
 | Fichero | Qué contiene |
@@ -48,6 +49,7 @@ config que necesita a su propio árbol y la conecta a sus propios scripts/CI.
 | `angular-lint-rules.mjs` | Las reglas de angular-eslint activas por major de Angular, usadas por `angular/angular-eslint-rules` |
 | `gate-command-rules.mjs` | Todo comando de gate nombra su reporter, para que un lector de logs vea un informe estable, y nunca pasa `eslint --quiet` |
 | `run-tool.mjs` | El lanzador por el que cada gate corre su paquete: busca el binario bajo `GATES_KIT_TOOLCHAIN` y sale con 3 en vez de pasar si no puede |
+| `templates/gitlab-ci-quality/`, `gitlab-ci-quality.md` | La etapa de calidad de GitLab CI copiable (lint de estilos, gitleaks, auditoría de dependencias, Lighthouse CI; todos bloqueantes) con el estándar de lint, el patrón de `.npmrc` y su verificador; la página guarda la regla de adopción con cero infractores y los pendientes de la empresa. Sus ficheros no nombran nada de este kit, porque caen en repositorios de la empresa |
 | `findings-register.mjs` | El registro de hallazgos por repositorio (`.claude/FINDINGS.jsonl`): hallazgos y cierres con recibos, solo se añade; `list`, `validate`, `add`, `close`. Cada `templates/<stack>/AGENT-CONTRACT.md` nombra su ruta |
 
 ## No hidden failures, through any channel (owner directive 2026-09-30, absolute)
@@ -57,7 +59,8 @@ in this kit is rolled into a real project — the config alone is not the gate; 
 is part of it:
 
 - A **new** gate lands with **zero offenders**. Its violations are fixed at the root first, or the
-  rule stays registered but **not enabled** until they are. Never seed a baseline to make it green.
+  rule is **not added** to the config until they are (measure, fix the code, then enable; no list of
+  rules registered but off, see `gitlab-ci-quality.md`). Never seed a baseline to make it green.
 - **No central exception registry may be created or grow**: bulk-suppression files, lint/tool ignore
   lists, ratchet baselines, opt-out lists, coverage exclusions, `knip`/dependency-check ignores,
   skipped or `.only` tests, coverage-ignore comments, a rule flipped to `off`. Existing registries only
@@ -71,8 +74,9 @@ is part of it:
 @es Directiva del dueño, verbatim: «NO SE ESCONDEN FALLOS, SE ABORDAN y bien abordados.» Esto rige
 CÓMO se instala cada gate de este kit en un proyecto real:
 - Un gate **nuevo** entra con **cero infractores**. Sus violaciones se arreglan en la raíz primero, o
-  la regla queda registrada pero **sin activar** hasta que lo estén. Nunca sembrar una línea base para
-  que salga verde.
+  la regla **no se agrega** a la config hasta que lo estén (medir, corregir el código y recién entonces
+  activar; sin lista de reglas registradas pero apagadas, ver `gitlab-ci-quality.md`). Nunca sembrar una
+  línea base para que salga verde.
 - **Ningún registro central de excepciones puede crearse o crecer**: ficheros de supresión masiva,
   listas de ignorados de lint/herramienta, líneas base de ratchet, listas de opt-out, exclusiones de
   cobertura, ignorados de `knip`/chequeo de dependencias, tests saltados o `.only`, comentarios de
@@ -107,7 +111,8 @@ convención en todas partes.
 2. Read the stack file(s) that apply (`angular.md`, `react.md`, `node-express.md` — a full-stack repo
    reads more than one).
 3. Copy the exact config shown into the project's own tree (`eslint.config.*`, `.gitleaks.toml`,
-   `.lighthouserc.cjs`, etc.) — never reference this kit's files from a project's runtime config.
+   `.lighthouserc.cjs`, etc.) — never reference this kit's files from a project's runtime config. A
+   GitLab CI quality stage is copied whole from `templates/gitlab-ci-quality/` (see `gitlab-ci-quality.md`).
 4. Roll the gate out per `fleet-kit-integration.md` and the no-hidden-failures rule above.
 5. Where no tool exists (`gaps-manual-checklists.md`), the checklist is the control — not a future gate
    to build.
@@ -116,7 +121,8 @@ convención en todas partes.
 1. Leer `tier1-tier3-menu.md` y elegir primero las entradas de Tier 1.
 2. Leer el/los ficheros de stack que apliquen (`angular.md`, `react.md`, `node-express.md`).
 3. Copiar la config exacta al propio árbol del proyecto — nunca referenciar los ficheros de este kit
-   desde la config en tiempo de ejecución de un proyecto.
+   desde la config en tiempo de ejecución de un proyecto. Una etapa de calidad de GitLab CI se copia
+   entera desde `templates/gitlab-ci-quality/` (ver `gitlab-ci-quality.md`).
 4. Desplegar el gate según `fleet-kit-integration.md` y la regla de no esconder fallos de arriba.
 5. Donde no existe herramienta (`gaps-manual-checklists.md`), el checklist ES el control — no un gate
    pendiente de construir.

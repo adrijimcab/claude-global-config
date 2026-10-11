@@ -28,7 +28,7 @@ datos reales de usuario o va a producción. La columna *Reference impl* apunta a
 | 1 | **gitleaks** | `gitleaks detect --source . --config .gitleaks.toml` (pre-commit + CI) | Committed secrets (API keys, JWTs, tokens) | Low (default ruleset; raise entropy threshold to 3.5 to cut base64/UUID noise — see below) | ~1-5s | — |
 | 2 | **ESLint `eslint-plugin-security`** | flat config, see below | `eval`, dynamic `require`, unsafe regex (ReDoS), timing attacks, object injection, `child_process` | Medium (`detect-object-injection`, `detect-non-literal-fs-filename` need `warn` not `error` — legitimately noisy on dynamic-but-safe code) | seconds (part of normal lint run) | — |
 | 3 | **ESLint `eslint-plugin-jsx-a11y`** (React) / **`@angular-eslint/template` a11y rules** (Angular) | flat config — see `react.md` / `angular.md` | Missing alt text, invalid ARIA attrs, non-interactive elements with handlers, missing form labels | Low | seconds | Angular: partial in `b100-am-ui` (harnesses + axe, not template a11y lint rules — a gap worth closing, see `angular.md`) |
-| 4 | **`npm audit --audit-level=high`** or **osv-scanner** | `npm audit` / `osv-scanner --lockfile=package-lock.json` | Known CVEs in the dependency tree | Medium (transitive-only, unreachable-code CVEs still flag — needs a documented, EXPIRING ignore entry per the no-hidden-failures rule, never a blanket ignore) | seconds-1min | — |
+| 4 | **`npm audit --audit-level=high`** or **osv-scanner** | `npm audit` / `osv-scanner --lockfile=package-lock.json` (blocking CI job: `templates/gitlab-ci-quality/.gitlab-ci.yml`) | Known CVEs in the dependency tree | Medium (transitive-only, unreachable-code CVEs still flag — needs a documented, EXPIRING ignore entry per the no-hidden-failures rule, never a blanket ignore) | seconds-1min | — |
 | 5 | **TypeScript `strict` + `noUncheckedIndexedAccess`** | `tsconfig.json` | Null/undefined access, implicit any, unsound indexing | Low | seconds (part of typecheck) | ✅ (strict TS is `b100-am-ui`'s baseline) |
 | 6 | **HTML validation (`html-validate` or W3C Nu Validator via `vnu.jar`)** | `html-validate` npm package against SSR/prerendered output | Invalid markup, duplicate IDs, missing `lang`, malformed ARIA | Low | seconds | — |
 | 7 | **robots.txt / sitemap.xml structural validation** | small script using a real XML parser (`fast-xml-parser`) + `robots-parser` npm package, never regex | Malformed sitemap XML, >50k URL limit breach, missing `Sitemap:` cross-reference in robots.txt, orphaned `Disallow` rules | Low | seconds | — |
@@ -40,7 +40,7 @@ datos reales de usuario o va a producción. La columna *Reference impl* apunta a
 |---|---|---|---|---|---|---|
 | 9 | **Semgrep — official registry rulesets** | `semgrep --config=p/owasp-top-ten --config=p/typescript --config=p/javascript --config=p/react .` | OWASP Top 10 patterns, framework-specific unsafe sinks (`dangerouslySetInnerHTML`, JWT `none`-alg, hardcoded secrets pattern) | Low for registry rulesets (AST `pattern:`/`pattern-either:` matching) — **medium-high if a custom rule uses `pattern-regex:`**, which is Semgrep's own regex escape hatch; treat any `pattern-regex:` rule the same as a banned regex-over-source scan | ~10-30s | — |
 | 10 | **axe via Playwright** (`@axe-core/playwright`) against Storybook stories or live routes | Playwright test file asserting `AxeBuilder(page).analyze()` has zero violations | Contrast, ARIA validity, landmark structure, label presence — the same engine Lighthouse's a11y category uses | Low | ~10s-2min depending on story count | ✅ `check:a11y`, `check:demo-a11y` (`b100-am-ui`) |
-| 11 | **Lighthouse CI budgets** | `.lighthouserc.cjs` with `assert.assertions` on LCP/CLS/TBT/resource-summary — see the `web-performance` skill's budget reference for a ready config | Performance regressions (LCP/CLS/TBT as lab proxies), a11y score regressions, best-practices/SEO score regressions | Medium (lab metrics vary run-to-run — always set `numberOfRuns: 3` and assert on median) | ~30s-2min per page | ✅ `check:lighthouse` (`b100-am-ui`) |
+| 11 | **Lighthouse CI budgets** | `.lighthouserc.cjs` (copyable, median of 3 with accessibility as an error: `templates/gitlab-ci-quality/.lighthouserc.cjs`) with `assert.assertions` on LCP/CLS/TBT/resource-summary — see the `web-performance` skill's budget reference for a ready config | Performance regressions (LCP/CLS/TBT as lab proxies), a11y score regressions, best-practices/SEO score regressions | Medium (lab metrics vary run-to-run — always set `numberOfRuns: 3` and assert on median) | ~30s-2min per page | ✅ `check:lighthouse` (`b100-am-ui`) |
 | 12 | **Bundle-size budgets** | Angular: `budgets` in `angular.json`; React/Vite: `size-limit` package or `webpack-bundle-analyzer` + custom check | Bundle bloat before it becomes a timing regression | Low | seconds (reads `dist/` sizes, no browser) | ✅ `check:bundle-size` (`b100-am-ui`) |
 | 13 | **Visual regression** (Playwright snapshot diffing) | `playwright test` with `toHaveScreenshot()` | Unintended visual/layout changes across viewports/themes | Medium-high (font rendering, animation timing, OS-level rendering differences need careful CI-container pinning) | ~1-5min | ✅ `visual:check`, `visual:docker` (`b100-am-ui`) |
 | 14 | **CSP report-only rollout** | Deploy-config header, not a test — `Content-Security-Policy-Report-Only: script-src 'nonce-{per-response}' 'strict-dynamic'; object-src 'none'; report-to csp-endpoint` alongside a looser enforced policy | Real violation reports from production traffic before tightening the enforced policy | N/A (monitoring, not a pass/fail gate) | zero CI cost, ongoing monitoring cost | — |
@@ -103,12 +103,20 @@ location (examples, spec fixtures, vendored code) — never a live secret waitin
 [extend]
 useDefault = true
 
+[[rules]]
+id = "generic-api-key"
+entropy = 3.5
+
 [allowlist]
 paths = ['''\.env\.example''', '''.*\.spec\.ts$''', '''node_modules/.*''']
-
-[extend.entropy]
-Min = 3.5
 ```
+Entropy is set on the rule: an `[extend.entropy]` table is accepted by gitleaks without error and does
+nothing (measured with gitleaks 8.30.1). The copyable version, with a reason above every allowlist entry,
+is `templates/gitlab-ci-quality/.gitleaks.toml`; the whole CI stage is described in `gitlab-ci-quality.md`.
+@es La entropía se fija en la regla: gitleaks acepta una tabla `[extend.entropy]` sin error y no hace nada
+(medido con gitleaks 8.30.1). La versión copiable, con un motivo sobre cada entrada de la lista de
+permitidos, es `templates/gitlab-ci-quality/.gitleaks.toml`; la etapa de CI completa está en
+`gitlab-ci-quality.md`.
 (Note: gitleaks' *own* rule definitions are necessarily regex-based — that's how a secret-scanner
 inherently works, matching known key-format shapes. This is different in kind from the no-regex
 mandate's target, which is regex used as a substitute for a real parser/linter over *source code
