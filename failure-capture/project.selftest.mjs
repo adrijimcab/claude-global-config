@@ -45,6 +45,15 @@ function check(name, condition, detail) {
   else failures.push(`${name}${detail === undefined ? '' : ` — ${String(detail).slice(0, 600)}`}`);
 }
 
+/** The `loadedSetCeiling` the project context of `directory` surfaces, or the text of the fault reading it raised, so a fault fails the check that expects a value instead of crashing the run. @es El `loadedSetCeiling` que muestra el contexto del proyecto de `directory`, o el texto del fallo al leerlo, para que un fallo haga fallar la comprobación en vez de tumbar la corrida. */
+function ceilingOf(directory) {
+  try {
+    return projectOf(directory)?.loadedSetCeiling;
+  } catch (error) {
+    return `THREW: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
 function write(root, files) {
   for (const [relative, contents] of Object.entries(files)) {
     const absolute = path.join(root, ...relative.split('/'));
@@ -164,9 +173,9 @@ try {
     check(`a loadedSetCeiling of ${JSON.stringify(bad)} THROWS, bilingual`, refused.includes('"loadedSetCeiling" must be a positive integer') && refused.includes('@es'), refused);
   }
   write(app, { '.claude/failure-capture.json': JSON.stringify({ loadedSetCeiling: 140000 }) });
-  equal('a valid loadedSetCeiling is surfaced by the project context', projectOf(app)?.loadedSetCeiling, 140000);
+  equal('a valid loadedSetCeiling is surfaced by the project context', ceilingOf(app), 140000);
   rmSync(path.join(app, '.claude', 'failure-capture.json'));
-  equal('no loadedSetCeiling is absent by default', projectOf(app)?.loadedSetCeiling, undefined);
+  equal('no loadedSetCeiling is absent by default', ceilingOf(app), undefined);
 
   // --- the home is global configuration, never a project; and it is injectable --------------------------
   // A home that is NOT the process's own, handed in by the caller: the property under test is "whatever the
