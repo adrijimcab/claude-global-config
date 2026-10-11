@@ -46,7 +46,17 @@ export function runGentleAi({ gentleAi }, args) {
  */
 export function syncGentleAi({ gentleAi }, args, stdio = 'inherit') {
   const [command, ...leading] = gentleAi;
-  const result = spawnSync(command, [...leading, 'sync', ...args], { stdio, windowsHide: true });
+  return syncOutcome(spawnSync(command, [...leading, 'sync', ...args], { stdio, windowsHide: true }));
+}
+
+/**
+ * What a finished `spawnSync` of the sync means. Pure, so every state is provable on every platform: Windows never
+ * reports a signal for a child that killed itself (measured 2026-10-11: status 1, signal null), so the killed
+ * branch is only reachable here. @es Qué significa un `spawnSync` terminado del sync. Puro, para probar cada estado
+ * en toda plataforma: Windows nunca informa una señal de un hijo que se mató a sí mismo (medido el 2026-10-11:
+ * status 1, signal null), así que la rama de proceso matado solo se alcanza aquí.
+ */
+export function syncOutcome(result) {
   if (result.error) return { started: false, reason: result.error.message };
   if (result.status === null) return { started: true, status: 1, note: `killed by ${result.signal}` };
   return { started: true, status: result.status };

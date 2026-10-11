@@ -11,6 +11,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { syncOutcome } from './gentle-ai-cli.mjs';
 import { syncThroughOverlay } from './sync-wrapper.mjs';
 
 const CLAUDE = '.claude/CLAUDE.md';
@@ -90,6 +91,14 @@ export function registerSyncWrapperCases({ test, expect, newRoot, put, read, ins
     const { exitCode } = wrap(context);
     expect(exitCode !== 0, true, `exit (${exitCode})`);
     expect(read(context.home, CLAUDE), claude([]), 'pruned');
+  });
+
+  test('sync outcome: a child ended by a signal (status null) is a failure that names the signal; a status is kept as is', () => {
+    const outcome = (result) => JSON.stringify(syncOutcome(result));
+    expect(outcome({ status: null, signal: 'SIGKILL' }), JSON.stringify({ started: true, status: 1, note: 'killed by SIGKILL' }), 'killed');
+    expect(outcome({ status: 0, signal: null }), JSON.stringify({ started: true, status: 0 }), 'clean');
+    expect(outcome({ status: 3, signal: null }), JSON.stringify({ started: true, status: 3 }), 'failed');
+    expect(outcome({ error: new Error('ENOENT'), status: null }), JSON.stringify({ started: false, reason: 'ENOENT' }), 'unstarted');
   });
 
   test('sync wrapper: a gentle-ai that cannot start -> exit 1, nothing applied, and it says so', () => {
