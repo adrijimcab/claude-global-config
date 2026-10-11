@@ -82,6 +82,20 @@ try {
   check('BOM payload is parsed', denied(evaluate(`﻿${JSON.stringify({ transcript_path: transcript(step(ENGLISH)) })}`)), true);
   check('a reader that throws is allowed', evaluate(JSON.stringify({ transcript_path: 'x' }), () => { throw new Error('boom'); }), undefined);
 
+  // The shape MEASURED in a real session (c4d7f854, 2026-10-11): after the previous tool result come
+  // bookkeeping records (attachment), then the text record, and the first tool_use of the response is a
+  // SEPARATE later record carrying wireToolInputs. The English line preceded an Edit call.
+  // @es La forma MEDIDA en una sesión real: tras el tool_result vienen registros de contabilidad
+  // (attachment), luego el texto, y el primer tool_use de la respuesta es un registro posterior APARTE.
+  const attachment = (type) => JSON.stringify({ type: 'attachment', attachment: { type } });
+  const realShape = (t) => [user('Dale'), assistant([text('Va.'), toolUse({})]), toolResult('ok'), attachment('total_tokens_reminder'), attachment('output_style'), assistant([text(t)], { requestId: 'req_x', slug: 's' }), JSON.stringify({ type: 'assistant', wireToolInputs: { t: { file_path: 'x' } }, message: { content: [{ type: 'tool_use', id: 't', name: 'Edit', input: { file_path: 'x' } }] } })];
+  const editCall = (file) => evaluate(JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Edit', transcript_path: file, tool_input: { file_path: 'x' } }));
+
+  check('real shape: English before the first Edit of a response is refused', denied(editCall(transcript(realShape('Now the backlog correction for the ApexCharts mistake, and the lesson capture.')))), true);
+  check('real shape: Spanish before the first Edit of a response is allowed', denied(editCall(transcript(realShape(SPANISH)))), false);
+  check('real shape: a bookkeeping record between the text and the tool_use does not hide the text', denied(editCall(transcript([...realShape(ENGLISH).slice(0, -1), attachment('output_style'), realShape(ENGLISH).at(-1)]))), true);
+  check('real shape: the text record alone (tool_use not yet written) is judged', denied(editCall(transcript(realShape(ENGLISH).slice(0, -1)))), true);
+
   // A tool result larger than the initial window sits between the previous step and the new text.
   const big = 'x'.repeat(600 * 1024);
 

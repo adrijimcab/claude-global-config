@@ -19,6 +19,7 @@ const G = 'owner-language-guard';
 const MUTANTS = [
   // interstitial.mjs
   ['any user entry stops being the boundary', `${G}/interstitial.mjs`, "if (entry?.type === 'user' && entry.isSidechain !== true) return", "if (false) return"],
+  ['bookkeeping attachments close the step', `${G}/interstitial.mjs`, "if (entry?.type === 'user' && entry.isSidechain !== true) return", "if ((entry?.type === 'user' || entry?.type === 'attachment') && entry.isSidechain !== true) return"],
   ['sidechain user entries close the step', `${G}/interstitial.mjs`, "entry?.type === 'user' && entry.isSidechain !== true", "entry?.type === 'user'"],
   ['texts come back in reverse order of writing', `${G}/interstitial.mjs`, 'return { texts: texts.reverse(), complete: true };', 'return { texts, complete: true };'],
   ['an unparsable line aborts instead of being skipped', `${G}/interstitial.mjs`, '    } catch {\n      continue;\n    }', '    } catch {\n      break;\n    }'],
