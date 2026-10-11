@@ -30,19 +30,30 @@ export function orchestratorMd({ span = REVIEW_SPAN, eol = '\n', after = '', reg
 }
 
 /** Just the orchestrator region of `orchestratorMd`. @es Solo la región orquestadora de `orchestratorMd`. */
-export function orchestratorRegion({ span = REVIEW_SPAN, regionId = 'sdd-orchestrator' } = {}) {
+function orchestratorRegion({ span = REVIEW_SPAN, regionId = 'sdd-orchestrator' } = {}) {
   return region(regionId, ['# Agent Teams', '', '#### Native Checking Contract', '', 'Checking.', '', `${span}#### Cost and Context Balance`, '', 'Cost.'].join('\n'));
 }
 
 /**
- * A CLAUDE.md whose orchestrator region holds EVERY lazy section of the real list (built from their own
- * anchors, in the order their anchors chain: a section's end line is the next one's start where upstream
- * chains them), the review span among them.
- * @es Un CLAUDE.md cuya región orquestadora contiene TODA sección diferida de la lista real.
+ * A CLAUDE.md as gentle-ai renders it, whose regions hold EVERY lazy section of the real list that the render
+ * carries (built from their own anchors, in the order their anchors chain: a section's end line is the next
+ * one's start where upstream chains them), the review span among them. `regionId` `orchestrator` is the v4 (ODD)
+ * render and carries every section; `sdd-orchestrator` is the v2/v3 render, which has none of the v4-only spans.
+ * @es Un CLAUDE.md como lo genera gentle-ai, cuyas regiones contienen TODA sección diferida de la lista real que
+ * ese render lleva. `orchestrator` es el render v4 (ODD) y lleva todas; `sdd-orchestrator` es el render v2/v3, sin
+ * ninguno de los tramos exclusivos de v4.
  */
-export function fullOrchestratorMd({ eol = '\n', regionId = 'sdd-orchestrator' } = {}) {
+export function fullOrchestratorMd({ eol = '\n', regionId = 'orchestrator' } = {}) {
+  const v4 = regionId === 'orchestrator';
   const blocking = lazyEntryNamed('blocking-prompts');
+  const delegation = lazyEntryNamed('delegation-restatement');
   const delegated = lazyEntryNamed('delegated-verification');
+  const ladder = lazyEntryNamed('routing-ladder');
+  const discovery = lazyEntryNamed('skill-discovery');
+  const registry = lazyEntryNamed('skill-registry-protocol');
+  const odd = lazyEntryNamed('odd-reference');
+  const rdd = lazyEntryNamed('rdd-user-owned');
+  const onlyV4 = (lines) => (v4 ? lines : []);
   const body = [
     '# Agent Teams',
     '',
@@ -54,6 +65,15 @@ export function fullOrchestratorMd({ eol = '\n', regionId = 'sdd-orchestrator' }
     '',
     'Language body.',
     '',
+    // Both renders carry `### Delegation Rules`; only the v4 one may move it. @es Ambos renders llevan `### Delegation Rules`; solo el de v4 puede moverlo.
+    delegation.start,
+    '',
+    'Delegation table — ñandú.',
+    '',
+    '#### Mandatory Delegation Triggers',
+    '',
+    'Triggers.',
+    '',
     delegated.start,
     '',
     'Gate body.',
@@ -62,14 +82,14 @@ export function fullOrchestratorMd({ eol = '\n', regionId = 'sdd-orchestrator' }
     '',
     'Checking body.',
     '',
-    `${REVIEW_SPAN}#### Cost and Context Balance`,
+    `${REVIEW_SPAN}${ladder.start}`,
     '',
     'Cost.',
     '',
-    region('sdd-model-assignments', [lazyEntryNamed('model-assignments').start, '', 'Table — ñandú.', ''].join('\n')),
+    ...onlyV4(['### Work Routing Ladder', '', 'Ladder — 日本.', '', '### Allowed edit surfaces (MANDATORY)', '', 'Surfaces.', '', ladder.end, '', 'Delivery.', '']),
+    ...onlyV4([discovery.start, '', 'Discovery — ñandú.', '', discovery.end, '', 'Safety rules.', '', registry.start, '', 'Registry — 日本.', '']),
   ].join('\n');
-  const rdd = lazyEntryNamed('rdd-user-owned');
-  const routing = ['## Implementation Routing', '', rdd.start, '', 'Switch rules — 日本.', '', region('remote-authorization', 'Remote.')].join('\n');
+  const routing = ['## Implementation Routing', '', '### ODD protocol (MANDATORY, in this order, on every request)', '', 'Protocol.', '', ...onlyV4([odd.start, '', 'ODD detail — ñandú 日本.', '']), rdd.start, '', 'Switch rules — 日本.', '', region('remote-authorization', 'Remote.')].join('\n');
   return ['# Owner pointer', '', region('persona', 'Persona.'), '', region(regionId, body), '', region('agent-routing', routing), ''].join('\n').split('\n').join(eol);
 }
 

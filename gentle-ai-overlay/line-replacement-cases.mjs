@@ -107,12 +107,14 @@ export function registerLineReplacementCases({ test, expect, newRoot, put, read 
     expect(read(context.home, entry.file), replaced, 'replaced again');
   });
 
-  test('line replacement: the REAL entry is a single distinct line and its replacement does not contain its upstream', () => {
-    const real = CUSTOMIZATIONS.find((candidate) => candidate.kind === 'anchored-line-replacement');
-    expect(real !== undefined, true, 'a real entry exists');
-    expect(real.upstream.includes('\n') || real.replacement.includes('\n'), false, 'single lines');
-    expect(real.upstream === real.replacement, false, 'distinct');
-    expect(real.replacement.includes(real.upstream), false, 'replacement does not contain upstream');
-    expect(real.upstream.includes('without running the full suite'), true, 'anchored on the exact upstream clause');
+  // No live entry since gentle-ai v4 retired the sdd-verify skill it anchored on (2026-10-11); any future one must
+  // still hold these properties. @es Sin entrada viva desde que gentle-ai v4 retiró la skill sdd-verify donde se
+  // anclaba (2026-10-11); toda entrada futura debe seguir cumpliendo estas propiedades.
+  test('line replacement: every REAL entry is a single distinct line and its replacement does not contain its upstream', () => {
+    for (const real of CUSTOMIZATIONS.filter((candidate) => candidate.kind === 'anchored-line-replacement')) {
+      expect(real.upstream.includes('\n') || real.replacement.includes('\n'), false, `${real.id}: single lines`);
+      expect(real.upstream === real.replacement, false, `${real.id}: distinct`);
+      expect(real.replacement.includes(real.upstream), false, `${real.id}: replacement does not contain upstream`);
+    }
   });
 }

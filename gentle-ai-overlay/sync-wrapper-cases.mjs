@@ -164,12 +164,12 @@ export function registerSyncWrapperCases({ test, expect, newRoot, put, read, ins
     expect(readFileSync(syncCalls(context), 'utf8').trim(), JSON.stringify(['--agent', 'claude-code']), 'argv the fake sync saw');
   });
 
-  test('sync.mjs on the real list: a lost tools grant is broken and not sync-safe -> exit 1, the sync never runs', () => {
+  test('sync.mjs on the real list: owner text inside a managed region is broken and not sync-safe -> exit 1, the sync never runs', () => {
     const context = completeHome();
-    put(context.home, '.claude/agents/sdd-design.md', agentFile({ tools: 'Read' }));
+    put(context.home, '.claude/CLAUDE.md', read(context.home, '.claude/CLAUDE.md').replace('<!-- gentle-ai:persona -->', '<!-- gentle-ai:persona -->\r\n# Configuración propia del dueño: vive fuera de este archivo'));
     const result = run('sync.mjs', [], cliEnv(context));
     expect(result.status, 1, 'exit');
     expect(existsSync(syncCalls(context)), false, 'sync ran');
-    expect(result.stdout.includes('sdd-design-grants-bash'), true, `names the broken one (${result.stdout})`);
+    expect(result.stdout.includes('claude-md-owner-sections-outside-managed-regions'), true, `names the broken one (${result.stdout})`);
   });
 }

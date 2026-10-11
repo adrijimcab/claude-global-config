@@ -98,7 +98,11 @@ const MUTANTS = [
   ['the orchestrator region is only known by its v3 id', 'gentle-ai-overlay/customizations.mjs', "const ORCHESTRATOR_REGIONS = ['sdd-orchestrator', 'orchestrator'];", "const ORCHESTRATOR_REGIONS = ['sdd-orchestrator'];"],
   ['the review contract is lazy whatever the review mode', 'gentle-ai-overlay/customizations.mjs', "    loadedWhile: 'reviews-may-run',\n", ''],
   ['the review contract loses its witness line', 'gentle-ai-overlay/customizations.mjs', "    witness: '# Native Compact Review Orchestration',\n", ''],
-  ['the blocking-prompt pointer loses its triggers', 'gentle-ai-overlay/customizations.mjs', ", as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, a `gentle-ai` invocation exits non-zero or refuses, or SDD status reports `blocked(edit_authority_missing)`.", "."],
+  ['the blocking-prompt pointer loses its triggers', 'gentle-ai-overlay/customizations.mjs', ", as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, or a `gentle-ai` invocation exits non-zero or refuses.", "."],
+  ['the ODD reference pointer loses its triggers', 'gentle-ai-overlay/customizations.mjs', ' READ THAT FILE IN FULL before creating, resuming or updating a feature document, before the first write of substantial authorized work, and before any work-unit commit or pull request.', ' READ THAT FILE IN FULL.'],
+  ['the routing ladder pointer loses its triggers', 'gentle-ai-overlay/customizations.mjs', ' READ THAT FILE IN FULL before launching any delegated worker (explorer, writer or verifier), and before recovering from a tooling or worktree incident.', ' READ THAT FILE IN FULL.'],
+  ['a v4-only section also matches the v3 orchestrator region', 'gentle-ai-overlay/customizations.mjs', "    end: '#### Delegated Verification Gate (MANDATORY)',\n    regions: ['orchestrator'],", "    end: '#### Delegated Verification Gate (MANDATORY)',\n    regions: ORCHESTRATOR_REGIONS,"],
+  ['the ODD reference is looked for in the orchestrator region', 'gentle-ai-overlay/customizations.mjs', "    end: '### Receipt-driven development is user-owned',\n    regions: ['agent-routing'],", "    end: '### Receipt-driven development is user-owned',\n    regions: ['orchestrator'],"],
   ['the verification pointer loses its triggers', 'gentle-ai-overlay/customizations.mjs', ", when a delegated writer returns work, and before deciding what verification or checking a finished change needs.", "."],
   ['a restore no longer tells the model to read the stash', 'gentle-ai-overlay/reapply-hook-output.mjs', '...(read.length === 0 ? {} : {', '...(true ? {} : {'],
   ['a move is no longer announced', 'gentle-ai-overlay/reapply-hook-output.mjs', "if (outcome.change === 'moved') return", "if (false) return"],
@@ -112,7 +116,6 @@ const MUTANTS = [
   ['apply rewrites the file without the replacement', 'gentle-ai-overlay/kinds/line-replacement.mjs', 'joinLines(lines));', 'joinLines(state.lines));'],
   ['the line replacement is no longer sync-safe', 'gentle-ai-overlay/kinds/line-replacement.mjs', '  syncSafe: true,', '  syncSafe: false,'],
   ['the line replacement plan names the wrong outcome', 'gentle-ai-overlay/kinds/line-replacement.mjs', "outcome: 'would-replace'", "outcome: 'would-try'"],
-  ['the real anchor sentence drifts from the upstream text', 'gentle-ai-overlay/customizations.mjs', '`blocked` without running the full suite.\'', '`blocked` without running the whole suite.\''],
   ['a help flag inside a review command no longer stops the mode change read', 'gentle-ai-overlay/reapply-triggers.mjs', 'const [group, noun, verb] = subcommandWords(args);', 'const [group, noun, verb] = args.filter((arg) => !arg.startsWith(\'-\'));'],
   ['the apply no-op line loses its Spanish half', 'gentle-ai-overlay/apply.mjs', 'broken @es nada reaplicable', 'broken nada reaplicable'],
   ['the apply verdict heading loses its Spanish half', 'gentle-ai-overlay/apply.mjs', 'verdict after apply @es veredicto', 'verdict after apply veredicto'],
@@ -168,6 +171,7 @@ const survivors = runMutants({
   paths: ['gentle-ai-overlay', 'gentle-ai-sync-guard', 'hook-dispatch', 'hook-state', 'bilingual-output', 'settings.json'],
   selftest: 'gentle-ai-overlay/selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);

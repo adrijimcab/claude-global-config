@@ -24,7 +24,7 @@ const BASH = 'Bash';
 const POWERSHELL = 'PowerShell';
 
 const BROKEN_RESULTS = [
-  { id: 'sdd-spec-grants-bash', status: 'broken', detail: 'tools line does not grant Bash', reapplicable: true },
+  { id: 'gentle-ai-telemetry-disabled', status: 'broken', detail: 'telemetry is enabled', reapplicable: true },
   { id: 'claude-md-owner-sections-outside-managed-regions', status: 'broken', detail: 'line 900 is INSIDE persona', reapplicable: false, remedy: 'Move the owner text by hand.' },
 ];
 const UNVERIFIABLE_RESULTS = [{ id: 'claude-md-persona-region-is-only-gentle-ai-text', status: 'unverifiable', detail: 'source not in module cache', reapplicable: false }];
@@ -121,7 +121,7 @@ const NOT_A_SYNC = [
   [BASH, "echo 'a && gentle-ai sync'"],
   [BASH, 'echo "a \\" ; gentle-ai sync"'],
   [BASH, 'x="$(echo "gentle-ai sync")"'],
-  [BASH, 'gentle-ai sdd-status sync'],
+  [BASH, 'gentle-ai doctor sync'],
   // Another program's `sync` subcommand is not gentle-ai's. @es El subcomando `sync` de otro programa no es el de gentle-ai.
   [BASH, 'rclone sync src dst'],
   [BASH, 'git sync'],
@@ -156,7 +156,7 @@ test('drift clean (check exit 0) -> a real sync is allowed', () => expect(verdic
 
 test('broken (exit 1) -> refusal names every broken id and both fixes', () => {
   const result = decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: DRIFT.broken });
-  const mentions = ['sdd-spec-grants-bash', 'claude-md-owner-sections-outside-managed-regions', 'apply.mjs', 'Move the owner text by hand.', '--dry-run'];
+  const mentions = ['gentle-ai-telemetry-disabled', 'claude-md-owner-sections-outside-managed-regions', 'apply.mjs', 'Move the owner text by hand.', '--dry-run'];
   mentions.forEach((text) => expect(result.reason.includes(text), true, `reason mentions ${text}`));
 });
 
@@ -195,7 +195,7 @@ test('only a sync-safe result is unverifiable (exit 2) -> the sync is ALLOWED', 
 test('a sync-safe result beside a real breakage -> refused, and the reason names only the real one', () => {
   const result = decide({ command: 'gentle-ai sync', toolName: BASH }, { checkDrift: () => ({ exitCode: 1, results: [...SYNC_SAFE_RESULTS, ...BROKEN_RESULTS] }) });
   expect(result.decision, 'deny', 'decision');
-  expect(result.reason.includes('sdd-spec-grants-bash'), true, 'names the real breakage');
+  expect(result.reason.includes('gentle-ai-telemetry-disabled'), true, 'names the real breakage');
   expect(result.reason.includes('review-contract-lazy-while-reviews-are-off'), false, 'omits the sync-safe one');
 });
 
@@ -368,7 +368,7 @@ const REFUSALS = {
 
 for (const [kind, reasonOf] of Object.entries(REFUSALS)) {
   test(`bilingual: the ${kind} refusal carries its Spanish half on every line that is prose, not on the result lists`, () => {
-    const prose = textLines(reasonOf()).filter((line) => !line.startsWith('  - sdd-') && !line.startsWith('  - claude-md-') && !line.startsWith('  - Move the owner'));
+    const prose = textLines(reasonOf()).filter((line) => !line.startsWith('  - gentle-ai-telemetry-') && !line.startsWith('  - claude-md-') && !line.startsWith('  - Move the owner'));
     expect(prose.length > 0, true, 'has prose');
     prose.forEach((line) => expect(withEs(line), true, `line "${line.slice(0, 60)}"`));
   });

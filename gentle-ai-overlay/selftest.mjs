@@ -16,9 +16,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CUSTOMIZATIONS } from './customizations.mjs';
 import { KINDS, applyAll, evaluateAll } from './invariants.mjs';
-import { reconcileSection } from './lazy-section.mjs';
+import { inspectSection, reconcileSection } from './lazy-section.mjs';
 import { registerLazySectionCases } from './lazy-section-cases.mjs';
-import { lazyEntryNamed, orchestratorRegion } from './lazy-section-fixtures.mjs';
+import { fullOrchestratorMd, lazyEntries } from './lazy-section-fixtures.mjs';
+import { driftAdvisory } from './report.mjs';
 import { registerLineReplacementCases } from './line-replacement-cases.mjs';
 import { registerPrunedTextCases } from './pruned-text-cases.mjs';
 import { registerReapplyCases } from './reapply-cases.mjs';
@@ -54,7 +55,7 @@ const read = (base, relative) => readFileSync(path.join(base, relative), 'utf8')
 
 function agentFile({ tools, body = 'You are an executor.', eol = '\n' }) {
   const toolsLine = tools === undefined ? [] : [`tools: ${tools}`];
-  return ['---', 'name: sdd-x', 'description: >', '  Explore — investiga el código, ñandú 日本 ✓', 'model: sonnet', ...toolsLine, '---', '', body, ''].join(eol);
+  return ['---', 'name: worker-x', 'description: >', '  Explore — investiga el código, ñandú 日本 ✓', 'model: sonnet', ...toolsLine, '---', '', body, ''].join(eol);
 }
 
 function region(id, content) {
@@ -131,7 +132,7 @@ const run = (script, args, env = process.env) => spawnSync(process.execPath, [pa
 
 // ---------------------------------------------------------------- agent-tool-required
 
-const needsBash = { id: 't', kind: 'agent-tool-required', file: '.claude/agents/sdd-x.md', tool: 'Bash' };
+const needsBash = { id: 't', kind: 'agent-tool-required', file: '.claude/agents/worker-x.md', tool: 'Bash' };
 
 test('required: Bash in the tools line -> held', () => {
   const context = newRoot();
@@ -222,7 +223,7 @@ test('missing agent file -> broken, apply refuses and creates nothing', () => {
 
 // ---------------------------------------------------------------- agent-tool-forbidden
 
-const withholdsBash = { id: 'r', kind: 'agent-tool-forbidden', file: '.claude/agents/sdd-research.md', tool: 'Bash' };
+const withholdsBash = { id: 'r', kind: 'agent-tool-forbidden', file: '.claude/agents/researcher.md', tool: 'Bash' };
 
 test('forbidden: missing file -> broken, never held', () => {
   expect(evaluate(withholdsBash, newRoot()).status, 'broken', 'status');
@@ -426,14 +427,10 @@ function completeHome({ telemetryEnabled = false } = {}) {
     const owner = entry.anchors.map((anchor) => `${anchor} text\n`).join('\n');
     put(context.home, entry.file, entry.file === '.claude/CLAUDE.md' ? claudeMd({ owner, eol: '\r\n' }) : owner);
   }
-  for (const entry of CUSTOMIZATIONS.filter((candidate) => candidate.kind === 'anchored-line-replacement')) {
-    put(context.home, entry.file, `# A skill\r\n\r\n${entry.replacement}\r\n`);
-  }
-  for (const entry of CUSTOMIZATIONS.filter((candidate) => candidate.kind.startsWith('agent-tool'))) {
-    put(context.home, entry.file, agentFile({ tools: entry.kind === 'agent-tool-required' ? `Read, Bash, ${MCP}` : 'WebFetch, WebSearch' }));
-  }
   return context;
 }
+/** CLAUDE.md of a complete home with every lazy span loaded, as a raw v4 sync leaves it. @es CLAUDE.md de un home completo con todo tramo diferido cargado, como lo deja un sync v4 crudo. */
+const withLoadedSpans = (context) => `${read(context.home, '.claude/CLAUDE.md')}${fullOrchestratorMd({ eol: '\r\n' })}`;
 const flags = ({ home, modCache, fakeCli }) => ['--home', home, '--mod-cache', modCache, '--gentle-ai-node-script', fakeCli];
 
 test('real list: every kind is registered and every id is unique', () => {
@@ -445,15 +442,15 @@ test('check.mjs: complete fixture -> exit 0', () => {
   expect(run('check.mjs', flags(completeHome())).status, 0, 'exit');
 });
 
-test('check.mjs: one tools line lost Bash -> exit 1; apply.mjs restores it -> exit 0; second apply -> exit 0, no change', () => {
+test('check.mjs: every lazy span loaded -> exit 1; apply.mjs moves them all -> exit 0; second apply -> exit 0, no change', () => {
   const context = completeHome();
-  put(context.home, '.claude/agents/sdd-spec.md', agentFile({ tools: `Read, ${MCP}` }));
+  put(context.home, '.claude/CLAUDE.md', withLoadedSpans(context));
   expect(run('check.mjs', flags(context)).status, 1, 'check before');
   expect(run('apply.mjs', flags(context)).status, 0, 'apply');
-  const restored = read(context.home, '.claude/agents/sdd-spec.md');
-  expect(restored, agentFile({ tools: `Read, Bash, ${MCP}` }), 'restored bytes');
+  const moved = read(context.home, '.claude/CLAUDE.md');
+  lazyEntries().forEach((entry) => expect(inspectSection(moved, entry).form, 'moved', `${entry.name} moved`));
   expect(run('apply.mjs', flags(context)).stdout.includes('nothing reapplicable was broken'), true, 'second apply');
-  expect(read(context.home, '.claude/agents/sdd-spec.md'), restored, 'bytes after second apply');
+  expect(read(context.home, '.claude/CLAUDE.md'), moved, 'bytes after second apply');
 });
 
 test('apply.mjs: owner rule inside the region -> refuses to move prose, exits 1, CLAUDE.md untouched', () => {
@@ -472,46 +469,41 @@ test('check.mjs: telemetry enabled, even under DO_NOT_TRACK=1 -> exit 1; apply.m
 });
 
 test('check.mjs --json: same verdict as the exit code, results carry id, status and remedy', () => {
-  const context = completeHome();
-  put(context.home, '.claude/agents/sdd-tasks.md', agentFile({ tools: `Read, ${MCP}` }));
+  const context = completeHome({ telemetryEnabled: true });
   const result = run('check.mjs', [...flags(context), '--json']);
   const report = JSON.parse(result.stdout);
   expect(result.status, 1, 'exit');
   expect(report.exitCode, 1, 'exitCode field');
-  const broken = report.results.filter((entry) => entry.status === 'broken').map((entry) => entry.id);
-  expect(broken.join(','), 'sdd-tasks-grants-bash', 'broken ids');
+  const broken = report.results.filter((entry) => entry.status === 'broken');
+  expect(broken.map((entry) => entry.id).join(','), 'gentle-ai-telemetry-disabled', 'broken ids');
+  expect(broken[0].reapplicable, true, 'reapplicable carried');
 });
 
-test('apply.mjs --dry-run: the review span would move, nothing is written, exit is the current verdict; apply.mjs then moves it -> exit 0', () => {
+test('apply.mjs --dry-run: every loaded span would move, nothing is written, exit is the current verdict; apply.mjs then moves them -> exit 0', () => {
   const context = completeHome();
-  const review = lazyEntryNamed('review-contract');
-  const withSpan = `${read(context.home, '.claude/CLAUDE.md')}${orchestratorRegion().split('\n').join('\r\n')}\r\n`;
-  put(context.home, '.claude/CLAUDE.md', withSpan);
+  const withSpans = withLoadedSpans(context);
+  put(context.home, '.claude/CLAUDE.md', withSpans);
   const dry = run('apply.mjs', [...flags(context), '--dry-run']);
   expect(dry.status, 1, 'dry-run exit');
-  expect(dry.stdout.includes('WOULD-MOVE lazy-review-contract'), true, `dry-run stdout (${dry.stdout})`);
-  expect(read(context.home, '.claude/CLAUDE.md'), withSpan, 'CLAUDE.md after dry run');
+  lazyEntries().forEach((entry) => expect(dry.stdout.includes(`WOULD-MOVE lazy-${entry.name}`), true, `dry-run names ${entry.name} (${dry.stdout})`));
+  expect(read(context.home, '.claude/CLAUDE.md'), withSpans, 'CLAUDE.md after dry run');
   expect(run('apply.mjs', flags(context)).status, 0, 'apply exit');
-  expect(read(context.home, '.claude/CLAUDE.md'), reconcileSection(withSpan, review, { keepLoaded: false, stash: null, stashLabel: `~/${review.stash}` }).text, 'CLAUDE.md after apply');
+  const moved = lazyEntries().reduce((text, entry) => reconcileSection(text, entry, { keepLoaded: false, stash: null, stashLabel: `~/${entry.stash}` }).text, withSpans);
+  expect(read(context.home, '.claude/CLAUDE.md'), moved, 'CLAUDE.md after apply');
 });
 
-test('check.mjs --json: the lazy sections and the line replacement report syncSafe, every other kind does not', () => {
+test('check.mjs --json: the lazy sections report syncSafe, every other kind does not', () => {
   const report = JSON.parse(run('check.mjs', [...flags(completeHome()), '--json']).stdout);
   const safe = report.results.filter((entry) => entry.syncSafe === true).map((entry) => entry.id);
-  expect(safe.join(','), 'sdd-verify-runs-scoped-gates,lazy-blocking-prompts,lazy-delegated-verification,lazy-review-contract,lazy-model-assignments,lazy-rdd-user-owned', 'sync-safe ids');
+  expect(
+    safe.join(','),
+    'lazy-blocking-prompts,lazy-delegated-verification,lazy-review-contract,lazy-delegation-restatement,lazy-routing-ladder,lazy-skill-discovery,lazy-skill-registry-protocol,lazy-odd-reference,lazy-rdd-user-owned',
+    'sync-safe ids',
+  );
 });
 
-test('apply.mjs --dry-run on the REAL list: the upstream verify sentence would be replaced, nothing is written; apply.mjs then replaces it -> exit 0', () => {
-  const context = completeHome();
-  const real = CUSTOMIZATIONS.find((candidate) => candidate.kind === 'anchored-line-replacement');
-  const upstreamText = `# A skill\r\n\r\n${real.upstream}\r\n`;
-  put(context.home, real.file, upstreamText);
-  const dry = run('apply.mjs', [...flags(context), '--dry-run']);
-  expect(dry.status, 1, 'dry-run exit');
-  expect(dry.stdout.includes(`WOULD-REPLACE ${real.id}`), true, `dry-run stdout (${dry.stdout})`);
-  expect(read(context.home, real.file), upstreamText, 'file after dry run');
-  expect(run('apply.mjs', flags(context)).status, 0, 'apply exit');
-  expect(read(context.home, real.file), `# A skill\r\n\r\n${real.replacement}\r\n`, 'file after apply');
+test('the real list carries no customization of a file gentle-ai v4 no longer installs (no SDD phase agent or skill)', () => {
+  CUSTOMIZATIONS.filter((entry) => entry.file !== undefined).forEach((entry) => expect(/sdd-/.test(entry.file), false, `${entry.id}: ${entry.file}`));
 });
 
 test('check.mjs: reference unavailable, nothing broken -> exit 2', () => {
@@ -539,12 +531,11 @@ test('hook: all held -> exit 0 and silent', () => {
 });
 
 test('hook: drift -> exit 0 with valid JSON naming the apply command', () => {
-  const context = completeHome();
-  put(context.home, '.claude/agents/sdd-design.md', agentFile({ tools: `Read, ${MCP}` }));
+  const context = completeHome({ telemetryEnabled: true });
   const result = run('session-start-hook.mjs', flags(context));
   expect(result.status, 0, 'exit');
   const message = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
-  expect(message.includes('apply.mjs') && message.includes('sdd-design-grants-bash'), true, 'advisory');
+  expect(message.includes('apply.mjs') && message.includes('gentle-ai-telemetry-disabled'), true, 'advisory');
   expect(message.includes('gentle-ai-overlay/sync.mjs'), true, 'advisory names the sync wrapper');
 });
 
@@ -573,9 +564,9 @@ test('bilingual: apply.mjs says in both languages that nothing was broken, and l
 
 test('bilingual: the drift advisory carries both halves on its header, restore and re-check lines, and for a withheld tool', () => {
   const context = completeHome();
-  put(context.home, '.claude/agents/sdd-design.md', agentFile({ tools: `Read, ${MCP}` }));
-  put(context.home, '.claude/agents/sdd-research.md', agentFile({ tools: 'WebFetch, Bash' }));
-  const message = JSON.parse(run('session-start-hook.mjs', flags(context)).stdout).hookSpecificOutput.additionalContext;
+  put(context.home, needsBash.file, agentFile({ tools: `Read, ${MCP}` }));
+  put(context.home, withholdsBash.file, agentFile({ tools: 'WebFetch, Bash' }));
+  const message = driftAdvisory(evaluateAll([needsBash, withholdsBash], context));
   ['local customization(s)', 'Restore the reapplicable ones with:', 'A withheld tool was granted', 'Re-check with:', 'Sync only through the wrapper'].forEach((needle) => expect(withEs(lineWith(message, needle)), true, `line "${needle}"`));
 });
 

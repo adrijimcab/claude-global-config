@@ -2,7 +2,7 @@
  * THE ONE PLACE that names our local customizations of what gentle-ai manages (files and settings),
  * and the invariant each must satisfy. Paths are relative to the home directory.
  *
- * Why this exists: gentle-ai 2.9.1 has no supported override for these files. `gentle-ai sync`
+ * Why this exists: gentle-ai (2.9.1, and v4.0.0 as re-measured on 2026-10-11) has no supported override for these files. `gentle-ai sync`
  * rewrites every Claude sub-agent file from its embedded asset (internal/components/sdd/inject.go,
  * WriteFileAtomic with no merge) and replaces the content of every marker region in CLAUDE.md. On
  * 2026-09-28 one sync erased both kinds of customization below.
@@ -46,9 +46,6 @@
  * sync real, reaplica lo que sync deshizo, comprueba, y sale distinto de cero mientras algo quede desviado.
  */
 
-// Owner lesson «QUE LOS SDD TENGAN BASH Y TODO LO NECESARIO» (engram #698).
-const PHASES_THAT_NEED_BASH = ['sdd-explore', 'sdd-propose', 'sdd-spec', 'sdd-design', 'sdd-tasks'];
-
 // Desde el 2026-09-28 el texto propio del dueño salió de ~/.claude/CLAUDE.md: lo global vive en
 // ~/.claude/rules/ (sync no toca esa carpeta) y lo de b100 en <b100-am-ui>/.claude/CLAUDE.md, que no
 // gestiona gentle-ai. En CLAUDE.md queda solo un encabezado-puntero FUERA de las regiones; su ancla
@@ -91,13 +88,6 @@ const PROMOTED_AREA_RULE_ANCHORS = {
   'run-artifacts': ['- **`stale-artifact-read-as-this-runs-result`**'],
 };
 
-// The Hard Rules line of the sdd-verify skill, as gentle-ai renders it, and ours. The upstream line is
-// the anchor, character for character. @es La línea de Hard Rules de la skill sdd-verify tal como la
-// genera gentle-ai, y la nuestra. La línea de upstream es el ancla, carácter por carácter.
-const VERIFY_UPSTREAM_SENTENCE = '- Run full verification only after all tasks are complete. If any task is pending, return `blocked` without running the full suite.';
-const VERIFY_SCOPED_SENTENCE =
-  "- Run verification only after all tasks are complete; if any task is pending, return `blocked` without running any test. Run only the tests and gates that prove the change's requirements and read its touched paths, never the repository's full suite or full gate chain: the orchestrator runs that once, at integration, on the tree being integrated.";
-
 // Sections of CLAUDE.md that are loaded only when needed. Each one is a span of the orchestrator region
 // that gentle-ai renders whole (`start` up to, not including, `end`; both whole lines, anchors that are
 // headings gentle-ai itself uses) and that this machine reads only in a situation, which the pointer names.
@@ -123,7 +113,7 @@ const LAZY_SECTIONS = [
     regions: ORCHESTRATOR_REGIONS,
     stash: `${LAZY_DIR}/blocking-prompt-contracts.md`,
     pointer: {
-      en: 'The blocking-prompt contracts (lossless relay of a prompt, menu or choice envelope meant for the user; the Gentle AI provider-defect handoff; the SDD edit-authority consent relay) are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, a `gentle-ai` invocation exits non-zero or refuses, or SDD status reports `blocked(edit_authority_missing)`.',
+      en: 'The blocking-prompt contracts (lossless relay of a prompt, menu or choice envelope meant for the user; the Gentle AI provider-defect handoff) are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, or a `gentle-ai` invocation exits non-zero or refuses.',
     },
   },
   {
@@ -156,15 +146,65 @@ const LAZY_SECTIONS = [
       en: 'Receipt-driven development is off globally, so this contract is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL, and follow it as if it were written here, before any `gentle-ai review` command other than `gentle-ai review mode status`, before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as `gentle-ai review mode status` reports `effective: on`.',
     },
   },
+  // gentle-ai v4 (ODD) only: the spans below exist in the `orchestrator` and `agent-routing` regions that v4
+  // renders, so `regions` names the v4 ids alone and a v2/v3 render never matches them. Measured 2026-10-11 on
+  // a v4.0.0 render in an emulated home: they hold 22,177 of the 39,821 characters that stayed loaded after
+  // the sections above moved. @es Solo gentle-ai v4 (ODD): estos tramos existen en las regiones
+  // `orchestrator` y `agent-routing` que genera v4, así que `regions` nombra solo los ids de v4 y un render
+  // v2/v3 nunca coincide. Medido el 2026-10-11 sobre un render de v4.0.0 en un home emulado.
   {
-    name: 'model-assignments',
-    label: 'model assignments',
-    start: '## Model Assignments',
-    end: '<!-- /gentle-ai:sdd-model-assignments -->',
-    regions: ['sdd-model-assignments'],
-    stash: `${LAZY_DIR}/model-assignments.md`,
+    name: 'delegation-restatement',
+    label: 'orchestrator delegation rules',
+    start: '### Delegation Rules',
+    end: '#### Delegated Verification Gate (MANDATORY)',
+    regions: ['orchestrator'],
+    stash: `${LAZY_DIR}/orchestrator-delegation-rules.md`,
     pointer: {
-      en: 'The model-assignment table (the model alias of every SDD and Judgment-Day role, and of generic delegation) is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL before the first Agent or Task delegation of a session, keep it for the session, and give EVERY Claude Agent call the `model` it maps.',
+      en: 'The orchestrator Delegation Rules table and its own list of delegation triggers are not loaded here: `### Mandatory Delegation Triggers` under `## Implementation Routing`, always loaded, binds the same triggers. Their exact text is in `{stash}`. READ THAT FILE IN FULL when that section does not settle whether a piece of work stays inline or goes to a delegated worker.',
+    },
+  },
+  {
+    name: 'routing-ladder',
+    label: 'routing ladder and delegation hand-off rules',
+    start: '#### Cost and Context Balance',
+    end: '### Delivery strategy',
+    regions: ['orchestrator'],
+    stash: `${LAZY_DIR}/routing-ladder-and-hand-off.md`,
+    pointer: {
+      en: 'Cost and Context Balance, the Work Routing Ladder, the Canonical Lightweight Workflows, the Allowed edit surfaces contract (MANDATORY for every writer) and the Key Learnings closing block are not loaded here; their exact text is in `{stash}`. READ THAT FILE IN FULL before launching any delegated worker (explorer, writer or verifier), and before recovering from a tooling or worktree incident.',
+    },
+  },
+  {
+    name: 'skill-discovery',
+    label: 'intent-driven skill discovery',
+    start: '### Intent-Driven Skill Discovery',
+    end: '### Safety',
+    regions: ['orchestrator'],
+    stash: `${LAZY_DIR}/intent-driven-skill-discovery.md`,
+    pointer: {
+      en: 'Intent-driven skill discovery is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL when a request names or implies a workflow a skill may cover and the injected skill list does not show that skill.',
+    },
+  },
+  {
+    name: 'skill-registry-protocol',
+    label: 'skill registry protocol',
+    start: '### Skill Registry Protocol',
+    end: '<!-- /gentle-ai:orchestrator -->',
+    regions: ['orchestrator'],
+    stash: `${LAZY_DIR}/skill-registry-protocol.md`,
+    pointer: {
+      en: 'The skill registry protocol (resolving `.atl/skill-registry.md` and passing exact `SKILL.md` paths to workers under `## Skills to load before work`) is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL before the first delegation of a session, and when a worker reports `skill_resolution`.',
+    },
+  },
+  {
+    name: 'odd-reference',
+    label: 'ODD reference detail',
+    start: '### Organic Driven Development',
+    end: '### Receipt-driven development is user-owned',
+    regions: ['agent-routing'],
+    stash: `${LAZY_DIR}/odd-reference.md`,
+    pointer: {
+      en: 'The ODD reference detail (research and assumption challenges, the feature document `odd/tasks/<feature>.md` and its engram mirror, resume, the test-first policy, per-commit review assessment, and the delivery strategy) is not loaded here; its exact text is in `{stash}`. READ THAT FILE IN FULL before creating, resuming or updating a feature document, before the first write of substantial authorized work, and before any work-unit commit or pull request.',
     },
   },
   {
@@ -181,18 +221,6 @@ const LAZY_SECTIONS = [
 ];
 
 export const CUSTOMIZATIONS = [
-  ...PHASES_THAT_NEED_BASH.map((phase) => ({
-    id: `${phase}-grants-bash`,
-    kind: 'agent-tool-required',
-    file: `.claude/agents/${phase}.md`,
-    tool: 'Bash',
-  })),
-  {
-    id: 'sdd-research-withholds-bash',
-    kind: 'agent-tool-forbidden',
-    file: '.claude/agents/sdd-research.md',
-    tool: 'Bash',
-  },
   {
     id: 'claude-md-owner-sections-outside-managed-regions',
     kind: 'owner-sections-outside-managed-regions',
@@ -222,18 +250,6 @@ export const CUSTOMIZATIONS = [
     kind: 'persona-region-matches-upstream',
     file: '.claude/CLAUDE.md',
     region: 'persona',
-  },
-  // Owner rule 2026-10-01 (sdd-mandate point 3): the verify phase runs only the tests and gates that
-  // prove the change and read its touched paths; the full chain runs once, at integration, by the
-  // orchestrator. @es Regla del dueño 2026-10-01 (punto 3 del mandato SDD): la fase verify corre solo los
-  // tests y gates que prueban el cambio y leen sus rutas tocadas; la cadena completa la corre el
-  // orquestador una vez, al integrar.
-  {
-    id: 'sdd-verify-runs-scoped-gates',
-    kind: 'anchored-line-replacement',
-    file: '.claude/skills/sdd-verify/SKILL.md',
-    upstream: VERIFY_UPSTREAM_SENTENCE,
-    replacement: VERIFY_SCOPED_SENTENCE,
   },
   ...LAZY_SECTIONS.map((section) => ({ id: `lazy-${section.name}`, kind: 'lazy-section', file: '.claude/CLAUDE.md', ...section })),
   // Owner decision 2026-09-28: telemetry stays off. Checked and re-applied through the gentle-ai CLI.

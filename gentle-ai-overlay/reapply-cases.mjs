@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { CUSTOMIZATIONS } from './customizations.mjs';
 import { applyAll, evaluateAll } from './invariants.mjs';
 import { fullOrchestratorMd, lazyEntries, lazyEntryNamed, orchestratorMd } from './lazy-section-fixtures.mjs';
-import { reconcileSection } from './lazy-section.mjs';
+import { inspectSection, reconcileSection } from './lazy-section.mjs';
 import { reapplyTrigger } from './reapply-triggers.mjs';
 import { reapplySyncSafe } from './reapply-hook-output.mjs';
 import { readTextOrNull } from './text-file.mjs';
@@ -64,14 +64,12 @@ const shellPayload = (command, tool = 'Bash') => JSON.stringify({ hook_event_nam
 
 export function registerReapplyCases({ test, expect, newRoot, put, read, installFakeCli, completeHome, agentFile, run }) {
   const review = lazyEntryNamed('review-contract');
-  const verify = CUSTOMIZATIONS.find((entry) => entry.kind === 'anchored-line-replacement');
   const flags = ({ home, fakeCli }) => ['--home', home, '--gentle-ai-node-script', fakeCli];
   const claudeOf = (context) => read(context.home, review.file);
-  /** A fixture home whose CLAUDE.md holds every lazy section, loaded, with the verify skill as sync-safe customizations leave it, and the given CLI state. @es Un home con todas las secciones diferidas cargadas y la skill de verify como la dejan las personalizaciones. */
+  /** A fixture home whose CLAUDE.md holds every lazy section, loaded, and the given CLI state. @es Un home con todas las secciones diferidas cargadas y el estado de CLI dado. */
   function loadedHome(cliState = { reviewGlobal: '' }, text = fullOrchestratorMd({ eol: '\r\n' })) {
     const context = installFakeCli(newRoot(), { enabled: false, ...cliState });
     put(context.home, review.file, text);
-    put(context.home, verify.file, `# A skill\r\n\r\n${verify.replacement}\r\n`);
     return context;
   }
   /** What the overlay makes of `text` with every section moved, computed with the pure logic only. @es Lo que el overlay hace del texto con toda sección movida, con la lógica pura. */
@@ -117,22 +115,23 @@ export function registerReapplyCases({ test, expect, newRoot, put, read, install
     lazyEntries().forEach((entry) => expect(readTextOrNull(path.join(context.home, entry.stash)) !== null, true, `${entry.name}: stash written`));
   });
 
-  test('dispatcher: a raw sync that put the upstream verify sentence back is followed by the line replacement', () => {
-    const context = loadedHome();
-    const upstream = `# A skill\r\n\r\n${verify.upstream}\r\n`;
-    put(context.home, verify.file, upstream);
-    dispatchPost(context, shellPayload('gentle-ai sync --agents claude-code'));
-    expect(read(context.home, verify.file), `# A skill\r\n\r\n${verify.replacement}\r\n`, 'skill after the hook');
+  test('dispatcher: a raw v2/v3 render moves the sections both renders share, keeps its `### Delegation Rules` loaded and names the refusal', () => {
+    const context = loadedHome({ reviewGlobal: '' }, fullOrchestratorMd({ eol: '\r\n', regionId: 'sdd-orchestrator' }));
+    const original = claudeOf(context);
+    const delegation = lazyEntryNamed('delegation-restatement');
+    const message = JSON.parse(dispatchPost(context, shellPayload('gentle-ai sync')).stdout).systemMessage;
+    const after = claudeOf(context);
+    expect(inspectSection(after, review).form, 'moved', 'review contract moved');
+    const span = (text) => text.slice(text.indexOf(delegation.start), text.indexOf(delegation.end));
+    expect(span(after), span(original), 'the v3 delegation span is untouched');
+    expect(readTextOrNull(path.join(context.home, delegation.stash)), null, 'no v4 stash written');
+    expect(message.includes('lazy-delegation-restatement') && message.includes('could not be re-applied'), true, `refusal named (${message})`);
   });
 
-  test('dispatcher: a raw sync leaves a customization sync can ERASE alone (a lost tool grant is not re-applied by the hook)', () => {
-    const context = completeHome();
-    const agent = '.claude/agents/sdd-spec.md';
-    const stripped = agentFile({ tools: `Read, ${MCP}` });
-    put(context.home, agent, stripped);
+  test('dispatcher: a raw sync leaves a customization sync can ERASE alone (an enabled telemetry is not re-applied by the hook)', () => {
+    const context = completeHome({ telemetryEnabled: true });
     dispatchPost(context, shellPayload('gentle-ai sync'));
-    expect(read(context.home, agent), stripped, 'agent file untouched by the hook');
-    expect(evaluateAll(CUSTOMIZATIONS, context).find((result) => result.id === 'sdd-spec-grants-bash').status, 'broken', 'still broken, for the apply command');
+    expect(evaluateAll(CUSTOMIZATIONS, context).find((result) => result.id === 'gentle-ai-telemetry-disabled').status, 'broken', 'still broken, for the apply command');
   });
 
   test('dispatcher: review mode enabled -> the review span is restored, the model is told to read its stash now, and the always-lazy sections stay moved', () => {
@@ -197,17 +196,20 @@ export function registerReapplyCases({ test, expect, newRoot, put, read, install
   const BEFORE = '## Section';
   const AFTER = '## Next section';
   const prune = { id: 'prune', kind: 'pruned-text-stays-pruned', file: '.claude/CLAUDE.md', before: BEFORE, after: AFTER, block: ['', 'Text sync keeps emitting.'] };
-  const grants = { id: 'grants', kind: 'agent-tool-required', file: '.claude/agents/sdd-x.md', tool: 'Bash' };
+  const grants = { id: 'grants', kind: 'agent-tool-required', file: '.claude/agents/worker-x.md', tool: 'Bash' };
+  const replace = { id: 'replace', kind: 'anchored-line-replacement', file: '.claude/skills/worker/SKILL.md', upstream: '- Run the full suite — ñandú.', replacement: '- Run only the scoped gates — ñandú.' };
   const plain = (middle) => ['# Pointer', BEFORE, ...middle, AFTER, ''].join('\n');
 
   test('re-apply: every sync-safe customization that is broken is applied, in one pass, and each outcome is announced', () => {
     const context = installFakeCli(newRoot(), { enabled: false });
     put(context.home, '.claude/CLAUDE.md', plain(['', 'Text sync keeps emitting.']));
     put(context.home, grants.file, agentFile({ tools: `Read, ${MCP}` }));
-    const output = reapplySyncSafe(context, [prune, grants]);
+    put(context.home, replace.file, `# A skill\r\n\r\n${replace.upstream}\r\n`);
+    const output = reapplySyncSafe(context, [prune, grants, replace]);
     expect(read(context.home, '.claude/CLAUDE.md'), plain([]), 'pruned');
+    expect(read(context.home, replace.file), `# A skill\r\n\r\n${replace.replacement}\r\n`, 'line replaced');
     expect(read(context.home, grants.file), agentFile({ tools: `Read, ${MCP}` }), 'the tool grant is not sync-safe, so untouched');
-    expect(output.systemMessage.includes('re-applied prune'), true, `announced (${output.systemMessage})`);
+    expect(output.systemMessage.includes('re-applied prune') && output.systemMessage.includes('replace'), true, `announced (${output.systemMessage})`);
   });
 
   test('re-apply: nothing broken -> nothing said; a refused customization is reported with its remedy and the file is untouched', () => {

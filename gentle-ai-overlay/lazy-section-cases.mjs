@@ -67,6 +67,19 @@ export function registerLazySectionCases({ test, expect, newRoot, put, read, ins
     expect(REGION_IDS.every((id) => review.regions.includes(id)), true, 'sdd-orchestrator and orchestrator');
   });
 
+  // The v4-only spans name the v4 region ids alone: inside a v2/v3 render their anchors (`### Delegation Rules`
+  // is rendered by both) must never be moved under a v4 pointer. @es Los tramos exclusivos de v4 nombran solo los
+  // ids de región de v4: dentro de un render v2/v3 sus anclas nunca se mueven bajo un puntero de v4.
+  const V4_ONLY = ['delegation-restatement', 'routing-ladder', 'skill-discovery', 'skill-registry-protocol', 'odd-reference'];
+  for (const name of V4_ONLY) {
+    test(`lazy list: "${name}" is v4-only, so its span inside the v2/v3 orchestrator region is refused, never moved`, () => {
+      const entry = lazyEntryNamed(name);
+      expect(entry.regions.includes('sdd-orchestrator'), false, 'no v3 region id');
+      const v3 = sectionMd(entry, { regionId: 'sdd-orchestrator' });
+      expect(reconcileSection(v3, entry, { keepLoaded: false, stash: null, stashLabel: stashLabel(entry) }).refused !== undefined, true, 'refused in a v3 render');
+    });
+  }
+
   // ------------------------------------------------------------ the pure span logic
 
   for (const regionId of REGION_IDS) {
