@@ -1,0 +1,6 @@
+{
+  "id": "usted-prose",
+  "expect": "fail",
+  "source": "synthetic: correct prose, but addresses the owner with usted forms",
+  "message": "Ya revisé el hook y encontré por qué no se disparaba. El matcher estaba escrito para otro evento, de modo que nunca se ejecutaba con la configuración que usted tiene.\n\nLo corregí en el archivo de ajustes y comprobé que ahora responde a cada parada. Si desea, puede probarlo abriendo una sesión nueva para ver si su mensaje pasa por el juez.\n\nCuando usted disponga de un momento, indíqueme si prefiere que lo suba al repositorio de respaldo o que espere su revisión."
+}

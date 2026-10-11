@@ -72,7 +72,15 @@ check('rubric: voseo does not rescue a changelog', PROMPT.includes('Voseo does n
 check('rubric: prose that explains the why with a closing is the one exception', PROMPT.includes('full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands'), true);
 check('rubric: prose with a supporting list passes', PROMPT.includes('when prose carries the message and a list only supports it (a few short items, or a command block the owner must run)'), true);
 check('rubric: unsure passes', PROMPT.includes('When unsure, answer {"ok": true}.'), true);
-check('rubric: the signature is the v2 line', PROMPT_SIGNATURE, 'voice-judge rubric v2.');
+check('rubric: the signature is the v3 line', PROMPT_SIGNATURE, 'voice-judge rubric v3.');
+check('rubric: a Spanish reply with tu or usted forms fails', PROMPT.includes('answer {"ok": false} when it addresses him with tú or usted forms (tienes, tiene usted, puedes, quieres, su as his possessive) instead of Rioplatense voseo (tenés, podés, querés, vos)'), true);
+check('rubric: quoted text, code and other people's words do not count for voseo', PROMPT.includes('Quoted text, code and other people's words do not count.'), true);
+check('rubric: tu alone is not a tuteo marker', PROMPT.includes('tu alone is normal in voseo and does not count'), true);
+check('rubric: a cold, stiff or bureaucratic reply fails', PROMPT.includes('reads cold, stiff or bureaucratic'), true);
+check('rubric: the wanted voice is simpatico, comfortable and pleasant', PROMPT.includes('simpático, comfortable and pleasant, the voice of a warm Argentine mentor'), true);
+check('rubric: slang is limited to one or two natural expressions', PROMPT.includes('one or two natural Rioplatense expressions at most, and a reply overloaded with slang until it is a caricature fails too'), true);
+check('rubric: the reason asks for voseo and warmth', PROMPT.includes('speak to the owner in voseo (vos, tenés, podés) with a warm, pleasant, simpático tone'), true);
+check('rubric: a short reply is judged for voseo before it passes', PROMPT.indexOf('addresses him with tú or usted') < PROMPT.indexOf('one or two lines with no status content'), true);
 check('rubric: never sets impossible', PROMPT.includes('Never set the field impossible.'), true);
 check('rubric: never asks for length for its own sake', PROMPT.includes('Never ask for a longer message for its own sake'), true);
 check('rubric: the reason asks for the Gentleman mentor voice in prose', PROMPT.includes('Gentleman mentor voice: prose that talks to the person with warmth and energy, the why of each decision in sentences, a list only where a list genuinely helps, and a closing that lands'), true);

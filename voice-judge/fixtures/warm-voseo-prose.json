@@ -1,0 +1,6 @@
+{
+  "id": "warm-voseo-prose",
+  "expect": "pass",
+  "source": "synthetic control: warm Rioplatense voseo prose, one natural expression",
+  "message": "Ya lo encontré, y es más tonto de lo que parecía: el matcher estaba escrito para otro evento, por eso tu hook nunca se disparaba. Lo corregí en el archivo de ajustes y comprobé que ahora responde en cada parada.\n\nSi querés, probalo abriendo una sesión nueva y fijate si tu mensaje pasa por el juez. Y decime si preferís que lo suba ya al respaldo o que espere a que lo revises vos."
+}
