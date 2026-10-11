@@ -232,7 +232,14 @@ const user = path.join(scratch, 'user');
 
 mkdirSync(path.join(user, '.claude', 'failure-capture', 'state'), { recursive: true });
 writeFileSync(path.join(user, '.claude', 'failure-capture', 'state', 'incidents.jsonl'), '{"u":1}\n');
-const defaults = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'backup.mjs')], { encoding: 'utf8', env: { ...process.env, USERPROFILE: user, HOME: user } });
+// The defaults are what a process with no Claude home override gets, so an override this selftest inherits
+// (the selftest runner sets one in every sandbox) is removed rather than read.
+// @es Los valores por defecto son los de un proceso sin override del home de Claude, así que un override
+// heredado (el runner de selftests fija uno en cada sandbox) se quita en vez de leerse.
+const defaultsEnv = { ...process.env, USERPROFILE: user, HOME: user };
+
+delete defaultsEnv.HOOK_CLAUDE_HOME;
+const defaults = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'backup.mjs')], { encoding: 'utf8', env: defaultsEnv });
 const today = new Date().toISOString().slice(0, 10);
 
 check('cli: with no arguments the home is ~/.claude and the target ~/.claude-backups/journals-<today>', defaults.status === 0 && existsSync(path.join(user, '.claude-backups', `journals-${today}`, 'failure-capture', 'state', 'incidents.jsonl')), true);
