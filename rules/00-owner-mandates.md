@@ -158,7 +158,7 @@ confirmación de cada una, liberar los procesos que retienen el recurso solo cua
 aplicar con respaldo y rollback, avisar que sigan (y reinicien si hace falta) y prueben, y dar el cambio
 por hecho solo cuando todas reportan que está bien; un fallo activa el rollback.
 
-## Standing workflow premise — ODD + full contract + tooling leverage + senior audit stance (owner directive 2026-07-28; ODD since 2026-10-11)
+## Standing workflow premise — ODD + full contract + tooling leverage + senior audit stance (owner directive 2026-07-28)
 
 The route a change takes (tracked ODD where the design is open, direct where it is settled), the full
 agent contract, and proof by the project's real full gate set are stated in `~/.claude/route-mandate.md`, which
@@ -237,10 +237,8 @@ feature ODD queda verificada), el ORQUESTADOR hace, en el MISMO turno, las tres 
    `git cherry` (patch-id, nunca solo la ancestría); el worktree está limpio; su actor está parado; y
    en Windows no se sigue ningún junction. Si NO está integrado, no se borra: se integra primero, o se
    informa como trabajo varado.
-3. **ODD:** si la unidad era una feature ODD, se cierra: su documento `odd/tasks/<feature>.md` queda
-   con cada tarea marcada solo con su evidencia observada y el id del commit que la cerró, y su espejo
-   de engram `odd/<feature>/tasks` se actualiza con el documento entero. Una comprobación en rojo no se
-   cierra: se arregla primero.
+3. **ODD:** una feature ODD se cierra con `odd/tasks/<feature>.md` con cada tarea marcada con su
+   evidencia y su commit, y su espejo de engram actualizado entero. En rojo no se cierra: se arregla.
 4. **Lo encontrado:** todo hallazgo que trae la unidad (del informe del worker o de la integración) se
    resuelve en ese turno según «Resolver en el momento antes que encolar», y si no puede, entra al
    backlog con su razón.

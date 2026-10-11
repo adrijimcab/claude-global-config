@@ -1,17 +1,14 @@
 # Route + full-contract mandate — binding, every session, every project
 
-Every change runs through Organic Driven Development (ODD, gentle-ai v4) and takes one of two routes,
-chosen by how settled its DESIGN is — never by its size, its risk, or how urgent it feels. Points 2 and 3
-bind on both.
+Every change runs through ODD (gentle-ai v4) on one of two routes, chosen by how settled its DESIGN
+is — never by its size, its risk, or how urgent it feels. Points 2 and 3 bind on both.
 
 1. **Tracked ODD where the design is open.** A new feature, a new project, a refactor that crosses a
-   module boundary or changes a public API, and any change whose approach is still undecided when the
-   work starts. Explore first, resolve the open decisions (research with sources, or one question to the
-   owner for a decision only the owner holds), and TRACK before the first write: the feature document
-   `odd/tasks/<feature>.md` and its engram mirror `odd/<feature>/tasks` carry the objective, the decided
-   design and why, the task list, and the checks of each task. Implement task by task, each closed by a
-   work-unit Conventional Commit whose id is recorded in the document; close with the verified outcome.
-   Use `judgment-day` for adversarial review and the `review-*` lenses where the risk tier calls for them.
+   module boundary or changes a public API, and any change whose approach is undecided when the work
+   starts. Explore, resolve the open decisions, and TRACK before the first write: `odd/tasks/<feature>.md`
+   and its engram mirror `odd/<feature>/tasks` carry the decided design and why, the tasks and their
+   checks. Each task closes with a work-unit commit recorded in the document. Use `judgment-day` for
+   adversarial review and the `review-*` lenses where the risk tier calls for them.
    **Direct (inline or delegated) where the design is settled.** A fix whose root cause has been
    measured and whose solution has one evident shape, or a contained change inside one module, goes
    direct: root cause first, then the change, then the gates. When a direct change turns out to need a
@@ -32,8 +29,8 @@ bind on both.
 **Trivial scope (typo, rename, comment tweak, a genuinely one-line no-logic change):** goes direct
 inline with no feature document; the contract (senior stance, no patches) and the gates still bind.
 
-If ODD tracking or a skill is genuinely unavailable in the current environment, say so plainly and apply
-the stance + gates manually — never silently drop the process and never fake it.
+If ODD tracking or a skill is genuinely unavailable, say so plainly and apply the stance + gates
+manually — never silently drop the process and never fake it.
 
 ## Tooling leverage — reach for the BEST tool, and seek one for anything new
 
