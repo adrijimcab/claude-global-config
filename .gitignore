@@ -205,6 +205,10 @@
 /owner-language-guard/fixtures/*
 !/owner-language-guard/fixtures/stop-payload.constructed.json
 
+# Where a subagent stands: transcript, processes, worktree. @es Dónde está un subagente.
+!/worker-status/
+!/worker-status/*.mjs
+
 !/engram-persistence/
 !/engram-persistence/*.mjs
 !/engram-persistence/*.json
