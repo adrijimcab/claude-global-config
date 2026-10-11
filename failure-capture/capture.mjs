@@ -42,7 +42,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { stateDir } from '../hook-state/locations.mjs';
-import { closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, readClosure, verifyMechanism } from './closure.mjs';
+import { closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, NO_MECHANISM_REASON_FORM, readClosure, verifyMechanism } from './closure.mjs';
 import { adviseOnBudget } from './budget-advisory.mjs';
 import { budgetVerdict } from './budget-verdict.mjs';
 import { renderBudget, renderUnmeasured } from './budget-report.mjs';
@@ -489,7 +489,7 @@ function promotionInstructions(key, target) {
   const closeSteps = (number) => [
     speaker.line('instructions.close', { number }),
     `       node "${path.join(HERE, 'capture.mjs')}" promote --key ${key} ${MECHANISM_FLAG} <guard path>`,
-    `       node "${path.join(HERE, 'capture.mjs')}" promote --key ${key} ${NO_MECHANISM_FLAG} "<reason>"`,
+    `       node "${path.join(HERE, 'capture.mjs')}" promote --key ${key} ${NO_MECHANISM_FLAG} ${NO_MECHANISM_REASON_FORM}`,
     speaker.line('instructions.close.note')
   ];
 
@@ -712,7 +712,13 @@ function commandPromote(args) {
   speaker.say('promote.done', { key });
   speaker.say(target === GLOBAL_TARGET ? 'promote.landed.global' : 'promote.landed.contract', { count: WORKER_CONTRACTS.length, files: contractFilesOf(target, key).join(', ') });
   speaker.say(...proofMessage(target));
-  speaker.say(closure.kind === 'mechanism' ? 'promote.closed.mechanism' : 'promote.closed.reason', closure.kind === 'mechanism' ? { path: closure.path } : { reason: closure.reason });
+  if (closure.kind === 'mechanism') {
+    speaker.say('promote.closed.mechanism', { path: closure.path });
+  } else {
+    speaker.say('promote.closed.reason');
+    speaker.data(`  ${closure.reason}`);
+  }
+
   speaker.say('promote.stub');
 
   return 0;

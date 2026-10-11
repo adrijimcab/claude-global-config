@@ -45,7 +45,7 @@ process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const AREA = 'guards';
 const KEY = 'area-lesson-key';
 const OTHER = 'global-lesson-key';
-const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
+const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall. @es una afirmación escrita en prosa no la detecta ningún hook; recuerdo medido 0 de 6.';
 const GLOBAL_HEAD = '# Lessons Ledger — global\n\n---\n';
 const lessonLine = (scope, key, count) => `- [${scope}] 2026-09-14 — it recurred -> RULE: do the ${key} thing <!--fc:${key}#${String(count)}-->\n`;
 const rulesFor = (key) => `- **\`${key}\`** — the rule, face one.\n`;

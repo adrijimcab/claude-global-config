@@ -69,6 +69,12 @@ const SELFTEST_TIMEOUT_MS = 1_800_000;
 /** The proof file every fleet guard keeps beside itself. @es El fichero de prueba que cada guard guarda a su lado. */
 const SELFTEST_NAME = 'selftest.mjs';
 
+/** The marker that opens the Spanish half of a house-form text. @es El marcador que abre la mitad española de un texto en la forma de la casa. */
+const SPANISH_MARKER = '@es';
+
+/** The shape of a reason as the caller types it. @es La forma de un motivo tal como lo escribe quien llama. */
+export const NO_MECHANISM_REASON_FORM = `"<English reason>. ${SPANISH_MARKER} <motivo en español>"`;
+
 /** One sentence in the house form: English, then the Spanish half marked `@es`. @es Una frase en la forma de la casa: inglés y luego la mitad española marcada `@es`. */
 const both = (english, spanish) => `${english} @es ${spanish}`;
 
@@ -77,7 +83,7 @@ function bothOptions() {
   return [
     both('Close it with ONE of:', 'Ciérrala con UNA de estas:'),
     both(`  ${MECHANISM_FLAG} <path>        a guard/gate that makes the repeat impossible; its ${SELFTEST_NAME} is run and must pass, and the guard or its selftest must name the lesson key`, `un guard/gate que hace imposible la repetición; su ${SELFTEST_NAME} se ejecuta y debe pasar, y el guard o su selftest debe nombrar la clave de la lección`),
-    both(`  ${NO_MECHANISM_FLAG} "<reason>"  why no mechanism is possible (${MINIMUM_REASON_LENGTH}+ chars), recorded verbatim`, `por qué no cabe ningún mecanismo (${MINIMUM_REASON_LENGTH}+ caracteres), se registra literal`)
+    both(`  ${NO_MECHANISM_FLAG} ${NO_MECHANISM_REASON_FORM}  why no mechanism is possible, in both languages (${MINIMUM_REASON_LENGTH}+ chars), recorded verbatim`, `por qué no cabe ningún mecanismo, en los dos idiomas (${MINIMUM_REASON_LENGTH}+ caracteres), se registra literal`)
   ];
 }
 
@@ -114,7 +120,37 @@ export function readClosure(args) {
   // marcador final es como el loop la encuentra, así que un salto de línea la dejaría huérfana.
   if (reason.includes('\n') || reason.includes('\r')) return { kind: 'refused', problems: [both(`${NO_MECHANISM_FLAG} must be one line: it is written verbatim into a one-line ledger entry`, `${NO_MECHANISM_FLAG} debe ser de una sola línea: se escribe literal en una entrada de ledger de una línea`), ...bothOptions()] };
 
+  // The reason is printed and recorded as written and never translated, so it must arrive in BOTH
+  // languages already: a reason without its `@es` half would reach the Spanish side of every report in English.
+  // @es El motivo se imprime y se registra tal cual y nunca se traduce, así que debe llegar ya en LOS DOS
+  // idiomas: un motivo sin su mitad `@es` llegaría en inglés al lado español de cada informe.
+  if (houseHalves(reason) === undefined) return { kind: 'refused', problems: [both(`${NO_MECHANISM_FLAG} must carry both languages in the house form ${NO_MECHANISM_REASON_FORM}: the English reason, then the ${SPANISH_MARKER} marker as a word of its own, then the Spanish one, neither half empty`, `${NO_MECHANISM_FLAG} debe llevar los dos idiomas en la forma de la casa ${NO_MECHANISM_REASON_FORM}: el motivo en inglés, luego el marcador ${SPANISH_MARKER} como palabra propia y luego el español, sin ninguna mitad vacía`), ...bothOptions()] };
+
   return { kind: 'no-mechanism', reason };
+}
+
+/**
+ * The English and Spanish halves of a reason in the house form, or `undefined` when it is not in it: the
+ * marker is the standalone token `@es` (a word of its own, not part of another), the first one splits the
+ * text, and both halves must hold something. No regex (M5).
+ * @es Las mitades inglesa y española de un motivo en la forma de la casa, o `undefined` si no está en ella:
+ * el marcador es el token suelto `@es` (una palabra propia, no parte de otra), el primero parte el texto y
+ * ambas mitades deben contener algo. Sin regex (M5).
+ */
+function houseHalves(reason) {
+  for (let at = reason.indexOf(SPANISH_MARKER); at !== -1; at = reason.indexOf(SPANISH_MARKER, at + 1)) {
+    const after = at + SPANISH_MARKER.length;
+    const standalone = (at === 0 || reason[at - 1] === ' ') && (after === reason.length || reason[after] === ' ');
+
+    if (standalone) {
+      const english = reason.slice(0, at).trim();
+      const spanish = reason.slice(after).trim();
+
+      return english.length > 0 && spanish.length > 0 ? { english, spanish } : undefined;
+    }
+  }
+
+  return undefined;
 }
 
 /** `~/…` against `home`, anything else against `repoRoot`. @es `~/…` contra `home`, lo demás contra `repoRoot`. */

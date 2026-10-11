@@ -48,7 +48,7 @@ const stub = (key, date, count) => `- [promoted] ${date} — ${key}: no mechanis
 
 // --- the command ---------------------------------------------------------------------------------------
 {
-  const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
+  const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall. @es una afirmación escrita en prosa no la detecta ningún hook; recuerdo medido 0 de 6.';
   const world = makeCaptureWorld({
     scratch,
     name: 'full-line-and-old-stub',

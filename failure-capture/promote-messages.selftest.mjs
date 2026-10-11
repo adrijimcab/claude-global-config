@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import os from 'node:os';
 import path from 'node:path';
 
-import { contractFileId, readClosure, verifyMechanism } from './closure.mjs';
+import { contractFileId, NO_MECHANISM_REASON_FORM, readClosure, verifyMechanism } from './closure.mjs';
 import { makeCaptureWorld, monolingualRuns } from './capture-world.mjs';
 import { messageProblems, render } from '../bilingual-output/message.mjs';
 import { PROMOTE_MESSAGES } from './promote-messages.mjs';
@@ -35,7 +35,7 @@ const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-
 // también ante una excepción: un selftest no deja nada tras de sí.
 process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const KEY = 'promote-lesson-key';
-const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
+const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall. @es una afirmación escrita en prosa no la detecta ningún hook; recuerdo medido 0 de 6.';
 const GLOBAL_HEAD = '# Lessons Ledger — global\n\n---\n';
 const PROJECT_HEAD = '# Lessons Ledger — demo\n\n---\n';
 const line = (scope, count) => `- [${scope}] 2026-09-14 — it recurred -> RULE: do the thing <!--fc:${KEY}#${String(count)}-->\n`;
@@ -131,7 +131,7 @@ const project = (name, { config = { scope: 'demo' }, files = {} } = {}) => makeC
   says('a global rule that has not landed (how to close)', out, 'instructions.close', { number: 2 });
   says('a global rule that has not landed (the way to close it)', out, 'instructions.close.note');
   says('a global rule that has not landed (the tail)', out, 'instructions.global.tail');
-  check('a global rule that has not landed: the commands to copy are printed as they are', out.includes(`promote --key ${KEY} --mechanism <guard path>`) && out.includes(`promote --key ${KEY} --no-mechanism "<reason>"`), out);
+  check('a global rule that has not landed: the commands to copy are printed as they are', out.includes(`promote --key ${KEY} --mechanism <guard path>`) && out.includes(`promote --key ${KEY} --no-mechanism ${NO_MECHANISM_REASON_FORM}`), out);
   bilingual('a global rule that has not landed', out);
 }
 
@@ -209,7 +209,8 @@ const project = (name, { config = { scope: 'demo' }, files = {} } = {}) => makeC
   says('a promotion closed by a reason', out, 'promote.done', { key: KEY });
   says('a promotion closed by a reason (where it landed)', out, 'promote.landed.global', { files: rules });
   says('a promotion closed by a reason (what was verified)', out, 'promote.proof.token');
-  says('a promotion closed by a reason (how it closed)', out, 'promote.closed.reason', { reason: REASON });
+  says('a promotion closed by a reason (how it closed)', out, 'promote.closed.reason');
+  check('a promotion closed by a reason (the reason, once, as written)', out.split(`  ${REASON}`).length - 1 === 1, out);
   says('a promotion closed by a reason (the stub)', out, 'promote.stub');
   bilingual('a promotion closed by a reason', out);
 }

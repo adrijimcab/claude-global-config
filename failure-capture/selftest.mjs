@@ -47,7 +47,7 @@ import { isolateState } from '../hook-state/locations.mjs';
 isolateState('failure-capture');
 
 const KEY = 'lesson-under-test';
-const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
+const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall. @es una afirmación escrita en prosa no la detecta ningún hook; recuerdo medido 0 de 6.';
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'failure-capture-selftest-'));
 // Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
 // también ante una excepción: un selftest no deja nada tras de sí.

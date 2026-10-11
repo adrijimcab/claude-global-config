@@ -20,7 +20,7 @@ export const PROMOTE_MESSAGES = {
   },
   'instructions.global.tail': { en: '     It refuses until the token is actually there. Do not hand-edit the ledger instead.', es: '     Se niega hasta que el token esté de verdad. No edites el ledger a mano en su lugar.' },
   'instructions.close': { en: '  {number}. Close it with a MECHANISM that makes the repeat impossible, or say why none is possible:', es: '  {number}. Ciérrala con un MECANISMO que haga imposible la repetición, o di por qué no cabe ninguno:' },
-  'instructions.close.note': { en: '     The mechanism must name the key and its selftest.mjs is RUN and must pass; the reason is recorded verbatim.', es: '     El mecanismo debe nombrar la clave y su selftest.mjs se EJECUTA y debe pasar; el motivo se registra literal.' },
+  'instructions.close.note': { en: '     The mechanism must name the key and its selftest.mjs is RUN and must pass; the reason is recorded verbatim and must carry both languages (English, then @es, then Spanish).', es: '     El mecanismo debe nombrar la clave y su selftest.mjs se EJECUTA y debe pasar; el motivo se registra literal y debe llevar los dos idiomas (inglés, luego @es, luego español).' },
   'instructions.contract': { en: 'PROMOTION REQUIRED -> the DELEGATED-WORKER contract of {scope} ({count} file(s)).', es: 'PROMOCIÓN REQUERIDA -> el contrato de WORKER DELEGADO de {scope} ({count} fichero(s)).' },
   'instructions.contract.gate': { en: 'PROMOTION REQUIRED -> the DELEGATED-WORKER contract of {scope} ({count} file(s) and a parity gate).', es: 'PROMOCIÓN REQUERIDA -> el contrato de WORKER DELEGADO de {scope} ({count} fichero(s) y un gate de paridad).' },
   'instructions.contract.many': { en: 'A rule added to one file only means workers on another runtime silently never receive it.', es: 'Una regla añadida a un solo fichero significa que los workers de otro runtime no la reciben nunca, en silencio.' },
@@ -60,6 +60,8 @@ export const PROMOTE_MESSAGES = {
   'promote.proof.contracts': { en: 'Verified on disk: token present in {count} contract file(s); this project declares no parity gate.', es: 'Verificado en disco: token presente en {count} fichero(s) de contrato; este proyecto no declara gate de paridad.' },
   'promote.proof.contractsGate': { en: 'Verified on disk: token present in {count} contract file(s) and in the ANCHORS array; the parity gate ran and passed.', es: 'Verificado en disco: token presente en {count} fichero(s) de contrato y en el array ANCHORS; el gate de paridad corrió y pasó.' },
   'promote.closed.mechanism': { en: 'Closed by mechanism {path} (selftest run, exit 0).', es: 'Cerrada por el mecanismo {path} (selftest ejecutado, salida 0).' },
-  'promote.closed.reason': { en: 'No mechanism is possible: {reason}', es: 'No cabe mecanismo: {reason}' },
+  // The reason itself follows as a data line, as written, in the two languages its author gave it.
+  // @es El motivo mismo sigue como línea de datos, tal cual, en los dos idiomas en que lo dio su autor.
+  'promote.closed.reason': { en: 'No mechanism is possible; the reason, as recorded:', es: 'No cabe mecanismo; el motivo, tal como se registró:' },
   'promote.stub': { en: 'The ledger line is now a stub, so the lesson costs a fraction of the tokens it did.', es: 'La línea del ledger ahora es un muñón, así que la lección cuesta una fracción de los tokens que costaba.' }
 };

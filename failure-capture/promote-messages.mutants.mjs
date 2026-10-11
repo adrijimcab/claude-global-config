@@ -64,8 +64,8 @@ const MUTANTS = [
   ['a project promotion claims only a token in the file', COMMAND, "if (target !== PROJECT_TARGET) return ['promote.proof.token', {}];", "if (true) return ['promote.proof.token', {}];"],
   ['a promotion with a parity gate claims no gate ran', COMMAND, "PARITY_GATE === undefined ? 'promote.proof.contracts' : 'promote.proof.contractsGate'", "'promote.proof.contracts'"],
   ['a promotion with no parity gate claims one ran', COMMAND, "PARITY_GATE === undefined ? 'promote.proof.contracts' : 'promote.proof.contractsGate'", "'promote.proof.contractsGate'"],
-  ['a mechanism closure is reported as a reason', COMMAND, "closure.kind === 'mechanism' ? 'promote.closed.mechanism' : 'promote.closed.reason'", "'promote.closed.reason'"],
-  ['the reason of a closure is not reported', COMMAND, ": { reason: closure.reason });", ": { reason: '' });"],
+  ['a mechanism closure is reported as a reason', COMMAND, "if (closure.kind === 'mechanism') {\n    speaker.say('promote.closed.mechanism', { path: closure.path });", "if (false) {\n    speaker.say('promote.closed.mechanism', { path: closure.path });"],
+  ['the reason of a closure is not reported', COMMAND, 'speaker.data(`  ${closure.reason}`);', "speaker.data('  ');"],
   english('the stub notice', "speaker.say('promote.stub');", "console.log('The ledger line is now a stub.');"),
 
   // --- the closure problems and the table

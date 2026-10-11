@@ -39,7 +39,7 @@ const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-
 // también ante una excepción: un selftest no deja nada tras de sí.
 process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const KEY = 'scoped-lesson-key';
-const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
+const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall. @es una afirmación escrita en prosa no la detecta ningún hook; recuerdo medido 0 de 6.';
 const GLOBAL_HEAD = '# Lessons Ledger — global\n\n---\n';
 const PROJECT_HEAD = '# Lessons Ledger — demo\n\n---\n';
 const line = (scope, count) => `- [${scope}] 2026-09-14 — it recurred -> RULE: do the thing <!--fc:${KEY}#${String(count)}-->\n`;

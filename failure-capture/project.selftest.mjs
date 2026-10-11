@@ -35,7 +35,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The REAL path: Windows hands out the 8.3 spelling of the temp dir, and the loop reports real paths.
 // @es La ruta REAL: Windows da la forma 8.3 del temporal y el bucle reporta rutas reales.
 const scratch = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'failure-capture-project-')));
-const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
+const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall. @es una afirmación escrita en prosa no la detecta ningún hook; recuerdo medido 0 de 6.';
 
 let passed = 0;
 const failures = [];
