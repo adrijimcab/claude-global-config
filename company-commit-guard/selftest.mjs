@@ -121,6 +121,7 @@ scenario({ world: personal, setup: stage('.claude/settings.json', 'by Claude\n')
 scenario({ command: 'git commit -m "claude"', cwd: join(personal.repo, '..'), expected: 'allow', label: 'a directory that is no repository is never judged' });
 scenario({ command: `git -C "${company.repo}" commit -m "claude"`, cwd: join(company.repo, '..'), expected: 'deny', label: 'git -C into the company repository, cwd elsewhere' });
 scenario({ command: `git -C "${personal.repo}" commit -m "claude"`, cwd: company.repo, expected: 'allow', label: 'git -C into the PERSONAL repository from a company cwd is not judged' });
+scenario({ command: 'cd "$UNSET_DIRECTORY" && git commit -m "claude"', expected: 'deny', label: 'an unfollowable cd falls back to the directory the line started in' });
 scenario({ command: `cd "${company.repo}" && git commit -m "claude"`, cwd: join(company.repo, '..'), expected: 'deny', label: 'a cd into the company repository' });
 
 scenario({ setup: stage('.claude/new.md', 'x\n'), command: 'git commit -m "docs: readme only" -- README.md', expected: 'allow', label: 'company: a staged tainted file OUTSIDE the explicit pathspec is not part of this commit' });

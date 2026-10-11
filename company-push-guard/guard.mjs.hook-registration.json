@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a `git push` to a company remote (a URL on a company host) whose range names an AI tool, or that skips the push hooks with --no-verify, would put AI tooling into the company's history — owner order 2026-10-11: nothing about AI reaches the company repositories, the control lives only in ~/.claude."
+}

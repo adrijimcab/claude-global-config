@@ -19,7 +19,8 @@ const MUTANTS = [
   ['a tool with no shell dialect is no longer exempted', DECIDE, 'if (dialect === undefined || ', 'if ('],
   ['a non-commit git subcommand is judged as a commit', DECIDE, "invocation.subcommand === 'commit'", "invocation.subcommand !== 'push'"],
   ['an unusable list no longer refuses the commit (fail open)', DECIDE, 'if (config.problem !== undefined) return { problem: config.problem };', ''],
-  ['a repository with only personal remotes is judged too', DECIDE, 'if (dir === undefined || companyRemoteNames(dir, config.hosts).length === 0) continue;', 'if (dir === undefined) continue;'],
+  ['a repository with only personal remotes is judged too', DECIDE, 'if (companyRemoteNames(dir, config.hosts).length === 0) continue;', ''],
+  ['an unfollowable cd no longer falls back to the starting directory', DECIDE, 'invocationDirectory(invocation) ?? cwd;', "invocationDirectory(invocation) ?? '/nonexistent-dir';"],
   ['the first company commit with findings no longer stops the search', DECIDE, 'if (findings.length > 0) return { dir, findings };', ''],
 
   // --- decide.mjs: the message sources.

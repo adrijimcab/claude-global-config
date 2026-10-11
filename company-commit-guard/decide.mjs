@@ -100,9 +100,9 @@ export function judgeCommit(payload) {
   if (config.problem !== undefined) return { problem: config.problem };
 
   for (const invocation of commits) {
-    const dir = invocationDirectory(invocation);
+    const dir = invocationDirectory(invocation) ?? cwd; // an unfollowable `cd` falls back to where the line started
 
-    if (dir === undefined || companyRemoteNames(dir, config.hosts).length === 0) continue;
+    if (companyRemoteNames(dir, config.hosts).length === 0) continue;
 
     const parsed = parseCommitArguments(invocation.args);
     const findings = [...messageFindings(parsed, { dir, command, invocationText: invocation.text, names: config.names }), ...contentFindings(parsed, dir, config.names)];

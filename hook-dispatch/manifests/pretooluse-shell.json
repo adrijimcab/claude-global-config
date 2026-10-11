@@ -10,6 +10,7 @@
     "../../vendored-edit-guard/guard.mjs",
     "../../sdd-attempt-cwd-guard/guard.mjs",
     "../../worker-stash-guard/guard.mjs",
-    "../../company-commit-guard/guard.mjs"
+    "../../company-commit-guard/guard.mjs",
+    "../../company-push-guard/guard.mjs"
   ]
 }
