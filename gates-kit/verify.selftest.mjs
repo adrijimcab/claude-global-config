@@ -45,6 +45,9 @@ function check(label, condition) {
 }
 
 const roots = [];
+// Every root is removed on every exit, a throw included: a selftest leaves nothing behind it. @es Toda raíz se
+// elimina en toda salida, también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 
 /** Builds `<root>/<stack>/<gate>` from a spec of overrides; `null` removes a part. @es Construye un gate; `null` quita una parte. */
 function buildGate(root, stack, name, overrides = {}) {
@@ -398,8 +401,6 @@ check('the chosen toolchain alone among the siblings does not make a gate not ap
 })());
 check('discovery points every gate at the chosen toolchain', discoverGates(perMajor, 'fw', 'fw-2').every((gate) => gate.toolchain === path.join(perMajor, 'toolchains', 'fw-2')));
 check('every per-major line carries its @es half', [...majorOne.lines, ...majorTwo.lines, ...mismatch.lines, ...staticRun.lines].every((line) => line.includes(' @es ')));
-
-for (const root of roots) rmSync(root, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.error(`gates-kit verify selftest FAILED @es el selftest de verify de gates-kit FALLÓ (${failures.length} of ${passed + failures.length}):`);

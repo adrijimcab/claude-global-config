@@ -32,6 +32,9 @@ const MCP = 'mcp__engram__mem_search, mcp__engram__mem_save';
 // ---------------------------------------------------------------- fixture construction
 
 const roots = [];
+// Every root is removed on every exit, a throw included: a selftest leaves nothing behind it. @es Toda raíz se
+// elimina en toda salida, también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 function newRoot() {
   const root = mkdtempSync(path.join(tmpdir(), 'gentle-ai-overlay-selftest-'));
   roots.push(root);
@@ -596,6 +599,5 @@ for (const { name, body } of cases) {
     console.log(`FAIL ${name}\n     ${error.message}`);
   }
 }
-roots.forEach((root) => rmSync(root, { recursive: true, force: true }));
 console.log(`\n${cases.length - failed}/${cases.length} passed`);
 process.exitCode = failed === 0 ? 0 : 1;

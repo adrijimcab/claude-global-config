@@ -37,9 +37,24 @@ const STATE_DIR = stateDir('engram-persistence');
 
 const git = (cwd, args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 
+const scratches = [];
+
+// Every scratch directory is removed on every exit, a throw included: a selftest leaves nothing behind it.
+// @es Todo directorio de prueba se elimina en toda salida, también ante una excepción: un selftest no deja nada.
+process.once('exit', () => scratches.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+/** A fresh temporary directory, removed when the run exits. @es Un directorio temporal nuevo, eliminado al salir. */
+function scratchDir(prefix) {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+
+  scratches.push(dir);
+
+  return dir;
+}
+
 /** A repository with one commit, and a second on demand. @es Un repo con un commit, y otro a demanda. */
 function makeRepo() {
-  const dir = mkdtempSync(join(tmpdir(), 'engram-guard-'));
+  const dir = scratchDir('engram-guard-');
 
   git(dir, ['init', '-q']);
   git(dir, ['config', 'user.email', 'selftest@example.com']);
@@ -110,7 +125,6 @@ mkdirSync(STATE_DIR, { recursive: true });
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
   check('first sighting of a session records a baseline', 'allow', verdict(r));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 // --- CASE 2: HEAD unchanged → nothing landed → allow.
@@ -127,7 +141,6 @@ mkdirSync(STATE_DIR, { recursive: true });
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
   check('HEAD unchanged — nothing landed', 'allow', verdict(r));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 // --- CASE 3: THE ONE THAT MATTERS — HEAD moved, no save in the new tail → block, naming the commit.
@@ -147,7 +160,6 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   check('HEAD moved with no save — refuses', 'block', verdict(r));
   check('  and the refusal NAMES the commit', true, r.output.includes('feat(x): landed'));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 // --- CASE 4: HEAD moved and a save follows it → allow.
@@ -166,7 +178,6 @@ mkdirSync(STATE_DIR, { recursive: true });
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
   check('HEAD moved and a save follows — allows', 'allow', verdict(r));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 // --- CASE 5: ORDER. A save written BEFORE the commits must NOT satisfy them. This is the case the
@@ -186,7 +197,6 @@ mkdirSync(STATE_DIR, { recursive: true });
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
   check('a save BEFORE the commits does not cover them', 'block', verdict(r));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 // --- CASE 6: stop_hook_active → allow immediately, so the guard can never trap a turn.
@@ -205,7 +215,6 @@ mkdirSync(STATE_DIR, { recursive: true });
   const r = run(dir, { session_id: session, transcript_path: transcript, stop_hook_active: true });
 
   check('stop_hook_active — never traps a turn', 'allow', verdict(r));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 // --- CASE 7: THE REAL FAILURE, measured 2026-09-14. The offset is a BYTE count (`statSync().size`), so
@@ -229,7 +238,6 @@ mkdirSync(STATE_DIR, { recursive: true });
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
   check('REAL CASE: multi-byte history, then a save after the commits — allows', 'allow', verdict(r));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 // --- CASE 8: the same multi-byte history WITHOUT a save must still refuse — the byte fix must not turn
@@ -250,7 +258,6 @@ mkdirSync(STATE_DIR, { recursive: true });
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
   check('multi-byte history, no save after the commits — still refuses', 'block', verdict(r));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 // --- FAIL-OPEN: every malfunction of its own must let the turn end.
@@ -259,20 +266,18 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   check('garbage payload', 'allow', verdict(run(dir, 'NOT JSON')));
   check('no session id, no transcript', 'allow', verdict(run(dir, {})));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 {
   // Outside a repository entirely: no git, no verdict, no baseline, and nothing leaked on stderr.
   // @es Fuera de todo repo: sin git no hay veredicto ni línea base, y nada se filtra por stderr.
-  const dir = mkdtempSync(join(tmpdir(), 'engram-guard-nogit-'));
+  const dir = scratchDir('engram-guard-nogit-');
   const session = `st-nogit-${Date.now()}`;
   const r = run(dir, { session_id: session, transcript_path: 'nope' });
 
   check('outside a git repository', 'allow', verdict(r));
   check('  and it records no baseline', undefined, stateOf(session));
   check('  and git\'s own complaint does not leak to stderr', '', r.stderr);
-  rmSync(dir, { recursive: true, force: true });
 }
 
 // --- THE REST OF THE STATE SPACE. Each case below pins one decision the guard makes.
@@ -299,7 +304,6 @@ function baselined(name, transcriptText = 'start\n') {
   advance(dir, 'after-the-idle-stop');
   writeFileSync(transcript, `${SAVED}plain work\n`, 'utf8');
   check('a save made during an idle Stop does not cover later commits', 'block', verdict(run(dir, { session_id: session, transcript_path: transcript })));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 {
@@ -308,7 +312,6 @@ function baselined(name, transcriptText = 'start\n') {
   advance(dir, 'landed');
   writeFileSync(transcript, 'start\ncalled mem_session_summary to close out\n', 'utf8');
   check('a session summary is a save too', 'allow', verdict(run(dir, { session_id: session, transcript_path: transcript })));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 {
@@ -320,7 +323,6 @@ function baselined(name, transcriptText = 'start\n') {
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'second');
   check('a save already spent on earlier commits does not cover new ones', 'block', verdict(run(dir, { session_id: session, transcript_path: transcript })));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 {
@@ -332,7 +334,6 @@ function baselined(name, transcriptText = 'start\n') {
   writeFileSync(join(dir, 't.jsonl'), 'start\nno save\n', 'utf8');
   check('a state file with a non-string head reads as a first sighting', 'allow', verdict(run(dir, { session_id: session, transcript_path: join(dir, 't.jsonl') })));
   check('  and the baseline is rewritten as the real HEAD', git(dir, ['rev-parse', 'HEAD']), stateOf(session)?.head);
-  rmSync(dir, { recursive: true, force: true });
 }
 
 {
@@ -342,7 +343,6 @@ function baselined(name, transcriptText = 'start\n') {
 
   check('an unreadable transcript lets the turn end', 'allow', verdict(run(dir, { session_id: session, transcript_path: join(dir, 'missing.jsonl') })));
   check('  and the baseline moves to the new HEAD', landed, stateOf(session)?.head);
-  rmSync(dir, { recursive: true, force: true });
 }
 
 {
@@ -359,7 +359,6 @@ function baselined(name, transcriptText = 'start\n') {
   // @es El transcript vive en el repo y `advance` lo commiteó, así que el reset lo quitó: se repone.
   writeFileSync(transcript, SAVED, 'utf8');
   check('a HEAD that moved backwards has no new commits to record', 'allow', verdict(run(dir, { session_id: session, transcript_path: transcript })));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 {
@@ -372,7 +371,6 @@ function baselined(name, transcriptText = 'start\n') {
   writeFileSync(join(dir, 't.jsonl'), 'start\nno save\n', 'utf8');
   check('a recorded head git cannot resolve lets the turn end', 'allow', verdict(run(dir, { session_id: session, transcript_path: join(dir, 't.jsonl') })));
   check('  and leaves the recorded head untouched', gone, stateOf(session)?.head);
-  rmSync(dir, { recursive: true, force: true });
 }
 
 {
@@ -387,7 +385,6 @@ function baselined(name, transcriptText = 'start\n') {
   check('  and it lists the newest of them', true, r.output.includes('feat(x): c13'));
   check('  and it lists the twelfth newest', true, r.output.includes('feat(x): c02'));
   check('  and it leaves the oldest unlisted', false, r.output.includes('feat(x): c01'));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 {
@@ -397,7 +394,6 @@ function baselined(name, transcriptText = 'start\n') {
   advance(dir, 'landed');
   writeFileSync(transcript, 'start\nno save\n', 'utf8');
   check('a payload with a byte-order mark is still judged', 'block', verdict(run(dir, `﻿${JSON.stringify({ session_id: session, transcript_path: transcript })}`)));
-  rmSync(dir, { recursive: true, force: true });
 }
 
 const failures = results.filter((ok) => !ok).length;

@@ -59,6 +59,9 @@ function outcome(action) {
 const throwsBilingual = (action) => /^threw: .*@es /s.test(String(outcome(action)));
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'latency-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const MIN = 60 * 1000;
 const NOW = 1_800_000_000_000;
 let counter = 0;
@@ -319,8 +322,6 @@ check('scenario: no repos is unknown, never clean', scenarioOf([]), 'unknown');
 
   check('replay: the equivalence mode still compares the two paths and exits 0 when they agree', [equivalence.status, /"total": 1/.test(equivalence.stdout), /"same": 1/.test(equivalence.stdout)], [0, true, true]);
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.log(`FAIL ${failures.length} of ${passed + failures.length} checks. @es FALLO ${failures.length} de ${passed + failures.length} comprobaciones.`);

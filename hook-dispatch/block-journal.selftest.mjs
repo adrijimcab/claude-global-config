@@ -61,6 +61,9 @@ function check(name, actual, expected) {
 
 const saved = { HOOK_STATE_DIR: process.env.HOOK_STATE_DIR, HOOK_CLAUDE_HOME: process.env.HOOK_CLAUDE_HOME };
 const root = mkdtempSync(path.join(os.tmpdir(), 'block-journal-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(root, { recursive: true, force: true }));
 const stateRoot = path.join(root, 'state');
 process.env.HOOK_STATE_DIR = stateRoot;
 process.env.HOOK_CLAUDE_HOME = path.join(root, 'claude');
@@ -276,7 +279,6 @@ for (const [key, value] of Object.entries(saved)) {
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
 }
-rmSync(root, { recursive: true, force: true });
 
 for (const failure of failures) console.log(`FAIL ${failure}`);
 console.log(`${passed}/${passed + failures.length} passed`);

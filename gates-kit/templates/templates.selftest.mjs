@@ -170,6 +170,9 @@ function idsOf(entries, name) {
 }
 
 const roots = [];
+// Every root is removed on every exit, a throw included: a selftest leaves nothing behind it. @es Toda raíz se
+// elimina en toda salida, también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 
 /** A fresh temporary templates root. @es Una raíz temporal de plantillas. */
 function freshRoot() {
@@ -228,8 +231,6 @@ for (const stack of ['angular-app', 'angular-lib', 'nest-api', 'node-lib-vitest'
 }
 
 check('every discovered live template has no problem', live.length > 0 && live.every((entry) => entry.problems.length === 0));
-
-for (const dir of roots) rmSync(dir, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.error(`gates-kit templates selftest FAILED @es el selftest de plantillas de gates-kit FALLÓ (${failures.length} of ${passed + failures.length}):`);

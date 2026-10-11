@@ -198,6 +198,9 @@ check('the registration names exactly Bash and PowerShell', registration.registr
 // says, so its process writes to a temp state directory and never to the live journal of this guard.
 // @es DE PUNTA A PUNTA por el dispatcher. El dispatcher registra cada bloqueo que dice: su proceso escribe en un directorio de estado temporal, nunca en el journal vivo de esta guardia.
 const stateRoot = mkdtempSync(path.join(tmpdir(), 'cwd-change-guard-state-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(stateRoot, { recursive: true, force: true }));
 const dispatched = execFileSync('node', [path.join(HERE, '..', 'hook-dispatch', 'dispatch.mjs'), path.join(HERE, '..', 'hook-dispatch', 'manifests', 'pretooluse-shell.json')], {
   input: JSON.stringify(bash(INCIDENT_COMMAND)),
   encoding: 'utf8',
@@ -213,7 +216,6 @@ const dispatchedAllowed = execFileSync('node', [path.join(HERE, '..', 'hook-disp
 });
 
 check('the subshell shape is ALLOWED through the dispatcher', dispatchedAllowed.includes('CWD-CHANGE GUARD'), false);
-rmSync(stateRoot, { recursive: true, force: true });
 
 const total = passed + failures.length;
 

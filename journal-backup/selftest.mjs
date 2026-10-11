@@ -45,6 +45,9 @@ function check(name, actual, expected) {
 
 const sha = (text) => createHash('sha256').update(text).digest('hex');
 const scratch = mkdtempSync(path.join(tmpdir(), 'journal-backup-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let counter = 0;
 
 /** A constructed home holding the given files. @es Un home construido con esos ficheros. */
@@ -253,8 +256,6 @@ check('language: every message of the table has both halves', Object.entries(MES
 check('language: the Spanish halves keep their accents', Object.values(MESSAGES).some(({ es }) => /[áéíóúñ]/.test(es)), true);
 check('language: the Spanish copied line keeps its accent', MESSAGES.copied.es.includes('líneas'), true);
 check('language: the table is not empty', Object.keys(MESSAGES).length > 0, true);
-
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.error(`journal-backup selftest FAILED (${failures.length}/${passed + failures.length}):\n${failures.join('\n')}`);

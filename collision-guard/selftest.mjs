@@ -61,6 +61,9 @@ function check(name, actual, expected) {
 }
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'collision-guard-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const repo = path.join(scratch, 'repo');
 const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 const write = (file, content) => writeFileSync(path.join(repo, file), content, 'utf8');
@@ -211,8 +214,6 @@ for (const [label, input] of [['garbage', 'NOT JSON AT ALL'], ['empty', ''], ['B
 
   check('the declaration registers both shells, which the decision covers', matcher, 'Bash|PowerShell');
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 process.stdout.write(`collision-guard selftest: ${String(passed)} passed, ${String(failures.length)} failed\n`);
 

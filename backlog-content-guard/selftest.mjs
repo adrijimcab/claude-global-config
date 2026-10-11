@@ -49,6 +49,9 @@ function check(name, actual, expected) {
 
 // ── a real, disposable sqlite database shaped like engram's own `observations` table ────────────────
 const scratch = mkdtempSync(path.join(tmpdir(), 'backlog-content-guard-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const databasePath = path.join(scratch, 'engram.db');
 const db = new DatabaseSync(databasePath);
 
@@ -275,8 +278,6 @@ check('a soft-deleted citation beside a valid one is DENIED', verdict(save({ top
 check('the archive topic_key prefix match ignores case', verdict(save({ topic_key: MASTER, content: archived(18) })), 'allow');
 check('a junk token beside a valid id is ignored, the valid id still counts', verdict(save({ topic_key: MASTER, content: `${SHRUNK}\nARCHIVED: #11, #eleven` })), 'allow');
 check('citedArchiveIds reads several ids and ignores repeats', citedArchiveIds('ARCHIVED: #3, #4 #3\n- ARCHIVED: (#5)').join(','), '3,4,5');
-
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.error(`backlog-content-guard selftest: ${failures.length} FAILURE(S) of ${passed + failures.length}`);

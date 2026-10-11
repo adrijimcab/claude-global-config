@@ -93,6 +93,9 @@ function includesAll(text, needles) {
 
 // ── a REAL fixture repository, with a REAL typescript resolvable through node_modules lookup ──────────
 const scratch = mkdtempSync(path.join(tmpdir(), 'type-assertion-guard-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const repo = path.join(scratch, 'repo');
 const src = path.join(repo, 'src');
 
@@ -271,6 +274,9 @@ function run(toolInput, { tool = 'Edit', cwd = repo } = {}) {
 // === 10. no TypeScript compiler resolvable for the target repository — fails OPEN, and reports ==========
 {
   const unresolvable = mkdtempSync(path.join(tmpdir(), 'type-assertion-guard-no-ts-'));
+  // Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+  // también ante una excepción: un selftest no deja nada tras de sí.
+  process.once('exit', () => rmSync(unresolvable, { recursive: true, force: true }));
   const bareCheck = resolveTypeScript(path.join(unresolvable, 'x.ts'));
 
   check('setup: the unresolvable fixture directory really has no TypeScript reachable from it', 'error' in bareCheck, true);
@@ -283,8 +289,6 @@ function run(toolInput, { tool = 'Edit', cwd = repo } = {}) {
 
   check('with no TypeScript compiler resolvable, the guard fails OPEN (allows)', result.verdict, 'allow');
   check('...and NAMES the malfunction on stderr, in both languages', includesAll(result.stderr, ['type-assertion-guard', 'TypeScript compiler', '@es']), true);
-
-  rmSync(unresolvable, { recursive: true, force: true });
 }
 
 // === 11. Edit/MultiEdit naming a file that does not exist on disk — fails OPEN, and reports =============
@@ -362,8 +366,6 @@ const TREE = process.env.SELFTEST_TREE || path.join(homedir(), '.claude');
 
   check('settings.json wires Edit|Write|MultiEdit to the dispatcher with this guard\'s manifest', wired, true);
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 process.stdout.write(`type-assertion-guard selftest: ${passed} passed, ${failures.length} failed\n`);
 

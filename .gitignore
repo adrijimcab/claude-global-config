@@ -152,7 +152,6 @@
 !/rule-tiering/
 !/rule-tiering/*.mjs
 /rule-tiering/scratch/
-/delegation-receipts/scratch/
 
 # Shared modules the global guards import, vendored byte-identical from b100-am-ui (vendored/PROVENANCE.json).
 !/vendored/

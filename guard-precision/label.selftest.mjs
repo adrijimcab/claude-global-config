@@ -39,6 +39,9 @@ import { appendRecord, digestInput, journalPath } from '../hook-state/journal.mj
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const saved = { HOOK_STATE_DIR: process.env.HOOK_STATE_DIR, HOOK_CLAUDE_HOME: process.env.HOOK_CLAUDE_HOME };
 const scratch = mkdtempSync(path.join(tmpdir(), 'label-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const stateRoot = path.join(scratch, 'state');
 const claudeRoot = path.join(scratch, 'claude');
 process.env.HOOK_STATE_DIR = stateRoot;
@@ -290,7 +293,6 @@ for (const [key, value] of Object.entries(saved)) {
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
 }
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`FAIL: ${failure}`);

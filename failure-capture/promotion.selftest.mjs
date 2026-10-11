@@ -23,6 +23,9 @@ import { minimalStub } from './ledger-line.mjs';
 import { promotedStub } from './promotion.mjs';
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'promotion-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let passed = 0;
 const failures = [];
 
@@ -154,8 +157,6 @@ refusedAsk('an original with no marker', { original: ORIGINAL.replace(` ${MARKER
   check('promotedStub refuses when the evidence re-read from disk does not hold the original', result.ok === false && result.problem.includes('absent'), JSON.stringify(result));
   check('...and a write that reported success is not trusted: nothing was archived', !existsSync(evidenceFile(home('liar'), KEY)));
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 for (const failure of failures) process.stdout.write(`  FAIL ${failure}\n`);
 process.stdout.write(`failure-capture promotion selftest: ${passed} passed, ${failures.length} failed\n`);

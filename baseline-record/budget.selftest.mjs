@@ -48,6 +48,9 @@ function attempt(action) {
 }
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'budget-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const PROJECT = path.join(scratch, 'projects', 'b100');
 
 /** A report in the shape `capture.mjs budget` prints. @es Un informe con la forma que imprime `capture.mjs budget`. */
@@ -148,8 +151,6 @@ function standIn(name, stdout, code) {
   check('both: the project measurement names the real project', both.project?.command?.endsWith(`--project ${PROJECT}`), true);
   check('both: the two measurements are kept apart', [both.global?.measured, both.project?.measured, both.global?.projectRawChars], [true, true, 0]);
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.log(`FAIL ${failures.length} of ${passed + failures.length} checks. @es FALLO ${failures.length} de ${passed + failures.length} comprobaciones.`);

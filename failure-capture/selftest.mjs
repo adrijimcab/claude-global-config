@@ -49,6 +49,9 @@ isolateState('failure-capture');
 const KEY = 'lesson-under-test';
 const REASON = 'a claim written in prose cannot be detected by any hook; measured 0 of 6 recall';
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'failure-capture-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 
 let passed = 0;
 const failures = [];
@@ -552,8 +555,6 @@ refused(
   const refused = stopFor('replay-session-b');
   check('sello: sin --session ni CLAUDE_CODE_SESSION_ID el sello no es de esta sesión y el turno sigue bloqueado', refused.includes('block'), refused);
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 process.stdout.write(`failure-capture selftest: ${passed} passed, ${failures.length} failed\n`);
 

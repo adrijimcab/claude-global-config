@@ -58,6 +58,9 @@ const SESSION = 'c45d798b-d78f-4f60-9a32-1f722bbe86e5';
 const OTHER_SESSION = '0b7e1d2a-5c3f-4e9a-8d61-aa00bb11cc22';
 
 const scratch = mkdtempSync(join(tmpdir(), 'resume-before-fresh-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const EXHAUSTED_TREE = join(scratch, 'agent-aa3437bf9bf7832a9');
 
 mkdirSync(EXHAUSTED_TREE);
@@ -366,6 +369,9 @@ for (const [expected, description, label] of cases) {
 //     does / does not contain the prior errand. The real case is first and is quoted from the incident.
 {
   const liveTree = mkdtempSync(join(tmpdir(), 'resume-before-fresh-live-'));
+  // Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+  // también ante una excepción: un selftest no deja nada tras de sí.
+  process.once('exit', () => rmSync(liveTree, { recursive: true, force: true }));
   const accessibility = record({ id: 'agent-a153f28c32544646b', description: 'Close the accessibility gates', ageMs: 87 * HOUR, worktreePath: liveTree });
   const reaped = record({ id: 'agent-aREAPEDA11Y0000', description: 'Close the accessibility gates', ageMs: 87 * HOUR, worktreePath: join(scratch, 'gone') });
   const mainCheckout = record({ id: 'agent-aMAINA11Y00000', description: 'Close the accessibility gates', ageMs: 87 * HOUR });
@@ -399,11 +405,7 @@ for (const [expected, description, label] of cases) {
   if (refused) failures += 1;
 
   console.log(`${refused ? 'FAIL' : 'PASS'}  the real case is advised, never refused`);
-
-  rmSync(liveTree, { recursive: true, force: true });
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 const total = checked;
 

@@ -32,6 +32,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,15 +48,12 @@ isolateState('delegation-receipts');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.join(HERE, 'guard.mjs');
-// Under `scratch/`, which the mutation runner treats as run output and never copies into a sandbox.
-// @es Bajo `scratch/`, que el corredor de mutantes nunca copia a un sandbox.
-const SCRATCH = (() => {
-  const parent = path.join(HERE, 'scratch');
+// In the system temp directory, never inside the tree under test, and removed on every exit, a throw included:
+// a selftest leaves nothing behind it. @es En el directorio temporal del sistema, nunca dentro del árbol bajo
+// prueba, y eliminado en toda salida, también ante una excepción: un selftest no deja nada tras de sí.
+const SCRATCH = mkdtempSync(path.join(tmpdir(), 'delegation-receipts-selftest-'));
 
-  mkdirSync(parent, { recursive: true });
-
-  return mkdtempSync(path.join(parent, 'selftest-'));
-})();
+process.once('exit', () => rmSync(SCRATCH, { recursive: true, force: true }));
 
 let failures = 0;
 let checks = 0;
@@ -407,8 +405,6 @@ const drive = (payload) => {
   check(bom.blocked !== true && bom.status === 0, 'a BOM-prefixed payload is decoded, not silently swallowed');
   check(bom.stdout.includes('"decision":"block"'), 'and it reaches the same verdict as the un-prefixed one');
 }
-
-rmSync(SCRATCH, { recursive: true, force: true });
 
 console.log(`\n${checks - failures}/${checks} passed`);
 process.exit(failures === 0 ? 0 : 1);

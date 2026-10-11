@@ -31,6 +31,9 @@ import { isolateState } from '../hook-state/locations.mjs';
 isolateState('failure-capture');
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'condense-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let passed = 0;
 const failures = [];
 
@@ -267,8 +270,6 @@ for (const [name, mangle] of [['drops its last characters', (text) => text.slice
 
   check(`a ledger write that ${name} is detected on re-read and the pre-image is restored`, after === target.text && outcome.status === 1 && outcome.ledgers[0].restored === true, `${JSON.stringify(outcome)}\n${after}`);
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 for (const failure of failures) process.stdout.write(`  FAIL ${failure}\n`);
 process.stdout.write(`failure-capture condense selftest: ${passed} passed, ${failures.length} failed\n`);

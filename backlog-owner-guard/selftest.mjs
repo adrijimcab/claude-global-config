@@ -57,6 +57,9 @@ function check(name, actual, expected) {
 
 // ── a real, disposable sqlite database shaped like engram's own store ──────────────────────────────
 const scratch = mkdtempSync(path.join(tmpdir(), 'backlog-owner-guard-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const dbPath = path.join(scratch, 'engram.db');
 
 {
@@ -328,8 +331,6 @@ check(
   evaluate(rawPayload(REAL_SUBAGENT_PAYLOAD_SHAPE))?.hookSpecificOutput?.permissionDecision,
   'deny'
 );
-
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.error(`backlog-owner-guard selftest: ${failures.length} FAILURE(S) of ${passed + failures.length}`);

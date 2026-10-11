@@ -31,6 +31,9 @@ import { isolateState } from '../hook-state/locations.mjs';
 isolateState('failure-capture');
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'ledger-lock-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let passed = 0;
 const failures = [];
 
@@ -221,8 +224,6 @@ const ledgerOf = (target) => (existsSync(target.ledger) && statSync(target.ledge
 
   check('a capture whose write fails exits non-zero, releases the lock and keeps the entry in the spool', run.status !== 0 && gone(target.lock) && spooled(target) === 1, `exit ${run.status}, spooled ${String(spooled(target))}`);
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 for (const failure of failures) process.stdout.write(`  FAIL ${failure}\n`);
 process.stdout.write(`failure-capture ledger lock selftest: ${passed} passed, ${failures.length} failed\n`);

@@ -35,6 +35,9 @@ const speaker = makeSpeaker(TABLE);
 let passed = 0;
 const failures = [];
 const roots = [];
+// Every root is removed on every exit, a throw included: a selftest leaves nothing behind it. @es Toda raíz se
+// elimina en toda salida, también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 
 /** Records one assertion. @es Registra una aserción. */
 function check(label, condition) {
@@ -186,8 +189,6 @@ function cli(dir, ...args) {
   check('the CLI prints the success line on its standard output', cli(none, good).stdout.includes(' @es '));
   check('the CLI prints a problem on its standard error', cli(none, bad).stderr.includes(' @es '));
 }
-
-for (const root of roots) rmSync(root, { recursive: true, force: true });
 
 for (const label of failures) speaker.complain('failed', { label });
 

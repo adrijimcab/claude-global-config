@@ -37,6 +37,9 @@ const TOOL = "process.stdout.write(`args=${process.argv.slice(3).join('|')} mark
 let passed = 0;
 const failures = [];
 const root = mkdtempSync(path.join(tmpdir(), 'run-tool-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(root, { recursive: true, force: true }));
 
 /** Records one assertion. @es Registra una aserción. */
 function check(label, condition) {
@@ -148,8 +151,6 @@ const refusals = [unset, empty, launch(root, []), missing, wrongBin, noDirectory
 
 check('every refusal carries its @es half', refusals.every((refusal) => refusal.stderr.includes(' @es ')));
 check('the Spanish half keeps its accents', unset.stderr.includes('está'));
-
-rmSync(root, { recursive: true, force: true });
 
 for (const label of failures) speaker.complain('failed', { label });
 

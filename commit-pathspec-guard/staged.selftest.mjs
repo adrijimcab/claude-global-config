@@ -48,6 +48,9 @@ function check(label, condition) {
 }
 
 const sandbox = mkdtempSync(join(tmpdir(), 'commit-staged-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(sandbox, { recursive: true, force: true }));
 
 /** Runs git in `directory` with a fixed identity; returns `{ ok, stdout, stderr }`, never throws. @es Ejecuta git con identidad fija. */
 function gitResult(directory, args, input) {
@@ -255,8 +258,6 @@ console.log('imported');
 const imported = spawnSync(process.execPath, [importer], { encoding: 'utf8' });
 
 check('3.4 importing the module runs nothing: no output, no refusal, exit 0', imported.status === 0 && imported.stdout.trim() === 'imported' && imported.stderr === '');
-
-rmSync(sandbox, { recursive: true, force: true });
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

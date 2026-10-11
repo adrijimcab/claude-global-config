@@ -77,6 +77,21 @@ function writtenPathsIn(...args) {
 /** A file's text, or '' when it was never written, so a missing ledger is a failed check and not a crash. @es El texto de un fichero, o '' si nunca se escribió. */
 const slurp = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
 
+const scratches = [];
+
+// Every scratch directory is removed on every exit, a throw included: a selftest leaves nothing behind it.
+// @es Todo directorio de prueba se elimina en toda salida, también ante una excepción: un selftest no deja nada.
+process.once('exit', () => scratches.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+/** A fresh temporary directory, removed when the run exits. @es Un directorio temporal nuevo, eliminado al salir. */
+function scratchDir(prefix) {
+  const dir = mkdtempSync(path.join(tmpdir(), prefix));
+
+  scratches.push(dir);
+
+  return dir;
+}
+
 function check(name, actual, expected) {
   const actualText = JSON.stringify(actual);
   const expectedText = JSON.stringify(expected);
@@ -493,14 +508,13 @@ check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
 
   check('evaluate() with a clean fixture repo allows', cleanOutput, undefined);
 
-  const ledgerDir = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-evaluate-'));
+  const ledgerDir = scratchDir('config-sync-guard-evaluate-');
   const ledger = path.join(ledgerDir, 'pending.jsonl');
   const orphanRepo = fakeRepo('fixture-repo', { statusText: '## master...origin/master\n M foo.txt\n' });
   const orphan = evaluate(raw, { repos: [orphanRepo], liveAgents: new Map() }, { ledger });
 
   check('evaluate() with a path no live session made notes it and does not block', orphan?.decision === undefined && orphan?.systemMessage?.includes('foo.txt'), true);
   check('evaluate() records that path in the ledger under this session', slurp(ledger).includes(`"session":"${session}"`) && slurp(ledger).includes('foo.txt'), true);
-  rmSync(ledgerDir, { recursive: true, force: true });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -544,7 +558,7 @@ check(
   check('no windows explain nothing', withinWindow([], ms(15)), false);
 }
 {
-  const root = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-mtime-'));
+  const root = scratchDir('config-sync-guard-mtime-');
   const stamp = (file, seconds) => utimesSync(file, seconds, seconds);
   const outside = path.join(root, 'outside');
   const tree = path.join(root, 'tree');
@@ -568,10 +582,9 @@ check(
   check('latestChangeMs of a directory covers the newest file under it (3e6 ms) and never follows a junction to the far-future file (4.2e12 ms)', found >= 3_000_000 && found < 4_200_000_000_000, true);
   check('latestChangeMs visits at most `limit` entries: with 1 it measures the directory itself (2e6 ms) and nothing under it', latestChangeMs(tree, 1), 2_000_000);
   check('latestChangeMs of a path that cannot be measured is undefined, never zero', latestChangeMs(path.join(root, 'missing')), undefined);
-  rmSync(root, { recursive: true, force: true });
 }
 {
-  const root = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-ledger-'));
+  const root = scratchDir('config-sync-guard-ledger-');
   const ledger = path.join(root, 'state', 'pending.jsonl');
   const io = { ledger, now: () => new Date('2026-10-01T10:00:00.000Z') };
   const entry = (repo, file) => ({ repo, path: file });
@@ -583,7 +596,6 @@ check(
   check('the same path in another repo, and a new path, are recorded', recordUnexplained([entry('r', '/a'), entry('other', '/a'), entry('r', '/b')], 's-10', io), [entry('other', '/a'), entry('r', '/b')]);
   check('the ledger holds each repo and path exactly once', lines().length, 3);
   check('a ledger that cannot be written records nothing and throws nothing', recordUnexplained([entry('r', '/c')], 's', { ledger: path.join(root, 'state', 'pending.jsonl', 'not-a-directory.jsonl') }), []);
-  rmSync(root, { recursive: true, force: true });
 }
 check('parseAheadLog reads each commit with its paths, in order', parseAheadLog(logOf(['abc1234', 'feat: x: y', 'a/b.mjs', 'c.mjs'], ['def5678', 'chore: empty'])), [
   { hash: 'abc1234', subject: 'feat: x: y', paths: ['a/b.mjs', 'c.mjs'] },
@@ -595,7 +607,7 @@ check('pathspecCommitCommand stages then commits only the named paths, quoted, a
 // DIAGNOSTICS: attribution.mjs, against REAL constructed transcript files (never the real fleet).
 // ---------------------------------------------------------------------------------------------
 {
-  const scratch = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-selftest-'));
+  const scratch = scratchDir('config-sync-guard-selftest-');
 
   const liveTranscript = path.join(scratch, 'live.jsonl');
   const deadTranscript = path.join(scratch, 'dead.jsonl');
@@ -645,12 +657,11 @@ check('pathspecCommitCommand stages then commits only the named paths, quoted, a
   // accident regardless of content. Proves that guard is load-bearing, not merely present.
   check('liveOwnerOf: an empty/unparseable path never matches by accident, even with agents present', liveOwnerOf('', texts), undefined);
 
-  rmSync(scratch, { recursive: true, force: true });
 }
 
 check('agentRecords is empty for a nonexistent root, never throws', agentRecords(path.join(HERE, 'no-such-root')), []);
 {
-  const root = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-records-'));
+  const root = scratchDir('config-sync-guard-records-');
   const subagents = path.join(root, 'some-project', 'session-7', 'subagents');
 
   mkdirSync(subagents, { recursive: true });
@@ -660,7 +671,6 @@ check('agentRecords is empty for a nonexistent root, never throws', agentRecords
     { id: 'agent-a', session: 'session-7', subagent: true, transcript: path.join(subagents, 'agent-a.jsonl') },
     { id: 'main-session-7', session: 'session-7', subagent: false, transcript: path.join(root, 'some-project', 'session-7.jsonl') }
   ]);
-  rmSync(root, { recursive: true, force: true });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -721,7 +731,7 @@ check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason'
 // desechable.
 // ---------------------------------------------------------------------------------------------
 {
-  const scratch = mkdtempSync(path.join(tmpdir(), 'config-sync-guard-repo-'));
+  const scratch = scratchDir('config-sync-guard-repo-');
   const git = (...args) => execFileSync('git', ['-C', scratch, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
   mkdirSync(scratch, { recursive: true });
@@ -817,7 +827,6 @@ check('parseArgs reads --flag value pairs', parseArgs(['--repo', 'r', '--reason'
 
   check('REAL git repo, the SAME dismissal no longer matches once the file\'s content changed -> block again', verdictKind(STOP_PAYLOAD(), { repos: [realRepo], liveAgents: madeThere, dismissals }), 'block');
 
-  rmSync(scratch, { recursive: true, force: true });
 }
 
 // ---------------------------------------------------------------------------------------------

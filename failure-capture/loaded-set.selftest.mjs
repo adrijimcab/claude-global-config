@@ -18,6 +18,9 @@ import path from 'node:path';
 import { loadedSet } from './loaded-set.mjs';
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'loaded-set-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let passed = 0;
 let worlds = 0;
 const failures = [];
@@ -194,8 +197,6 @@ const names = (root, result) => result.files.map((file) => relativeTo(root, file
 
   check('an empty world has no files, no gaps and zero totals', [result.files, result.missing, result.rawTotal, result.countedTotal], [[], [], 0, 0]);
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 for (const failure of failures) process.stdout.write(`  FAIL ${failure}\n`);
 process.stdout.write(`failure-capture loaded set selftest: ${passed} passed, ${failures.length} failed\n`);

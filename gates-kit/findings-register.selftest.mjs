@@ -60,6 +60,9 @@ function check(label, condition) {
 }
 
 const roots = [];
+// Every root is removed on every exit, a throw included: a selftest leaves nothing behind it. @es Toda raíz se
+// elimina en toda salida, también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 
 /** A fresh temporary folder. @es Una carpeta temporal nueva. */
 function freshRoot() {
@@ -434,8 +437,6 @@ check('a usage error names the offending input', run(['list', '--bogus', 'x'], p
 check('every message of the table has both halves, different and with the same placeholders', messageProblems(MESSAGES).length === 0);
 check('every problem id has a message', ['invalid-json', 'not-object', 'bad-version', 'bad-kind', 'unknown-key', 'bad-id', 'id-mismatch', 'bad-date', 'missing-scope', 'missing-source', 'bad-basis', 'summary-not-bilingual', 'summary-multiline', 'missing-evidence', 'bad-evidence', 'bad-receipt', 'duplicate-id', 'orphan-closure', 'already-closed', 'closure-before-finding'].every((id) => MESSAGES[`problem.${id}`] !== undefined));
 check('the Spanish halves keep their accents', Object.values(MESSAGES).some((message) => /[áéíóúñ]/.test(message.es)));
-
-for (const root of roots) rmSync(root, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.error(`gates-kit findings-register selftest FAILED @es el selftest de findings-register de gates-kit FALLÓ (${failures.length} of ${passed + failures.length}):`);

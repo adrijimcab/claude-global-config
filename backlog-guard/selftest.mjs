@@ -350,6 +350,9 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
 // ---------------------------------------------------------------------------------------------
 {
   const scratch = mkdtempSync(path.join(tmpdir(), 'backlog-guard-selftest-'));
+  // Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+  // también ante una excepción: un selftest no deja nada tras de sí.
+  process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
   const transcriptPath = path.join(scratch, 'transcript.jsonl');
   const sessionId = `selftest-${String(process.pid)}-${String(Date.now())}`;
 
@@ -449,8 +452,6 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
     encoding: 'utf8'
   });
   check('END TO END stop_hook_active: allowed even with a pending phrase', bypassed.includes('"decision":"block"'), false);
-
-  rmSync(scratch, { recursive: true, force: true });
 
   function appendToFile(file, text) {
     writeFileSync(file, readFileSync(file, 'utf8') + text, 'utf8');

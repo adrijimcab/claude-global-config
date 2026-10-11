@@ -66,6 +66,9 @@ function check(name, given, expected) {
 }
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'project-profile-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let counter = 0;
 
 /** A fresh empty folder. @es Una carpeta nueva y vacía. */
@@ -506,8 +509,6 @@ check('payloadOf: a BOM is tolerated, junk is undefined', [payloadOf('﻿{"cwd":
   check('cli process: runs as a program', () => [cli.status, JSON.parse(cli.stdout || '{}').frameworkVersion?.major], [0, 22]);
   check('cli process: importing it runs nothing', spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(path.join(HERE, 'profile.mjs')).href)});`], { encoding: 'utf8', cwd: outside }).stdout, '');
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.log(`FAIL ${failures.length} of ${passed + failures.length} checks. @es FALLO ${failures.length} de ${passed + failures.length} comprobaciones.`);

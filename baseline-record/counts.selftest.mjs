@@ -54,6 +54,9 @@ function attempt(action) {
 }
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'counts-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let counter = 0;
 
 /** A constructed home holding the given files. @es Un home construido con esos ficheros. */
@@ -134,8 +137,6 @@ const git = (home, ...args) => spawnSync('git', ['-C', home, ...args], { encodin
 
   check('registry: a missing settings file is named, not zero', missing.settings, 'unreadable');
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.log(`FAIL ${failures.length} of ${passed + failures.length} checks. @es FALLO ${failures.length} de ${passed + failures.length} comprobaciones.`);

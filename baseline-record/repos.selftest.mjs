@@ -51,6 +51,9 @@ function attempt(action) {
 }
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'repos-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let counter = 0;
 
 /** A fresh empty directory. @es Un directorio nuevo y vacío. */
@@ -202,8 +205,6 @@ const sha1 = (file) => createHash('sha1').update(readFileSync(file)).digest('hex
   check('inventory: the totals are the sums of the entries', [inventory.totalFiles, inventory.totalBytes], [4, 18]);
   check('inventory: a missing directory is reported as missing', attempt(() => dirInventory(path.join(dir, 'absent'))), { exists: false });
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.log(`FAIL ${failures.length} of ${passed + failures.length} checks. @es FALLO ${failures.length} de ${passed + failures.length} comprobaciones.`);

@@ -31,6 +31,9 @@ import { discoverToolchains, gateToolProblems, inspectToolchain } from './toolch
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const roots = [];
+// Every root is removed on every exit, a throw included: a selftest leaves nothing behind it. @es Toda raíz se
+// elimina en toda salida, también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 
 let passed = 0;
 const failures = [];
@@ -247,8 +250,6 @@ const servedBy = (gateName, id) => {
 for (const [id, runners] of [['angular-19', ['karma']], ['angular-20', ['karma', 'vitest']], ['angular-21', ['karma', 'vitest']], ['angular-22', ['karma', 'vitest']]]) {
   for (const [runner, gateName] of Object.entries(runnerGates)) check(`${id} ${runners.includes(runner) ? 'serves' : 'does not serve'} the ${runner} gate`, servedBy(gateName, id) === runners.includes(runner));
 }
-
-for (const root of roots) rmSync(root, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.error(`gates-kit toolchain-layout selftest FAILED @es el selftest de toolchain-layout de gates-kit FALLÓ (${failures.length} of ${passed + failures.length}):`);

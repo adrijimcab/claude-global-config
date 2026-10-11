@@ -59,6 +59,9 @@ function attempt(action) {
 }
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'collect-selftest-'));
+// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
+// también ante una excepción: un selftest no deja nada tras de sí.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 const git = (dir, ...args) => spawnSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { encoding: 'utf8' });
 
 /** A repo with one commit holding `files`. @es Un repo con un commit con `files`. */
@@ -237,8 +240,6 @@ check('problems: several at once are listed in section order', broken((copy) => 
   check('cli: a run count of zero exits 2', cli(...flags(ok).slice(0, -2), '--runs', '0').status, 2);
   check('cli: a run count that is not an integer exits 2', [cli(...flags(ok).slice(0, -2), '--runs', 'abc').status, cli(...flags(ok).slice(0, -2), '--runs', '2.5').status], [2, 2]);
 }
-
-rmSync(scratch, { recursive: true, force: true });
 
 if (failures.length > 0) {
   console.log(`FAIL ${failures.length} of ${passed + failures.length} checks. @es FALLO ${failures.length} de ${passed + failures.length} comprobaciones.`);
