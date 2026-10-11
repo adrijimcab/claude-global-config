@@ -203,7 +203,8 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
   cadena entera: esa corrida es del orquestador, una vez, al aterrizar. El brief nombra esos comandos.
 - Las ramas se acumulan en UNA rama de tanda. La rama de integración (develop) se mueve UNA sola vez, al
   final, con la cadena completa (`build:ci-pr`, y el suelo del landing guard) sobre ese árbol exacto. Ese
-  aterrizaje cierra también, con `--close`, todos los worktrees cuyo contenido entra en él.
+  aterrizaje cierra también todos los worktrees cuyo contenido entra en él (en b100-am-ui,
+  `.claude/integrate/integrate.mjs --close`; en el resto, la sección siguiente).
 
 ## Cierre de toda unidad de trabajo terminada (directiva del dueño 2026-10-01, global, todo proyecto)
 
@@ -217,6 +218,18 @@ verify), el ORQUESTADOR hace, en el MISMO turno, las tres cosas:
    informa como trabajo varado.
 3. **SDD:** si la unidad era un cambio SDD, se archiva (`sdd-archive`) cuando su verify está en verde.
    Un verify en rojo no se archiva: se arregla primero.
+4. **Lo encontrado:** todo hallazgo que trae la unidad (del informe del worker o de la integración) se
+   resuelve en ese turno según «Resolver en el momento antes que encolar», y si no puede, entra al
+   backlog con su razón.
+
+Reafirmado por el dueño el 2026-10-11 para toda sesión, también las nuevas: «siempre que se integra un
+agente, se borre su worktree y su rama local si la hizo y que se suba lo hecho a engram y lo encontrado y
+que surja que se arregle». Mecanismo: un guard `Stop` del orquestador que rechaza cerrar el turno mientras
+quede un worktree cuyo contenido ya está integrado (`git cherry` vacío contra su rama de integración),
+limpio y sin actor vivo (en construcción, con selftest que prueba que discrimina).
+@es Al integrar un agente: guardar en engram lo hecho y lo encontrado, borrar su worktree y su rama, y
+arreglar lo que surja; lo hace cumplir un guard `Stop` que rechaza el cierre de turno con un worktree ya
+integrado abierto.
 
 ## Resolver en el momento antes que encolar (directiva del dueño 2026-10-11, global)
 
