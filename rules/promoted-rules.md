@@ -27,6 +27,7 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
   RULE: a claim about what share of a file or list belongs to a category is made only after classifying every entry by reading it, and the sentence carries the count (N of M).
   RULE: "duplicate" is a share claim too — compare every entry against its supposed copy before proposing to remove or unload the set, and state how many are fully covered (N of M).
   RULE: before any verdict about a dependency, PARSE the manifest and name the SECTION the key lives in; the same package name in two sections answers two different questions.
+  RULE (face of 2026-10-11, every project): before citing a third-party API as precedent or evidence, read the project's manifest AND the source that imports it to confirm that library is the one in use, then cite THAT library's docs. A claim was once checked against ApexCharts in a project that draws its charts with another library.
   RULE: identify an actor by identity evidence — id, live status, start time, its worktree contents — never by subject matter.
   RULE: a census over a class counts DECLARATIONS, never deduplicated names, and any identifier class includes `$`.
 
