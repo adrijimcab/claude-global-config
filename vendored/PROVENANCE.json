@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-11T13:15:15.080Z",
+  "syncedAt": "2026-10-11T15:07:41.308Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -80,7 +80,7 @@
     },
     {
       "path": "mutation-proof/scope.selftest.mjs",
-      "sha256": "fa54b00f92202ac9f50fda104603e658c8fa26e5de74081725f04c7551b34566"
+      "sha256": "612fbd02a3bd2f56507d9509e70d1c9c077cf59f2dbfca2ae590962569e1070a"
     },
     {
       "path": "mutation-proof/scope.mutants.mjs",

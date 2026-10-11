@@ -395,7 +395,13 @@ try {
   expect('a campaign file that is not there is a PROBLEM', missing.problems.length === 1);
 
   // --- the population and the command line, over a throwaway git repository.
-  const repository = realpathSync(mkdtempSync(path.join(tmpdir(), 'mutation-scope-repository-')));
+  // Inside the sandbox, so the `finally` below removes it even when an assertion throws. A repository
+  // nested in the sandbox does not make the sandbox itself one: git resolves upwards, never downwards.
+  // @es Dentro del sandbox, para que el `finally` lo borre aunque una aserción lance. Un repositorio
+  // anidado no convierte al sandbox en repositorio: git resuelve hacia arriba, nunca hacia abajo.
+  const repository = path.join(sandbox, 'repository');
+
+  mkdirSync(repository);
   const git = (...args) => spawnSync('git', ['-C', repository, ...args], { encoding: 'utf8' });
 
   git('init', '-q');
@@ -465,8 +471,6 @@ try {
     return result.status === 2 && result.stderr.includes('Usage') && result.stderr.includes('@es');
   })());
   expect('a root that is not a repository measures nothing (exit 2)', cli('--root', sandbox).status === 2);
-
-  rmSync(repository, { recursive: true, force: true });
 } finally {
   rmSync(sandbox, { recursive: true, force: true });
 }
