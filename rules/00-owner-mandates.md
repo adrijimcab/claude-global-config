@@ -285,6 +285,14 @@ corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
   copilot, chatgpt, openai — nunca frases genéricas como «spec-driven», que el inglés corriente usa) y un
   hallazgo frena el push. Un guard que necesita conocer esos nombres (el de atribución en los commits) lee
   la lista desde fuera del repo, nunca la versiona.
+- **A la empresa no se sube nada sin autorización explícita del dueño; a `adrijimcab` sí** (directiva del
+  dueño 2026-10-11: «Ni land.js ni nadie tiene que subir nada a remoto sin mi autorización explícita», «Push
+  solo cuando yo te lo diga», «Quiero que no suba a mi empresa, a adrijimcab cuando quieras»). Ninguna sesión
+  ni agente hace push, tag ni release a un remoto de la empresa sin que el dueño lo ordene en la conversación
+  para ESE push; el trabajo verificado se integra en LOCAL y espera. Los repos de respaldo de
+  `github.com/adrijimcab/*` se suben cuando haga falta. Mecanismo: `land.mjs` decide la publicación por la URL
+  del remoto — `adrijimcab` se publica, cualquier otro remoto integra solo en local e imprime el comando de push
+  para el dueño, sin ningún flag que lo encienda.
 - Solo se commitea lo propio y terminado: lo que un agente VIVO está escribiendo lo commitea ese
   agente al terminar (nunca se commitea el estado de trabajo de un actor vivo).
 - Mensajes en inglés, Conventional, sin atribución. Artefactos de ejecución (`state/`, `.runs/`,
