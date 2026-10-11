@@ -84,6 +84,16 @@ function treeOf(root) {
   return found;
 }
 
+/**
+ * A link to a DIRECTORY, built with the type that needs no privilege: a junction on Windows (a file symlink there
+ * needs a privilege an ordinary user lacks), a symlink elsewhere. Both are reported by `lstat` as links.
+ * @es Un enlace a un DIRECTORIO, del tipo que no exige privilegio: junction en Windows (allí un symlink de fichero
+ * exige un privilegio que un usuario normal no tiene), symlink en el resto. `lstat` informa de ambos como enlaces.
+ */
+function linkToDirectory(target, linkPath) {
+  symlinkSync(target, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+}
+
 const put = (root, relative, content) => {
   mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
   writeFileSync(path.join(root, relative), content);
@@ -111,9 +121,12 @@ function makeHome(scratch, name) {
   put(home, 'fleet-kit/state/repos/k/diff-coverage/run-1/summary.json', '{"results":[]}');
   put(home, '.hidden/state/refusals.jsonl', 'not a mechanism\n');
   put(home, 'guard-z/state/journal.jsonl', '');
-  put(home, 'outside/target.jsonl', 'the target of a link\n');
+  put(home, 'outside/linked-dir/target.jsonl', 'the target of a link\n');
   mkdirSync(path.join(home, 'brief-audience', 'state'), { recursive: true });
-  symlinkSync(path.join(home, 'outside', 'target.jsonl'), path.join(home, 'brief-audience', 'state', 'refusals.jsonl'));
+  linkToDirectory(path.join(home, 'outside', 'linked-dir'), path.join(home, 'brief-audience', 'state', 'refusals.jsonl'));
+  put(home, 'outside/linked-state/refusals.jsonl', '{"raw":"behind a linked state directory"}\n');
+  mkdirSync(path.join(home, 'linked-mechanism'), { recursive: true });
+  linkToDirectory(path.join(home, 'outside', 'linked-state'), path.join(home, 'linked-mechanism', 'state'));
   put(home, 'sessions/dead.json', JSON.stringify({ pid: 999_999_991, sessionId: 's' }));
   put(home, 'sessions/garbled.json', '{not json');
   put(home, 'sessions/no-pid.json', JSON.stringify({ sessionId: 's' }));
@@ -172,6 +185,7 @@ try {
   check('operative state is kept', ['KEEP     backlog-guard/s-1.json: operative', 'KEEP     backlog-guard/dismissals.jsonl: operative', 'KEEP     fleet-kit/handback/refusals.jsonl: operative', 'KEEP     fleet-kit/repos/k/verdicts/t.json: operative'].map((line) => said.includes(line)), [true, true, true, true]);
   check('an unknown file and a link are reported, never guessed', [said.includes('UNKNOWN  mystery/weird.bin'), said.includes('UNKNOWN  brief-audience/refusals.jsonl')], [true, true]);
   check('a directory that is not a plain name is not a mechanism', said.includes('.hidden'), false);
+  check('a state directory that is a link is never entered, so nothing behind it is planned', [said.includes('linked-mechanism'), said.includes('linked-state')], [false, false]);
   check('the summary counts every action', said.includes('5 to archive, 7 kept, 2 unknown.'), true);
   check('the dry run says how to apply it, bilingual', said.includes('Run again with --apply') && dry.out.every((line) => line.includes(' @es ')), true);
   check('a dry run with no blocker announces no refusal', said.includes('REFUSED'), false);
@@ -186,7 +200,7 @@ try {
   check('the whole journal is archived', readFileSync(path.join(archive, 'guard-x', 'journal.jsonl'), 'utf8'), `${DECISION}\n${DISMISSAL}\n{torn\n${REPORT}\n`);
   check('the fresh journal holds only the dismissal in force', readFileSync(path.join(home, 'guard-x', 'state', 'journal.jsonl'), 'utf8'), `${DISMISSAL}\n`);
   check('no temp file is left behind', existsSync(path.join(home, 'guard-x', 'state', 'journal.jsonl.tmp')), false);
-  const untouched = ['backlog-guard/state/s-1.json', 'backlog-guard/state/dismissals.jsonl', 'guard-y/state/journal.jsonl', 'collision-guard/state/guard-errors.jsonl', 'mystery/state/weird.bin', 'fleet-kit/state/handback/refusals.jsonl', 'fleet-kit/state/repos/k/verdicts/t.json', 'guard-z/state/journal.jsonl', 'brief-audience/state/refusals.jsonl', 'outside/target.jsonl', '.hidden/state/refusals.jsonl'];
+  const untouched = ['backlog-guard/state/s-1.json', 'backlog-guard/state/dismissals.jsonl', 'guard-y/state/journal.jsonl', 'collision-guard/state/guard-errors.jsonl', 'mystery/state/weird.bin', 'fleet-kit/state/handback/refusals.jsonl', 'fleet-kit/state/repos/k/verdicts/t.json', 'guard-z/state/journal.jsonl', 'brief-audience/state/refusals.jsonl', 'outside/linked-dir', 'outside/linked-dir/target.jsonl', 'outside/linked-state/refusals.jsonl', 'linked-mechanism/state', '.hidden/state/refusals.jsonl'];
   check('operative, current, empty, unknown and linked files are untouched, bytes and time', untouched.map((file) => after[file] === before[file]), untouched.map(() => true));
   check('apply reports each move and the total', [applied.out.filter((line) => line.startsWith('Archived ')).length, applied.out.some((line) => line.startsWith('Carried 1 dismissal(s)')), applied.out.at(-1).startsWith(`Rotated 5 file(s) into ${archive}.`)], [5, true, true]);
 
