@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 /**
  * Self-test for the integration-branch drift warning (`UserPromptSubmit`). Repositories are CONSTRUCTED (see
- * `fixtures.mjs`). The warning is driven two ways: `evaluate()` over raw payloads, and the command REGISTERED
- * in this tree's `settings.json`, run as the harness runs it (a shell command, the payload on stdin, the shape
- * measured from a live session), with the `$HOME/.claude` of the command replaced by this tree.
+ * `fixtures.mjs`). The warning is driven two ways: `evaluate()` over raw payloads, and the script run as a
+ * process with the payload on stdin (the registration in `settings.json` is proved by `wiring.selftest.mjs`).
  *
  * THE STATE SPACE: a clone in sync (silent); drifted with the remote-tracking ref (warns, names the sync
  * command); drifted without it (warns, names the owner's decision); a linked worktree of a drifted clone; a
@@ -12,13 +11,12 @@
  * drift lasts (no state to lose).
  *
  * @es Auto-test del aviso de deriva de la rama de integración (`UserPromptSubmit`). Los repositorios se
- * CONSTRUYEN. El aviso se ejecuta de dos maneras: `evaluate()` sobre payloads crudos y el comando REGISTRADO en
- * el `settings.json` de este árbol, tal como lo ejecuta el harness. Nunca bloquea, y avisa en cada prompt
+ * CONSTRUYEN. El aviso se ejecuta de dos maneras: `evaluate()` sobre payloads crudos y el script como proceso
+ * con el payload por stdin (el registro en `settings.json` lo prueba `wiring.selftest.mjs`). Nunca bloquea, y avisa en cada prompt
  * mientras dure la deriva (no hay estado que perder).
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { isolateState } from '../hook-state/locations.mjs';
@@ -28,7 +26,6 @@ isolateState('integration-branch');
 
 const { evaluate } = await import('./prompt-hook.mjs');
 
-const tree = path.resolve(import.meta.dirname, '..');
 const world = makeWorld();
 let passed = 0;
 const failures = [];
@@ -89,21 +86,17 @@ check(evaluate('not json') === undefined && evaluate('') === undefined && evalua
 check(evaluate(JSON.stringify({ prompt: 'hi' })) === undefined, 'a payload without cwd is silent');
 check(evaluate(`\uFEFF${JSON.stringify(payloadFor(other.clone))}`)?.hookSpecificOutput !== undefined, 'a byte-order mark before the payload is tolerated');
 
-// ── The registered command, driven as the harness drives it ──────────────────────────────────────
-const settings = JSON.parse(readFileSync(path.join(tree, 'settings.json'), 'utf8'));
-const registered = (settings.hooks?.UserPromptSubmit ?? []).flatMap((entry) => entry.hooks ?? []).filter((hook) => hook.command?.includes('integration-branch/prompt-hook.mjs'));
-check(registered.length === 1, 'exactly one UserPromptSubmit command is registered for the drift warning');
-const command = (registered[0]?.command ?? 'exit 99').split('$HOME/.claude').join(tree.split('\\').join('/'));
-const run = (payload) => spawnSync(command, { shell: true, input: typeof payload === 'string' ? payload : JSON.stringify(payload), encoding: 'utf8' });
-
+// ── The script run as a process, payload on stdin ────────────────────────────────────────────────
+const HOOK = path.join(import.meta.dirname, 'prompt-hook.mjs');
+const runHook = (payload) => spawnSync(process.execPath, [HOOK], { input: typeof payload === 'string' ? payload : JSON.stringify(payload), encoding: 'utf8' });
 const driftedCli = world.repository(['feature/meet']);
-const cliWarn = run(payloadFor(driftedCli.clone));
+const cliWarn = runHook(payloadFor(driftedCli.clone));
 const cliOutput = JSON.parse(cliWarn.stdout || '{}');
-check(cliWarn.status === 0 && cliOutput.hookSpecificOutput?.hookEventName === 'UserPromptSubmit' && cliOutput.hookSpecificOutput.additionalContext.includes('feature/meet'), `the registered command exits 0 and prints the notice (exit ${cliWarn.status})`);
-const cliQuiet = run(payloadFor(synced.clone));
-check(cliQuiet.status === 0 && cliQuiet.stdout === '', 'the registered command is silent for a clone in sync');
-const cliBroken = run('not json');
-check(cliBroken.status === 0 && cliBroken.stdout === '', 'the registered command exits 0 and prints nothing for malformed input');
+check(cliWarn.status === 0 && cliOutput.hookSpecificOutput?.hookEventName === 'UserPromptSubmit' && cliOutput.hookSpecificOutput.additionalContext.includes('feature/meet'), `the script exits 0 and prints the notice (exit ${cliWarn.status})`);
+const cliQuiet = runHook(payloadFor(synced.clone));
+check(cliQuiet.status === 0 && cliQuiet.stdout === '', 'the script is silent for a clone in sync');
+const cliBroken = runHook('not json');
+check(cliBroken.status === 0 && cliBroken.stdout === '', 'the script exits 0 and prints nothing for malformed input');
 
 world.dispose();
 const total = passed + failures.length;
