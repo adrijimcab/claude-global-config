@@ -15,7 +15,7 @@
  * y desechable con la forma de `observations`, nunca un lector simulado.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -26,6 +26,7 @@ import { decide } from './decide.mjs';
 import { evaluate } from './guard.mjs';
 import { extractItems } from './items.mjs';
 import { droppedItems } from './loss.mjs';
+import { judgeOddMirror, oddFeatureOf } from './odd-mirror.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
@@ -94,7 +95,24 @@ insert.run('b100-am-ui', 'project', 'backlog/1.0.0-master-archive-4', DETAIL, '2
 insert.run('b100-am-ui', 'project', 'notes/ordinary-archive-1', DETAIL, null); // id 16: archive of the ordinary record
 insert.run('b100-am-ui', 'project', 'backlog/1.0.0-master-archive-5', '- #36 table editor: error state is not announced to screen readers under the zoneless scheduler.', null); // id 17: holds only #36
 insert.run('b100-am-ui', 'project', 'BACKLOG/1.0.0-MASTER-ARCHIVE-6', DETAIL, null); // id 18: archive whose key differs only in case
+const ODD_SUMMARY = 'Feature feat-a: three of five tasks are done and the rest is in progress, see the document for the detail.';
+
+insert.run('b100-am-ui', 'project', 'odd/feat-a/tasks', ODD_SUMMARY, null); // id 19: ODD mirror holding an old one-paragraph summary
+insert.run('b100-am-ui', 'project', 'odd/nofile/tasks', ODD_SUMMARY, null); // id 20: ODD mirror whose source file does not exist
+insert.run('b100-am-ui', 'project', 'odd/unreadable/tasks', ODD_SUMMARY, null); // id 21: ODD mirror whose source path is a directory
+insert.run('b100-am-ui', 'project', 'odd/empty/tasks', ODD_SUMMARY, null); // id 22: ODD mirror whose source file is empty
+insert.run('b100-am-ui', 'project', 'feat-a/tasks', ODD_SUMMARY, null); // id 23: ordinary record that merely ends in /tasks
 db.close();
+
+// A project tree with the ODD source file, in the layout of the Discovery root. @es Un árbol de proyecto con el fichero fuente ODD.
+const projectRoot = path.join(scratch, 'project');
+const ODD_FILE = ['# feat-a', '', '- [x] task one done with its commit evidence recorded.', '- [x] task two done with its commit evidence recorded.', '- [ ] task three pending until the gate is green.'].join('\n');
+
+mkdirSync(path.join(projectRoot, 'odd', 'tasks', 'unreadable.md'), { recursive: true });
+mkdirSync(path.join(projectRoot, 'Discovery-FE', 'src'), { recursive: true });
+writeFileSync(path.join(projectRoot, 'odd', 'tasks', 'feat-a.md'), `${ODD_FILE}\n`, 'utf8');
+writeFileSync(path.join(projectRoot, 'odd', 'tasks', 'empty.md'), '\n', 'utf8');
+const oddCwd = path.join(projectRoot, 'Discovery-FE', 'src');
 
 const OPTIONS = { databasePath };
 const MISSING = { databasePath: path.join(scratch, 'does-not-exist.db') };
@@ -108,8 +126,14 @@ function update(input, tool = `${MCP}mem_update`) {
   return { tool_name: tool, tool_input: input };
 }
 
+// A throw inside the guard is a verdict of its own, never a crash of the selftest: a mutant that makes the guard throw is then caught by a check.
+// @es Una excepción dentro de la guardia es un veredicto propio, no una caída del selftest: así un mutante que la hace lanzar lo atrapa un check.
 function verdict(payload, options = OPTIONS) {
-  return evaluate(JSON.stringify(payload), options)?.hookSpecificOutput?.permissionDecision ?? 'allow';
+  try {
+    return evaluate(JSON.stringify(payload), options)?.hookSpecificOutput?.permissionDecision ?? 'allow';
+  } catch (error) {
+    return `threw: ${error.message}`;
+  }
 }
 
 const KEY = 'backlog/1.0.0-bilingual-gate-hardening';
@@ -208,10 +232,18 @@ check('tabs and non-breaking spaces count as whitespace', verdict(save({ topic_k
 
 // decide() driven directly with readers that refuse to be called: a call means the guard judged what it must not.
 const FORBIDDEN = { byId: () => { throw new Error('store read'); }, byTopicKey: () => { throw new Error('store read'); } };
-check('a save without a topic_key never reads the store', decide({}, `${MCP}mem_save`, { content: 'short' }, FORBIDDEN), undefined);
-check('a save with a blank topic_key never reads the store', decide({}, `${MCP}mem_save`, { topic_key: '  ', content: 'short' }, FORBIDDEN), undefined);
-check('an update without content never reads the store', decide({}, `${MCP}mem_update`, { id: 1, title: 'x' }, FORBIDDEN), undefined);
-check('an unrelated tool never reads the store', decide({}, 'Bash', { command: 'ls' }, FORBIDDEN), undefined);
+const judged = (...args) => {
+  try {
+    return decide(...args) === undefined ? 'allow' : 'refusal';
+  } catch (error) {
+    return `read the store: ${error.message}`;
+  }
+};
+
+check('a save without a topic_key never reads the store', judged({}, `${MCP}mem_save`, { content: 'short' }, FORBIDDEN), 'allow');
+check('a save with a blank topic_key never reads the store', judged({}, `${MCP}mem_save`, { topic_key: '  ', content: 'short' }, FORBIDDEN), 'allow');
+check('an update without content never reads the store', judged({}, `${MCP}mem_update`, { id: 1, title: 'x' }, FORBIDDEN), 'allow');
+check('an unrelated tool never reads the store', judged({}, 'Bash', { command: 'ls' }, FORBIDDEN), 'allow');
 
 // ── the pure units ───────────────────────────────────────────────────────────────────────────────────
 check('a wrapped paragraph is ONE item', extractItems('one two three\nfour five six\n\nseven eight').length, 2);
@@ -280,6 +312,41 @@ check('a junk token beside a valid id is ignored, the valid id still counts', ve
 check('citedArchiveIds reads several ids and ignores repeats', citedArchiveIds('ARCHIVED: #3, #4 #3\n- ARCHIVED: (#5)').join(','), '3,4,5');
 
 check('the topic_key reader returns updated_at, the column the ODD mirror guard compares with a file mtime', typeof realReaders.byTopicKey(KEY, {}).rows?.[0]?.updated_at, 'string');
+
+// ── ODD mirrors are judged against their source file (`odd-mirror.mjs`) ─────────────────────────────
+const oddSave = (key, content, cwd = oddCwd) => save({ topic_key: key, content }, { cwd });
+const oddUpdate = (id, content, cwd = oddCwd) => ({ ...update({ id, content }), cwd });
+const oddReason = (payload) => evaluate(JSON.stringify(payload), OPTIONS)?.hookSpecificOutput?.permissionDecisionReason ?? '';
+const LOCATOR = 'Source: odd/tasks/feat-a.md (full text mirrored below)';
+
+check('ODD mirror: the full file replacing an old summary is allowed (save)', verdict(oddSave('odd/feat-a/tasks', ODD_FILE)), 'allow');
+check('ODD mirror: the full file replacing an old summary is allowed (update by id)', verdict(oddUpdate(19, ODD_FILE)), 'allow');
+check('ODD mirror: a locator line before the file text is allowed', verdict(oddUpdate(19, `${LOCATOR}\n\n${ODD_FILE}`)), 'allow');
+check('ODD mirror: CRLF line endings and a trailing newline are allowed', verdict(oddUpdate(19, `${ODD_FILE.split('\n').join('\r\n')}\r\n`)), 'allow');
+check('ODD mirror: the real case (old summary, new full file with locator) replayed end to end', verdict({ ...update({ id: 19, content: `${LOCATOR}\n${ODD_FILE}` }), cwd: projectRoot }), 'allow');
+check('ODD mirror: a summary-only mirror is DENIED', verdict(oddUpdate(19, 'Feature feat-a: all five tasks are done and the document has the detail.')), 'deny');
+check('ODD mirror: a mirror missing the last file line is DENIED', verdict(oddUpdate(19, ODD_FILE.split('\n').slice(0, -1).join('\n'))), 'deny');
+check('ODD mirror: the old summary kept beside a partial file is DENIED', verdict(oddUpdate(19, `${ODD_SUMMARY}\n${ODD_FILE.split('\n').slice(0, 3).join('\n')}`)), 'deny');
+check('ODD mirror: the mirror key match ignores case', verdict(oddSave('ODD/feat-a/TASKS', ODD_FILE)), 'allow');
+check('ODD mirror: an empty source file falls back to the drop-nothing rule', verdict(oddUpdate(22, 'Short summary only.')), 'deny');
+check('ODD mirror: a record that only ends in /tasks is ordinary', verdict(oddUpdate(23, ODD_FILE)), 'deny');
+
+const oddRefusal = oddReason(oddUpdate(19, 'Short summary only.'));
+
+check('ODD mirror: the refusal names the source file', oddRefusal.includes(path.join(projectRoot, 'odd', 'tasks', 'feat-a.md')), true);
+check('ODD mirror: the refusal is bilingual', oddRefusal.includes('source file') && oddRefusal.includes('@es') && oddRefusal.includes('fichero fuente'), true);
+check('ODD mirror: no source file in reach falls back to the drop-nothing rule (deny)', verdict(oddUpdate(20, 'Short summary only.')), 'deny');
+check('ODD mirror: no source file in reach falls back to the drop-nothing rule (allow an addition)', verdict(oddUpdate(20, `${ODD_SUMMARY}\n- an addition with words.`)), 'allow');
+check('ODD mirror: a call without a working directory falls back to the drop-nothing rule', verdict(update({ id: 19, content: 'Short summary only.' })), 'deny');
+check('ODD mirror: an unreadable source (a directory) falls back to the drop-nothing rule', verdict(oddUpdate(21, 'Short summary only.')), 'deny');
+check('ODD mirror: a feature name that tries to leave odd/tasks never reads a file', verdict(oddSave('odd/../x/tasks', 'short')), 'allow');
+check('ODD mirror: the key odd/<feature>/notes is an ordinary record', oddFeatureOf('odd/feat-a/notes'), undefined);
+check('ODD mirror: the key of a feature with dots is accepted', oddFeatureOf('odd/feat.a-1/tasks'), 'feat.a-1');
+check('ODD mirror: a traversal feature is rejected', oddFeatureOf('odd/../tasks'), undefined);
+check('hand-kept records keep the drop-nothing rule next to an ODD source file (master)', verdict(oddUpdate(2, 'short')), 'deny');
+check('hand-kept records are not allowed to drop content by carrying a file text', verdict(oddUpdate(1, ODD_FILE)), 'deny');
+check('judgeOddMirror with an injected reader: not a mirror key is not handled', judgeOddMirror({}, 'notes/x', 'c', '.', FORBIDDEN.byId).applies, false);
+check('judgeOddMirror with an injected reader: contained text is handled and allowed', judgeOddMirror({}, 'odd/f/tasks', 'x body y', '.', () => ({ file: 'f.md', text: 'body' })).refusal, undefined);
 
 if (failures.length > 0) {
   console.error(`backlog-content-guard selftest: ${failures.length} FAILURE(S) of ${passed + failures.length}`);

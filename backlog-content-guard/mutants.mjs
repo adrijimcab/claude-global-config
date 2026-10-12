@@ -22,7 +22,8 @@ const I = 'backlog-content-guard/items.mjs';
 const R = 'backlog-content-guard/current-revision.mjs';
 const G = 'backlog-content-guard/guard.mjs';
 const A = 'backlog-content-guard/archive.mjs';
-const R2 = 'backlog-content-guard/reason.mjs';
+const O = 'backlog-content-guard/odd-mirror.mjs';
+const R2 ='backlog-content-guard/reason.mjs';
 
 const MUTANTS = [
   // --- loss.mjs: preserved / retired ---
@@ -51,7 +52,7 @@ const MUTANTS = [
 
   // --- decide.mjs: the state space ---
   ['mem_save is never judged', D, 'if (SAVE_TOOLS.has(toolName)) return decideSave(payload, toolName, toolInput, readers);', 'if (false) return decideSave(payload, toolName, toolInput, readers);'],
-  ['mem_update is never judged', D, 'if (UPDATE_TOOLS.has(toolName)) return decideUpdate(toolName, toolInput, readers);', 'if (false) return decideUpdate(toolName, toolInput, readers);'],
+  ['mem_update is never judged', D, 'if (UPDATE_TOOLS.has(toolName)) return decideUpdate(payload, toolName, toolInput, readers);', 'if (false) return decideUpdate(payload, toolName, toolInput, readers);'],
   ['the plain-mount mem_update name is dropped', D, "export const UPDATE_TOOLS = new Set(['mcp__engram__mem_update', 'mcp__plugin_engram_engram__mem_update']);", "export const UPDATE_TOOLS = new Set(['mcp__plugin_engram_engram__mem_update']);"],
   ['the plain-mount mem_save name is dropped', D, "export const SAVE_TOOLS = new Set(['mcp__engram__mem_save', 'mcp__plugin_engram_engram__mem_save']);", "export const SAVE_TOOLS = new Set(['mcp__plugin_engram_engram__mem_save']);"],
   ['a save without a topic_key is judged against nothing and refused', D, 'if (!isText(topicKey) || typeof content !== \'string\') return undefined;', 'if (typeof content !== \'string\') return undefined;'],
@@ -86,6 +87,20 @@ const MUTANTS = [
   ['archive items are compared without normalisation', A, 'texts.push(extractItems(read.rows[0].content).join(\' \'))', 'texts.push(read.rows[0].content)'],
   ['an archive refusal is reported as a plain loss (wrong text)', R2, "refusal.kind === 'archive-invalid' ? archiveText(refusal)", 'false ? archiveText(refusal)'],
 
+  // --- odd-mirror.mjs + decide.mjs: ODD mirrors judged against their source file ---
+  ['an ODD mirror is never judged against its file (drop-nothing rule applies)', D, 'return mirror.applies ? mirror.refusal : lossRefusal(base, row, next, readers);', 'return lossRefusal(base, row, next, readers);'],
+  ['an ODD mirror is always allowed', O, 'if (canonical(next).includes(source.text)) return { applies: true };', 'if (true) return { applies: true };'],
+  ['an ODD mirror lacking the file text is allowed through the old rule', O, "return { applies: true, refusal: { ...base, kind: 'odd-mirror-incomplete', file: source.file, dropped: [] } };", 'return { applies: false };'],
+  ['an unreadable source file refuses instead of falling back', O, 'if (source === undefined) return { applies: false };', "if (source === undefined) return { applies: true, refusal: { ...base, kind: 'odd-mirror-incomplete', file: '?', dropped: [] } };"],
+  ['an empty source file counts as readable', O, "if (text !== '') return { file, text };", 'return { file, text };'],
+  ['the source file is looked up only in the working directory itself', O, 'const parent = path.dirname(directory);\n\n    if (parent === directory) return undefined;\n    directory = parent;', 'return undefined;'],
+  ['CRLF is not normalised, so a CRLF mirror reads as partial', O, "return text.replaceAll('\\r\\n', '\\n').trim();", 'return text.trim();'],
+  ['the mirror key match becomes case-sensitive', O, "const MIRROR_KEY = /^odd\\/([^/]+)\\/tasks$/i;", "const MIRROR_KEY = /^odd\\/([^/]+)\\/tasks$/;"],
+  ['a feature name is not validated', O, 'feature !== undefined && SAFE_FEATURE.test(feature) && !feature.includes(\'..\')', 'feature !== undefined'],
+  ['every key is treated as an ODD mirror', O, "const MIRROR_KEY = /^odd\\/([^/]+)\\/tasks$/i;", "const MIRROR_KEY = /^(?:odd\\/)?([^/]+)\\/tasks$/i;"],
+  ['the working directory of an update is not passed to the mirror check', D, 'row, content, readers, payload?.cwd);\n}\n\n/**\n * The verdict', 'row, content, readers, undefined);\n}\n\n/**\n * The verdict'],
+  ['the ODD refusal is rendered as a plain loss', R2, "if (refusal.kind === 'odd-mirror-incomplete') return oddMirrorText(refusal);", ''],
+
   // --- current-revision.mjs: the store reads ---
   ['soft-deleted rows are treated as live', R, 'WHERE id = ? AND deleted_at IS NULL', 'WHERE id = ?'],
   ['soft-deleted rows are treated as live targets of a save', R, "const clauses = ['lower(topic_key) = lower(?)', 'deleted_at IS NULL'];", "const clauses = ['lower(topic_key) = lower(?)'];"],
@@ -103,7 +118,8 @@ const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
   paths: ['backlog-content-guard', 'backlog-owner-guard', 'backlog-guard', 'hook-caller', 'hook-state', 'bilingual-output'],
   selftest: 'backlog-content-guard/selftest.mjs',
-  mutants: MUTANTS
+  mutants: MUTANTS,
+  crashKills: 'fail'
 });
 
 process.exit(survivors === 0 ? 0 : 1);

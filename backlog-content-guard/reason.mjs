@@ -59,6 +59,15 @@ function lossText(refusal) {
   ].join('\n');
 }
 
+function oddMirrorText(refusal) {
+  return [
+    `backlog-content-guard: this ${refusal.toolName} writes the ODD mirror ${refusal.topicKey} without the whole text of its source file ${refusal.file}. A mirror is the full current document, so a partial or summary mirror is refused.`,
+    'Resend the content with the WHOLE current text of that file (a locator line before or after it is fine). Text the file no longer holds may be dropped.',
+    `@es Este ${refusal.toolName} escribe el espejo ODD ${refusal.topicKey} sin el texto íntegro de su fichero fuente ${refusal.file}. Un espejo es el documento completo actual, así que un espejo parcial o resumen se rechaza.`,
+    'Reenvía el contenido con el texto COMPLETO actual de ese fichero (una línea localizadora antes o después vale). El texto que el fichero ya no tiene puede desaparecer.'
+  ].join('\n');
+}
+
 function unverifiableText(refusal) {
   return [
     `backlog-content-guard: cannot verify a write to the master backlog ${refusal.topicKey} (${refusal.kind}: ${refusal.detail}). This guard fails CLOSED for the master backlog, because a silently replaced revision cannot be reconstructed.`,
@@ -71,6 +80,7 @@ function unverifiableText(refusal) {
 /** The deny reason for one refusal descriptor. @es El motivo de denegación para un descriptor de rechazo. */
 export function reason(refusal) {
   if (refusal.kind === 'content-loss') return lossText(refusal);
+  if (refusal.kind === 'odd-mirror-incomplete') return oddMirrorText(refusal);
 
   return refusal.kind === 'archive-invalid' ? archiveText(refusal) : unverifiableText(refusal);
 }
