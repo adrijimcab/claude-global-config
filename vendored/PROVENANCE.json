@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-12T13:48:15.699Z",
+  "syncedAt": "2026-10-12T16:26:06.020Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -16,7 +16,7 @@
     },
     {
       "path": "agent-liveness/liveness.mjs",
-      "sha256": "8eda4c82222c39a30b4f2bcc4f50e53e234f49acd8cbae6cf767b86a9c181e12"
+      "sha256": "33ce429b159a5caef19b5e0f7b844acb3e2a35d0c43a77e8ac97f7e812bcf3fb"
     },
     {
       "path": "toolchain-guard/tree-tenancy.mjs",

@@ -175,16 +175,37 @@ await section("5. a START with no STOP older than the ceiling is a crashed sessi
 
 // --- 6. an agent joined only by the TENANCY line of its brief ---------------------------------------------------
 await section("6. an agent joined only by the TENANCY line of its brief", async () => {
+  // REAL worktrees on disk: a linked worktree keeps `.git` as a FILE, a main checkout as a directory. The linked
+  // one lives under `.claude-wt/`, NOT under a `worktrees/` folder, so the answer cannot come from the folder name.
+  // @es Worktrees REALES en disco: uno enlazado guarda `.git` como FICHERO; uno principal, como directorio. El
+  // enlazado vive bajo `.claude-wt/`, NO bajo una carpeta `worktrees/`, así que la respuesta no sale del nombre.
   const tenant = 'wt7';
-  const claimed = transcript('t7', 90 * MINUTE, brief(`C:/repo/.claude/worktrees/${tenant}`));
-  const unclaimed = transcript('t7n', 90 * MINUTE, brief('C:/repo/.claude/worktrees/elsewhere'));
+  const linkedAt = (name) => {
+    const dir = path.join(scratch, '.claude-wt', name);
 
-  check('a started taker whose brief names the worktree is working though quiet', idOf(ownerOf(tenant, [taker('agent-t7', claimed)], recorded(['start', 't7', 100 * MINUTE]))), 'agent-t7');
-  check('a started taker whose brief names ANOTHER worktree is not an owner', idOf(ownerOf(tenant, [taker('agent-t7n', unclaimed)], recorded(['start', 't7n', 100 * MINUTE]))), undefined);
-  check('a started taker with no transcript yet cannot be joined', idOf(ownerOf(tenant, [taker('agent-t7m', transcript('t7m', undefined))], recorded(['start', 't7m', MINUTE]))), undefined);
-  check('a stopped taker is stopped though its brief claims the worktree and it wrote a second ago', idOf(ownerOf(tenant, [taker('agent-t7s', transcript('t7s', 1000, brief(`C:/repo/.claude/worktrees/${tenant}`)))], recorded(['stop', 't7s', 500]))), undefined);
-  check('an unrecorded taker keeps the window rule through its brief', idOf(ownerOf(tenant, [taker('agent-t7u', transcript('t7u', MINUTE, brief(`C:/repo/.claude/worktrees/${tenant}`)))], recorded())), 'agent-t7u');
-  check('a taker never claims the main checkout (not under worktrees/)', idOf(activeOwner('C:/repo', [taker('agent-t7c', claimed)], NOW, recorded(['start', 't7c', MINUTE]))), undefined);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, '.git'), `gitdir: /somewhere/.git/worktrees/${name}`);
+
+    return dir.split(path.sep).join('/');
+  };
+  const mainCheckout = path.join(scratch, 'main-checkout');
+
+  mkdirSync(path.join(mainCheckout, '.git'), { recursive: true });
+
+  const tenantPath = linkedAt(tenant);
+  const elsewhere = linkedAt('elsewhere');
+  const claimed = transcript('t7', 90 * MINUTE, brief(tenantPath));
+  const unclaimed = transcript('t7n', 90 * MINUTE, brief(elsewhere));
+  const ownerAt = (records, lifecycle, where = tenantPath) => activeOwner(where, records, NOW, lifecycle);
+
+  check('a started taker whose brief names the worktree is working though quiet', idOf(ownerAt([taker('agent-t7', claimed)], recorded(['start', 't7', 100 * MINUTE]))), 'agent-t7');
+  check('a started taker whose brief names ANOTHER worktree is not an owner', idOf(ownerAt([taker('agent-t7n', unclaimed)], recorded(['start', 't7n', 100 * MINUTE]))), undefined);
+  check('a started taker with no transcript yet cannot be joined', idOf(ownerAt([taker('agent-t7m', transcript('t7m', undefined))], recorded(['start', 't7m', MINUTE]))), undefined);
+  check('a stopped taker is stopped though its brief claims the worktree and it wrote a second ago', idOf(ownerAt([taker('agent-t7s', transcript('t7s', 1000, brief(tenantPath)))], recorded(['stop', 't7s', 500]))), undefined);
+  check('an unrecorded taker keeps the window rule through its brief', idOf(ownerAt([taker('agent-t7u', transcript('t7u', MINUTE, brief(tenantPath)))], recorded())), 'agent-t7u');
+  check('a taker never claims the main checkout (its .git is a directory)', idOf(ownerAt([taker('agent-t7c', transcript('t7c', MINUTE, brief(mainCheckout)))], recorded(['start', 't7c', MINUTE]), mainCheckout)), undefined);
+  check('a taker never claims a path that has no .git at all', idOf(ownerAt([taker('agent-t7p', transcript('t7p', MINUTE, brief(scratch)))], recorded(['start', 't7p', MINUTE]), scratch)), undefined);
+  check('a linked worktree outside any worktrees/ folder is joined by the brief (the folder name decides nothing)', path.basename(path.dirname(tenantPath)), '.claude-wt');
 });
 
 // --- 7. the store: keys, corrupt text, a missing file ----------------------------------------------------------
