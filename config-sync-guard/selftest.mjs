@@ -359,7 +359,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   const written = recordAuthoredWrites([{ path: 'C:\\Fake\\Dir\\File.md', mtimeMs: 5 }], 's-1', journal);
 
   check('a record is normalized (forward slashes, lowercase) and carries session and mtime', written, [{ path: 'c:/fake/dir/file.md', mtimeMs: 5, session: 's-1' }]);
-  check('what was recorded is read back', readAuthoredWrites(journal), written);
+  check('what was recorded is read back', threw('readAuthoredWrites', () => readAuthoredWrites(journal), []), written);
   check('an unreadable journal has no records', readAuthoredWrites(path.join(dir, 'absent.jsonl')), []);
 
   writeFileSync(journal, `not json\n${JSON.stringify({ path: 1, session: 's', mtimeMs: 1 })}\n${JSON.stringify(written[0])}\n`, 'utf8');
@@ -376,7 +376,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
 
   for (let index = 0; index < MAX_RECORDS + 5; index += 1) recordAuthoredWrites([{ path: `c:/f/${String(index)}`, mtimeMs: index }], 's-1', journal);
 
-  const kept = readAuthoredWrites(journal);
+  const kept = threw('readAuthoredWrites', () => readAuthoredWrites(journal), []);
 
   check('the journal keeps only the newest MAX_RECORDS', [kept.length, kept[kept.length - 1].mtimeMs, kept[0].mtimeMs], [MAX_RECORDS, MAX_RECORDS + 4, 5]);
 
