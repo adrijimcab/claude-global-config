@@ -282,6 +282,7 @@ for (const [expected, description, label] of cases) {
     [context.includes('UNRESUMABLE') && context.includes('aa3437bf9bf7832a9'), 'the advice names the old agent as unresumable'],
     [context.includes(EXHAUSTED_TREE) && context.includes('TENANCY:'), 'the advice names its worktree and asks for a TENANCY line'],
     [!context.includes('SendMessage'), 'the advice never prints a resume recipe that cannot work'],
+    [context.includes('  TENANCY: <that worktree folder>') && context.includes('context failure or oversized transcript') && context.includes('@es   TENANCY: <esa carpeta de worktree>') && context.includes('irreanudable'), 'the closing TENANCY line names both causes, in both languages'],
     [decide('Measure the storybook render budget', '', REPO, records, NOW, SESSION)?.hookSpecificOutput?.permissionDecision === 'deny', 'a rate-limited agent still gets the resume-first refusal'],
     [decide('Extract the reorder state machine into its own controller', '', REPO, records, NOW, SESSION) === undefined, 'unrelated work gets no output at all']
   ];

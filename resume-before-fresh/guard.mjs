@@ -656,7 +656,9 @@ function unresumableNotice(exhausted) {
     ...(oversized.length === 0 ? [] : sizeRule(oversized)),
     '',
     'Its worktree may hold uncommitted or unlanded work. Give the replacement a line naming it, e.g.:',
-    '  TENANCY: <that worktree folder> — taking over from a context-exhausted agent; read its diff first.'
+    '  TENANCY: <that worktree folder> — taking over from an unresumable agent (context failure or oversized transcript); read its diff first.',
+    '@es Su worktree puede tener trabajo sin commitear o sin aterrizar; dale al reemplazo una línea que lo nombre:',
+    '@es   TENANCY: <esa carpeta de worktree> — relevo de un agente irreanudable (fallo de contexto o transcript demasiado grande); leé primero su diff.'
   ].join('\n');
 }
 

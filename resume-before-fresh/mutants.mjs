@@ -46,6 +46,7 @@ const MUTANTS = [
   ['the ledger rule is not printed for an oversized agent', G, '...(oversized.length === 0 ? [] : sizeRule(oversized)),', ''],
   ['the Spanish half of the ledger rule is dropped', G, "    '@es se lanza un agente fresco con alcance acotado que lee el estado de los ficheros.',\n", ''],
   ['the oversized agent is named without its size', G, '...oversized.map((agent) => `  ${address(agent.id)}: ${(agent.bytes / 1e6).toFixed(2)} MB (${agent.bytes} bytes) > ${EXHAUSTED_TRANSCRIPT_BYTES} bytes`)', '...oversized.map((agent) => `  ${address(agent.id)}`)'],
+  ['the closing TENANCY line names only the context failure again', G, 'unresumable agent (context failure or oversized transcript)', 'context-exhausted agent'],
   ['an agent older than the window is offered', G, '    if (now - lastWrite > RESUMABLE_WINDOW_MS) continue;\n', ''],
   ['a record from another project is offered', G, 'if (projectSlug(record.project) !== slug) continue;', ''],
   ['an agent whose worktree was removed is offered', G, '    if (recordedWorktree.length > 0 && !existsSync(recordedWorktree)) continue;\n', '']
