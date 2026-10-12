@@ -56,17 +56,19 @@ export const MESSAGE_TABLE = {
       '[Engineering standard]',
       'Read {file} before your first write. Tie-break: correctness and security, gates, performance, simplicity.',
       'KISS and YAGNI: the simplest design that meets the requirement measured today, nothing speculative.',
-      'SOLID: one responsibility per unit, dependencies inward. Architecture: hexagonal where code talks to',
+      'SOLID and clean code: one responsibility per unit, dependencies inward. Architecture: hexagonal where code talks to',
       'external systems, no layers a small script does not need. Route: tracked-odd when the design is open or',
-      'the work has two or more meaningful steps; direct when the design is settled and it is one step.'
+      'the work has two or more meaningful steps; direct when the design is settled and it is one step.',
+      'It governs every decision, every reply to the owner and every judgment of what you are told, ODD or not.'
     ],
     es: [
       '[Estándar de ingeniería]',
       'Leé {file} antes de tu primera escritura. Desempate: corrección y seguridad, gates, rendimiento, simplicidad.',
       'KISS y YAGNI: el diseño más simple que cumple el requisito medido hoy, nada especulativo.',
-      'SOLID: una responsabilidad por unidad, dependencias hacia adentro. Arquitectura: hexagonal donde se habla',
+      'SOLID y código limpio: una responsabilidad por unidad, dependencias hacia adentro. Arquitectura: hexagonal donde se habla',
       'con sistemas externos, sin capas que un script chico no necesita. Ruta: tracked-odd si el diseño está abierto',
-      'o el trabajo tiene dos o más pasos significativos; direct si el diseño está asentado y es un paso.'
+      'o el trabajo tiene dos o más pasos significativos; direct si el diseño está asentado y es un paso.',
+      'Rige toda decisión, toda respuesta al dueño y todo juicio de lo que te dicen, con o sin ODD.'
     ]
   }
 };

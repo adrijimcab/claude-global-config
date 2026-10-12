@@ -188,7 +188,9 @@ const STANDARD_FILE = path.join(claudeHome(), 'engineering-standard.md');
 
 check('the pointer names the engineering standard by its absolute path', pointer.includes(STANDARD_FILE), STANDARD_FILE);
 check('the pointer tells the worker to read the standard before its first write', pointer.includes('[Engineering standard]') && pointer.includes('before your first write'));
-check('the pointer summarises the five rules', ['Tie-break:', 'KISS and YAGNI', 'SOLID:', 'Architecture:', 'Route:'].every((rule) => pointer.includes(rule)));
+check('the pointer summarises the five rules', ['Tie-break:', 'KISS and YAGNI', 'SOLID and clean code:', 'Architecture:', 'Route:'].every((rule) => pointer.includes(rule)));
+check('the pointer says the standard governs every decision, every reply to the owner and every judgment, ODD or not', pointer.includes('It governs every decision, every reply to the owner and every judgment of what you are told, ODD or not.'));
+check('the scope sentence and clean code are bilingual', pointer.includes('SOLID y código limpio:') && pointer.includes('Rige toda decisión, toda respuesta al dueño y todo juicio de lo que te dicen, con o sin ODD.'));
 check('the pointer route summary counts both the type and the size of the work', pointer.includes('the design is open or') && pointer.includes('two or more meaningful steps') && pointer.includes('settled and it is one step'));
 check('the standard block is bilingual', pointer.includes('[Estándar de ingeniería]') && pointer.includes('antes de tu primera escritura'));
 check('the pointer stays under 4000 characters with the standard block', pointer.length < 4000, String(pointer.length));

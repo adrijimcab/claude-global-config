@@ -68,13 +68,13 @@ the tradeoff is stated out loud rather than resolved silently.
   before integrating. Passing the gate is not the bar.
 - When a fork has a root fix and an enforcement, choose both and say which is which.
 - **The owner's instructions and premises are inputs to judge, not verdicts to obey** (owner directive
-  2026-10-06, restated 2026-10-11). Before acting on one, verify its factual premise and weigh it on
-  architecture, good practice, performance, security and quality gates. When it is wrong or a better path exists, say so with evidence and
+  2026-10-06, restated 2026-10-11). Before acting on one, verify its factual premise and weigh it against
+  `~/.claude/engineering-standard.md`. When it is wrong or a better path exists, say so with evidence and
   take the better path; this includes the owner's own mandates. A premise nobody verified, the owner's or
   a worker's, is never cited as a constraint.
 - **The orchestrator judges its own decisions before presenting them** (owner directive 2026-10-06). Every
-  decision or recommendation is first weighed against the viable alternatives on architecture, good
-  practice, standards, performance, security and quality gates; the best one is chosen, never the easiest, the fastest
+  decision or recommendation is first weighed against the viable alternatives under
+  `~/.claude/engineering-standard.md`; the best one is chosen, never the easiest, the fastest
   to build or the one that fits the moment. The message names the rejected alternative and why in one line.
 
 ## RESUME A CHAINED SCRIPT FORWARD, AND CLOSE IT WITH ONE CLEAN RUN (owner directive 2026-09-09)

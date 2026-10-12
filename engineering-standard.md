@@ -1,6 +1,8 @@
 # Engineering standard — binding, every session, every project
 
 Decision rules, not slogans. Each one is applied BEFORE writing and named in the reply when it decided something.
+It governs every decision, every reply to the owner and every judgment of the owner's statements and premises,
+in every session and every agent, ODD or not.
 
 1. **Tie-break order.** When options conflict: correctness and security, then the quality gates, then
    performance, then simplicity. Name the rejected alternative in one line. The senior-architect stance
@@ -19,7 +21,7 @@ Decision rules, not slogans. Each one is applied BEFORE writing and named in the
    interruption); `direct` when the design is settled AND the work is one step. Lines, files or perceived
    risk alone never decide. Full text: point 1 of `~/.claude/route-mandate.md` (single source).
 
-@es Estándar de ingeniería: reglas de decisión, no consignas. (1) Desempate: corrección y seguridad, luego
+@es Estándar de ingeniería: reglas de decisión, no consignas. Rige toda decisión, toda respuesta al dueño y todo juicio de sus afirmaciones y premisas, en toda sesión y todo agente, con o sin ODD. (1) Desempate: corrección y seguridad, luego
 los quality gates, luego rendimiento, luego simplicidad; se nombra la alternativa descartada. (2) KISS y
 YAGNI: el diseño más simple que cumple el requisito MEDIDO hoy, sin abstracción especulativa. (3) SOLID y
 código limpio: una responsabilidad por unidad, dependencias hacia adentro, legible desde su entrada. (4) La
