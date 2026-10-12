@@ -22,7 +22,10 @@
  * THE TREE UNDER TEST is passed explicitly as `SELFTEST_TREE` (the absolute top level `--root` resolves to): a
  * selftest that has to read the tree reads it from there, never through `homedir()`, which now names the
  * sandbox. A project selftest that imports a SHARED fleet module resolves it from `SELFTEST_FLEET`, the fleet
- * that holds this runner, read-only by contract.
+ * that holds this runner, read-only by contract. With `--git-dir`, each selftest also receives it, absolute, as
+ * `SELFTEST_GIT_DIR` (absent otherwise), because its tree is ignored by the repository `git rev-parse` would answer.
+ * @es Con `--git-dir`, cada selftest recibe además ese directorio, absoluto, como `SELFTEST_GIT_DIR` (ausente si no),
+ * porque su árbol lo ignora el repositorio que respondería `git rev-parse`.
  *
  * THE LEAK VERDICT (`sandbox-verdict.mjs`) looks only at what no other process writes: anything left in the
  * sandbox home (a module that bypassed the state seam), anything left in the private temp directory, and any
@@ -76,12 +79,12 @@ const speaker = makeSpeaker(MESSAGES);
  * lo que dejó fuera de sus costuras; `failure` es null si salió en verde. Lanza `TreeStatusError` si git no
  * puede leer el árbol antes o después.
  */
-function runOne({ root, entry, timeoutMs, spawn }) {
+function runOne({ root, gitDir, entry, timeoutMs, spawn }) {
   const sandbox = createSandbox();
 
   try {
     const treeBefore = treeStatus(root);
-    const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root }) });
+    const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root, gitDir }) });
     const treeAfter = treeStatus(root);
 
     return { failure, escapes: escapesOf({ sandbox, tree: root, treeBefore, treeAfter }) };
@@ -180,7 +183,7 @@ export function runSelftests({ root, gitDir, timeoutMs = DEFAULT_TIMEOUT_MS, spa
     const label = entry.untracked ? ' UNTRACKED' : '';
     let outcome;
     try {
-      outcome = runOne({ root: discovered.root, entry, timeoutMs, spawn });
+      outcome = runOne({ root: discovered.root, gitDir, entry, timeoutMs, spawn });
     } catch (error) {
       if (!(error instanceof TreeStatusError)) throw error;
       const notMeasured = speaker.line('tree-unreadable', { tree: error.tree, selftest: entry.path, reason: error.reason });

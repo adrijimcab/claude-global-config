@@ -41,6 +41,8 @@ const MUTANTS = [
   ['a --git-dir tree is normalised to its code repo, so the tooling repository is never asked', DISCOVERY, "const top = gitDir === undefined ?", 'const top = true ?'],
   ['the --git-dir repository lists every file on disk, ignored scratch copies included', DISCOVERY, "['--git-dir', path.resolve(gitDir), '--work-tree', top]", "['-C', top]"],
   ['the runner does not pass --git-dir to discovery', RUN, 'discoverSelftests(root, { gitDir })', 'discoverSelftests(root)'],
+  ['the runner does not hand --git-dir to the sandbox environment of each selftest', RUN, 'tree: root, gitDir }) });', 'tree: root }) });'],
+  ['the runner does not hand --git-dir to the run of each selftest', RUN, 'runOne({ root: discovered.root, gitDir, entry, timeoutMs, spawn })', 'runOne({ root: discovered.root, entry, timeoutMs, spawn })'],
   ['the command line drops --git-dir', RUN, '{ root: parsed.root, gitDir: parsed.gitDir, onLine: writeLineSync }', '{ root: parsed.root, onLine: writeLineSync }'],
   ['--git-dir is accepted without --root', RUN, "argv.length === 4 && argv[0] === '--root' && argv[2] === '--git-dir'", "argv.length === 4 && argv[2] === '--git-dir'"],
   ['any second option is taken as --git-dir, so a filter can be passed', RUN, "argv.length === 4 && argv[0] === '--root' && argv[2] === '--git-dir'", "argv.length === 4 && argv[0] === '--root'"],

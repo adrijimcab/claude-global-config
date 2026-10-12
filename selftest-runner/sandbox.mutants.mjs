@@ -20,15 +20,15 @@ const TREE = 'selftest-runner/tree-status.mjs';
 
 const MUTANTS = [
   // The runner's wiring / El cableado del runner
-  ['the child runs in the runner environment, not its sandbox', RUN, 'env: sandboxEnv(sandbox, { base: process.env, tree: root }) });', 'env: process.env });'],
-  ['the tree named to the child is the runner cwd', RUN, 'sandboxEnv(sandbox, { base: process.env, tree: root })', 'sandboxEnv(sandbox, { base: process.env, tree: process.cwd() })'],
+  ['the child runs in the runner environment, not its sandbox', RUN, 'env: sandboxEnv(sandbox, { base: process.env, tree: root, gitDir }) });', 'env: process.env });'],
+  ['the tree named to the child is the runner cwd', RUN, 'sandboxEnv(sandbox, { base: process.env, tree: root, gitDir })', 'sandboxEnv(sandbox, { base: process.env, tree: process.cwd(), gitDir })'],
   ['the sandbox is left behind', RUN, '    removeSandbox(sandbox);\n', ''],
   ['every selftest shares one sandbox', RUN, 'const sandbox = createSandbox();', 'const sandbox = (globalThis.sharedSandbox ??= createSandbox());'],
   [
     'the tree is read "before" the selftest only after it ran',
     RUN,
-    '    const treeBefore = treeStatus(root);\n    const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root }) });',
-    '    const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root }) });\n    const treeBefore = treeStatus(root);',
+    '    const treeBefore = treeStatus(root);\n    const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root, gitDir }) });',
+    '    const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root, gitDir }) });\n    const treeBefore = treeStatus(root);',
   ],
   ['the tree after the selftest is the tree before it', RUN, 'const treeAfter = treeStatus(root);', 'const treeAfter = treeBefore;'],
   ['a selftest that escaped but exited 0 is green', RUN, 'if (outcome.failure === null && outcome.escapes.length === 0) {', 'if (outcome.failure === null) {'],
@@ -48,6 +48,10 @@ const MUTANTS = [
   ['SELFTEST_TREE is not set', SANDBOX, '  setVariable(env, TREE_VARIABLE, path.resolve(tree));\n', ''],
   ['SELFTEST_TREE is not made absolute', SANDBOX, 'setVariable(env, TREE_VARIABLE, path.resolve(tree));', 'setVariable(env, TREE_VARIABLE, tree);'],
   ['SELFTEST_FLEET is not set', SANDBOX, '  setVariable(env, FLEET_VARIABLE, FLEET_ROOT);\n', ''],
+  ['SELFTEST_GIT_DIR is never set', SANDBOX, '  setVariable(env, GIT_DIR_VARIABLE, gitDir === undefined ? undefined : path.resolve(gitDir));\n', ''],
+  ['SELFTEST_GIT_DIR is handed over as given, not absolute', SANDBOX, 'path.resolve(gitDir));', 'gitDir);'],
+  ['an inherited SELFTEST_GIT_DIR survives a run without --git-dir', SANDBOX, 'gitDir === undefined ? undefined :', 'gitDir === undefined ? base[GIT_DIR_VARIABLE] :'],
+  ['SELFTEST_GIT_DIR is left as the literal text "undefined" when there is no git dir', SANDBOX, 'if (value !== undefined) env[name] = value;', 'env[name] = String(value);'],
   ['SELFTEST_FLEET names the sandbox home instead of the fleet', SANDBOX, 'setVariable(env, FLEET_VARIABLE, FLEET_ROOT);', 'setVariable(env, FLEET_VARIABLE, sandbox.claudeHome);'],
   ['SELFTEST_FLEET names the runner directory, not the fleet above it', SANDBOX, "const FLEET_ROOT = path.resolve(import.meta.dirname, '..');", 'const FLEET_ROOT = import.meta.dirname;'],
   ['a variable spelled in another case is left beside the new one', SANDBOX, 'if (key.toUpperCase() === name) delete env[key];', 'if (key.toUpperCase() === name) void env[key];'],

@@ -14,7 +14,13 @@
  * (a contract file, a settings file) reads it from there, never from the home, which is now empty.
  * `SELFTEST_FLEET` carries the fleet that holds this runner (`~/.claude`), for a project selftest that imports a
  * shared fleet module; it is read-only by contract.
+ * `SELFTEST_GIT_DIR` carries the git dir the runner was given with `--git-dir`, absolute, and is absent when none
+ * was given (an inherited value is removed): a selftest of a tooling tree its code repo ignores has no other way to
+ * find its own repository.
  * `NODE_DISABLE_COMPILE_CACHE` is set, so no Node process of the child leaves a compile cache in its temp.
+ * @es `SELFTEST_GIT_DIR` lleva el git dir que recibió el runner con `--git-dir`, absoluto, y no existe si no se dio
+ * ninguno (un valor heredado se quita): un selftest de un árbol de tooling que su repo de código ignora no tiene otra
+ * forma de hallar su propio repositorio.
  *
  * WHAT IT CANNOT REACH: a path a module builds without the environment (a hard-coded absolute path), and the
  * other per-user directories Windows keeps in `APPDATA`/`LOCALAPPDATA`, which stay the real ones.
@@ -54,6 +60,14 @@ export const TREE_VARIABLE = 'SELFTEST_TREE';
  * debajo es la flota real, fuera de toda costura del sandbox.
  */
 export const FLEET_VARIABLE = 'SELFTEST_FLEET';
+
+/**
+ * The variable that names the git dir given to the runner with `--git-dir`: the repository of a tooling tree its code
+ * repository ignores. Set only when one was given.
+ * @es La variable que nombra el git dir dado al runner con `--git-dir`: el repositorio de un árbol de tooling que su
+ * repo de código ignora. Se fija solo si se dio uno.
+ */
+export const GIT_DIR_VARIABLE = 'SELFTEST_GIT_DIR';
 
 /** The fleet root: the directory above `selftest-runner/`. @es La raíz de la flota: el directorio sobre `selftest-runner/`. */
 const FLEET_ROOT = path.resolve(import.meta.dirname, '..');
@@ -97,20 +111,22 @@ export function createSandbox(parent = tmpdir()) {
  * variables case-insensitively, so a stale `Temp` beside a new `TEMP` would leave the child two answers.
  * @es Fija `name` en `env`, quitando antes cualquier grafía que solo difiera en mayúsculas: Windows lee sus
  * variables sin distinguirlas, y un `Temp` viejo junto a un `TEMP` nuevo dejaría al hijo dos respuestas.
+ * With `value` undefined it only removes. @es Con `value` undefined solo quita.
  */
 function setVariable(env, name, value) {
   for (const key of Object.keys(env)) if (key.toUpperCase() === name) delete env[key];
 
-  env[name] = value;
+  if (value !== undefined) env[name] = value;
 }
 
 /**
  * The environment of a child that runs in `sandbox`: `base` with every home, state and temp variable pointed
- * into the sandbox, and `SELFTEST_TREE` set to `tree`.
+ * into the sandbox, `SELFTEST_TREE` set to `tree`, and `SELFTEST_GIT_DIR` set to `gitDir` (absolute) or removed when
+ * there is none.
  * @es El entorno de un hijo que corre en `sandbox`: `base` con cada variable de home, estado y temporal
- * apuntando dentro del sandbox, y `SELFTEST_TREE` en `tree`.
+ * apuntando dentro del sandbox, `SELFTEST_TREE` en `tree` y `SELFTEST_GIT_DIR` en `gitDir` (absoluto) o quitada si no hay.
  */
-export function sandboxEnv(sandbox, { base, tree }) {
+export function sandboxEnv(sandbox, { base, tree, gitDir }) {
   const env = { ...base };
 
   for (const name of HOME_VARIABLES) setVariable(env, name, sandbox.home);
@@ -119,6 +135,7 @@ export function sandboxEnv(sandbox, { base, tree }) {
   setVariable(env, STATE_ROOT_VARIABLE, sandbox.state);
   setVariable(env, TREE_VARIABLE, path.resolve(tree));
   setVariable(env, FLEET_VARIABLE, FLEET_ROOT);
+  setVariable(env, GIT_DIR_VARIABLE, gitDir === undefined ? undefined : path.resolve(gitDir));
   setVariable(env, COMPILE_CACHE_OFF, '1');
 
   return env;

@@ -26,7 +26,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { discoverSelftests } from './discovery.mjs';
@@ -123,6 +123,36 @@ check(ownRepoCli.status === 0 && ownRepoCli.stdout.includes('2/2 green'), `the c
 check(cli(codeRepo, '--git-dir', toolingGitDir).status === 2, '--git-dir without --root is refused');
 check(cli(codeRepo, '--only', toolingTree, '--git-dir', toolingGitDir).status === 2, '--git-dir after an option that is not --root is refused');
 check(cli(codeRepo, '--root', toolingTree, '--git-dir', path.join(bareDir(), 'missing.git')).status === 2, 'a --git-dir that is not a repository exits 2, never green');
+
+// ── The git dir handed to each selftest: SELFTEST_GIT_DIR ────────────────────────────────────────
+// The probe records what it was given in an ignored file, so recording it is not a change to the tree under test.
+// @es La sonda anota lo que recibió en un fichero ignorado, así anotarlo no cambia el árbol bajo prueba.
+const PROBE = "import { writeFileSync } from 'node:fs';\nwriteFileSync('seen.txt', JSON.stringify(process.env.SELFTEST_GIT_DIR ?? null));\n";
+// A selftest that never ran leaves no note: that reads as 'no note', a failed check, never a crash.
+// @es Un selftest que no corrió no deja nota: eso se lee como 'no note', un check fallido, nunca un crash.
+const noteOf = (tree) => path.join(tree, 'a', 'seen.txt');
+const seenBy = (tree) => (existsSync(noteOf(tree)) ? JSON.parse(readFileSync(noteOf(tree), 'utf8')) : 'no note');
+const STALE = { ...process.env, SELFTEST_GIT_DIR: 'stale-value' };
+const runnerWith = (env, ...args) => spawnSync(process.execPath, [RUN, ...args], { cwd: bareDir(), encoding: 'utf8', env });
+
+const probeRepo = repo({ tracked: { 'a/selftest.mjs': PROBE }, ignore: 'seen.txt\n' });
+const noGitDir = runnerWith(STALE, '--root', probeRepo);
+check(noGitDir.status === 0 && seenBy(probeRepo) === null, `without --git-dir a selftest sees no SELFTEST_GIT_DIR, an inherited value removed: ${noGitDir.status} ${seenBy(probeRepo)}`);
+
+const probeCodeRepo = repo({ tracked: { 'README.md': 'code' }, loose: { '.claude/a/selftest.mjs': PROBE }, ignore: '.claude/\n' });
+const probeTree = path.join(probeCodeRepo, '.claude');
+const probeGitDir = path.join(bareDir(), 'probe.git');
+const probeGit = (...args) => spawnSync('git', [`--git-dir=${probeGitDir}`, `--work-tree=${probeTree}`, ...args], { encoding: 'utf8' });
+spawnSync('git', ['init', '-q', '--bare', probeGitDir], { encoding: 'utf8' });
+probeGit('add', 'a/selftest.mjs');
+probeGit('-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '-m', 'probe');
+writeFileSync(path.join(probeGitDir, 'info', 'exclude'), 'seen.txt\n', { flag: 'a' });
+const withGitDir = runnerWith(STALE, '--root', probeTree, '--git-dir', probeGitDir);
+check(withGitDir.status === 0 && seenBy(probeTree) === path.resolve(probeGitDir), `with --git-dir a selftest sees exactly that git dir, absolute, over a stale inherited value: ${withGitDir.status} ${seenBy(probeTree)} ${withGitDir.stdout}`);
+const relativeGitDir = path.relative(process.cwd(), probeGitDir);
+rmSync(noteOf(probeTree), { force: true });
+const relativeRun = spawnSync(process.execPath, [RUN, '--root', probeTree, '--git-dir', relativeGitDir], { encoding: 'utf8' });
+check(relativeRun.status === 0 && seenBy(probeTree) === path.resolve(probeGitDir), `a relative --git-dir reaches the selftest absolute: ${relativeRun.status} ${seenBy(probeTree)}`);
 
 // ── Verdict: red paths leave the rest running ────────────────────────────────────────────────────
 const sentinel = 'later-selftest-ran';

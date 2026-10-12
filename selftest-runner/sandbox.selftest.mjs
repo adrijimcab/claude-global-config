@@ -137,6 +137,10 @@ check(unitEnv.PATH === 'kept' && unitEnv.SELFTEST_TREE === path.resolve('.'), 't
 check(unitEnv.SELFTEST_FLEET === FLEET_ROOT, `the fleet root is the directory that holds the runner, absolute: ${unitEnv.SELFTEST_FLEET}`);
 const staleFleet = sandboxEnv(unit, { base: { Selftest_Fleet: 'stale' }, tree: '.' });
 check(!('Selftest_Fleet' in staleFleet) && staleFleet.SELFTEST_FLEET === FLEET_ROOT, 'a SELFTEST_FLEET spelled in another case is replaced, never left beside the new one');
+const withGitDir = sandboxEnv(unit, { base: { Selftest_Git_Dir: 'stale' }, tree: '.', gitDir: 'tooling.git' });
+check(!('Selftest_Git_Dir' in withGitDir) && withGitDir.SELFTEST_GIT_DIR === path.resolve('tooling.git'), `a given git dir is made absolute and replaces a stale one spelled in another case: ${withGitDir.SELFTEST_GIT_DIR}`);
+const withoutGitDir = sandboxEnv(unit, { base: { SELFTEST_GIT_DIR: 'stale', Selftest_Git_Dir: 'stale' }, tree: '.' });
+check(!Object.keys(withoutGitDir).some((key) => key.toUpperCase() === 'SELFTEST_GIT_DIR'), `without a git dir no spelling of SELFTEST_GIT_DIR survives: ${Object.keys(withoutGitDir)}`);
 removeSandbox(unit);
 check(!existsSync(unit.root), 'removeSandbox removes the whole sandbox');
 
