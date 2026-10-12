@@ -10,6 +10,8 @@
  * WHAT IT DECIDES.
  *   - Fires on `Stop` for the orchestrator only; a subagent caller, a `SubagentStop` and a stop already inside
  *     a refusal pass.
+ *   - Judges only the documents THIS session wrote or edited (`session-documents.mjs`, from its transcript):
+ *     another session's document is never warned about here. @es Solo juzga los documentos que escribió ESTA sesión.
  *   - Refuses, bilingually, naming each feature whose mirror is MISSING or STALE (`mirror-verdict.mjs`).
  *   - AT MOST ONCE per session and set of findings (`../integrated-worktree-guard/noticed-sets.mjs`).
  *   - FAILS OPEN on a malfunction of its own (unreadable store, directory or payload) and records it in
@@ -33,6 +35,7 @@ import { alreadyShown, markShown } from '../integrated-worktree-guard/noticed-se
 import { featureDocuments } from './feature-documents.mjs';
 import { judgeMirrors, mirrorTopicKey } from './mirror-verdict.mjs';
 import { refusalText } from './report.mjs';
+import { documentsWrittenBy } from './session-documents.mjs';
 
 export { mirrorTopicKey };
 
@@ -70,7 +73,18 @@ export function decide(payload, { projectRoot = projectOf(payload), databasePath
     return undefined;
   }
 
-  const { findings, unmeasured } = judgeMirrors(projectRoot, listed.documents, { databasePath });
+  if (listed.documents.length === 0) return undefined;
+
+  // Only the documents THIS session wrote are its to mirror; another session's are not warned about here.
+  // @es Solo los documentos que escribió ESTA sesión le tocan; los de otra sesión no se avisan aquí.
+  const own = documentsWrittenBy(payload?.transcript_path, projectRoot, listed.documents);
+
+  if (own.error !== undefined) {
+    note(stateDir, { event: 'transcript-unread', transcript: payload?.transcript_path ?? null, error: own.error });
+    return undefined;
+  }
+
+  const { findings, unmeasured } = judgeMirrors(projectRoot, own.documents, { databasePath });
 
   for (const item of unmeasured) note(stateDir, { event: 'malfunction', stage: 'read-mirror', feature: item.feature, error: item.reason });
 

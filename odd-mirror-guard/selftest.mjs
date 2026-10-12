@@ -35,6 +35,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { defaultDatabasePath } from '../backlog-owner-guard/resolve-topic-key.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
+import { featureDocuments } from './feature-documents.mjs';
 import { decide, mirrorTopicKey } from './guard.mjs';
 
 // The state of the guard under test, and of any child it spawns, lives in a temp directory.
@@ -92,6 +93,19 @@ const mirror = (feature, updatedAt, { project = 'foo-bar', deletedAt = null } = 
 const DOCUMENT_AT = '2026-10-12 10:00:10';
 const documentSeconds = Date.parse('2026-10-12T10:00:10Z') / 1000;
 let projectCount = 0;
+const featuresOf = new Map();
+let transcriptCount = 0;
+
+/** A transcript whose only call is an Edit of one document. @es Un transcript con un solo Edit de un documento. */
+function editTranscript(dir, feature) {
+  transcriptCount += 1;
+
+  const file = path.join(root, `transcript-${transcriptCount}.jsonl`);
+
+  writeFileSync(file, `${JSON.stringify({ message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: path.join(dir, 'odd', 'tasks', `${feature}.md`) } }] } })}\n`);
+
+  return file;
+}
 
 /** A project directory named `Foo_Bar` holding the given features, each file stamped DOCUMENT_AT. @es Un proyecto `Foo_Bar` con las features dadas. */
 function project(features, { extra = [] } = {}) {
@@ -112,13 +126,30 @@ function project(features, { extra = [] } = {}) {
     }
   }
 
+  featuresOf.set(dir, features ?? []);
+
   return dir;
+}
+
+/**
+ * A session transcript whose Write calls created the given features' documents in `dir` (default: all of them).
+ * @es Un transcript de sesión cuyas llamadas Write crearon los documentos de las features dadas en `dir`.
+ */
+function transcriptOf(dir, wrote = featuresOf.get(dir) ?? []) {
+  transcriptCount += 1;
+
+  const file = path.join(root, `transcript-${transcriptCount}.jsonl`);
+  const lines = wrote.map((feature) => JSON.stringify({ message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: path.join(dir, 'odd', 'tasks', `${feature}.md`) } }] } }));
+
+  writeFileSync(file, `${lines.join('\n')}\n`);
+
+  return file;
 }
 
 const payload = (session, extra = {}) => ({ hook_event_name: 'Stop', session_id: session, cwd: root, ...extra });
 let stateCount = 0;
 const freshState = () => path.join(root, `state-${(stateCount += 1)}`);
-const run = (dir, session, options = {}) => decide(payload(session, options.payload), { projectRoot: dir, databasePath, stateDir: options.stateDir ?? freshState() });
+const run = (dir, session, options = {}) => decide(payload(session, { transcript_path: transcriptOf(dir, options.wrote), ...options.payload }), { projectRoot: dir, databasePath, stateDir: options.stateDir ?? freshState() });
 const blocked = (output) => output?.decision === 'block';
 
 // ── missing / stale / fresh ───────────────────────────────────────────────────────────────────────
@@ -154,6 +185,7 @@ check('with several features only the bad ones are named', blocked(mixed) && mix
 process.stdout.write('nothing to check\n');
 
 check('a project with no odd directory is allowed', run(project(undefined), 'b1') === undefined);
+check('only Markdown files are documents', featureDocuments(project(['a', 'b'], { extra: ['notes.txt'] })).documents.map((d) => d.feature).join() === 'a,b');
 check('an empty odd/tasks is allowed', run(project([]), 'b2') === undefined);
 check('a non-Markdown file in odd/tasks is ignored', run(project([], { extra: ['notes.txt'] }), 'b3') === undefined);
 
@@ -190,7 +222,7 @@ check('swap: same count but a DIFFERENT feature is a different set, refused agai
 process.stdout.write('when it cannot measure\n');
 
 const unreadableState = freshState();
-const unreadable = decide(payload('e1'), { projectRoot: bad, databasePath: path.join(root, 'absent', 'engram.db'), stateDir: unreadableState });
+const unreadable = decide(payload('e1', { transcript_path: transcriptOf(bad) }), { projectRoot: bad, databasePath: path.join(root, 'absent', 'engram.db'), stateDir: unreadableState });
 const observed = existsSync(path.join(unreadableState, 'observed.jsonl')) ? readFileSync(path.join(unreadableState, 'observed.jsonl'), 'utf8') : '';
 
 check('an unreadable store allows (fails open), never reads as fresh', unreadable === undefined);
@@ -208,7 +240,7 @@ const shim = (input, dir) =>
     windowsHide: true,
   });
 
-const shimBlock = shim(`﻿${JSON.stringify(payload('f1'))}`, bad);
+const shimBlock = shim(`﻿${JSON.stringify(payload('f1', { transcript_path: transcriptOf(bad) }))}`, bad);
 let shimOutput;
 
 try {
@@ -219,11 +251,35 @@ try {
 
 check('BOM-prefixed payload on a bad project: exit 0 and a block decision', shimBlock.status === 0 && blocked(shimOutput) && shimOutput.reason.includes('no-mirror'), JSON.stringify(shimBlock));
 
-const shimClean = shim(JSON.stringify(payload('f2')), project(['fresh-one']));
+const freshProject = project(['fresh-one']);
+const shimClean = shim(JSON.stringify(payload('f2', { transcript_path: transcriptOf(freshProject) })), freshProject);
 
 check('a fresh mirror: exit 0 and no output', shimClean.status === 0 && shimClean.stdout === '', JSON.stringify(shimClean));
 
-const shimGarbage = shim('not json', bad);
+// ── authorship: only the documents THIS session wrote ──────────────────────────────────────────────
+process.stdout.write('whose documents are judged\n');
+
+const shared = project(['mine-missing', 'theirs-missing', 'theirs-other']);
+
+check('a document written by another session is ignored', run(shared, 'g1', { wrote: [] }) === undefined);
+
+const mineOnly = run(shared, 'g2', { wrote: ['mine-missing'] });
+
+check('a document written by this session is judged', blocked(mineOnly) && mineOnly?.reason.includes('mine-missing'), JSON.stringify(mineOnly));
+check("in a mixed set only this session's documents are reported", blocked(mineOnly) && !mineOnly.reason.includes('theirs-missing') && !mineOnly.reason.includes('theirs-other'), mineOnly?.reason);
+check('an Edit of the document counts as writing it too', blocked(decide(payload('g3', { transcript_path: editTranscript(shared, 'mine-missing') }), { projectRoot: shared, databasePath, stateDir: freshState() })));
+check('a write of the same relative path in ANOTHER checkout is not this project', run(shared, 'g4', { wrote: [], payload: { transcript_path: transcriptOf(project(['mine-missing'])) } }) === undefined);
+check('a payload with no transcript cannot attribute, so it allows', run(shared, 'g5', { payload: { transcript_path: undefined } }) === undefined);
+
+const unreadableTranscriptState = freshState();
+
+check('an unreadable transcript allows AND records it', run(shared, 'g6', { stateDir: unreadableTranscriptState, payload: { transcript_path: path.join(root, 'no-such.jsonl') } }) === undefined && readFileSync(path.join(unreadableTranscriptState, 'observed.jsonl'), 'utf8').includes('transcript-unread'));
+
+const noDocumentsState = freshState();
+
+check('a project with no documents does not even read the transcript', run(project(undefined), 'g7', { stateDir: noDocumentsState, payload: { transcript_path: undefined } }) === undefined && !existsSync(path.join(noDocumentsState, 'observed.jsonl')));
+
+const shimGarbage =shim('not json', bad);
 
 check('an unreadable payload fails open: exit 0, no output', shimGarbage.status === 0 && shimGarbage.stdout === '');
 
