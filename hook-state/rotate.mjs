@@ -113,6 +113,7 @@ export const KINDS = Object.freeze([
   ['owner-language-guard', 'guard.log', ARCHIVE, 'guard log'],
   ['review-cwd-guard', 'journal.jsonl', ARCHIVE, 'refusal and fail-open journal'],
   ['stash-watch', 'observed.jsonl', ARCHIVE, 'observation journal'],
+  ['process-reaper', 'reaps.jsonl', ARCHIVE, 'what each SubagentStop reaped, and the payload keys it received'],
   ['stop-input-recorder', 'stops.jsonl', ARCHIVE, 'what each Stop hook received'],
   ['stash-watch', 'noticed.json', KEEP, 'the stash sets each session was shown'],
   ['type-assertion-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],
