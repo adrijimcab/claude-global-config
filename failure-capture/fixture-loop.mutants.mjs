@@ -17,7 +17,7 @@ const PROVISIONER = 'failure-capture/fixture-loop.mjs';
 const MUTANTS = [
   ['the loop modules are not copied', PROVISIONER, 'copyModules(sources.loop, loop, accept);', 'mkdirSync(loop, { recursive: true });'],
   ['the filter is ignored', PROVISIONER, 'copyModules(sources.loop, loop, accept);', 'copyModules(sources.loop, loop, () => true);'],
-  ['the shared modules are not copied', PROVISIONER, "copyModules(sources.shared, shared, (file) => !file.includes('selftest') && !file.includes('mutants'));", 'mkdirSync(shared, { recursive: true });'],
+  ['the shared modules are not copied', PROVISIONER, "copyModules(sources.shared, shared, isProduct);", 'mkdirSync(shared, { recursive: true });'],
   ['the selftests and campaigns are copied too', PROVISIONER, "const isProduct = (file) => !file.includes('selftest') && !file.includes('mutants');", 'const isProduct = () => true;'],
   ['the parity engine is not copied', PROVISIONER, 'copyModules(sources.engine ?? REAL_SOURCES.engine, path.join(loop, \'..\', ENGINE_DIRECTORY), isProduct);', 'void ENGINE_DIRECTORY;'],
   ['the parity engine is copied with its selftests', PROVISIONER, 'path.join(loop, \'..\', ENGINE_DIRECTORY), isProduct);', 'path.join(loop, \'..\', ENGINE_DIRECTORY), () => true);'],
