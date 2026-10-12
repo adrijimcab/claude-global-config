@@ -101,7 +101,7 @@ const MUTANTS = [
   ['a word with a slash is not an import', PRESENCE, "return word.includes('/') || word.includes('.') ? word : undefined;", "return word.includes('.') ? word : undefined;"],
   ['the imported file need not exist', PRESENCE, '.some((imported) => isFile(', '.some((imported) => true || isFile('],
   ['an indented import is missed', PRESENCE, 'const trimmed = line.trim();', 'const trimmed = line;'],
-  ['a tab does not end the imported word', PRESENCE, ".split(' ')[0].split('\t')[0]", ".split(' ')[0]"],
+  ['a tab does not end the imported word', PRESENCE, ".split(' ')[0].split('\\t')[0]", ".split(' ')[0]"],
   ['a ~/ import is resolved against the .claude directory', PRESENCE, 'imported.startsWith(HOME_PREFIX) ? path.join(homedir(), imported.slice(HOME_PREFIX.length)) : path.resolve(claudeDirectory, imported)', 'path.resolve(claudeDirectory, imported)'],
   ['the guard does not look for a CLAUDE.md project', GUARD, "const ROOT_MARKERS = [ANCHORS_FILE, '.claude/CLAUDE.md', '.claude/AGENT-LEDGER.md'];", "const ROOT_MARKERS = [ANCHORS_FILE, '.claude/AGENT-LEDGER.md'];"],
   ['the guard does not look for an AGENT-LEDGER project', GUARD, "const ROOT_MARKERS = [ANCHORS_FILE, '.claude/CLAUDE.md', '.claude/AGENT-LEDGER.md'];", "const ROOT_MARKERS = [ANCHORS_FILE, '.claude/CLAUDE.md'];"],
