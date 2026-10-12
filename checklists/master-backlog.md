@@ -274,6 +274,12 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   report. Fix: add those four replies from the session transcript as pass fixtures and narrow the rule's
   wording, re-measured over 5 runs per fixture. Pending, reason (3): the rubric lives on master and the next
   landing is assembling; it goes in the unit after it.
+  Still present in v4, measured 2026-10-12 in three sessions. b100-am-ui-f8 (c4d7f854): v4 rejected under
+  rule 8 four prose paragraphs with no list, giving the reason "the body is a status report, with items about
+  the hook, the promotion, the master session and the process kills". The orchestrator: two owner-requested
+  reports were rejected in a loop. The judge treats status CONTENT in prose as an enumeration. Two of these
+  replies were added as pass fixtures in 95b4455; the rest are in the session transcripts. Still pending,
+  together with the judge gate (rule 1 applied in code, not by the model).
 - Uncommitted work during a long run (recurred 2026-10-11, `worker-work-left-uncommitted-across-a-stop` 2x: a
   worker an hour without a commit, then the orchestrator's own inline land.mjs fix uncommitted while its
   mutation campaign ran). Mechanism to build: the mutation runner and the selftest runner refuse to start in a
