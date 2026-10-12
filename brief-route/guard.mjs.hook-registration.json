@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Agent|Task|SendMessage"
+    }
+  ],
+  "why": "briefs reach a worker without saying which route it takes, so the worker cannot tell whether it may open or touch an ODD feature document, which the orchestrator owns (measured 2026-10-12). Registered for SendMessage as well as Agent|Task because a resume carries the brief addition in tool_input.message, the same surface brief-provenance covers."
+}

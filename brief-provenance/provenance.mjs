@@ -45,7 +45,8 @@ const LIST_MARKUP = '-*+#>';
 // @es Lo blanco lo decide `trim()`, no una constante llena de espacios.
 const isLead = (char) => LIST_MARKUP.includes(char) || char.trim() === '';
 
-function stripLead(line) {
+/** The line without its leading layout; exported so every brief-line guard strips layout the same way. @es La línea sin su maquetación inicial; exportada para que todo guard de líneas de brief la quite igual. */
+export function stripLead(line) {
   let index = 0;
 
   while (index < line.length && isLead(line.charAt(index))) index += 1;
