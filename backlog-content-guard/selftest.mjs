@@ -279,6 +279,8 @@ check('the archive topic_key prefix match ignores case', verdict(save({ topic_ke
 check('a junk token beside a valid id is ignored, the valid id still counts', verdict(save({ topic_key: MASTER, content: `${SHRUNK}\nARCHIVED: #11, #eleven` })), 'allow');
 check('citedArchiveIds reads several ids and ignores repeats', citedArchiveIds('ARCHIVED: #3, #4 #3\n- ARCHIVED: (#5)').join(','), '3,4,5');
 
+check('the topic_key reader returns updated_at, the column the ODD mirror guard compares with a file mtime', typeof realReaders.byTopicKey(KEY, {}).rows?.[0]?.updated_at, 'string');
+
 if (failures.length > 0) {
   console.error(`backlog-content-guard selftest: ${failures.length} FAILURE(S) of ${passed + failures.length}`);
 

@@ -27,7 +27,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { defaultDatabasePath } from '../backlog-owner-guard/resolve-topic-key.mjs';
 
-const COLUMNS = 'id, project, scope, topic_key, content';
+const COLUMNS = 'id, project, scope, topic_key, content, updated_at';
 
 /** Runs `query` against a read-only handle, turning every failure into `{ error }`. @es Ejecuta la consulta en solo lectura; todo fallo es `{ error }`. */
 function withStore(databasePath, query) {
