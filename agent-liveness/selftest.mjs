@@ -280,7 +280,7 @@ await section("10. the real dispatcher on real-shaped payloads from the real man
 
     return file;
   };
-  const payload = (event, agent) => JSON.stringify({ session_id: 's9', transcript_path: 'C:/t/main.jsonl', cwd: 'C:/repo/.claude/worktrees/wtD', hook_event_name: event, agent_id: agent, agent_type: 'general-purpose', ...(event === 'SubagentStop' ? { stop_hook_active: false, agent_transcript_path: `C:/t/subagents/agent-${agent}.jsonl`, last_assistant_message: 'ok' } : {}) });
+  const payload = (event, agent) => JSON.stringify({ session_id: 's9', transcript_path: 'C:/t/main.jsonl', cwd: 'C:/repo/.claude/worktrees/wtD', prompt_id: 'p9', hook_event_name: event, agent_id: agent, agent_type: 'general-purpose', ...(event === 'SubagentStop' ? { stop_hook_active: false, agent_transcript_path: `C:/t/subagents/agent-${agent}.jsonl`, last_assistant_message: 'ok' } : {}) });
 
   check('the SubagentStart manifest is for the SubagentStart event and runs the recorder', [JSON.parse(readFileSync(startManifest, 'utf8')).event, JSON.parse(readFileSync(startManifest, 'utf8')).guards.includes(recorderEntry)], ['SubagentStart', true]);
   check('the SubagentStop manifest runs the recorder', JSON.parse(readFileSync(stopManifest, 'utf8')).guards.includes(recorderEntry), true);

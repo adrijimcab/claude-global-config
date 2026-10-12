@@ -30,8 +30,8 @@ import path from 'node:path';
 
 import { stateDir } from '../hook-state/locations.mjs';
 
-/** The mechanism whose state holds the lifecycle. @es El mecanismo cuyo estado guarda el ciclo de vida. */
-export const MECHANISM = 'agent-liveness';
+/** The directory of the state that holds the lifecycle. @es El directorio del estado que guarda el ciclo de vida. */
+const lifecycleDir = () => stateDir('agent-liveness');
 
 /** The events that decide liveness. @es Los eventos que deciden la vivacidad. */
 export const START = 'start';
@@ -41,7 +41,7 @@ export const STOP = 'stop';
 const FILE_PREFIX = 'agent-';
 
 /** Where the lifecycle is kept. @es Dónde se guarda el ciclo de vida. */
-export const lifecyclePath = () => path.join(stateDir(MECHANISM), 'lifecycle.jsonl');
+export const lifecyclePath = () => path.join(lifecycleDir(), 'lifecycle.jsonl');
 
 /**
  * The key an agent is known by, whether it arrives as a hook's `agent_id` (`a8534307c229206b6`) or as the harness's
@@ -62,7 +62,7 @@ export function agentKey(id) {
  * @es Añade una línea al fichero. Lanza si falla la escritura: quien llama (el registrador) decide tragarla.
  */
 export function appendLifecycle(line) {
-  mkdirSync(stateDir(MECHANISM), { recursive: true });
+  mkdirSync(lifecycleDir(),{ recursive: true });
   appendFileSync(lifecyclePath(), `${JSON.stringify(line)}\n`, 'utf8');
 }
 
