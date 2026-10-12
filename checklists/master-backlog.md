@@ -330,6 +330,16 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   DONE 2026-10-11: built as `stale-session-guard`, landed on master 386d92a. The Stop-versus-PreToolUse
   difference was explained from code (`hook-dispatch/dispatch.mjs` re-reads its manifest on every run, so
   guards added to an existing group are live mid-session; only new settings.json groups need a restart).
+
+  CORRECTED 2026-10-12: that premise was false. A live probe (Claude Code 2.1.296, `hook-reload-probe/`,
+  fixtures `fired-2.1.296.log` and `turns-2.1.296.txt`) showed hook groups added, edited and removed in
+  settings.json fire (or stop firing) on the next turn for UserPromptSubmit, Stop, PreToolUse and
+  SubagentStart; the orchestrator session confirmed it for judge-gate Stop and SubagentStart. CLAUDE.md and
+  rules text are read only at session start. `stale-session-guard` removed in cf1d82d; lesson
+  `guard-built-on-an-unmeasured-premise`. Still unexplained: the 2026-10-11 PreToolUse observation above.
+- Stale memory-text warning: PENDING, reason (4) (its own design). A session does not re-read CLAUDE.md or
+  rules edited after it started (measured 2026-10-12, same probe). Candidate: a content fingerprint of the
+  loaded memory files taken at session start, compared on each prompt, telling the session to restart.
 - Voice judge re-stop input (reported 2026-10-11 by session b100-am-ui-f8, its measurement): the v2 judge
   rejected four consecutive final messages of one turn quoting content the later rewrites no longer held. The
   v3 worker reproduced the rubric path with real-shaped payloads: a clean last message passes 5 of 5 with
