@@ -21,6 +21,8 @@ import { fileURLToPath } from 'node:url';
 
 import { agentRecords, FINISHED_HORIZON_MS, isLive, liveAgentWrites, liveOwnerOf } from './attribution.mjs';
 import { pathspecCommitCommand } from './commit-advice.mjs';
+import { authorsAt, MAX_RECORDS, readAuthoredWrites, recordAuthoredWrites } from './authored-writes.mjs';
+import { changedBetween, snapshotMtimes } from './touched-paths.mjs';
 import { latestChangeMs } from './path-mtime.mjs';
 import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs, readDismissals } from './dismiss.mjs';
 import { decide } from './decide.mjs';
@@ -304,6 +306,114 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   check('a LIVE worker of this session beside its main transcript is not named as finished worker output', finishedBlock(agents({ m: mainAgent('s-1', edit(here('foo.txt'))), w: liveAgent('s-1', edit(here('foo.txt'))) }))?.dirtyRepos?.[0]?.workerOutput, []);
   check('a path this session\'s main transcript wrote (no finished worker) names no worker output', finishedBlock(agents({ m: mainAgent('s-1', edit(here('foo.txt'))) }))?.dirtyRepos?.[0]?.workerOutput, []);
   check('a payload without a session id cannot tell "another session" from "mine": a main shell call blocks', decide({ hook_event_name: 'Stop' }, { repos: [repo], liveAgents: agents({ m: shellActor('s-2', false, T - 500, T + 500) }), mtimeOf: () => T })?.kind, 'block');
+}
+
+// ---------------------------------------------------------------------------------------------
+// STATE SPACE: a path whose AUTHOR is recorded (`authored-writes.mjs`) is credited to that author only,
+// whatever shell call overlapped it; with no record the shell-window rule stands. `authoredWrites` is
+// injected; the dirty path is `foo.txt`, changed at `T`. Session `s-1` ends its turn unless stated.
+// Measured 2026-10-12: a shell call of one session overlapped a ledger write made by another.
+// @es ESPACIO DE ESTADOS: una ruta con AUTOR registrado es de ese autor y de nadie más, aunque un shell la
+// solape; sin registro rige la ventana de shell.
+// ---------------------------------------------------------------------------------------------
+{
+  const T = 2_000_000;
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const recordFor = (session, file = 'foo.txt', mtimeMs = T) => ({ path: here(file).replaceAll('\\', '/').toLowerCase(), mtimeMs, session });
+  const kindFor = (session, authoredWrites, liveAgents) => decide(STOP_PAYLOAD({ session_id: session }), { repos: [repo], liveAgents, authoredWrites, mtimeOf: () => T })?.kind ?? 'allow';
+  const overlapped = agents({ m: shellActor('s-2', false, T - 500, T + 500) });
+
+  check('author s-1 recorded, s-2\'s shell window overlaps: s-2 is NOT blocked (the write was not its)', kindFor('s-2', [recordFor('s-1')], overlapped), 'allow');
+  check('author s-1 recorded, s-2\'s shell window overlaps: s-1 IS blocked (it made the change)', kindFor('s-1', [recordFor('s-1')], overlapped), 'block');
+  check('author s-1 recorded, nobody live overlaps: s-1 is still blocked by the record alone', kindFor('s-1', [recordFor('s-1')], new Map()), 'block');
+  check('NO record: s-2\'s overlapping shell window still blocks s-2 (today\'s rule stands)', kindFor('s-2', [], overlapped), 'block');
+  check('a record for s-1 on ANOTHER path does not shift s-2\'s claim on foo.txt', kindFor('s-2', [recordFor('s-1', 'bar.txt')], overlapped), 'block');
+  check('a record at an OLDER mtime (someone wrote the file again since) no longer claims it: the window rule decides', kindFor('s-2', [recordFor('s-1', 'foo.txt', T - 7)], overlapped), 'block');
+  check('an author recorded outranks a structured write of another live agent', kindFor('s-1', [recordFor('s-1')], agents({ w: liveAgent('s-2', edit(here('foo.txt'))) })), 'block');
+  check('two sessions recorded at the same mtime: both are makers', [kindFor('s-1', [recordFor('s-1'), recordFor('s-2')], new Map()), kindFor('s-2', [recordFor('s-1'), recordFor('s-2')], new Map())], ['block', 'block']);
+  check('a payload with no session id cannot tell whose it is: a recorded author blocks (the safe direction)', decide({ hook_event_name: 'Stop' }, { repos: [repo], liveAgents: new Map(), authoredWrites: [recordFor('s-1')], mtimeOf: () => T })?.kind, 'block');
+  check('a path with no measurable time matches no record', decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: new Map(), authoredWrites: [recordFor('s-1')], mtimeOf: () => undefined })?.kind, 'note');
+}
+
+// ---------------------------------------------------------------------------------------------
+// The journal and the snapshot behind it: `authored-writes.mjs`, `touched-paths.mjs`.
+// @es El journal y la foto que lo alimentan.
+// ---------------------------------------------------------------------------------------------
+{
+  const dir = scratchDir('authored-writes-');
+  const journal = path.join(dir, 'journal.jsonl');
+  /** The result of `work`, or `fallback` plus a recorded failure when it throws: a throw is a verdict, not a crash. @es El resultado de `work`, o `fallback` y un fallo registrado si lanza. */
+  const threw = (name, work, fallback) => {
+    try {
+      return work();
+    } catch (error) {
+      failures.push(`${name}() THREW ${error.message} @es ${name}() LANZÓ`);
+
+      return fallback;
+    }
+  };
+
+  check('an unknown session records nothing', [recordAuthoredWrites([{ path: 'a', mtimeMs: 1 }], undefined, journal), recordAuthoredWrites([{ path: 'a', mtimeMs: 1 }], 'unknown', journal), recordAuthoredWrites([{ path: 'a', mtimeMs: 1 }], '', journal), existsSync(journal)], [[], [], [], false]);
+  check('nothing changed records nothing and creates no journal', [recordAuthoredWrites([], 's-1', journal), existsSync(journal)], [[], false]);
+
+  const written = recordAuthoredWrites([{ path: 'C:\\Fake\\Dir\\File.md', mtimeMs: 5 }], 's-1', journal);
+
+  check('a record is normalized (forward slashes, lowercase) and carries session and mtime', written, [{ path: 'c:/fake/dir/file.md', mtimeMs: 5, session: 's-1' }]);
+  check('what was recorded is read back', readAuthoredWrites(journal), written);
+  check('an unreadable journal has no records', readAuthoredWrites(path.join(dir, 'absent.jsonl')), []);
+
+  writeFileSync(journal, `not json\n${JSON.stringify({ path: 1, session: 's', mtimeMs: 1 })}\n${JSON.stringify(written[0])}\n`, 'utf8');
+  check('a bad line and a malformed record are skipped, the good one is kept', threw('readAuthoredWrites', () => readAuthoredWrites(journal), []), written);
+
+  const records = [{ path: 'c:/r/dir/a.md', mtimeMs: 9, session: 's-1' }, { path: 'c:/r/dir/b.md', mtimeMs: 9, session: 's-2' }, { path: 'c:/r/dir/c.md', mtimeMs: 8, session: 's-3' }, { path: 'c:/r/dirx/d.md', mtimeMs: 9, session: 's-4' }];
+
+  check('an exact file matches its author at its mtime', authorsAt(records, 'C:\\R\\Dir\\A.md', 9), ['s-1']);
+  check('a collapsed directory matches the authors of the files under it at that mtime, at a directory boundary', authorsAt(records, 'C:/R/Dir/', 9), ['s-1', 's-2']);
+  check('a collapsed directory without a trailing slash matches the same way', authorsAt(records, 'C:/R/Dir', 9), ['s-1', 's-2']);
+  check('another mtime matches nobody', authorsAt(records, 'c:/r/dir/a.md', 10), []);
+  check('no measurable time matches nobody', authorsAt(records, 'c:/r/dir/a.md', undefined), []);
+  check('an empty path matches nothing', authorsAt(records, '', 9), []);
+
+  for (let index = 0; index < MAX_RECORDS + 5; index += 1) recordAuthoredWrites([{ path: `c:/f/${String(index)}`, mtimeMs: index }], 's-1', journal);
+
+  const kept = readAuthoredWrites(journal);
+
+  check('the journal keeps only the newest MAX_RECORDS', [kept.length, kept[kept.length - 1].mtimeMs, kept[0].mtimeMs], [MAX_RECORDS, MAX_RECORDS + 4, 5]);
+
+  const root = scratchDir('touched-paths-');
+
+  mkdirSync(path.join(root, 'sub'));
+  writeFileSync(path.join(root, 'sub', 'old.txt'), 'x', 'utf8');
+  writeFileSync(path.join(root, 'same.txt'), 'x', 'utf8');
+  writeFileSync(path.join(root, 'kept.txt'), 'x', 'utf8');
+  utimesSync(path.join(root, 'sub', 'old.txt'), 100, 100);
+  utimesSync(path.join(root, 'same.txt'), 100, 100);
+  utimesSync(path.join(root, 'kept.txt'), 100, 100);
+
+  const before = threw('snapshotMtimes', () => snapshotMtimes([root, path.join(root, 'missing')]), new Map());
+
+  writeFileSync(path.join(root, 'sub', 'old.txt'), 'y', 'utf8');
+  utimesSync(path.join(root, 'sub', 'old.txt'), 200, 200);
+  writeFileSync(path.join(root, 'new.txt'), 'z', 'utf8');
+  rmSync(path.join(root, 'same.txt'));
+
+  const changed = changedBetween(before, snapshotMtimes([root])).map((entry) => path.relative(root, entry.path).replaceAll('\\', '/')).sort();
+
+  // The DEFAULT journal (isolated state) is read when no `authoredWrites` is injected: the real wiring.
+  // @es Sin `authoredWrites` inyectado se lee el journal POR DEFECTO (estado aislado): el cableado real.
+  const real = scratchDir('authored-real-');
+  const realFile = path.join(real, 'foo.txt');
+
+  writeFileSync(realFile, 'x', 'utf8');
+  recordAuthoredWrites([{ path: realFile, mtimeMs: statSync(realFile).mtimeMs }], 's-9');
+
+  const realRepo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n', worktree: real });
+  const realKind = (session) => decide(STOP_PAYLOAD({ session_id: session }), { repos: [realRepo], liveAgents: new Map() })?.kind ?? 'allow';
+
+  check('the default journal credits the recorded author of a real file (block) and no other session (allow)', [realKind('s-9'), realKind('s-2')], ['block', 'allow']);
+
+  check('the snapshot names the files that were rewritten or created, not the vanished or untouched ones', changed, ['new.txt', 'sub/old.txt']);
+  check('a file given as a root is measured as itself', [...snapshotMtimes([path.join(root, 'new.txt')]).keys()], [path.join(root, 'new.txt')]);
 }
 
 // ---------------------------------------------------------------------------------------------

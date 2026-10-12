@@ -51,6 +51,7 @@
  */
 
 import { liveAgentWrites } from './attribution.mjs';
+import { authorsAt, readAuthoredWrites } from './authored-writes.mjs';
 import { readDismissals } from './dismiss.mjs';
 import { measureFingerprint } from './fingerprint.mjs';
 import { claimsOn, finishedWorkersOf, ownershipVerdict } from './path-ownership.mjs';
@@ -109,10 +110,11 @@ function pathsText(paths, shown = 8) {
  * Each dirty path of `repo` as `{ absolute, verdict }`: what it means for this session (`path-ownership.mjs`).
  * @es Cada ruta sucia de `repo` como `{ absolute, verdict }`: qué significa para esta sesión.
  */
-function judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf }) {
+function judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf, authoredWrites }) {
   return dirtyPaths.map((relativePath) => {
     const absolute = path.join(repo.worktree, relativePath);
-    const claims = claimsOn(absolute, mtimeOf(absolute), liveAgents);
+    const mtimeMs = mtimeOf(absolute);
+    const claims = claimsOn(absolute, mtimeMs, liveAgents, authorsAt(authoredWrites, absolute, mtimeMs));
 
     return { absolute, verdict: ownershipVerdict(claims, sessionId), workers: finishedWorkersOf(claims, sessionId) };
   });
@@ -130,7 +132,7 @@ function judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf }) {
  * esta sesión deba commitear ni subir, pero hay commits de otras sesiones y/o rutas que ningún transcript
  * vivo explica: se permite con nota), `'dismissed'` o `'dirty'`.
  */
-function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, dismissals }) {
+function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, dismissals, authoredWrites }) {
   if (!repoExists(repo)) return { repo, state: 'missing' };
 
   const status = repo.run(['status', '--porcelain=v1', '--branch']);
@@ -138,7 +140,7 @@ function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, 
   if (!status.ok) return { repo, state: 'unmeasurable', reason: status.stderr || 'git exited non-zero with no stderr' };
 
   const { aheadCount, dirtyPaths } = parseStatusPorcelain(status.stdout);
-  const judged = judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf });
+  const judged = judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf, authoredWrites });
   const ownPaths = judged.filter((entry) => entry.verdict === 'maker').map((entry) => entry.absolute);
   const workerOutput = judged.filter((entry) => entry.verdict === 'maker' && entry.workers.length > 0).map((entry) => ({ path: entry.absolute, workers: entry.workers }));
   const unexplained = judged.filter((entry) => entry.verdict === 'unexplained').map((entry) => entry.absolute);
@@ -164,10 +166,10 @@ function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, 
  * @es La decisión sobre un payload `Stop` ya parseado. `undefined` (permite en silencio), `{kind:'note'}`
  * (permite con mensaje), o `{kind:'block'}` (bloquea). Toda dependencia es inyectable.
  */
-export function decide(payload, { repos = declaredRepos(), now = Date.now(), liveAgents, mtimeOf = latestChangeMs, fingerprintOf = measureFingerprint, dismissals } = {}) {
+export function decide(payload, { repos = declaredRepos(), now = Date.now(), liveAgents, mtimeOf = latestChangeMs, fingerprintOf = measureFingerprint, dismissals, authoredWrites } = {}) {
   if (payload?.stop_hook_active === true) return undefined;
 
-  const context = { liveAgents: liveAgents ?? liveAgentWrites(now), sessionId: payload?.session_id, mtimeOf, fingerprintOf, dismissals: dismissals ?? readDismissals() };
+  const context = { liveAgents: liveAgents ?? liveAgentWrites(now), sessionId: payload?.session_id, mtimeOf, fingerprintOf, dismissals: dismissals ?? readDismissals(), authoredWrites: authoredWrites ?? readAuthoredWrites() };
   const classified = repos.map((repo) => classifyOneRepo(repo, context));
 
   const dirtyRepos = classified.filter((entry) => entry.state === 'dirty');
