@@ -222,6 +222,13 @@
 !/stale-session-guard/*.json
 /stale-session-guard/state/
 
+# The stop-input recorder (code and proof; the stops it records stay ignored).
+# @es El registrador de entradas de parada (código y prueba; las paradas que registra siguen ignoradas).
+!/stop-input-recorder/
+!/stop-input-recorder/*.mjs
+!/stop-input-recorder/*.json
+/stop-input-recorder/state/
+
 !/owner-language-guard/
 !/owner-language-guard/*.mjs
 !/owner-language-guard/*.json

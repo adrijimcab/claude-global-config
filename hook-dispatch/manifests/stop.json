@@ -1,6 +1,7 @@
 {
   "event": "Stop",
   "guards": [
+    "../../stop-input-recorder/guard.mjs",
     "../../hooks/claim-guard.mjs",
     "../../owner-language-guard/guard.mjs",
     "../../backlog-guard/guard.mjs",

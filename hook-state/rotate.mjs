@@ -114,6 +114,7 @@ export const KINDS = Object.freeze([
   ['sdd-attempt-cwd-guard', 'journal.jsonl', ARCHIVE, 'refusal and fail-open journal'],
   ['stale-session-guard', '*.json', KEEP, "each session's hook-group baseline and warned fingerprint"],
   ['stash-watch', 'observed.jsonl', ARCHIVE, 'observation journal'],
+  ['stop-input-recorder', 'stops.jsonl', ARCHIVE, 'what each Stop hook received'],
   ['stash-watch', 'noticed.json', KEEP, 'the stash sets each session was shown'],
   ['type-assertion-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],
   ['worker-delegation-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
