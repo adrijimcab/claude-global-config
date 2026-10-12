@@ -1,0 +1,6 @@
+{
+  "id": "neutral-short-acknowledgement",
+  "expect": "pass",
+  "source": "synthetic control: a one-line acknowledgement in neutral Spanish passes by rule 5, so the neutral-register test never reaches it",
+  "message": "Entendido, sigo con la siguiente unidad y cierro el ítem del backlog."
+}
