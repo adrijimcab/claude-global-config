@@ -96,8 +96,10 @@
 /commit-pathspec-guard/state/
 !/company-push-guard/
 !/company-push-guard/**
+/company-push-guard/state/
 !/company-commit-guard/
 !/company-commit-guard/**
+/company-commit-guard/state/
 !/company-scan/
 !/company-scan/**
 !/company-remote/
