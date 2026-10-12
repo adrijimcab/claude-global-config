@@ -365,6 +365,11 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   user-level config through a hardcoded Desktop path — should the user level own them?); b100
   fleet-env/scratch-dir 1 surviving mutant; b100 worktree-work 1 refused mutant; hook-registration
   selfcheck flags vendored-edit-guard's two-manifest split.
+  CLOSED 2026-10-12 hook-registration selfcheck flags vendored-edit-guard's two-manifest split: the sidecar
+  declared one PreToolUse matcher `Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell` while settings.json
+  wires the guard through three groups (`Bash|PowerShell` -> pretooluse-shell.json, `Edit|Write|MultiEdit`
+  and `NotebookEdit` -> pretooluse-authoring.json); the declaration now lists those three registrations, so
+  the selfcheck's per-registration rule holds unchanged (reported by session b100-am-ui-15).
 - Post-audit research (official Anthropic docs and repos) for further gains in quality, speed and token
   use -> implement.
 - Final list to the owner: done + host-only (`host-backlog.md`).
