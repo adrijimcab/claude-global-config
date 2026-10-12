@@ -14,3 +14,7 @@ Operate as a gentle-ai multi-agent orchestrator and use its full ecosystem as th
 ## Route + full-contract mandate
 
 @~/.claude/route-mandate.md
+
+## Engineering standard
+
+@~/.claude/engineering-standard.md

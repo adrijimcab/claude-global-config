@@ -1,19 +1,21 @@
 # Route + full-contract mandate — binding, every session, every project
 
-Every change runs through ODD (gentle-ai v4) on one of two routes, chosen by how settled its DESIGN
-is — never by its size, its risk, or how urgent it feels. Points 2 and 3 bind on both.
+Every change runs through ODD (gentle-ai v4) on one of two routes, chosen by its TYPE and its SIZE
+together: how settled the DESIGN is and how many meaningful steps the work has — never by lines, files,
+risk or urgency alone. Points 2 and 3 bind on both.
 
-1. **Tracked ODD where the design is open.** A new feature, a new project, a refactor that crosses a
-   module boundary or changes a public API, and any change whose approach is undecided when the work
-   starts. Explore, resolve the open decisions, and TRACK before the first write: `odd/tasks/<feature>.md`
+1. **Tracked ODD where the design is open OR the work is substantial.** A new feature, a new project, a
+   refactor that crosses a module boundary or changes a public API, any change whose approach is undecided
+   when the work starts, and any work that is substantial by ODD's own definition: two or more meaningful
+   implementation steps, or progress worth recovering after an interruption. Explore, resolve the open decisions, and TRACK before the first write: `odd/tasks/<feature>.md`
    and its engram mirror `odd/<feature>/tasks` carry the decided design and why, the tasks and their
    checks. Each task closes with a work-unit commit recorded in the document. Every step that measures
    a unit (the document, its commit, `gentle-ai review assess --cwd --base-ref`) runs in the unit's own
    worktree with its own base, never the integration checkout. Use `judgment-day` for
    adversarial review and the `review-*` lenses where the risk tier calls for them.
-   **Direct (inline or delegated) where the design is settled.** A fix whose root cause has been
-   measured and whose solution has one evident shape, or a contained change inside one module, goes
-   direct: root cause first, then the change, then the gates. When a direct change turns out to need a
+   **Direct (inline or delegated) where the design is settled AND the work is one step.** A fix whose
+   root cause has been measured and whose solution has one evident shape, or a contained change inside
+   one module, goes direct: root cause first, then the change, then the gates. When a direct change turns out to need a
    design decision nobody has made, stop and track it as above rather than deciding it in the diff.
 
 2. **Bind the FULL agent contract.** Every delegated agent must receive the project's complete contract
