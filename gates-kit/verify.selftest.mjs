@@ -204,12 +204,14 @@ buildGate(kit, 'angular', 'a-gate');
 buildGate(kit, 'nest', 'c-gate');
 buildGate(kit, 'templates', 'not-a-gate');
 buildGate(kit, 'toolchains', 'not-a-gate-either');
+buildGate(kit, 'clean-code-profile', 'not-a-gate-neither');
 writeFileSync(path.join(kit, 'README.md'), 'a plain file\n');
 
 check('discovery lists gates of every stack in a stable order', discoverGates(kit).map((gate) => `${gate.stack}/${gate.name}`).join() === 'angular/a-gate,angular/b-gate,nest/c-gate');
 check('discovery honours the stack filter', discoverGates(kit, 'nest').length === 1);
 check('discovery skips the templates folder', !discoverGates(kit).some((gate) => gate.stack === 'templates'));
 check('discovery skips the toolchains folder', !discoverGates(kit).some((gate) => gate.stack === 'toolchains'));
+check('discovery skips the clean-code-profile folder', !discoverGates(kit).some((gate) => gate.stack === 'clean-code-profile'));
 check('the toolchains folder is not found even when asked for by name', discoverGates(kit, 'toolchains').length === 0);
 check('an unknown stack yields no gate', discoverGates(kit, 'nope').length === 0);
 check('a plain file beside the stacks is not a stack', discoverGates(kit).length === 3);

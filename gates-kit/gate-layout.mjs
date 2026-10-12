@@ -5,13 +5,14 @@
  * `{ "command": ["node", "check.mjs", "{target}"], "timeoutMs": 300000 }`. `command` is an argv array run
  * without a shell from the gate directory; `{target}` becomes the absolute path of `pass/` or `fail/`;
  * `timeoutMs` is optional (default 300000). Any other key is refused. The `templates` folder holds
- * contract templates and the `toolchains` folder the pinned packages the gates run on (one subfolder per
- * stack); neither holds gates, so neither is ever a stack.
+ * contract templates, the `toolchains` folder the pinned packages the gates run on (one subfolder per
+ * stack) and the `clean-code-profile` folder the profile that grades projects against these gates; none
+ * holds gates, so none is ever a stack.
  *
  * @es Responde por la FORMA de un directorio de gate: qué gates hay y si cada uno tiene todas sus partes.
  * Un gate es `gates-kit/<stack>/<gate>/` con `config.*`, `pass/` y `fail/` no vacíos, `SOURCE.md` no vacío
  * y `gate.json`, la declaración estructurada de su comando (argv sin shell, desde el directorio del gate;
- * `{target}` se sustituye por la ruta de `pass/` o `fail/`). `templates` (plantillas) y `toolchains` (paquetes fijados sobre los que corren los gates) no son stacks.
+ * `{target}` se sustituye por la ruta de `pass/` o `fail/`). `templates` (plantillas), `toolchains` (paquetes fijados sobre los que corren los gates) y `clean-code-profile` (el perfil que califica proyectos contra estos gates) no son stacks.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -23,8 +24,11 @@ export const DEFAULT_TIMEOUT_MS = 300_000;
 /** The folder holding one pinned toolchain per stack. @es La carpeta con una toolchain fijada por stack. */
 export const TOOLCHAINS_FOLDER = 'toolchains';
 
+/** The folder holding the clean-code profile and its checker. @es La carpeta con el perfil de código limpio y su checker. */
+export const PROFILE_FOLDER = 'clean-code-profile';
+
 /** Folders under the kit that are not stacks. @es Carpetas del kit que no son stacks. */
-const NOT_STACKS = new Set(['templates', TOOLCHAINS_FOLDER]);
+const NOT_STACKS = new Set(['templates', TOOLCHAINS_FOLDER, PROFILE_FOLDER]);
 
 /** The toolchain directory of `stack` under the kit `root`. @es El directorio de la toolchain de `stack` bajo `root`. */
 export function toolchainOf(root, stack) {
