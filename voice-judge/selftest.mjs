@@ -74,6 +74,10 @@ check('rubric: passes a message addressed to a subagent or peer', PROMPT.include
 check('rubric: passes one or two lines with no status', PROMPT.includes('one or two lines with no status content'), true);
 check('rubric: rule 4 looks at what carries the reply, prose or enumerations', PROMPT.includes('Look at what CARRIES it: full-sentence prose paragraphs that tell what happened and why, or enumerations'), true);
 check('rubric: enumerations that carry a report fail', PROMPT.includes('when the enumerations carry a status or work report: after the opening sentence the body is mostly bullets, a table or a list of commits, hashes, paths or command results, each with at most a clause of explanation'), true);
+check('rubric: rule 8 counts lines, not topics', PROMPT.includes('Rule 8 counts LINES, not topics: it applies only when bullet, numbered or table lines are most of the body.'), true);
+check('rubric: names, numbers, commit references and a closing next step inside prose are content', PROMPT.includes('Names, numbers, commit references, file paths and a closing next-step sentence inside prose paragraphs are content, never an enumeration'), true);
+check('rubric: a prose reply passes rule 8 even when every paragraph reports on work', PROMPT.includes('a reply made of full-sentence paragraphs with no list passes rule 8 even when every paragraph reports on work done'), true);
+check('rubric: a rule 8 block quotes the lines it counted', PROMPT.includes('A block under rule 8 must quote the bullet, numbered or table lines it counted.'), true);
 check('rubric: voseo does not rescue a changelog', PROMPT.includes('Voseo does not rescue it: a changelog with an accent is still a changelog.'), true);
 check('rubric: prose that explains the why with a closing is the one exception', PROMPT.includes('full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands'), true);
 check('rubric: prose with a supporting list passes', PROMPT.includes('when prose carries the message and a list only supports it (a few short items, or a command block the owner must run)'), true);

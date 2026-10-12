@@ -27,7 +27,7 @@ const MUTANTS = [
   // --- WHAT A VERDICT IS.
   ['an ok true is not a pass', VERDICT, 'if (verdict.ok === true) return { kind: \'pass\' };', 'if (verdict.ok === true) return { kind: \'malfunction\', why: \'x\' };'],
   ['a non-boolean ok is read as a block', VERDICT, 'if (verdict.ok !== false) return', 'if (false) return'],
-  ['a reason without the marker blocks', VERDICT, ' || !verdict.reason.trim().startsWith(marker)', ''],
+  ['a reason without the marker blocks', VERDICT, 'if (!reason.startsWith(marker)) {', 'if (false) {'],
   ['the reason is not trimmed', VERDICT, "verdict.reason.trim() : ''", "verdict.reason : ''"],
   ['prose around the object is not tolerated', VERDICT, 'const match = /\\{[\\s\\S]*\\}/.exec(text);', 'const match = /^\\{[\\s\\S]*\\}$/.exec(text);'],
   ['an unparsable answer throws', VERDICT, '  } catch {\n    return undefined;\n  }', '  } catch (error) {\n    throw error;\n  }'],
