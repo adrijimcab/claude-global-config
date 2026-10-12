@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CUSTOMIZATIONS } from './customizations.mjs';
+import { registerHookCommandCases, settingsHoldingTheReplacements } from './hook-command-cases.mjs';
 import { KINDS, applyAll, evaluateAll } from './invariants.mjs';
 import { inspectSection, reconcileSection } from './lazy-section.mjs';
 import { registerLazySectionCases } from './lazy-section-cases.mjs';
@@ -244,6 +245,11 @@ test('forbidden: tools line without Bash -> held; with Bash -> broken and not re
 
 registerLineReplacementCases({ test, expect, newRoot, put, read });
 
+// ---------------------------------------------------------------- hook command replacement
+// @es Reemplazo de un comando de hook: los casos viven en hook-command-cases.mjs.
+
+registerHookCommandCases({ test, expect, newRoot, put, read });
+
 // ---------------------------------------------------------------- pruned text
 // @es Texto podado: los casos viven en pruned-text-cases.mjs.
 
@@ -427,6 +433,7 @@ function completeHome({ telemetryEnabled = false } = {}) {
     const owner = entry.anchors.map((anchor) => `${anchor} text\n`).join('\n');
     put(context.home, entry.file, entry.file === '.claude/CLAUDE.md' ? claudeMd({ owner, eol: '\r\n' }) : owner);
   }
+  put(context.home, '.claude/settings.json', settingsHoldingTheReplacements());
   return context;
 }
 /** CLAUDE.md of a complete home with every lazy span loaded, as a raw v4 sync leaves it. @es CLAUDE.md de un home completo con todo tramo diferido cargado, como lo deja un sync v4 crudo. */
@@ -492,12 +499,12 @@ test('apply.mjs --dry-run: every loaded span would move, nothing is written, exi
   expect(read(context.home, '.claude/CLAUDE.md'), moved, 'CLAUDE.md after apply');
 });
 
-test('check.mjs --json: the lazy sections report syncSafe, every other kind does not', () => {
+test('check.mjs --json: the lazy sections and the hook command replacements report syncSafe, every other kind does not', () => {
   const report = JSON.parse(run('check.mjs', [...flags(completeHome()), '--json']).stdout);
   const safe = report.results.filter((entry) => entry.syncSafe === true).map((entry) => entry.id);
   expect(
     safe.join(','),
-    'lazy-blocking-prompts,lazy-review-contract,lazy-orchestrator-mental-model,lazy-delegation-and-verification,lazy-routing-and-hand-off,lazy-skill-registry-protocol,lazy-odd-reference,lazy-rdd-user-owned,lazy-remote-authorization',
+    'lazy-blocking-prompts,lazy-review-contract,lazy-orchestrator-mental-model,lazy-delegation-and-verification,lazy-routing-and-hand-off,lazy-skill-registry-protocol,lazy-odd-reference,lazy-rdd-user-owned,lazy-remote-authorization,review-stop-hook-runs-only-in-a-linked-worktree-on-SessionStart,review-stop-hook-runs-only-in-a-linked-worktree-on-Stop',
     'sync-safe ids',
   );
 });

@@ -21,6 +21,7 @@ import { CUSTOMIZATIONS } from './customizations.mjs';
 import { applyAll, evaluateAll } from './invariants.mjs';
 import { fullOrchestratorMd, lazyEntries, lazyEntryNamed, orchestratorMd } from './lazy-section-fixtures.mjs';
 import { inspectSection, reconcileSection } from './lazy-section.mjs';
+import { settingsHoldingTheReplacements } from './hook-command-cases.mjs';
 import { reapplyTrigger } from './reapply-triggers.mjs';
 import { reapplySyncSafe } from './reapply-hook-output.mjs';
 import { readTextOrNull } from './text-file.mjs';
@@ -70,6 +71,7 @@ export function registerReapplyCases({ test, expect, newRoot, put, read, install
   function loadedHome(cliState = { reviewGlobal: '' }, text = fullOrchestratorMd({ eol: '\r\n' })) {
     const context = installFakeCli(newRoot(), { enabled: false, ...cliState });
     put(context.home, review.file, text);
+    put(context.home, '.claude/settings.json', settingsHoldingTheReplacements());
     return context;
   }
   /** What the overlay makes of `text` with every section moved, computed with the pure logic only. @es Lo que el overlay hace del texto con toda sección movida, con la lógica pura. */

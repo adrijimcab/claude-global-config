@@ -229,6 +229,18 @@ const LAZY_SECTIONS = [
   },
 ];
 
+// The review stop hook that gentle-ai registers on two events of settings.json, replaced by the shim that runs it only in
+// a linked worktree (review-site/stop-hook.mjs). `sync` appends its own command again whenever no entry carries it, so
+// the replacement is a customization (kind hook-command-replacement), not a one-off edit. @es El hook de parada de
+// revisión que gentle-ai registra en dos eventos de settings.json, sustituido por el conducto que lo corre solo en un
+// worktree enlazado. `sync` vuelve a añadir su comando cuando ninguna entrada lo lleva, así que el reemplazo es una
+// personalización (tipo hook-command-replacement), no una edición suelta.
+const REVIEW_STOP_HOOK = {
+  upstream: 'gentle-ai review stop-hook --agent claude-code',
+  replacement: 'node "$HOME/.claude/review-site/stop-hook.mjs"',
+};
+const REVIEW_STOP_HOOK_EVENTS = ['SessionStart', 'Stop'];
+
 export const CUSTOMIZATIONS = [
   {
     id: 'claude-md-owner-sections-outside-managed-regions',
@@ -267,6 +279,13 @@ export const CUSTOMIZATIONS = [
     region: 'persona',
   },
   ...LAZY_SECTIONS.map((section) => ({ id: `lazy-${section.name}`, kind: 'lazy-section', file: '.claude/CLAUDE.md', ...section })),
+  ...REVIEW_STOP_HOOK_EVENTS.map((event) => ({
+    id: `review-stop-hook-runs-only-in-a-linked-worktree-on-${event}`,
+    kind: 'hook-command-replacement',
+    file: '.claude/settings.json',
+    event,
+    ...REVIEW_STOP_HOOK,
+  })),
   // Owner decision 2026-09-28: telemetry stays off. Checked and re-applied through the gentle-ai CLI.
   {
     id: 'gentle-ai-telemetry-disabled',
