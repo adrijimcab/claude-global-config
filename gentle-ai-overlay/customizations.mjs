@@ -67,15 +67,21 @@ const OWNER_MANDATE_ANCHORS = [
 const PROMOTED_RULE_ANCHORS = [
   '# Promoted rules — recurred despite the ledger',
   '- **`bounded-search-read-as-absence`**',
-  '- **`collision-fixed-by-deleting-unread-side`**',
   '- **`audit-verdict-from-commit-subjects-not-from-reading`**',
-  '- **`brief-marker-written-as-prose-not-literal-form`**',
-  '- **`promotion-to-contract-read-as-prevention`**',
   '- **`worker-claim-about-unreachable-file-committed-as-fact`**',
-  '- **`provisioning-bound-to-delegation-not-worktree-creation`**',
-  '- **`gitignored-deliverable-destroyed-by-worktree-autoclean`**',
-  '- **`integrated-a-range-without-running-its-cheap-gates`**',
 ];
+
+// The promoted rules that apply to an ACTION, not to a path, in lessons/on-demand/ (the harness does not load them;
+// promoted-rules.md names each file and when to read it). They were moved out of promoted-rules.md on 2026-10-12 to
+// keep the always-loaded set under its ceiling; their anchors move with them. @es Las reglas promovidas que valen
+// para una ACCIÓN y no para una ruta, en lessons/on-demand/ (el harness no las carga; promoted-rules.md nombra cada
+// fichero y cuándo leerlo). Salieron de promoted-rules.md el 2026-10-12 para mantener el conjunto siempre cargado
+// bajo su techo; sus anclas van con ellas.
+const PROMOTED_ON_DEMAND_RULE_ANCHORS = {
+  delegation: ['- **`brief-marker-written-as-prose-not-literal-form`**', '- **`provisioning-bound-to-delegation-not-worktree-creation`**', '- **`gitignored-deliverable-destroyed-by-worktree-autoclean`**'],
+  landing: ['- **`integrated-a-range-without-running-its-cheap-gates`**', '- **`collision-fixed-by-deleting-unread-side`**'],
+  records: ['- **`promotion-to-contract-read-as-prevention`**'],
+};
 
 // The promoted rules whose text is path-scoped, in the rules file of their area (failure-capture/ledger-routes.mjs:
 // the harness loads them only when a file matching the area's `paths:` is read). They were moved out of
@@ -242,6 +248,12 @@ export const CUSTOMIZATIONS = [
     file: '.claude/rules/promoted-rules.md',
     anchors: PROMOTED_RULE_ANCHORS,
   },
+  ...Object.entries(PROMOTED_ON_DEMAND_RULE_ANCHORS).map(([topic, anchors]) => ({
+    id: `promoted-${topic}-on-demand-rules-file-holds-every-key`,
+    kind: 'owner-sections-outside-managed-regions',
+    file: `.claude/lessons/on-demand/promoted-${topic}.md`,
+    anchors,
+  })),
   ...Object.entries(PROMOTED_AREA_RULE_ANCHORS).map(([area, anchors]) => ({
     id: `promoted-${area}-rules-file-holds-every-key`,
     kind: 'owner-sections-outside-managed-regions',
