@@ -15,8 +15,12 @@
  *   - claim a kill it did not measure: a second listing says who is still alive, and a pid that now belongs to
  *     another program (its command line changed) is not a survivor.
  *
- * Entry point for other tools (`b100-am-ui/.claude/integrate/integrate.mjs --close`, `land.mjs`, the
- * SubagentStop hook): `reapAgentProcesses({ worktree, agentId, scratch }, deps?)`.
+ * WHEN IT RUNS: at CLOSE, never at stop. Close is `land.mjs --reap`, `integrate.mjs --close` and the
+ * orchestrator's closure of a finished unit. It is deliberately NOT a SubagentStop hook: a worker can stop while
+ * background work of its own is still running and resume on its own when that work completes (measured in a live
+ * session), so a reap at stop would kill live work. Closing is the orchestrator's decision that the unit is done.
+ *
+ * Entry point for those callers: `reapAgentProcesses({ worktree, agentId, scratch }, deps?)`.
  *
  * @es Siega los procesos de un agente CERRADO. Cerrar un agente deja lo que arrancó: bucles de espera, watchers,
  * servidores. La sesión b100-am-ui-f8 midió bucles vivos 18 h después de acabar su worker y tres
@@ -26,6 +30,10 @@
  * que el shell que lo lanza nombra el worktree que va a segar); no toca otro worktree, agente ni sesión (límite
  * a ambos lados; un nombre en blanco o un id corto no es marcador); no siega un checkout principal; no mata dos
  * veces (solo las raíces); y no afirma un kill que no midió (un segundo listado dice quién sigue vivo).
+ * CUÁNDO CORRE: al CERRAR, nunca al parar. Cerrar es `land.mjs --reap`, `integrate.mjs --close` y el cierre de una
+ * unidad terminada por el orquestador. A propósito NO es un hook de SubagentStop: un worker puede parar con trabajo
+ * de fondo propio todavía corriendo y reanudarse solo al terminar (medido en una sesión viva), así que segar al
+ * parar mataría trabajo vivo. Cerrar es la decisión del orquestador de que la unidad terminó.
  */
 
 import { listProcesses } from '../worker-status/processes.mjs';

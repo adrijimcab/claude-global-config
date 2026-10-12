@@ -1,7 +1,6 @@
 {
   "event": "SubagentStop",
   "guards": [
-    "../../failure-capture/turn-guard.mjs",
-    "../../process-reaper/reap-on-subagent-stop.mjs"
+    "../../failure-capture/turn-guard.mjs"
   ]
 }

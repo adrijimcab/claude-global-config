@@ -1,8 +1,0 @@
-{
-  "registrations": [
-    {
-      "event": "SubagentStop"
-    }
-  ],
-  "why": "a worker that ends leaves its polling loops, watchers and servers alive (measured 2026-10-12: loops alive about 18 h after their worker ended), and the closure rule says closing an agent kills every process of it."
-}
