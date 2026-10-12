@@ -191,6 +191,37 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   already fired. Add the incident as a labelled fail fixture, and its measured counterpart as a pass fixture,
   to the premise judge's calibration set, re-measured over 5 runs. Pending, reason (4): the calibration set is
   its own unit with the rest of the judge's measured precision work.
+- Integration branch as ONE source that every tool follows (owner order 2026-10-12: every session must keep
+  it current; measured the same day). gentle-ai v4 takes the review base from `refs/remotes/origin/HEAD`
+  (v4.0.0 internal/reviewtransaction/target_status.go:248-262). The harness bases Agent isolation worktrees
+  on origin/HEAD too (lesson agent-isolation-worktree-based-on-default-branch). In Discovery it resolves to
+  main (7f5fe05, the near-empty root). Design: the project's declared source (`.claude/fleet-kit.json`
+  integrationBranches[0], or b100's `.claude/integrate/integration-branches.mjs`) stays the only truth. A
+  ~/.claude tool `integration-branch/sync.mjs` sets the clone-local `git remote set-head origin <first>`
+  from it (local, never pushed). A UserPromptSubmit check warns when origin/HEAD and the declared first
+  branch disagree. The promoted rule already obliges the session that moves the branch to update the
+  source in the same turn. Pending, reason (1): Agent launches in Discovery are refused until feature/meet
+  lands f14, and it must be built test-first with mutants.
+- engram 2.2.1 -> 3.3.2 (measured 2026-10-12 from `engram version` and gh releases). v3 confirms the session
+  before memory writes and requires `expected_project` on update/delete (our guards only read tool calls, so
+  they are unaffected). backlog-content-guard and backlog-owner-guard read `~/.engram/engram.db` with SQL, so
+  a v3 schema change could blind them. Four engram servers are running (one since 2026-09-27), and Windows
+  cannot replace a running binary. Plan: close every Claude session, back up `~/.engram`, install v3.3.2 by
+  the method that installed `%LOCALAPPDATA%\engram\bin\engram.exe` (to be measured), restart, then run a live
+  probe of both guards against the real store before trusting them. Pending, reason (1): needs every session
+  closed; combine it with the restart v4 already requires. gentle-pi 2.4.0 -> 4.0.0 is NOT needed: it is the
+  harness for the Pi agent, and Pi is not installed on this machine (`where.exe pi`: none).
+- config-sync-guard attributes another session's paths (owner-pasted block, 2026-10-12): in session
+  b100-am-ui-f8 (c4d7f854) it listed lessons-ledger.md and three lessons/evidence files that the orchestrator
+  session wrote, as "paths this session made" (path-ownership by timing). The same defect class as the
+  integrated-worktree-guard attribution fixed in 916d739. Fix: attribute by the session's own transcript
+  writes, as that guard does now, with a red fixture of two sessions. Pending, reason (1): Agent launches
+  are refused in Discovery.
+- Rename `sdd-attempt-cwd-guard` to a name for what it now owns (the cwd of v4 review range commands and
+  the retired sdd-attempt verbs): its folder, state, rotate entry, manifests and selftests. Found by the
+  owner's SDD sweep 2026-10-12; the rest of that sweep is clean (history and gentle-ai-rendered text kept;
+  Discovery CLAUDE.md fixed 0eee82b; host H9 closed). Pending, reason (4): a rename across state,
+  rotate.mjs, census and two manifests is its own change.
 - Brief preflight face: derived gates (contract delivered 2026-10-12 by session b100-am-ui-f8; measured the same
   day by running `node .claude/gate-scope/gates-for.mjs src/lib/components/b100-dashboard/b100-dashboard.component.ts`
   in b100: exit 0, 19 gates, 64 unscoped). The deriver prints `{ gates, reasons, unscoped }` on stdout with exit 0,
