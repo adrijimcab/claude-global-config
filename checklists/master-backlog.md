@@ -382,6 +382,22 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   tightening, a v4 settings render) are superseded on master by 4886719, d1c6b04 and the 2026-10-12
   route-mandate rewrite (`route-mandate.md` "Every change runs through ODD"); patch-ids differ only because
   the later versions were rebuilt.
+- Actor ownership as one service (owner order 2026-10-12: «NO QUIERO FIXES NI PARCHES, SIEMPRE SOLUCIONES
+  ARQUITECTONICAS COMO REGLA», and «Solo se tiene que avisar en la sesión correspondiente»). Measured today:
+  four guards each decided "whose is this" with their own heuristic and each told the wrong session —
+  config-sync-guard by shell-window timing (b100 and Discovery blocked on an orchestrator ledger line),
+  agent-liveness by a folder name (live workers under .claude-wt read as ownerless), resume-before-fresh by
+  description words, stash-watch by clone (a Discovery writer's lint-staged stash shown to the orchestrator;
+  measured: stash 4e2fde83 content equal to 3c82916, `git diff` 0 lines, tag reaped/stash-4e2fde83, stack 0).
+  Per-guard fixes are in flight (path-ownership authorship, liveness linked-worktree test, TENANCY errand
+  identity); the architectural answer is ONE ownership module that every guard asks — which session or
+  agent wrote a path, owns a worktree, made a stash, holds an errand — fed by recorded events (tool writes,
+  capture authorship, SubagentStart/Stop, git operations with the session id), never by timing or names.
+  PENDING, reason (4): its own design, to run as tracked ODD after the in-flight fixes land, which it absorbs.
+- lint-staged backup stashes left by pathspec commits (reported by the Discovery session 2026-10-12, not yet
+  reproduced): `git commit -- <paths>` with lint-staged left the index out of step with HEAD and the backup
+  stash behind. Pairs with lesson commit-pathspec-restaged-a-removed-file. PENDING, reason (4): reproduce
+  on constructed state first, then decide whether workers commit with pathspecs or stage-then-commit.
 
 ## ORDER (decided 2026-10-11)
 
