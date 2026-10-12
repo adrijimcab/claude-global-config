@@ -93,6 +93,7 @@ try {
   const brief = (prompt, root, platform) => delegationTouches({ tool_input: { prompt } }, root, platform);
 
   check('a POSIX brief path inside a POSIX root touches it', brief('Work in /home/u/repo/src.', '/home/u/repo', 'linux'), true);
+  check('a POSIX root keeps its case on a POSIX platform: a brief path of the same case touches it', brief('Work in /home/U/Repo/src.', '/home/U/Repo', 'linux'), true);
   check('a POSIX brief path in a sibling folder does not', brief('Work in /home/u/repo-copy/src', '/home/u/repo', 'linux'), false);
   check('POSIX paths differing only by case are different places', brief('Work in /home/u/REPO/src', '/home/u/repo', 'linux'), false);
   check('a Git Bash brief path touches a Windows root, whatever the case', brief('Work in /c/users/ME/repo/src', 'C:/Users/me/repo', 'win32'), true);
