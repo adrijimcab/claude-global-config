@@ -1,0 +1,32 @@
+T1: Ejecuté `echo one` y devolvió `one`.
+
+Los codewords, tal como aparecen en mis instrucciones:
+- Project codeword: **ALPHA1** (de `scratchpad/probe2/proj/CLAUDE.md`)
+- Rule codeword: **RULEONE** (de `scratchpad/probe2/proj/.claude/rules/r.md`)
+T2: `echo two` devolvió `two`.
+
+Lancé un agente `general-purpose` con el prompt "reply ok". Está corriendo en segundo plano, así que todavía no tengo su resultado; te aviso cuando llegue la notificación.
+
+Los codewords, tal como los veo ahora:
+- Project codeword: **ALPHA1**
+- Rule codeword: **RULEONE**
+T3: done
+=== T1 baseline
+UPS-orig UserPromptSubmit 2026-10-12T13:03:21.810Z
+PRE-orig PreToolUse 2026-10-12T13:03:24.185Z
+STOP-orig Stop 2026-10-12T13:03:29.868Z
+=== T2 after add/edit/remove
+UPS-orig-EDITED UserPromptSubmit 2026-10-12T13:03:34.013Z
+UPS-added UserPromptSubmit 2026-10-12T13:03:34.015Z
+PRE-orig PreToolUse 2026-10-12T13:03:34.892Z
+PRE-added PreToolUse 2026-10-12T13:03:34.893Z
+SUBSTART-added SubagentStart 2026-10-12T13:03:35.086Z
+STOP-added Stop 2026-10-12T13:03:36.589Z
+UPS-added UserPromptSubmit 2026-10-12T13:03:36.749Z
+UPS-orig-EDITED UserPromptSubmit 2026-10-12T13:03:36.839Z
+STOP-added Stop 2026-10-12T13:03:37.714Z
+=== T3 after removing UPS-added and PRE-added
+UPS-orig-EDITED UserPromptSubmit 2026-10-12T13:03:40.751Z
+PRE-orig PreToolUse 2026-10-12T13:03:41.526Z
+STOP-added Stop 2026-10-12T13:03:42.265Z
+

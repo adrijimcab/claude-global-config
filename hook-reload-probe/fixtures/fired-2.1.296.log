@@ -1,0 +1,18 @@
+=== T1 baseline
+UPS-orig UserPromptSubmit 2026-10-12T13:03:21.810Z
+PRE-orig PreToolUse 2026-10-12T13:03:24.185Z
+STOP-orig Stop 2026-10-12T13:03:29.868Z
+=== T2 after add/edit/remove
+UPS-orig-EDITED UserPromptSubmit 2026-10-12T13:03:34.013Z
+UPS-added UserPromptSubmit 2026-10-12T13:03:34.015Z
+PRE-orig PreToolUse 2026-10-12T13:03:34.892Z
+PRE-added PreToolUse 2026-10-12T13:03:34.893Z
+SUBSTART-added SubagentStart 2026-10-12T13:03:35.086Z
+STOP-added Stop 2026-10-12T13:03:36.589Z
+UPS-added UserPromptSubmit 2026-10-12T13:03:36.749Z
+UPS-orig-EDITED UserPromptSubmit 2026-10-12T13:03:36.839Z
+STOP-added Stop 2026-10-12T13:03:37.714Z
+=== T3 after removing UPS-added and PRE-added
+UPS-orig-EDITED UserPromptSubmit 2026-10-12T13:03:40.751Z
+PRE-orig PreToolUse 2026-10-12T13:03:41.526Z
+STOP-added Stop 2026-10-12T13:03:42.265Z

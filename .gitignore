@@ -317,3 +317,10 @@
 
 # A crash mid-write of the overlay can leave its temp file; it is never content.
 *.overlay-tmp-*
+
+# The hook-reload probe (manual live measurement of what a running session reloads, with its captures).
+# @es La sonda de recarga de hooks (medición manual en vivo de lo que recarga una sesión en marcha, con sus capturas).
+!/hook-reload-probe/
+!/hook-reload-probe/*.mjs
+!/hook-reload-probe/fixtures/
+!/hook-reload-probe/fixtures/*
