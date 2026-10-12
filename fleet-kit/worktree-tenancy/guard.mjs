@@ -26,7 +26,7 @@ import { findConfig } from '../config/load-config.mjs';
 import { isAgentWorktree } from '../lib/agent-worktrees.mjs';
 import { deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
 import { effectiveDirectory } from '../lib/invocation-directory.mjs';
-import { activeOwner, agentRecords } from '../../agent-liveness/liveness.mjs';
+import { activeOwner, agentRecords } from '../../agent-liveness/active-owner.mjs';
 import { gitInvocations } from '../../shell-command/git-invocations.mjs';
 import { dialectOfTool } from '../../shell-command/shell-command.mjs';
 

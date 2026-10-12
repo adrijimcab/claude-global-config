@@ -1,0 +1,11 @@
+{
+  "registrations": [
+    {
+      "event": "SubagentStart"
+    },
+    {
+      "event": "SubagentStop"
+    }
+  ],
+  "why": "liveness read only from a transcript's mtime called a finished worker live for up to 30 minutes and a just-launched worker (no write yet) not live; the harness fires SubagentStart and SubagentStop, and without this recorder nothing keeps them."
+}

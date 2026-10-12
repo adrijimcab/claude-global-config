@@ -193,6 +193,14 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/subagent-start.json\"",
+            "type": "command"
+          }
+        ]
       }
     ],
     "SubagentStop": [

@@ -29,7 +29,7 @@ import { findConfig } from '../config/load-config.mjs';
 import { isAgentWorktree, listWorktrees } from '../lib/agent-worktrees.mjs';
 import { gitAsker, porcelainEntries } from '../lib/git.mjs';
 import { deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
-import { ACTIVE_WINDOW_MS, activeOwner, agentRecords } from '../../agent-liveness/liveness.mjs';
+import { ACTIVE_WINDOW_MS, activeOwner, agentRecords } from '../../agent-liveness/active-owner.mjs';
 import { nativeSpelling } from '../../cherry-pick-guard/working-directory.mjs';
 
 export const DELEGATION_TOOLS = new Set(['Agent', 'Task']);

@@ -12,6 +12,9 @@
       "event": "Stop"
     },
     {
+      "event": "SubagentStart"
+    },
+    {
       "event": "SubagentStop"
     }
   ],

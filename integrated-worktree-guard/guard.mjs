@@ -42,7 +42,7 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { activeOwner, agentRecords } from '../agent-liveness/liveness.mjs';
+import { activeOwner, agentRecords } from '../agent-liveness/active-owner.mjs';
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
 import { stateDir as stateDirOf } from '../hook-state/locations.mjs';
 import { alreadyShown, markShown } from './noticed-sets.mjs';

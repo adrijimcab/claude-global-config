@@ -1,0 +1,6 @@
+{
+  "event": "SubagentStart",
+  "guards": [
+    "../../agent-liveness/recorder.mjs"
+  ]
+}

@@ -67,6 +67,7 @@ const SESSIONS_FOLDER = 'sessions';
  * @es Cada tipo de estado conocido: `[mecanismo, patrón, tipo, motivo]`; gana la primera coincidencia.
  */
 export const KINDS = Object.freeze([
+  ['agent-liveness', 'lifecycle.jsonl', ARCHIVE, 'subagent start and stop events; a rotation refuses while a session lives, so no agent is running'],
   ['backlog-content-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['backlog-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['backlog-guard', 'dismissals.jsonl', KEEP, 'dismissals in force'],
