@@ -1,9 +1,0 @@
-{
-  "registrations": [
-    {
-      "event": "PreToolUse",
-      "matcher": "Bash|PowerShell"
-    }
-  ],
-  "why": "gentle-ai sdd-attempt acquire|settle|begin|record|finish run with --cwd on a repository's main checkout while the unit lived in a linked worktree charged settle with everything integrated meanwhile (9,300 changed lines vs a real 1,287) and blocked it, twice on 2026-10-11."
-}

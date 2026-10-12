@@ -111,7 +111,7 @@ export const KINDS = Object.freeze([
   ['integrated-worktree-guard', 'noticed.json', KEEP, 'the worktree sets each session was shown'],
   ['owner-language-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['owner-language-guard', 'guard.log', ARCHIVE, 'guard log'],
-  ['sdd-attempt-cwd-guard', 'journal.jsonl', ARCHIVE, 'refusal and fail-open journal'],
+  ['review-cwd-guard', 'journal.jsonl', ARCHIVE, 'refusal and fail-open journal'],
   ['stale-session-guard', '*.json', KEEP, "each session's hook-group baseline and warned fingerprint"],
   ['stash-watch', 'observed.jsonl', ARCHIVE, 'observation journal'],
   ['stop-input-recorder', 'stops.jsonl', ARCHIVE, 'what each Stop hook received'],

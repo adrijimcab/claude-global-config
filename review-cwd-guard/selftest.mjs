@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DISCRIMINATION PROOF for `sdd-attempt-cwd-guard`.
+ * DISCRIMINATION PROOF for `review-cwd-guard`.
  *
  * THE STATE SPACE, each state built as a REAL repository with REAL linked worktrees (git sandbox):
  *   repository   main + worktree with commits / main + worktree with only uncommitted changes /
@@ -24,7 +24,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
 
-isolateState('sdd-attempt-cwd-guard');
+isolateState('review-cwd-guard');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const load = (relative) => import(pathToFileURL(path.join(HERE, relative)).href);
@@ -212,7 +212,8 @@ for (const [expected, input, label, mustName] of cases) {
 {
   const denied = run(bash(slash(active.root), acquire(slash(active.repoDir))));
 
-  report(denied.includes('SDD-ATTEMPT-CWD GUARD REFUSED') && denied.includes('@es SDD-ATTEMPT-CWD GUARD RECHAZÓ'), 'the refusal carries English and its @es mirror with correct accents');
+  report(denied.includes('REVIEW-CWD GUARD REFUSED') && denied.includes('@es REVIEW-CWD GUARD RECHAZÓ'), 'the refusal carries English and its @es mirror with correct accents');
+  report(denied.indexOf('gentle-ai review assess|start|status') !== -1 && denied.indexOf('gentle-ai review assess|start|status') < denied.indexOf('Legacy:') && denied.indexOf('Legacy:') < denied.indexOf('sdd-attempt acquire|settle'), 'the refusal names the review commands first and the retired sdd-attempt verbs as legacy');
   report(denied.includes('1 commit(s) ahead'), 'the refusal says how many commits the worktree has');
   report(denied.includes("--cwd <the unit's own worktree>") && denied.includes('--cwd <el worktree propio de la unidad>'), 'the refusal says what to pass, once per language');
   report(run(bash(slash(dirtyOnly.root), acquire(slash(dirtyOnly.repoDir)))).includes('uncommitted changes'), 'a dirty worktree is described as having uncommitted changes');
@@ -220,12 +221,12 @@ for (const [expected, input, label, mustName] of cases) {
 
 // Fail-open is JOURNALED, not silent.
 {
-  const before = (() => { try { return readFileSync(path.join(stateDir('sdd-attempt-cwd-guard'), 'journal.jsonl'), 'utf8'); } catch { return ''; } })();
+  const before = (() => { try { return readFileSync(path.join(stateDir('review-cwd-guard'), 'journal.jsonl'), 'utf8'); } catch { return ''; } })();
 
   try {
     evaluate(bash(slash(active.root), acquire(slash(notRepository))));
 
-    const after = readFileSync(path.join(stateDir('sdd-attempt-cwd-guard'), 'journal.jsonl'), 'utf8');
+    const after = readFileSync(path.join(stateDir('review-cwd-guard'), 'journal.jsonl'), 'utf8');
 
     report(after.length > before.length && after.includes('"verdict":"fail-open"'), 'an unreadable repository is allowed AND journaled as fail-open');
   } catch (error) {
@@ -240,7 +241,7 @@ try {
   const manifest = JSON.parse(readFileSync(path.join(HERE, '..', 'hook-dispatch', 'manifests', 'pretooluse-shell.json'), 'utf8'));
 
   for (const tool of tools) report(dialectOfTool(tool) !== undefined, `the registration names ${tool}, which the decision knows a dialect for`);
-  report(manifest.guards.includes('../../sdd-attempt-cwd-guard/guard.mjs'), 'the PreToolUse shell manifest lists this guard');
+  report(manifest.guards.includes('../../review-cwd-guard/guard.mjs'), 'the PreToolUse shell manifest lists this guard');
 } catch (error) {
   report(false, `the wiring is unreadable: ${error instanceof Error ? error.message : String(error)}`);
 }
