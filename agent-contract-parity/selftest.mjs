@@ -243,7 +243,7 @@ const homeWithContract = project({ 'shared.md': 'x' });
 check('an import written as ~/ resolves against the home', withHome(homeWithContract, () => ownsContract(project({ '.claude/CLAUDE.md': '@~/shared.md\n' }))));
 check('an import written as ~/ that is missing from the home owns nothing', !withHome(homeWithContract, () => ownsContract(project({ '.claude/CLAUDE.md': '@~/nope.md\n' }))));
 check('a .claude directory with no CLAUDE.md and no ledger owns nothing', outcome(() => ownsContract(project({ '.claude/other.md': 'x' }))) === false);
-check('a project with no .claude owns nothing', !ownsContract(project({ 'LEDGER.md': 'x' })));
+check('a project with no .claude owns nothing', outcome(() => ownsContract(project({ 'LEDGER.md': 'x' }))) === false);
 check('a contract and no declaration is undeclared', outcome(() => contractParity(project(WITH_LEDGER)).status) === 'undeclared');
 check('an imported contract and no declaration is undeclared', outcome(() => contractParity(project(WITH_IMPORT)).status) === 'undeclared');
 check('no contract and no declaration stays absent', outcome(() => contractParity(project({})).status) === 'absent');

@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +45,8 @@ try {
   equal('every loop module is copied, selftests and campaigns included', mjsOf(everything), mjsOf(HERE));
   equal('the shared modules are copied beside the loop, without their selftests or campaigns', mjsOf(path.join(everything, '..', 'bilingual-output')), ['message.mjs', 'speaker.mjs']);
 
-  const engine = mjsOf(path.join(everything, '..', 'agent-contract-parity'));
+  const engineDirectory = path.join(everything, '..', 'agent-contract-parity');
+  const engine = existsSync(engineDirectory) ? mjsOf(engineDirectory) : [];
 
   equal('the parity engine modules the promotion imports are copied beside the loop', ['anchors-file.mjs', 'contract-presence.mjs', 'parity.mjs', 'refusal-text.mjs'].every((name) => engine.includes(name)), true);
   equal('...without the engine selftest or its mutant campaign', engine.some((name) => name.includes('selftest') || name.includes('mutants')), false);

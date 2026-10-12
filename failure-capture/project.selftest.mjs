@@ -162,6 +162,15 @@ try {
     thrown = error.message;
   }
   check('a broken project config THROWS, never reads as absent', thrown.includes('unknown key "scop"'), thrown);
+  write(app, { '.claude/failure-capture.json': JSON.stringify({ parityGate: '.claude/parity.mjs' }) });
+  thrown = '';
+
+  try {
+    projectOf(app);
+  } catch (error) {
+    thrown = error.message;
+  }
+  check('the retired parityGate key is refused, so no project keeps a gate the loop no longer runs', thrown.includes('unknown key "parityGate"'), thrown);
   for (const bad of [0, -5, 1.5, '140000', null]) {
     write(app, { '.claude/failure-capture.json': JSON.stringify({ loadedSetCeiling: bad }) });
     let refused = '';

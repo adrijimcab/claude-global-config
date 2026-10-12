@@ -246,6 +246,14 @@ const project = (name, { config = { scope: 'demo' }, files = {} } = {}) => makeC
 }
 
 {
+  const extra = { [ANCHORS_PATH]: declaration([KEY, 'absent-anchor']), 'repo/.claude/AGENT-LEDGER.md': mention, 'repo/.agents/AGENTS.md': mention };
+  const world = global('global-ignores-project-parity', { rules: mention, extra });
+  const { status, out } = promote(world, '--no-mechanism', REASON);
+
+  check('a global promotion ignores the parity of the project it runs from', status === 0 && !out.includes('absent-anchor'), out);
+}
+
+{
   const guard = `.claude/guard-${KEY}/guard.mjs`;
   const world = global('closed-mechanism', { rules: mention, extra: { [`repo/.claude/guard-${KEY}/guard.mjs`]: `// closes ${KEY}\n`, [`repo/.claude/guard-${KEY}/selftest.mjs`]: 'process.exit(0);\n' } });
   const { status, out } = promote(world, '--mechanism', guard);
