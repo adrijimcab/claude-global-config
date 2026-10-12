@@ -87,7 +87,13 @@ try {
   // --- THE PREMISE: the live listener table sees this process --------------------------------------
   check('premise: the live table lists this process as the listener of the declared port', REAL(PORT).has(MY_PID), `listeners: ${[...REAL(PORT)]}`);
   check('premise: a port nobody listens on has no listener', REAL(1).size === 0);
-  check('listeners fail open: a runner that throws gives an empty set', pidsListeningOn(PORT, process.platform, () => { throw new Error('boom'); }).size === 0);
+  check('listeners fail open: a runner that throws gives an empty set', (() => {
+    try {
+      return pidsListeningOn(PORT, process.platform, () => { throw new Error('boom'); }).size === 0;
+    } catch {
+      return false;
+    }
+  })());
   check('listeners on a Unix-like platform read lsof output', pidsListeningOn(PORT, 'linux', () => ({ stdout: '4242\n77\n' })).has('77'));
   check('listeners on Windows ignore a line that is not LISTENING', pidsListeningOn(3100, 'win32', () => ({ stdout: '  TCP    0.0.0.0:3100   0.0.0.0:0   ESTABLISHED   55\n' })).size === 0);
   check('listeners on Windows ignore another port that merely ends alike', pidsListeningOn(100, 'win32', () => ({ stdout: '  TCP    0.0.0.0:3100   0.0.0.0:0   LISTENING   55\n' })).size === 0);
@@ -183,7 +189,7 @@ try {
   // --- THE SHAPE OF AN ACTION ----------------------------------------------------------------------
   const [action] = controlActions('FRT_URL=zz-marker ls', 'bash', ELSEWHERE, [PROD], REAL);
 
-  check('an action names the resource, its description, the kind, the detail and the command text', action.resource === 'local-prod' && action.description === 'shared local PROD' && action.kind === 'reconfigure' && action.detail.includes('FRT_URL') && action.text === 'FRT_URL=zz-marker ls');
+  check('an action names the resource, its description, the kind, the detail and the command text', action?.resource === 'local-prod' && action.description === 'shared local PROD' && action.kind === 'reconfigure' && action.detail.includes('FRT_URL') && action.text === 'FRT_URL=zz-marker ls');
   check('a line with no resources yields no actions', controlActions('node bin/www', 'bash', ELSEWHERE, [], REAL).length === 0);
   check('an unknown dialect yields no actions', controlActions('node bin/www', 'fish', ELSEWHERE, [PROD], REAL).length === 0);
   check('the listener table is asked once per port, however many pids are checked', (() => {
