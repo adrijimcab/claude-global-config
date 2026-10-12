@@ -26,7 +26,7 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-10-04 — shell-one-liner-corrupted-data: mechanism C:/Users/adrian.jimenez/.claude/eval-guard/guard.mjs <!--fc:shell-one-liner-corrupted-data#3-->
 - [promoted] 2026-10-01 — orchestrator-cwd-change-leaked-to-workers: mechanism C:/Users/adrian.jimenez/.claude/cwd-change-guard/guard.mjs <!--fc:orchestrator-cwd-change-leaked-to-workers#3-->
 - [promoted] 2026-09-30 — worker-overwrote-master-backlog: mechanism C:/Users/adrian.jimenez/.claude/backlog-owner-guard/guard.mjs <!--fc:worker-overwrote-master-backlog#1-->
-- [promoted] 2026-09-30 — unverified-commit-published-by-another-sessions-sync: mechanism C:/Users/adrian.jimenez/.claude/worktree-landing/land.mjs <!--fc:unverified-commit-published-by-another-sessions-sync#3-->
+- [promoted] 2026-09-30 — unverified-commit-published-by-another-sessions-sync: mechanism C:/Users/adrian.jimenez/.claude/worktree-landing/land.mjs <!--fc:unverified-commit-published-by-another-sessions-sync#4-->
 - [promoted] 2026-10-01 — backlog-rewritten-from-summary-lost-detail: mechanism C:/Users/adrian.jimenez/.claude/backlog-content-guard/guard.mjs <!--fc:backlog-rewritten-from-summary-lost-detail#4-->
 - [promoted] 2026-10-01 — replied-to-owner-in-english: no mechanism <!--fc:replied-to-owner-in-english#15-->
 - [promoted] 2026-10-04 — root-cause-stated-before-measured: no mechanism <!--fc:root-cause-stated-before-measured#2-->
