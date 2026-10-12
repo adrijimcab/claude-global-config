@@ -273,6 +273,13 @@
 /type-assertion-guard/state/
 /type-assertion-guard/scratch/
 
+# Reviews a work unit's diff against the engineering standard and records the verdict by tree hash; a landing
+# requires it. Code yes; live state no. @es Revisa el diff de una unidad contra el estándar de ingeniería y registra
+# el veredicto por hash de árbol; el aterrizaje lo exige. Código sí; estado en vivo no.
+!/standard-review/
+!/standard-review/*.mjs
+/standard-review/state/
+
 # Lands a verified work branch onto the shared branch; closes `unverified-commit-published-by-another-sessions-sync`.
 # Code yes; live state no. @es Aterriza una rama de trabajo verificada sobre la rama compartida. Código sí;
 # estado en vivo no.

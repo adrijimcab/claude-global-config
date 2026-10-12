@@ -15,8 +15,8 @@
  * 2026-10-12, el juez de voz bloqueó con «insufficient evidence in transcript», que ninguna regla permite.
  */
 
-/** The first JSON object in `text`, fences and prose around it tolerated. @es El primer objeto JSON de `text`. */
-function objectIn(text) {
+/** The first JSON object in `text`, fences and prose around it tolerated; exported so other reviewers read model answers the same way. @es El primer objeto JSON de `text`; exportada para que otros revisores lean igual las respuestas del modelo. */
+export function objectIn(text) {
   const match = /\{[\s\S]*\}/.exec(text);
 
   if (match === null) return undefined;
