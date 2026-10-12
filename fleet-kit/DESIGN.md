@@ -148,7 +148,7 @@ under `~/.claude/fleet-kit/state/`.
 - Parameter expansion (`git merge $B`) and git aliases are not evaluated by the tokenizer; a move whose target
   the line makes unknowable is a finding, not an allow. But a git invocation whose DIRECTORY the line makes
   unknowable (`cd $X && git …`) cannot be attributed to any repository, so no config governs it and it is
-  skipped. `-C` is followed; `--git-dir` / `--work-tree` are not. A `push` naming no remote is resolved
+  skipped. `-C` is followed, and `--git-dir` (or `GIT_DIR` in the same command) names the repository the way git resolves it, so a move into a separate repository, such as an external bare backup, is judged against that repository's own config; `--work-tree` names only the tree and never changes the repository. A `GIT_DIR` exported by an earlier statement is not modelled. A `push` naming no remote is resolved
   against `origin`'s remote-tracking ref.
 - `gate-run` grades only CLEAN trees (no porcelain entry, untracked included, before and after the run), so
   its verdict is exactly `HEAD^{tree}`. A dirty checkout cannot earn a verdict; the kit never hashes a dirty
@@ -281,8 +281,7 @@ modo `--plan` (solo lectura) y un payload real por guarda registrada, sin tocar 
 
 **Todos**: los hooks solo ven las llamadas de Claude Code, nunca la terminal de una persona ni un merge del
 servidor; la expansión de parámetros y los alias de git no se evalúan (un destino incognoscible es un hallazgo, pero una
-invocación cuyo DIRECTORIO es incognoscible no se puede atribuir a ningún repositorio y se omite; se sigue `-C`, no
-`--git-dir`/`--work-tree`; un `push` sin remoto se resuelve contra `origin`);
+invocación cuyo DIRECTORIO es incognoscible no se puede atribuir a ningún repositorio y se omite; se sigue `-C`; `--git-dir` (o `GIT_DIR` en el mismo comando) nombra el repositorio como lo resuelve git, y `--work-tree` solo nombra el árbol; un `GIT_DIR` exportado antes no se modela; un `push` sin remoto se resuelve contra `origin`);
 `gate-run` solo califica árboles LIMPIOS; la vivacidad es frescura del transcript (ventana de 30 minutos).
 
 **discovery_fe**: el checkout principal tiene 418 entradas de trabajo ajeno, así que el calificador y `gate-run`

@@ -21,6 +21,7 @@ import { isDisabled } from '../config/validate.mjs';
 import { judge, readVerdict } from '../gate-run/verdicts.mjs';
 import { gitAsker } from '../lib/git.mjs';
 import { effectiveDirectory } from '../lib/invocation-directory.mjs';
+import { repositoryOptions } from '../lib/invocation-repository.mjs';
 import { dialectOfTool } from '../../shell-command/shell-command.mjs';
 import { requestedMoves } from './branch-moves.mjs';
 import { resolveMove } from './move-resolution.mjs';
@@ -51,11 +52,12 @@ export function landingFindings(payload, { stateRoot } = {}) {
 
     if (directory === undefined) return [];
 
-    const governed = findConfig(directory);
+    const ask = gitAsker(directory, repositoryOptions(request.invocation, dialect));
+    const governed = findConfig(directory, ask);
 
     if (governed === undefined || isDisabled(governed.config.landingGuard)) return [];
 
-    return resolveMove(request, gitAsker(directory), governed.config.integrationBranches)
+    return resolveMove(request, ask, governed.config.integrationBranches)
       .map((outcome) => findingOf(outcome, governed, stateRoot))
       .filter((finding) => finding !== undefined)
       .map((finding) => ({ finding, governed, invocation: request.invocation }));

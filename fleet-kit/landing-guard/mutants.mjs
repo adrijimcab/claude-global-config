@@ -8,6 +8,7 @@ const M = 'landing-guard/move-resolution.mjs';
 const D = 'landing-guard/decision.mjs';
 const I = 'lib/invocation-directory.mjs';
 const G = 'landing-guard/guard.mjs';
+const R = 'lib/invocation-repository.mjs';
 
 runCampaign('landing-guard/selftest.mjs', [
   ['every branch is an integration branch', M, '.filter((branch) => integrationBranches.includes(branch))', '.filter((branch) => true)'],
@@ -28,5 +29,10 @@ runCampaign('landing-guard/selftest.mjs', [
   ['the hook never refuses: a denial is spoken as advice', G, 'deny(decision.deny);', 'advise(decision.deny);'],
   ['the hook refuses what is only advice', G, 'advise(decision.advise)', 'deny(decision.advise)'],
   ['a line with no finding is advised', G, 'if (decision === undefined) return undefined;', "if (decision === undefined) return advise('');"],
+  ['--git-dir is ignored', R, 'const option = optionGitDir(invocation.gitOptions);', 'const option = undefined;'],
+  ['GIT_DIR in the command is ignored', R, 'option === undefined ? environmentGitDir(invocation.text, dialect, platform) : option.value', 'option === undefined ? undefined : option.value'],
+  ['GIT_DIR beats --git-dir', R, 'option === undefined ? environmentGitDir(invocation.text, dialect, platform) : option.value', 'environmentGitDir(invocation.text, dialect, platform) ?? option?.value'],
+  ['a relative --git-dir ignores the -C before it', R, 'index < until', 'index < 0'],
+  ['the repository lookup ignores the invocation options', D, 'const ask = gitAsker(directory, repositoryOptions(request.invocation, dialect));', 'const ask = gitAsker(directory);'],
   ['-C is not followed', I, "if (invocation.gitOptions[index] === '-C' && directory !== undefined) directory =", 'if (false) directory =']
 ]);

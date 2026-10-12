@@ -50,6 +50,27 @@ try {
   check('a dry-run push moves nothing', await verdictOf('git push --dry-run origin feature:develop', repository), 'allow');
 
   git(repository, 'checkout', '--quiet', 'develop');
+
+  // The repository a line acts on is the one git itself would pick: --git-dir or GIT_DIR names it, --work-tree only names its tree.
+  // @es El repositorio sobre el que actúa una línea es el que elegiría git: --git-dir o GIT_DIR lo nombran, --work-tree solo nombra su árbol.
+  const backup = path.join(root, 'backup.git');
+  const cloneGitDir = path.join(repository, '.git');
+  const treeInsideClone = path.join(repository, 'docs');
+
+  git(root, 'init', '--quiet', '--bare', backup);
+  check('a commit through --git-dir into a separate bare repository is allowed', await verdictOf(`git --git-dir="${backup}" --work-tree="${treeInsideClone}" commit -q -m "docs: x"`, repository), 'allow');
+  check('--git-dir given as two words is honoured', await verdictOf(`git --git-dir "${backup}" commit -q -m x`, repository), 'allow');
+  check('GIT_DIR set in the same command names the repository', await verdictOf(`GIT_DIR="${backup}" git commit -q -m x`, repository), 'allow');
+  check('a relative --git-dir is resolved after -C, as git does', await verdictOf('git --git-dir=../backup.git commit -q -m x', repository), 'allow');
+  check('a relative --git-dir follows the -C before it', await verdictOf('git -C .. --git-dir=repo/.git commit -q -m x', repository), 'deny');
+  check('a relative --git-dir is resolved after -C, not before it', await verdictOf('git -C .. --git-dir=backup.git commit -q -m x', repository), 'allow');
+  check('a commit through --git-dir into the clone own .git is refused', await verdictOf(`git --git-dir="${cloneGitDir}" commit -q -m x`, repository), 'deny');
+  check('the same through --git-dir from elsewhere is refused', await verdictOf(`git --git-dir="${cloneGitDir}" commit -q -m x`, elsewhere), 'deny');
+  check('GIT_DIR into the clone own .git is refused', await verdictOf(`GIT_DIR="${cloneGitDir}" git commit -q -m x`, elsewhere), 'deny');
+  check('--git-dir wins over GIT_DIR, as in git', await verdictOf(`GIT_DIR="${backup}" git --git-dir="${cloneGitDir}" commit -q -m x`, elsewhere), 'deny');
+  check('near miss: --work-tree alone does not change the repository', await verdictOf(`git --work-tree="${treeInsideClone}" commit -q -m x`, repository), 'deny');
+  check('near miss: the clone .git with a foreign --work-tree is still refused', await verdictOf(`git --git-dir="${cloneGitDir}" --work-tree="${elsewhere}" commit -q -m x`, repository), 'deny');
+
   check('ff merge into develop without a verdict is refused', await verdictOf('git merge --ff-only feature', repository), 'deny');
   check('the same line from PowerShell is refused', await verdictOf('git merge --ff-only feature', repository, 'PowerShell'), 'deny');
   check('the same line through -C from elsewhere is refused', await verdictOf(`git -C "${repository}" merge --ff-only feature`, elsewhere), 'deny');
