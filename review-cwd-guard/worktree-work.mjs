@@ -2,25 +2,17 @@
  * The git facts this guard decides on: is a directory a repository's MAIN checkout, and which LINKED
  * worktrees of it carry work (commits the main checkout's HEAD lacks, or uncommitted changes)?
  *
- * Every git failure THROWS, so the caller can fail open and journal it; nothing here guesses.
+ * Every git failure THROWS, so the caller can fail open and journal it; nothing here guesses. Whether a directory
+ * is a linked worktree is not decided here: `git-worktree/linked-worktree.mjs` owns that question.
  *
  * @es Los hechos de git sobre los que decide la guardia: si un directorio es el checkout PRINCIPAL de un
  * repositorio y qué worktrees ENLAZADOS suyos llevan trabajo (commits que el HEAD principal no tiene, o
- * cambios sin commitear). Todo fallo de git LANZA, para que quien llama falle abierto y lo registre.
+ * cambios sin commitear). Todo fallo de git LANZA, para que quien llama falle abierto y lo registre. Si un
+ * directorio es un worktree enlazado no se decide aquí: esa pregunta es de `git-worktree/linked-worktree.mjs`.
  */
 
-import { execFileSync } from 'node:child_process';
-
-/** Variables that make git pick a repository instead of discovering one (a git hook exports them). @es Variables que eligen repositorio. */
-const REPOSITORY_SELECTORS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR'];
-
-function git(directory, args) {
-  const env = { ...process.env };
-
-  for (const name of REPOSITORY_SELECTORS) delete env[name];
-
-  return execFileSync('git', ['-C', directory, ...args], { encoding: 'utf8', env, timeout: 15000, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-}
+import { git } from '../git-worktree/git-query.mjs';
+import { isLinkedWorktree } from '../git-worktree/linked-worktree.mjs';
 
 /** The `worktree <path>` entries of `git worktree list --porcelain`, main checkout first. @es Las rutas de worktrees, el principal primero. */
 function worktreePaths(directory) {

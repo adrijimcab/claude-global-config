@@ -63,8 +63,8 @@ const MUTANTS = [
 
   // linked-worktree.mjs
   ['a removed worktree is refused', L, 'if (!existsSync(worktree)) return true;', 'if (!existsSync(worktree)) return false;'],
-  ['a main checkout directory passes as a file', L, '.isFile()', '.isDirectory()'],
-  ['a directory without .git passes', L, '  } catch {\n    return false;', '  } catch {\n    return true;'],
+  ['a main checkout passes as a linked worktree', L, 'return isLinkedWorktree(worktree);', 'return !isLinkedWorktree(worktree);'],
+  ['a directory git cannot classify is reaped', L, '  } catch {\n    return false;', '  } catch {\n    return true;'],
 ];
 
 if (!existsSync(RUNNER)) {

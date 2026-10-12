@@ -335,3 +335,12 @@
 # Reaps the processes a closed agent leaves behind. @es Siega los procesos que deja un agente cerrado.
 !/process-reaper/
 !/process-reaper/**
+
+# The one owner of "is this directory a linked worktree" (code and proof). @es El único dueño de «¿este directorio es un worktree enlazado?» (código y prueba).
+!/git-worktree/
+!/git-worktree/**
+
+# Where a review happens: the review stop hook runs only in a linked worktree (code and proof; its journal stays ignored). @es Dónde ocurre una revisión: el hook de parada de revisión corre solo en un worktree enlazado.
+!/review-site/
+!/review-site/**
+/review-site/state/

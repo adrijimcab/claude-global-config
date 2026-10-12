@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { isolateState } from '../hook-state/locations.mjs';
+import { createGitSandbox } from '../selftest-fixtures/git-sandbox.mjs';
 
 isolateState('process-reaper');
 
@@ -50,10 +51,19 @@ const attempt = (run) => {
 };
 
 const fixtureRoot = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'process-reaper-')));
+// A REAL repository (git sandbox, so git never climbs out of it) whose linked worktrees are real too: what makes a
+// directory a linked worktree is git's answer, not the shape of a file. @es Un repositorio REAL, con worktrees reales.
+const sandbox = createGitSandbox({ parent: fixtureRoot });
+const runGit = (args, cwd) => {
+  const result = sandbox.git(args, { cwd });
+  if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+};
+writeFileSync(path.join(sandbox.repoDir, 'base.txt'), 'base');
+runGit(['add', 'base.txt'], sandbox.repoDir);
+runGit(['commit', '-q', '-m', 'base'], sandbox.repoDir);
 const linkedWorktree = (name) => {
   const directory = path.join(fixtureRoot, name);
-  mkdirSync(directory);
-  writeFileSync(path.join(directory, '.git'), 'gitdir: elsewhere\n');
+  runGit(['worktree', 'add', '-q', '-b', name, directory], sandbox.repoDir);
   return directory;
 };
 const forward = (value) => value.split('\\').join('/');
@@ -158,13 +168,11 @@ const cycle = [row(500, 501, `node ${WT}/a.mjs`), row(501, 500, `node ${WT}/b.mj
 check('a parent cycle in the listing terminates and kills something', attempt(() => killedOf({ worktree: WT }, { rows: cycle, self: 1, after: () => [] }).length > 0), true);
 
 // A main checkout is never reaped: its directory holds .git as a directory. @es Un checkout principal nunca se siega.
-const mainCheckout = path.join(fixtureRoot, 'main-checkout');
-mkdirSync(path.join(mainCheckout, '.git'), { recursive: true });
+const mainCheckout = sandbox.repoDir;
 const mainRun = reaperRun({ worktree: mainCheckout }, { rows: [row(600, 1, `node ${forward(mainCheckout)}/x.mjs`)] });
 check('a main checkout is refused', mainRun.outcome.refused, 'not-a-linked-worktree');
 check('a refused main checkout kills nothing', mainRun.killed, []);
-const plain = path.join(fixtureRoot, 'plain-directory');
-mkdirSync(plain);
+const plain = sandbox.plainDir('plain-directory');
 check('a directory that is no git checkout at all is refused', reaperRun({ worktree: plain }, { rows: [row(601, 1, `node ${forward(plain)}/x.mjs`)] }).outcome.refused, 'not-a-linked-worktree');
 const gone = path.join(fixtureRoot, 'removed-worktree');
 check('a worktree already removed is reaped by name', killedOf({ worktree: gone }, { rows: [row(602, 1, `sh ${forward(gone)}/watch-branches.sh`)], after: () => [] }), [602]);
