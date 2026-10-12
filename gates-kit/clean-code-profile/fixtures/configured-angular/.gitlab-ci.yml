@@ -1,0 +1,16 @@
+stages: [validate]
+
+.template:
+  script:
+    - echo hidden templates are not jobs
+
+lint:
+  stage: validate
+  script:
+    - npm run build:ci-pr
+
+audit:
+  stage: validate
+  allow_failure: true
+  script:
+    - npm audit --audit-level=high

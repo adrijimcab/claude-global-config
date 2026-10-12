@@ -1,0 +1,1 @@
+{ "unitSuite": { "npmScript": "build:ci-pr" } }

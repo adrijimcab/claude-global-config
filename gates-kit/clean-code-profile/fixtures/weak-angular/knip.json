@@ -1,0 +1,1 @@
+{ "ignore": ["a.ts", "b.ts"], "ignoreDependencies": ["x"], "workspaces": { "lib": { "ignoreBinaries": ["y"] } } }

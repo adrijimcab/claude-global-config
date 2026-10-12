@@ -1,0 +1,8 @@
+{
+  "name": "fixture-weak-angular",
+  "private": true,
+  "scripts": {
+    "build:ci-pr": "ng lint && jscpd src --min-tokens 120 && knip && depcruise src && npm audit --audit-level=critical && npm audit"
+  },
+  "dependencies": { "@angular/core": "19.0.0" }
+}

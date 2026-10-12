@@ -1,0 +1,12 @@
+{
+  "name": "fixture-workspace-node",
+  "private": true,
+  "scripts": {
+    "ci": "npm run test -w lib && npm run build && npm run ping",
+    "test": "knip",
+    "build": "echo build",
+    "postbuild": "jscpd src --min-tokens 70 --threshold 0",
+    "ping": "npm run pong",
+    "pong": "npm run ping"
+  }
+}

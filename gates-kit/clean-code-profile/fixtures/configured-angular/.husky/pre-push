@@ -1,0 +1,5 @@
+#!/bin/sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# the gates run only from the hook, which --no-verify skips
+npm run quality

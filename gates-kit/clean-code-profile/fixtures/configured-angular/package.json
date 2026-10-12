@@ -1,0 +1,10 @@
+{
+  "name": "fixture-configured-angular",
+  "private": true,
+  "scripts": {
+    "build:ci-pr": "ng lint",
+    "quality": "jscpd src && knip && depcruise src && npm audit --audit-level=high"
+  },
+  "dependencies": { "@angular/core": "19.0.0" },
+  "devDependencies": { "madge": "8.0.0" }
+}

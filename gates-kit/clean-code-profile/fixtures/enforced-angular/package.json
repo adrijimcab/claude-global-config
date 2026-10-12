@@ -1,0 +1,11 @@
+{
+  "name": "fixture-enforced-angular",
+  "private": true,
+  "scripts": {
+    "build:ci-pr": "npm run lint && npm run quality",
+    "prebuild:ci-pr": "tsc --noEmit -p tsconfig.json",
+    "lint": "ng lint",
+    "quality": "jscpd src && knip && depcruise src && npm audit --audit-level=high"
+  },
+  "dependencies": { "@angular/core": "19.0.0" }
+}
