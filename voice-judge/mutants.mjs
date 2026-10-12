@@ -28,7 +28,9 @@ const MUTANTS = [
   ['the rubric drops the prose exception', PROMPT, 'The one exception is a body whose full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands.', ''],
   ['the rubric blocks prose with a supporting list', PROMPT, 'Answer {"ok": true} when prose carries the message and a list only supports it', 'Answer ok false when a list is present'],
   ['the rubric stops looking at what carries the reply', PROMPT, 'Look at what CARRIES it:', 'Look at it:'],
-  ['the signature is still v1', PROMPT, "'voice-judge rubric v3.'", "'voice-judge rubric v1.'"],
+  ['the signature is still v1', PROMPT, "'voice-judge rubric v4.'", "'voice-judge rubric v1.'"],
+  ['a reply with no second person can fail as tuteo', PROMPT, ' Rule 4 fails only a tú or usted word that actually appears, and the reason must quote it: a reply with no second-person verb at all, written in the first person ("cierro la unidad", "me traiga") and the third person ("tiene que quedar"), is not tuteo.', ''],
+  ['a first-person reply can fail as cold for lacking a second-person verb', PROMPT, ' Sentences in the first person (cierro, paso, lo medí, me traiga) are a first-person voice, so a reply that explains its why in them is not cold, and a reply is never failed for not addressing him with a second-person verb.', ''],
   ['the rubric blocks when unsure', PROMPT, 'When unsure, answer {"ok": true}.', 'When unsure, answer ok false.'],
   ['the rubric allows impossible', PROMPT, 'Never set the field impossible.', 'Set the field impossible when the owner repeats himself.'],
   ['the rubric asks for length', PROMPT, 'Never ask for a longer message for its own sake: ask only for what is missing.', 'Ask for a longer message.'],
@@ -48,7 +50,7 @@ const MUTANTS = [
   ['the rubric drifts from the settings entry', PROMPT, 'for voice only', 'for tone only'],
   ['the pinned timeout is not the settings one', PROMPT, 'TIMEOUT_SECONDS = 30', 'TIMEOUT_SECONDS = 20'],
   ['the marker is not what the rubric spells', PROMPT, "MARKER = 'VOICE-JUDGE:'", "MARKER = 'VOICE JUDGE:'"],
-  ['the signature is the premise judge\'s', PROMPT, "'voice-judge rubric v3.'", "'premise-judge rubric v2.'"],
+  ['the signature is the premise judge\'s', PROMPT, "'voice-judge rubric v4.'", "'premise-judge rubric v2.'"],
 
   // --- THE SHARED JOURNAL GUARD, FOR THE VOICE JUDGE.
   ['the guard does not journal the voice judge', GUARD, '  { mechanism: VOICE_MECHANISM, marker: VOICE_MARKER },\n', ''],

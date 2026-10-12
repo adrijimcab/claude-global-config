@@ -76,7 +76,9 @@ check('rubric: voseo does not rescue a changelog', PROMPT.includes('Voseo does n
 check('rubric: prose that explains the why with a closing is the one exception', PROMPT.includes('full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands'), true);
 check('rubric: prose with a supporting list passes', PROMPT.includes('when prose carries the message and a list only supports it (a few short items, or a command block the owner must run)'), true);
 check('rubric: unsure passes', PROMPT.includes('When unsure, answer {"ok": true}.'), true);
-check('rubric: the signature is the v3 line', PROMPT_SIGNATURE, 'voice-judge rubric v3.');
+check('rubric: the signature is the v4 line', PROMPT_SIGNATURE, 'voice-judge rubric v4.');
+check('rubric: tuteo fails only on a quoted tú or usted word, never on a reply with no second person', PROMPT.includes('Rule 4 fails only a tú or usted word that actually appears, and the reason must quote it: a reply with no second-person verb at all'), true);
+check('rubric: a first-person reply is not cold for lacking a second-person verb', PROMPT.includes('a reply is never failed for not addressing him with a second-person verb'), true);
 check('rubric: a Spanish reply with tu or usted forms fails', PROMPT.includes('answer {"ok": false} when it addresses him with tú or usted forms (tienes, tiene usted, puedes, quieres, su as his possessive) instead of Rioplatense voseo (tenés, podés, querés, vos)'), true);
 check('rubric: quoted text, code and the words of other people do not count for voseo', PROMPT.includes('Quoted text, code and the words of other people do not count,'), true);
 check('rubric: tu alone is not a tuteo marker', PROMPT.includes('tu alone is normal in voseo and does not count'), true);
