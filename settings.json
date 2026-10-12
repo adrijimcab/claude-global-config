@@ -228,16 +228,6 @@
       {
         "hooks": [
           {
-            "command": "node \"$HOME/.claude/stale-session-guard/prompt-hook.mjs\"",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      },
-      {
-        "hooks": [
-          {
             "command": "node \"$HOME/.claude/integration-branch/prompt-hook.mjs\"",
             "timeout": 10,
             "type": "command"

@@ -1,8 +1,0 @@
-{
-  "registrations": [
-    {
-      "event": "UserPromptSubmit"
-    }
-  ],
-  "why": "Claude Code snapshots hook groups at session start, so a group registered later (the PreToolUse language group, commit 03383e3) is invisible to a running session; measured in session 5f411d3c, where only the Stop guard caught an English line. This hook tells the session, once per change, which guards it lacks."
-}

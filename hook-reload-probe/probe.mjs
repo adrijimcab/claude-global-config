@@ -7,6 +7,12 @@
  * that settled the stale-session question (Claude Code 2.1.296, 2026-10-12) is in `fixtures/`.
  * Usage: `node hook-reload-probe/probe.mjs <scratch-dir>` (the directory is created and overwritten).
  *
+ * Decision (2026-10-12): the run showed every settings hook change live on the next turn, for UserPromptSubmit,
+ * Stop, PreToolUse and SubagentStart, whether a group was added, edited or removed; CLAUDE.md and rules text was
+ * NOT re-read. The former `stale-session-guard` warned that groups registered after the session started do not
+ * run there, a premise taken from reading the dispatcher and never probed; it was false, so the guard was
+ * removed with its registration, state row and selftests. Only memory text is stale in a running session.
+ *
  * @es Sonda en vivo: ¿una sesión de Claude Code en marcha toma los cambios hechos a mitad de sesión en sus
  * grupos de hooks de settings y en el texto de CLAUDE.md / rules? Una sesión headless larga (stream-json) toma
  * tres turnos; entre turnos este script AGREGA, EDITA y QUITA grupos de hooks de cuatro eventos y reescribe
@@ -15,6 +21,13 @@
  * manual, no un selftest. La salida capturada de la corrida que resolvió la duda de sesión desactualizada
  * (Claude Code 2.1.296, 2026-10-12) está en `fixtures/`.
  * Uso: `node hook-reload-probe/probe.mjs <directorio-temporal>` (se crea y se sobrescribe).
+ *
+ * @es Decisión (2026-10-12): la corrida mostró todo cambio de hooks de settings activo en el turno siguiente,
+ * para UserPromptSubmit, Stop, PreToolUse y SubagentStart, ya sea que el grupo se agregue, se edite o se quite;
+ * el texto de CLAUDE.md y de rules NO se releyó. El antiguo `stale-session-guard` avisaba que los grupos
+ * registrados después de arrancar la sesión no corren en ella, una premisa tomada de leer el dispatcher y
+ * nunca sondeada; era falsa, así que se quitó la guardia con su registro, su fila de estado y sus selftests.
+ * Solo el texto de memoria queda desactualizado en una sesión en marcha.
  */
 
 import { spawn } from 'node:child_process';

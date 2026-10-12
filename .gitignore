@@ -229,13 +229,6 @@
 !/gentle-ai-sync-guard/
 !/gentle-ai-sync-guard/**
 
-# The stale-session warning (code and proof; its per-session state stays ignored).
-# @es El aviso de sesión desactualizada (código y prueba; su estado por sesión sigue ignorado).
-!/stale-session-guard/
-!/stale-session-guard/*.mjs
-!/stale-session-guard/*.json
-/stale-session-guard/state/
-
 # The stop-input recorder (code and proof; the stops it records stay ignored).
 # @es El registrador de entradas de parada (código y prueba; las paradas que registra siguen ignoradas).
 !/stop-input-recorder/
