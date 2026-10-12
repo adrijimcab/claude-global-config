@@ -217,6 +217,25 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   integrated-worktree-guard attribution fixed in 916d739. Fix: attribute by the session's own transcript
   writes, as that guard does now, with a red fixture of two sessions. Pending, reason (1): Agent launches
   are refused in Discovery.
+  CLOSED 2026-10-12 — config-sync-guard attributes another session's paths: refuted by measurement from session
+  b100-am-ui-f8. Its own `capture.mjs capture` ran the auto-condense pass, which rewrote the two orchestrator
+  lessons into new evidence files inside b100's shell call, so the guard's attribution was correct; b100
+  committed the four paths in 258943d. The item was written from the owner-pasted block without measuring.
+- Lesson auto-condense rewrites other sessions' lessons (reported 2026-10-12 by b100-am-ui-f8, its
+  measurement): a `capture.mjs capture` call condenses EVERY over-long ledger line, so the next capturer
+  writes and then commits other sessions' lesson text. Design question: condense only the capturing key, or
+  condense in a separate owned step. Pending, reason (4): a design change to the shared ledger writer.
+- Agent process reaper (owner order 2026-10-12, relayed by b100-am-ui-f8, its measurement): orphan bash
+  `until … sleep` loops and `sleep 100000` lived about 18 h after their worker ended
+  (agent-a83a72cee352af81b); three `sh watch-branches.sh` processes from a removed worktree have lived since
+  2026-09-27; and a storybook server outlived TaskStop. The rule is in 00-owner-mandates (closure item 5).
+  The lesson worker-left-a-polling-loop-alive is promoted when the reaper lands, because `capture.mjs promote`
+  takes the mechanism's path (`--mechanism`), and a `--no-mechanism` would be false. Mechanism to build: one reaper module that
+  finds every process (bash, sh, node, cmd, powershell) whose command line names the agent's worktree, the
+  agent id or its scratch path, and kills its tree with `taskkill /PID <pid> /T /F`. It is called from
+  SubagentStop, from land.mjs, and from b100's `integrate.mjs --close`. Its selftest kills a planted bash
+  loop and leaves a sibling session's process untouched. Pending, reason (1): Agent launches in Discovery
+  are refused until feature/meet lands f14; build it test-first with mutants.
 - Rename `sdd-attempt-cwd-guard` to a name for what it now owns (the cwd of v4 review range commands and
   the retired sdd-attempt verbs): its folder, state, rotate entry, manifests and selftests. Found by the
   owner's SDD sweep 2026-10-12; the rest of that sweep is clean (history and gentle-ai-rendered text kept;
