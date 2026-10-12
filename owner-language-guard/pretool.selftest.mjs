@@ -109,6 +109,115 @@ try {
   check('the first English line written is the one quoted', reasonOf(twoEnglish).includes('alpha review') && !reasonOf(twoEnglish).includes('gamma review'), true);
   check('window grows past a 2 MB tool result and finds the English line', denied(call(transcript([user('Dale'), assistant([text(SPANISH), toolUse({})]), toolResult('x'.repeat(2 << 20)), assistant([text(ENGLISH), toolUse({})])]))), true);
 
+  // The race MEASURED live on 2026-10-12 (Claude Code 2.1.296, owner-language-guard/fixtures/pretool-lag-probe.jsonl):
+  // the transcript is written asynchronously, so when PreToolUse fires the text record and the tool_use record of
+  // THIS call are often not on disk yet (3 of 4 calls in the probe). The guard anchors on the payload's tool_use_id,
+  // waits (bounded) until that record is written, and judges the texts BEFORE it.
+  // @es La carrera MEDIDA en vivo: el transcript se escribe de forma asíncrona, así que al disparar PreToolUse el
+  // texto y el tool_use de ESTA llamada suelen no estar aún en disco (3 de 4 en la sonda). El guard se ancla en el
+  // tool_use_id del payload, espera (acotado) a que ese registro exista y juzga los textos ANTERIORES.
+  const toolUseAs = (id, input = {}) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input }] } });
+  const textRecord = (t) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: t }] } });
+  const anchoredCall = (file, id, readTexts) => evaluate(JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: id, transcript_path: file }), readTexts);
+  const { appendFileSync: appendText } = await import('node:fs');
+  const { readInterstitialTexts, sleepSync } = await import('./interstitial.mjs');
+  const laggedBase = () => [user('Dale'), assistant([text('Va.'), toolUse({})]), toolResult('ok'), attachment('total_tokens_reminder'), attachment('output_style')];
+  const waitingFor = (file, late, { timeoutMs = 2000 } = {}) => {
+    let sleeps = 0;
+    let clock = 0;
+    const wait = { timeoutMs, pollMs: 25, now: () => clock, sleep: (ms) => { sleeps += 1; clock += ms; if (sleeps > 1000) throw new Error('runaway wait'); if (sleeps === 2) appendText(file, late.map((line) => `${line}
+`).join('')); } };
+
+    return { read: (transcriptPath, id) => readInterstitialTexts(transcriptPath, id, wait), sleeps: () => sleeps };
+  };
+
+  const lagFile = transcript(laggedBase());
+  const lagged = waitingFor(lagFile, [textRecord(ENGLISH), toolUseAs('toolu_lag')]);
+
+  check('lag: English text that lands after the hook started is refused', denied(anchoredCall(lagFile, 'toolu_lag', lagged.read)), true);
+  check('lag: the guard waited for the record instead of judging an empty tail', lagged.sleeps() >= 2, true);
+
+  const lagSpanishFile = transcript(laggedBase());
+  const laggedSpanish = waitingFor(lagSpanishFile, [textRecord(SPANISH), toolUseAs('toolu_es')]);
+
+  check('lag: Spanish text that lands late is allowed', denied(anchoredCall(lagSpanishFile, 'toolu_es', laggedSpanish.read)), false);
+
+  const presentFile = transcript([...laggedBase(), textRecord(ENGLISH), toolUseAs('toolu_now')]);
+  const present = waitingFor(presentFile, []);
+
+  check('anchored: a record already on disk is judged without waiting', denied(anchoredCall(presentFile, 'toolu_now', present.read)), true);
+  check('anchored: no sleep when the record is already there', present.sleeps(), 0);
+
+  const afterFile = transcript([...laggedBase(), textRecord(SPANISH), toolUseAs('toolu_a'), toolResult('ok'), textRecord(ENGLISH), toolUseAs('toolu_b')]);
+
+  check('anchored: English written AFTER the anchored call is not judged for it', denied(anchoredCall(afterFile, 'toolu_a', waitingFor(afterFile, []).read)), false);
+  check('anchored: the later call judges its own English', denied(anchoredCall(afterFile, 'toolu_b', waitingFor(afterFile, []).read)), true);
+
+  const priorFile = transcript([...laggedBase(), textRecord(ENGLISH), toolUseAs('toolu_first'), toolResult('ok'), toolUseAs('toolu_second')]);
+
+  check('anchored: the call right after a tool result does not re-judge the earlier text', denied(anchoredCall(priorFile, 'toolu_second', waitingFor(priorFile, []).read)), false);
+
+  const parallelFile = transcript([...laggedBase(), textRecord(ENGLISH), toolUseAs('toolu_p1'), toolUseAs('toolu_p2')]);
+
+  check('anchored: the second call of a parallel batch still sees the text before the first', denied(anchoredCall(parallelFile, 'toolu_p2', waitingFor(parallelFile, []).read)), true);
+
+  const neverFile = transcript([...laggedBase(), textRecord(ENGLISH)]);
+  const never = waitingFor(neverFile, [], { timeoutMs: 100 });
+
+  check('timeout: an anchor that never lands falls back to the text already on disk', denied(anchoredCall(neverFile, 'toolu_never', never.read)), true);
+  check('timeout: the wait is bounded by the budget (100 ms / 25 ms = 4 sleeps)', never.sleeps(), 4);
+
+  const silentFile = transcript(laggedBase());
+
+  check('timeout: nothing on disk and nothing arriving is allowed', denied(anchoredCall(silentFile, 'toolu_none', waitingFor(silentFile, [], { timeoutMs: 100 }).read)), false);
+  check('a payload without tool_use_id keeps the unanchored behaviour', denied(call(transcript(step(ENGLISH)))), true);
+
+  const realSleepFile = transcript([...laggedBase(), textRecord(ENGLISH)]);
+  const started = Date.now();
+
+  readInterstitialTexts(realSleepFile, 'toolu_real_sleep', { timeoutMs: 150, pollMs: 25 });
+  const cpuBefore = process.cpuUsage();
+  const sleepStart = Date.now();
+
+  sleepSync(120);
+
+  const cpuMs = (process.cpuUsage(cpuBefore).user + process.cpuUsage(cpuBefore).system) / 1000;
+
+  check('sleepSync blocks for the requested time', Date.now() - sleepStart >= 110, true);
+  check('sleepSync waits without spinning the CPU', cpuMs < 60, true);
+
+  let seenId = 'unset';
+
+  anchoredCall(transcript(step(SPANISH)), '', (_file, id) => { seenId = id; return []; });
+  check('an empty tool_use_id is not taken as an anchor', seenId, undefined);
+  check('a string tool_use_id reaches the reader as is', (() => { let got; anchoredCall(transcript(step(SPANISH)), 'toolu_x', (_f, id) => { got = id; return []; }); return got; })(), 'toolu_x');
+  check('the default sleep really waits (>= 150 ms) and stays bounded (< 2 s)', Date.now() - started >= 150 && Date.now() - started < 2000, true);
+
+  // The two REAL slips of 2026-10-12 (orchestrator session 5f411d3c, entries trimmed): each window ends at the
+  // tool_use record of the call the guard let through. Replayed whole, and replayed as the lag left it: the text
+  // and tool_use records not yet on disk when the hook starts.
+  // @es Los dos deslices REALES: cada ventana termina en el tool_use de la llamada que el guard dejó pasar.
+  // Reproducidos enteros y como los dejó el retraso: texto y tool_use aún no escritos al arrancar el hook.
+  const { readFileSync: readFixture } = await import('node:fs');
+  const realWindows = [
+    ['Read after "Now the backlog correction on checkpoint-24."', 'real-slip-read-2026-10-12.jsonl', 'toolu_013ouYwZqP2dQ7CjrVdsWqKQ', 'backlog correction'],
+    ['Bash after "Now the backlog record for those two..."', 'real-slip-bash-2026-10-12.jsonl', 'toolu_01A7BDqa8hsPz76tBEiHAmqq', 'backlog record']
+  ];
+
+  for (const [label, name, id, excerpt] of realWindows) {
+    const lines = readFixture(path.join(import.meta.dirname, 'fixtures', name), 'utf8').split('\n').filter(Boolean);
+    const whole = transcript(lines);
+    const refusedWhole = anchoredCall(whole, id, waitingFor(whole, []).read);
+
+    check(`real slip, whole window: ${label} is refused`, denied(refusedWhole) && reasonOf(refusedWhole).includes(excerpt), true);
+
+    const lagFixture = transcript(lines.slice(0, -2));
+    const laggedReal = waitingFor(lagFixture, lines.slice(-2));
+
+    check(`real slip, lagged window: ${label} is refused after the records land`, denied(anchoredCall(lagFixture, id, laggedReal.read)), true);
+    check(`real slip, lagged window: ${label} was waited for`, laggedReal.sleeps() >= 2, true);
+  }
+
   const cli = (input) => spawnSync(process.execPath, [path.join(import.meta.dirname, 'pretool.mjs')], { input, encoding: 'utf8' });
   const cliEnglish = cli(JSON.stringify({ transcript_path: transcript(step(ENGLISH)) }));
 

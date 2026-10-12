@@ -3,11 +3,13 @@
  * `PreToolUse` guard: refuses a tool call when the assistant text written just before it, addressed to the
  * owner, is English prose. Thin shell over the one classifier (`decide.mjs#englishParagraphs`); the text
  * comes from `interstitial.mjs`. Main session only: a subagent's calls are never judged. The tool call's
- * own payload is never read (it is data for another agent). FAILS OPEN on any problem of its own.
+ * own payload is never read (it is data for another agent); only its `tool_use_id` anchors the read, because
+ * the transcript lags the hook. FAILS OPEN on any problem of its own.
  *
  * @es Guardia `PreToolUse`: rechaza la llamada cuando el texto escrito justo antes, dirigido al dueño, es
  * prosa en inglés. Usa el único clasificador (`decide.mjs`). Solo sesión principal; el payload de la
- * llamada nunca se lee. FALLA ABIERTO ante cualquier fallo propio.
+ * llamada nunca se lee, salvo su `tool_use_id`, que ancla la lectura porque el transcript va por detrás del
+ * hook. FALLA ABIERTO ante cualquier fallo propio.
  */
 
 import { readFileSync } from 'node:fs';
@@ -32,7 +34,8 @@ export function evaluate(raw, readTexts = readInterstitialTexts) {
 
     if (isSubagentCaller(payload) || typeof transcript !== 'string' || transcript.length === 0) return undefined;
 
-    const [first] = englishParagraphs(readTexts(transcript));
+    const toolUseId = typeof payload.tool_use_id === 'string' && payload.tool_use_id.length > 0 ? payload.tool_use_id : undefined;
+    const [first] = englishParagraphs(readTexts(transcript, toolUseId));
 
     if (first === undefined) return undefined;
 

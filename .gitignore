@@ -246,6 +246,11 @@
 !/owner-language-guard/fixtures/
 /owner-language-guard/fixtures/*
 !/owner-language-guard/fixtures/stop-payload.constructed.json
+# The PreToolUse measurements of 2026-10-12: the transcript-lag probe capture and two real slip windows (entries
+# trimmed). @es Las mediciones de PreToolUse: la captura de la sonda de retraso y dos ventanas reales de deslices.
+!/owner-language-guard/fixtures/pretool-lag-probe.jsonl
+!/owner-language-guard/fixtures/real-slip-read-2026-10-12.jsonl
+!/owner-language-guard/fixtures/real-slip-bash-2026-10-12.jsonl
 
 # Where a subagent stands: transcript, processes, worktree. @es Dónde está un subagente.
 !/worker-status/
