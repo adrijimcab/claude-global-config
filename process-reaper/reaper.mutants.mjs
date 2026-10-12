@@ -57,7 +57,7 @@ const MUTANTS = [
   ['the lineage walk stops at the first step', T, 'step <= rows.length', 'step <= 0'],
   ['every member is a root', T, 'if (above.length === 0) cover(member);', 'cover(member);'],
   ['no member is a root in the first pass', T, 'if (above.length === 0) cover(member);', ''],
-  ['a cycle leaves nothing to kill', T, 'if (!covered.has(member.pid)) cover(member);', ''],
+  ['a cycle leaves nothing to kill', T, 'if (!covered.has(member.pid)) cover(member);', '{}'],
   ['any ancestor makes a member a non-root', T, 'filter((pid) => pid !== member.pid && pids.has(pid))', 'filter((pid) => pid !== member.pid)'],
   ['descendants are only the direct children', T, 'queue.push(entry.pid);', ''],
 

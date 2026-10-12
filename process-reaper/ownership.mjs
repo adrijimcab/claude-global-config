@@ -52,7 +52,8 @@ export function markersOf({ worktree, agentId, scratch } = {}) {
 
 /** Whether `marker` occurs in `line` with a boundary on both sides. @es Si el marcador aparece con límite a ambos lados. */
 function occursIn(marker, line) {
-  for (let at = line.indexOf(marker.text); at !== -1; at = line.indexOf(marker.text, at + 1)) {
+  // `at < line.length` ends the walk even for an empty name, which `indexOf` would find forever. @es `at < line.length` termina el recorrido incluso con un nombre vacío, que `indexOf` hallaría siempre.
+  for (let at = line.indexOf(marker.text); at !== -1 && at < line.length; at = line.indexOf(marker.text, at + 1)) {
     const before = line.charAt(at - 1);
     const after = line.charAt(at + marker.text.length);
     const bounded = (before === '' || !marker.continues(before)) && (after === '' || !marker.continues(after));

@@ -83,7 +83,17 @@ const world = [
   row(400, 900, `node land.mjs --worktree ${WT}`),
   row(900, 1, `bash -c node land.mjs --worktree ${WT}`)
 ];
-const reaperRun = (ownership, { rows = world, after = (killed) => rows.filter((entry) => ![...killed].some((pid) => pid === entry.pid || descendantsOf(rows, pid).some((below) => below.pid === entry.pid))), self = 400, ...options } = {}) => {
+// A crash of the reaper is a failed check, not an aborted selftest: it comes back as an outcome that matches nothing.
+// @es Un crash del segador es un check fallido, no un selftest abortado: vuelve como un resultado que no coincide con nada.
+const CRASHED = { refused: 'THREW', matched: [], protected: [], killed: [], survivors: [], lines: [''] };
+const reaperRun = (ownership, options) => {
+  try {
+    return runReaper(ownership, options);
+  } catch {
+    return { outcome: CRASHED, killed: [] };
+  }
+};
+const runReaper = (ownership, { rows = world, after = (killed) => rows.filter((entry) => ![...killed].some((pid) => pid === entry.pid || descendantsOf(rows, pid).some((below) => below.pid === entry.pid))), self = 400, ...options } = {}) => {
   const killed = [];
   let listed = 0;
   const outcome = reapAgentProcesses(ownership, {
@@ -131,6 +141,7 @@ check('the report names what it killed', outcomeLines.some((line) => line.includ
 check('the report names what it left alone', outcomeLines.some((line) => line.includes('Left alone 400')), true);
 check('the first line counts the processes and the trees', outcomeLines[0], 'Reaped 4 process(es) of the closed agent in 1 tree(s). @es Segados 4 proceso(s) del agente cerrado en 1 árbol(es).');
 check('nothing to reap says so', reaperRun({ worktree: 'C:/fx/.claude-wt/never-used' }).outcome.lines[0].startsWith('No live process belongs to the closed agent.'), true);
+check('a name that occurs twice is matched on its bounded occurrence', killedOf({ worktree: WT }, { rows: [row(710, 1, `node x${WT}/a ${WT}/b`)], self: 1 }), [710]);
 check('a trailing slash on the worktree still matches', killedOf({ worktree: `${WT}/` }, { rows: [row(700, 1, `sh watch.sh ${WT}`)] }), [700]);
 check('a child with a lower pid than its matched parent is not a second root', killedOf({ worktree: WT }, { rows: [row(810, 1, `bash ${WT}/a.sh`), row(805, 810, `bash ${WT}/b.sh`)], self: 1 }), [810]);
 
