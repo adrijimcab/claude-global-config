@@ -134,10 +134,12 @@ function blockOutput(marker, actor, sessionId, cwd) {
     '',
     '  A) RECORD IT (default). One line, in the ledger format, keyed so recurrence is countable:',
     '',
-    `     cd "${cwd}" && node "${CAPTURE_CLI}" capture \\`,
+    // A subshell, so the suggested command never moves the session's own directory (cwd-change-guard refuses a
+    // bare `cd` in the main session). @es Un subshell, para que la orden sugerida no mueva el directorio de la sesión.
+    `     ( cd "${cwd}" && node "${CAPTURE_CLI}" capture \\`,
     `       --key <lowercase-kebab-key> --scope <${scopes}> \\`,
     `       --actor ${actor} --session ${sessionId} \\`,
-    '       --lesson "What went wrong -> root cause -> RULE to not repeat."',
+    '       --lesson "What went wrong -> root cause -> RULE to not repeat." )',
     '',
     '     REUSE an existing key when this is the SAME lesson as before — that is what makes the loop',
     '     able to see recurrence, and a recurrence is what promotes an incident into binding contract.',

@@ -102,6 +102,13 @@ try {
   const errors = path.join(garbage, 'state', 'guard-errors.jsonl');
   check('payload ilegible: queda anotado, nunca calla', existsSync(errors) && readFileSync(errors, 'utf8').includes('rawLength'));
 
+  // The suggested capture command must be one the main session may run: cwd-change-guard refuses a bare `cd`, so
+  // the hint runs it in a subshell. @es La orden sugerida debe poder correrse en la sesión principal: va en un subshell.
+  const hinted = world('orden-sugerida');
+  const hintRun = spawnSync(process.execPath, [path.join(hinted, 'turn-guard.mjs')], { input: payload(MARKED), encoding: 'utf8', env: { ...process.env, ...homeOf(hinted) } });
+  const hint = JSON.stringify(JSON.parse(hintRun.stdout.trim() || '{}')).split('\\n').join('\n').split('\\"').join('"');
+  check('la orden de captura sugerida va en un subshell, nunca con un cd suelto', hint.includes('( cd "') && hint.includes('RULE to not repeat." )') && !/^\s*cd "/m.test(hint), hint.slice(0, 300));
+
   const loop = world('segunda-vez');
   standalone(loop, payload(MARKED));
   check('el segundo fin de turno de la misma sesión, dentro del cooldown, deja pasar', !standalone(loop, payload(MARKED)).blocked);

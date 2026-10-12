@@ -12,6 +12,7 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const F = 'failure-capture/turn-guard.mjs';
 const MUTANTS = [
   ['stop_hook_active deja de acotar: puede bloquear dos veces', F, 'if (payload.stop_hook_active === true) return undefined;', ''],
+  ['la orden sugerida vuelve a un cd suelto que la sesión principal no puede correr', F, '`     ( cd "${cwd}" && node', '`     cd "${cwd}" && node'],
   ['el cooldown desaparece', F, 'if (now - Number(previous.blockedAt) < COOLDOWN_MS) {', 'if (false) {'],
   ['una captura sellada deja de liberar el turno', F, "if (stamped !== undefined && stamped.session === sessionId && Number(stamped.at) > Number(previous.seenAt)) {", 'if (false) {'],
   ['una captura de OTRA sesión libera el turno', F, 'stamped.session === sessionId && ', ''],
