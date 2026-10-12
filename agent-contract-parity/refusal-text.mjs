@@ -37,6 +37,18 @@ export const MESSAGE_TABLE = {
     en: 'A rule added to one contract must be added to the other, in its own language. Fix, then retry. The anchors are declared in {file}.',
     es: 'Una regla añadida a un contrato debe añadirse al otro, en su idioma. Corregí y reintentá. Los anchors se declaran en {file}.'
   },
+  'undeclared-header': {
+    en: 'AGENT-CONTRACT PARITY NOT DECLARED: this project has a contract of its own but no {file}, so nothing guards its two contracts against drift.',
+    es: 'PARIDAD DE CONTRATO SIN DECLARAR: este proyecto tiene un contrato propio pero no {file}, así que nada protege sus dos contratos contra la deriva.'
+  },
+  'undeclared-create': {
+    en: 'Create {file} with this shape; "english" and "spanish" list the files (or directories of .md files) of the two contracts relative to the project root, and "anchors" the language-neutral tokens both must carry: {schema}',
+    es: 'Creá {file} con esta forma; "english" y "spanish" listan los ficheros (o directorios de .md) de los dos contratos relativos a la raíz del proyecto, y "anchors" los tokens neutros que ambos deben llevar: {schema}'
+  },
+  'undeclared-footer': {
+    en: 'A project with no contract under .claude/ needs no declaration. Declare it, then retry.',
+    es: 'Un proyecto sin contrato bajo .claude/ no necesita declaración. Declaralo y reintentá.'
+  },
   'invalid-header': {
     en: 'AGENT-CONTRACT PARITY NOT MEASURED: {file} is not a valid declaration, so nothing was compared.',
     es: 'PARIDAD DE CONTRATO SIN MEDIR: {file} no es una declaración válida, así que no se comparó nada.'
@@ -53,11 +65,16 @@ export const MESSAGE_TABLE = {
 
 const { line } = makeSpeaker(MESSAGE_TABLE);
 
+/** The shape of the declaration, shown to the maintainer who must write it. @es La forma de la declaración, para quien debe escribirla. */
+const SCHEMA = '{ "english": ["<contract file>"], "spanish": ["<contract file>"], "anchors": ["<token>"] }';
+
 /**
- * The refusal text for a `drift` or `invalid` verdict, or `undefined` for any other.
- * @es El texto del rechazo para un veredicto `drift` o `invalid`, o `undefined` para cualquier otro.
+ * The refusal text for an `undeclared`, `drift` or `invalid` verdict, or `undefined` for any other.
+ * @es El texto del rechazo para un veredicto `undeclared`, `drift` o `invalid`, o `undefined` para cualquier otro.
  */
 export function refusalReason(verdict) {
+  if (verdict.status === 'undeclared') return [line('undeclared-header', { file: ANCHORS_FILE }), line('undeclared-create', { file: ANCHORS_FILE, schema: SCHEMA }), line('undeclared-footer')].join('\n');
+
   if (verdict.status === 'invalid') return [line('invalid-header', { file: ANCHORS_FILE }), ...verdict.problems.map((problem) => line('invalid-problem', { problem })), line('invalid-footer')].join('\n');
 
   if (verdict.status !== 'drift') return undefined;

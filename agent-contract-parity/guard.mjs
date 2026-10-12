@@ -8,16 +8,18 @@
  * (`anchors-file.mjs`); a project without it is not checked. The engine used to live inside one project with
  * its fifty anchors written into the code, and matched with `includes`, so `M1` was carried by `M10`.
  *
- * REFUSES on the positive condition only: drift between two readable contracts, or a declaration that exists
- * but cannot be used (a silent skip of a broken declaration is the defect the check exists to prevent). Absent
- * declaration, an unreadable side and any malfunction of its own allow the delegation: a guard that wedges the
- * fleet when it breaks is a larger hazard than the drift it closes.
+ * REFUSES on the positive condition only: drift between two readable contracts, a declaration that exists but
+ * cannot be used (a silent skip of a broken declaration is the defect the check exists to prevent), and a
+ * project that owns a contract (`contract-presence.mjs`) and declares nothing. A project with no contract of its
+ * own, an unreadable side and any malfunction of its own allow the delegation: a guard that wedges the fleet
+ * when it breaks is a larger hazard than the drift it closes.
  *
  * @es Guard de `PreToolUse` sobre delegación: los dos contratos del proyecto deben llevar las mismas reglas
  * antes de enviar un worker bajo ellos. La decisión vive en `parity.mjs`; este fichero es el shim. UN MOTOR,
- * MUCHOS PROYECTOS: cada proyecto entra con `.claude/agent-contract/anchors.json`; sin él no se comprueba.
- * RECHAZA solo ante la condición positiva: deriva entre dos contratos legibles, o una declaración que existe
- * pero no sirve. Declaración ausente, un lado ilegible y cualquier fallo propio permiten la delegación.
+ * MUCHOS PROYECTOS: cada proyecto con contrato propio declara `.claude/agent-contract/anchors.json`.
+ * RECHAZA solo ante la condición positiva: deriva entre dos contratos legibles, una declaración que existe pero
+ * no sirve, y un proyecto con contrato propio que no declara nada. Un proyecto sin contrato propio, un lado
+ * ilegible y cualquier fallo propio permiten la delegación.
  */
 
 import { readFileSync } from 'node:fs';
@@ -28,6 +30,21 @@ import { ANCHORS_FILE } from './anchors-file.mjs';
 import { contractParity } from './parity.mjs';
 import { projectRootFor } from './project-root.mjs';
 import { refusalReason } from './refusal-text.mjs';
+import { isUserHome } from './user-home.mjs';
+
+/** The files that mark a project root, strongest first: its declaration, then the two forms of own contract. @es Los ficheros que marcan la raíz de un proyecto, el más fuerte primero. */
+const ROOT_MARKERS = [ANCHORS_FILE, '.claude/CLAUDE.md', '.claude/AGENT-LEDGER.md'];
+
+/** The first project root any marker resolves that is not a user home, or `undefined`. @es La primera raíz de proyecto que resuelve algún marcador y que no es un home de usuario. */
+function projectRoot(payload) {
+  for (const marker of ROOT_MARKERS) {
+    const root = projectRootFor(payload, marker);
+
+    if (root !== undefined && !isUserHome(root)) return root;
+  }
+
+  return undefined;
+}
 
 /**
  * The hook output (deny) for a raw payload whose project's contracts drifted or whose declaration is broken,
@@ -37,7 +54,7 @@ import { refusalReason } from './refusal-text.mjs';
 export function evaluate(raw) {
   try {
     const payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-    const root = projectRootFor(payload, ANCHORS_FILE);
+    const root = projectRoot(payload);
 
     if (root === undefined) return undefined;
 

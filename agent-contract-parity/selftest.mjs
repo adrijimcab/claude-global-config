@@ -16,14 +16,16 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { payloadFor } from '../hook-payloads/payloads.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 import { anchorPresence } from './anchor-match.mjs';
-import { readAnchors } from './anchors-file.mjs';
+import { ANCHORS_FILE, readAnchors } from './anchors-file.mjs';
+import { ownsContract } from './contract-presence.mjs';
+import { isUserHome } from './user-home.mjs';
 import { contractParity } from './parity.mjs';
 
 isolateState('agent-contract-parity');
@@ -44,6 +46,15 @@ function check(label, condition, detail = '') {
   failures += 1;
   console.error(`FAIL: ${label}${detail === '' ? '' : ` -- ${detail}`}\n@es FALLO: ${label}`);
 }
+
+/** The outcome of `action`, or `threw` when it throws, so a broken reader fails a CHECK and does not crash the run. @es El resultado de `action`, o `threw` si lanza, para que un lector roto falle un CHECK y no tumbe la corrida. */
+const outcome = (action) => {
+  try {
+    return action();
+  } catch {
+    return 'threw';
+  }
+};
 
 let counter = 0;
 
@@ -152,7 +163,7 @@ check('a declared path that does not exist beside one that does still reads the 
 check('a declared directory that does not exist is absent, not an error', String(verdict({ 'AGENTS.md': ES_FULL }, { ...DECLARED, english: ['rules'] }).absentSides) === 'english');
 check('the English rules directory alone, without the ledger, is a present side', verdict({ 'rules/x.md': EN_FULL, 'AGENTS.md': ES_FULL }).status === 'parity');
 check('a rules directory with no .md file is an absent side', String(verdict({ 'rules/x.txt': EN_FULL, 'AGENTS.md': ES_FULL }, { ...DECLARED, english: ['rules'] }).absentSides) === 'english');
-check('no declaration: absent, not checked', contractParity(project({ 'LEDGER.md': EN_FULL, 'AGENTS.md': ES_FULL })).status === 'absent');
+check('no declaration: absent, not checked', outcome(() => contractParity(project({ 'LEDGER.md': EN_FULL, 'AGENTS.md': ES_FULL })).status) === 'absent');
 check('an invalid declaration is invalid, never absent', verdict({ 'LEDGER.md': EN_FULL, 'AGENTS.md': ES_FULL }, { english: [] }).status === 'invalid');
 check('anchors are kept in declared order in the report', JSON.stringify(verdict({ 'LEDGER.md': 'nothing', 'AGENTS.md': ES_FULL }).missingInEnglish) === JSON.stringify(DECLARED.anchors));
 check('files of the English list are concatenated, not alternatives', verdict({ 'LEDGER.md': 'M1 M10 ng lint', 'rules/x.md': '@HostListener --no-verify', 'AGENTS.md': ES_FULL }).status === 'parity');
@@ -194,6 +205,75 @@ const invalid = run(project({ 'LEDGER.md': EN_FULL, 'AGENTS.md': ES_FULL }, '{ b
 check('the hook denies an invalid declaration, naming it', invalid.decision?.permissionDecision === 'deny' && String(invalid.decision?.permissionDecisionReason).includes('anchors.json'));
 check('the hook allows when the payload is not JSON', spawnSync(process.execPath, [GUARD], { input: 'not json', encoding: 'utf8' }).stdout === '');
 check('the hook allows when the payload names no directory', spawnSync(process.execPath, [GUARD], { input: '{}', encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: '' } }).stdout === '');
+
+// ---- a project that owns a contract must declare parity ----------------------------------------------------
+const WITH_LEDGER = { '.claude/AGENT-LEDGER.md': '# Ledger\n' };
+const WITH_IMPORT = { '.claude/CLAUDE.md': '# Project\n\n@AGENT-CONTRACT.md\n', '.claude/AGENT-CONTRACT.md': '# Contract\n' };
+const CONTRACT_PAIR = { 'LEDGER.md': EN_FULL, 'AGENTS.md': ES_FULL };
+
+check('a project with an AGENT-LEDGER owns a contract', ownsContract(project(WITH_LEDGER)));
+check('a project whose CLAUDE.md imports an existing file owns a contract', ownsContract(project(WITH_IMPORT)));
+check('a CLAUDE.md that imports a file that does not exist owns nothing', !ownsContract(project({ '.claude/CLAUDE.md': '@MISSING.md\n' })));
+check('a CLAUDE.md whose only @ lines are the Spanish marker owns nothing', !ownsContract(project({ '.claude/CLAUDE.md': '@es Solo local.\n@es Otra linea.\n', '.claude/es': 'x' })));
+check('an @ word without a slash or a dot is no import even when a file of that name exists', !ownsContract(project({ '.claude/CLAUDE.md': '@AGENTCONTRACT\n', '.claude/AGENTCONTRACT': 'x' })));
+check('an import with a slash is an import', ownsContract(project({ '.claude/CLAUDE.md': '@sub/c\n', '.claude/sub/c': 'x' })));
+check('an import on an indented line is an import', ownsContract(project({ '.claude/CLAUDE.md': '  @AGENT-CONTRACT.md\n', '.claude/AGENT-CONTRACT.md': 'x' })));
+check('an import followed by prose on its line is an import', ownsContract(project({ '.claude/CLAUDE.md': '@AGENT-CONTRACT.md the contract\n', '.claude/AGENT-CONTRACT.md': 'x' })));
+check('an import separated by a tab from its prose is an import', ownsContract(project({ '.claude/CLAUDE.md': '@AGENT-CONTRACT.md\tthe contract\n', '.claude/AGENT-CONTRACT.md': 'x' })));
+check('an import whose target is a directory is no import', !ownsContract(project({ '.claude/CLAUDE.md': '@sub.d\n', '.claude/sub.d/x': 'y' })));
+/** Runs `action` with the process home pointed at `home`, then restores it. @es Corre `action` con el home del proceso apuntando a `home` y lo restaura. */
+function withHome(home, action) {
+  const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+
+  try {
+    return action();
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
+const homeWithContract = project({ 'shared.md': 'x' });
+
+check('an import written as ~/ resolves against the home', withHome(homeWithContract, () => ownsContract(project({ '.claude/CLAUDE.md': '@~/shared.md\n' }))));
+check('an import written as ~/ that is missing from the home owns nothing', !withHome(homeWithContract, () => ownsContract(project({ '.claude/CLAUDE.md': '@~/nope.md\n' }))));
+check('a .claude directory with no CLAUDE.md and no ledger owns nothing', outcome(() => ownsContract(project({ '.claude/other.md': 'x' }))) === false);
+check('a project with no .claude owns nothing', !ownsContract(project({ 'LEDGER.md': 'x' })));
+check('a contract and no declaration is undeclared', outcome(() => contractParity(project(WITH_LEDGER)).status) === 'undeclared');
+check('an imported contract and no declaration is undeclared', outcome(() => contractParity(project(WITH_IMPORT)).status) === 'undeclared');
+check('no contract and no declaration stays absent', outcome(() => contractParity(project({})).status) === 'absent');
+check('a contract WITH a declaration is judged on parity, not undeclared', outcome(() => contractParity(project({ ...WITH_LEDGER, ...CONTRACT_PAIR }, DECLARED)).status) === 'parity');
+
+const undeclaredRun = run(project(WITH_LEDGER));
+const undeclaredReason = String(undeclaredRun.decision?.permissionDecisionReason);
+
+check('the hook DENIES a project with a contract and no anchors.json', undeclaredRun.decision?.permissionDecision === 'deny' && undeclaredRun.status === 0);
+check('the denial names the file to create', undeclaredReason.includes(ANCHORS_FILE));
+check('the denial states the schema (the three keys)', ['"english"', '"spanish"', '"anchors"', '<contract file>', '<token>'].every((key) => undeclaredReason.includes(key)));
+check('the denial carries the Spanish half', undeclaredReason.includes('@es'));
+check('the denial says the project owns a contract', undeclaredReason.includes('its own'));
+check('the hook DENIES a project whose CLAUDE.md imports a contract', run(project(WITH_IMPORT)).decision?.permissionDecision === 'deny');
+check('the hook ALLOWS the same project once anchors.json is in parity', run(project({ ...WITH_LEDGER, ...CONTRACT_PAIR }, DECLARED)).out === '');
+check('the hook ALLOWS a project with no .claude contract at all', run(project({ 'LEDGER.md': 'x' })).out === '');
+check('the hook finds an undeclared project from a subdirectory', run(path.join(project(WITH_LEDGER), 'sub', 'deep')).decision?.permissionDecision === 'deny');
+check('the hook finds an undeclared project through CLAUDE_PROJECT_DIR', run(path.join(ROOT, 'nowhere'), { CLAUDE_PROJECT_DIR: project(WITH_LEDGER) }).decision?.permissionDecision === 'deny');
+
+const fakeHome = project(WITH_IMPORT);
+const insideHome = path.join(fakeHome, 'work', 'plain');
+
+mkdirSync(insideHome, { recursive: true });
+// The ACCOUNT's own profile counts as a home even when the environment names another one (a sandbox or a
+// fixture). @es El perfil real de la cuenta cuenta como home aunque el entorno nombre otro.
+check('the account profile is a home even when HOME names a fixture', withHome(fakeHome, () => isUserHome(userInfo().homedir)));
+check('the process home is a home', withHome(fakeHome, () => isUserHome(fakeHome)));
+check('a folder under a home is not a home', withHome(fakeHome, () => !isUserHome(insideHome)));
+check('a folder under a user home that owns a contract is no project: allowed', run(insideHome, { HOME: fakeHome, USERPROFILE: fakeHome }).out === '');
+check('the same folder is a project when that directory is NOT the home: denied', run(insideHome).decision?.permissionDecision === 'deny');
 
 // ---- the wiring --------------------------------------------------------------------------------------------
 const declared = JSON.parse(readFileSync(DECLARATION, 'utf8'));

@@ -24,6 +24,8 @@ const PARITY = 'agent-contract-parity/parity.mjs';
 const GUARD = 'agent-contract-parity/guard.mjs';
 const REFUSAL = 'agent-contract-parity/refusal-text.mjs';
 const ROOT = 'agent-contract-parity/project-root.mjs';
+const PRESENCE = 'agent-contract-parity/contract-presence.mjs';
+const HOME = 'agent-contract-parity/user-home.mjs';
 
 const TOKEN_LINE = "const TOKEN_CHARACTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';";
 
@@ -85,6 +87,29 @@ const MUTANTS = [
   ['the guard allows an invalid declaration (reason lost)', GUARD, "permissionDecision: 'deny'", "permissionDecision: 'allow'"],
   ['the guard does not strip a byte-order mark', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
   ['the guard ignores the project found upward', GUARD, 'if (root === undefined) return undefined;', 'if (root !== undefined) return undefined;'],
+  // A project that owns a contract / Un proyecto con contrato propio
+  ['a contract and no declaration reads as absent', PARITY, "ownsContract(root) ? 'undeclared' : 'absent'", "'absent'"],
+  ['no contract and no declaration reads as undeclared', PARITY, "ownsContract(root) ? 'undeclared' : 'absent'", "'undeclared'"],
+  ['an undeclared verdict produces no refusal', REFUSAL, "if (verdict.status === 'undeclared') return", "if (verdict.status === 'undeclared-x') return"],
+  ['the refusal does not name the file to create', REFUSAL, "line('undeclared-create', { file: ANCHORS_FILE, schema: SCHEMA })", "line('undeclared-footer')"],
+  ['the refusal does not show the schema', REFUSAL, "line('undeclared-create', { file: ANCHORS_FILE, schema: SCHEMA })", "line('undeclared-create', { file: ANCHORS_FILE, schema: '' })"],
+  ['the refusal does not say which file is missing', REFUSAL, "line('undeclared-header', { file: ANCHORS_FILE }), line('undeclared-create'", "line('undeclared-footer'), line('undeclared-create'"],
+  ['an AGENT-LEDGER does not make a contract', PRESENCE, 'if (existsSync(path.join(claudeDirectory, LEDGER_FILE))) return true;', 'if (false) return true;'],
+  ['an unreadable CLAUDE.md is read anyway', PRESENCE, 'if (!isFile(instructions)) return false;', 'if (false) return false;'],
+  ['a line opening with @ is always an import', PRESENCE, "return word.includes('/') || word.includes('.') ? word : undefined;", 'return word;'],
+  ['a word with a dot is not an import', PRESENCE, "return word.includes('/') || word.includes('.') ? word : undefined;", "return word.includes('/') ? word : undefined;"],
+  ['a word with a slash is not an import', PRESENCE, "return word.includes('/') || word.includes('.') ? word : undefined;", "return word.includes('.') ? word : undefined;"],
+  ['the imported file need not exist', PRESENCE, '.some((imported) => isFile(', '.some((imported) => true || isFile('],
+  ['an indented import is missed', PRESENCE, 'const trimmed = line.trim();', 'const trimmed = line;'],
+  ['a tab does not end the imported word', PRESENCE, ".split(' ')[0].split('\t')[0]", ".split(' ')[0]"],
+  ['a ~/ import is resolved against the .claude directory', PRESENCE, 'imported.startsWith(HOME_PREFIX) ? path.join(homedir(), imported.slice(HOME_PREFIX.length)) : path.resolve(claudeDirectory, imported)', 'path.resolve(claudeDirectory, imported)'],
+  ['the guard does not look for a CLAUDE.md project', GUARD, "const ROOT_MARKERS = [ANCHORS_FILE, '.claude/CLAUDE.md', '.claude/AGENT-LEDGER.md'];", "const ROOT_MARKERS = [ANCHORS_FILE, '.claude/AGENT-LEDGER.md'];"],
+  ['the guard does not look for an AGENT-LEDGER project', GUARD, "const ROOT_MARKERS = [ANCHORS_FILE, '.claude/CLAUDE.md', '.claude/AGENT-LEDGER.md'];", "const ROOT_MARKERS = [ANCHORS_FILE, '.claude/CLAUDE.md'];"],
+  ['the guard takes a user home for a project', GUARD, 'if (root !== undefined && !isUserHome(root)) return root;', 'if (root !== undefined) return root;'],
+  ['the guard stops at the first marker even when it is a home', GUARD, 'if (root !== undefined && !isUserHome(root)) return root;', 'if (root !== undefined) return isUserHome(root) ? undefined : root;'],
+  ['the process home is not a home', HOME, 'const homes = [homedir()];', 'const homes = [];'],
+  ['the account profile is not a home', HOME, 'homes.push(userInfo().homedir);', ''],
+  ['a directory is never a home', HOME, "=== '');", "=== 'x');"],
   // Project resolution / Resolución del proyecto
   ['CLAUDE_PROJECT_DIR is ignored', ROOT, "typeof env.CLAUDE_PROJECT_DIR === 'string' && env.CLAUDE_PROJECT_DIR !== '' ? env.CLAUDE_PROJECT_DIR : undefined", 'undefined'],
   ['the cwd is not searched upward', ROOT, 'if (path.dirname(dir) === dir) return undefined;', 'return undefined;'],
