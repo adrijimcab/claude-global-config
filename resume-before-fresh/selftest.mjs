@@ -99,7 +99,7 @@ const COMPLETED_RECORD = { type: 'assistant', message: { role: 'assistant', cont
 const SERVER_ERROR_RECORD = { type: 'assistant', isApiErrorMessage: true, error: 'api_error', message: { model: '<synthetic>', content: [{ type: 'text', text: 'API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}}' }] } };
 
 /** A constructed record whose transcript really exists on disk with a chosen age. */
-function record({ id, description, project = SLUG, session = SESSION, ageMs = 5 * MINUTE, transcript = true, worktreePath = '', lastRecord = {}, sizeBytes = 0 }) {
+function record({ id, description, project = SLUG, session = SESSION, ageMs = 5 * MINUTE, transcript = true, worktreePath = '', lastRecord = {}, sizeBytes = 0, brief = '' }) {
   // The harness layout, as `agentRecords` walks it: <store>/<project>/<session>/subagents/<id>.jsonl.
   // @es La disposición del harness tal como la recorre `agentRecords`.
   const folder = join(scratch, project, session, 'subagents');
@@ -112,7 +112,10 @@ function record({ id, description, project = SLUG, session = SESSION, ageMs = 5 
     // @es Una línea de relleno PRIMERO, para que el último registro siga al final, donde el guard lo lee.
     // `sizeBytes` is the EXACT size of the file, so the threshold edge can be built to the byte.
     // @es `sizeBytes` es el tamaño EXACTO del fichero, para construir el borde del umbral al byte.
-    const body = `{}\n${JSON.stringify(lastRecord)}\n`;
+    // The brief is the FIRST record of a transcript, where `briefOf` reads it.
+    // @es El brief es el PRIMER registro del transcript, donde lo lee `briefOf`.
+    const first = brief === '' ? '{}' : JSON.stringify({ type: 'user', message: { role: 'user', content: brief } });
+    const body = `${first}\n${JSON.stringify(lastRecord)}\n`;
     const padding = sizeBytes > 0 ? `${JSON.stringify({ pad: 'x'.repeat(sizeBytes - body.length - '{"pad":""}\n'.length) })}\n` : '';
 
     writeFileSync(path, `${padding}${body}`);
@@ -314,6 +317,80 @@ for (const [expected, description, label] of cases) {
     checked += 1; if (!ok) failures += 1;
 
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  }
+}
+
+// --- ERRAND IDENTITY BY WORKTREE, added 2026-10-12. When the new brief and the stopped agent both name a
+//     linked worktree, the worktree decides the errand: the same one is the same errand whatever the words,
+//     a different one is a different errand whatever the words. Either side naming none falls back to the
+//     wording rule, unchanged.
+// @es IDENTIDAD DE ENCARGO POR WORKTREE. Si el brief nuevo y el agente parado nombran un worktree enlazado,
+//     decide el worktree; si algún lado no nombra ninguno, rige la regla de palabras, sin cambios.
+{
+  // A LINKED worktree has a .git FILE; a main checkout has a .git DIRECTORY and is shared by everyone.
+  // @es Un worktree ENLAZADO tiene un FICHERO .git; un checkout principal tiene un DIRECTORIO .git.
+  const tree = (name, linked = true) => {
+    const dir = join(scratch, 'trees', name);
+
+    mkdirSync(dir, { recursive: true });
+
+    if (linked) writeFileSync(join(dir, '.git'), 'gitdir: elsewhere\n');
+    else mkdirSync(join(dir, '.git'));
+
+    return dir.split('\\').join('/');
+  };
+  const ALPHA = tree('wt-alpha');
+  const BETA = tree('wt-beta');
+  const GAMMA = tree('wt-gamma');
+  const MAIN = tree('main-checkout', false);
+  // Never created: a path that names no worktree on disk.
+  // @es Nunca se crea: una ruta que no nombra ningún worktree en disco.
+  const GHOST = join(BETA, '..', 'ghost').split(String.fromCharCode(92)).join('/');
+  const brief = (path) => `MEASURED: none.\nROUTE: direct\n\nTENANCY: you write ONLY inside ${path} and your private scratch.\n\nGOAL: do the thing.`;
+  const population = [
+    record({ id: 'agent-aTENALPHA000000', description: 'Alpha migrate sidebar tokens', brief: brief(ALPHA) }),
+    record({ id: 'agent-aTENBETA0000000', description: 'Rework dashboard grid spacing', worktreePath: BETA }),
+    record({ id: 'agent-aTENPLAIN000000', description: 'Compile the icon sprite', brief: 'MEASURED: none.\nGOAL: compile.' }),
+    record({ id: 'agent-aTENMAIN0000000', description: 'Tune the legend marker weights', brief: brief(MAIN) }),
+    record({ id: 'agent-aTENHARNESS0000', description: 'Polish the toolbar overflow menu', worktreePath: BETA, brief: brief(ALPHA) }),
+    record({ id: 'agent-aTENGHOST0000000', description: 'Polish the icon gutter', brief: brief(GHOST) }),
+    // An oversized agent: unresumable, so it never refuses, but a fresh launch into ITS worktree is told so.
+    // @es Un agente sobredimensionado: irreanudable, no rechaza, pero un lanzamiento fresco en SU worktree se entera.
+    record({ id: 'agent-aTENHUGE00000000', description: 'Zzz quux bar baz', worktreePath: GAMMA, sizeBytes: EXHAUSTED_TRANSCRIPT_BYTES + 1000 })
+  ];
+  const names = (description, prompt) => priorAgents(description, REPO, population, NOW, SESSION, prompt).map((match) => address(match.id)).sort();
+  const decisions = [
+    [['aTENALPHA000000'], names('', brief(ALPHA)), 'an empty description still matches by the worktree it names'],
+    [[], names('Unrelated phrase three', brief(GHOST)), 'a path that is not a worktree on disk is no identity: the wording rule decides, and the words differ'],
+    [['aTENALPHA000000'], names('Completely different words entirely', brief(ALPHA)), 'the SAME worktree is the same errand whatever the words'],
+    [['aTENALPHA000000'], names('Completely different words entirely', brief(ALPHA.toUpperCase().split('/').join('\\'))), 'the same worktree written with backslashes and capitals is still the same'],
+    [[], names('Alpha migrate sidebar tokens', brief(GAMMA)), 'a DIFFERENT worktree is a different errand even with identical words'],
+    [['aTENPLAIN000000'], names('Compile the icon sprite', brief(GAMMA)), 'a stopped agent that names no worktree falls back to wording'],
+    [['aTENALPHA000000'], names('Alpha migrate sidebar tokens', 'GOAL: no tenancy line here.'), 'a new brief that names no worktree falls back to wording'],
+    [[], names('Something else altogether', 'GOAL: no tenancy line here.'), 'no worktree and no wording overlap: nothing'],
+    [['aTENBETA0000000', 'aTENHARNESS0000'], names('Unrelated phrase one', brief(BETA)), 'a harness-recorded worktree is an identity too, and wins over the brief of the same agent'],
+    [[], names('Unrelated phrase two', brief(MAIN)), 'a main checkout (.git directory) is shared by everyone: never an identity, so the wording rule decides and nothing here overlaps the words'],
+  ];
+
+  const refusal = decide('Completely different words entirely', brief(ALPHA), REPO, population, NOW, SESSION);
+  const advice = decide('Completely different words entirely', brief(GAMMA), REPO, population, NOW, SESSION);
+  const viaDecide = [
+    [refusal?.hookSpecificOutput?.permissionDecision === 'deny' && refusal.hookSpecificOutput.permissionDecisionReason.includes('aTENALPHA000000'), 'decide refuses by the worktree the prompt names'],
+    [advice?.hookSpecificOutput?.permissionDecision === undefined && (advice?.hookSpecificOutput?.additionalContext ?? '').includes('aTENHUGE00000000'), 'a fresh launch into the worktree of an oversized agent is allowed and told about it']
+  ];
+
+  for (const [ok, label] of viaDecide) {
+    checked += 1; if (!ok) failures += 1;
+
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  }
+
+  for (const [expected, actual, label] of decisions) {
+    const ok = expected.join() === actual.join();
+
+    checked += 1; if (!ok) failures += 1;
+
+    console.log(`${ok ? 'PASS' : 'FAIL'}  expected=[${expected.join()}] actual=[${actual.join()}]  ${label}`);
   }
 }
 

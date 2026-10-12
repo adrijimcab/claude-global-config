@@ -12,11 +12,12 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const G = 'resume-before-fresh/guard.mjs';
+const W = 'resume-before-fresh/worktree-identity.mjs';
 
 const MUTANTS = [
   ['dispatch vocabulary counts as the errand again (the 2026-09-30 false identity)', G, '.filter((word) => !DISPATCH_VOCABULARY.has(word))', '.filter(() => true)'],
   ['a context-exhausted agent is offered for a resume that cannot work', G, 'exhausted: stoppedOnContextLength(record.transcript) || oversized', 'exhausted: oversized'],
-  ['exhausted agents are refused like resumable ones', G, 'return matchingAgents(description, repoPath, own, now).filter((match) => !match.exhausted);', 'return matchingAgents(description, repoPath, own, now);'],
+  ['exhausted agents are refused like resumable ones', G, 'return matchingAgents(description, repoPath, own, now, prompt).filter((match) => !match.exhausted);', 'return matchingAgents(description, repoPath, own, now, prompt);'],
   ['the unresumable advice is dropped, so the replacement is told nothing', G, 'const advice = [unresumableNotice(', 'const advice = [undefined && unresumableNotice('],
   ['the advice stops asking for a TENANCY line', G, "'  TENANCY: <that worktree folder>", "'  <that worktree folder>"],
   ['every API error reads as context exhaustion, so a rate-limited agent is never offered', G, 'last.error === CONTEXT_EXHAUSTED_ERROR_CLASS && text === CONTEXT_EXHAUSTED_TEXT', 'true'],
@@ -25,7 +26,7 @@ const MUTANTS = [
   ['the message is searched instead of compared, so another invalid_request is written off', G, 'text === CONTEXT_EXHAUSTED_TEXT', 'text.startsWith(CONTEXT_EXHAUSTED_TEXT)'],
   ['a rate limit is read as context exhaustion', G, "export const CONTEXT_EXHAUSTED_ERROR_CLASS = 'invalid_request';", "export const CONTEXT_EXHAUSTED_ERROR_CLASS = 'rate_limit';"],
   ['the FIRST transcript record is read instead of the last', G, "JSON.parse(lines.at(-1) ?? '{}')", "JSON.parse(lines.at(0) ?? '{}')"],
-  ['an identical label is no longer judged when too few object words remain', G, 'if (!overlaps && !sameLabel(label, significantWords(record.description))) continue;', 'if (!overlaps) continue;'],
+  ['an identical label is no longer judged when too few object words remain', G, 'const wordingMatches = overlaps || sameLabel(label, significantWords(record.description));', 'const wordingMatches = overlaps;'],
   ['any label identical in size counts as the same label', G, 'left.size === right.size && [...left].every((word) => right.has(word))', 'left.size === right.size'],
   ['one shared word is enough to refuse', G, 'const overlaps = shared >= 2 && ratio >= OVERLAP_THRESHOLD;', 'const overlaps = shared >= 1;'],
   ['the overlap ratio is ignored, so two shared words refuse anything', G, 'const overlaps = shared >= 2 && ratio >= OVERLAP_THRESHOLD;', 'const overlaps = shared >= 2;'],
@@ -35,7 +36,7 @@ const MUTANTS = [
   ['an agent of another session is offered for a resume that cannot work from here', G, 'const own = records.filter((record) => sessionOf(record) === session);', 'const own = records;'],
   ['every session but the dispatching one is offered', G, 'sessionOf(record) === session', 'sessionOf(record) !== session'],
   ['the session is read one folder too low (the subagents folder)', G, 'path.basename(path.dirname(path.dirname(record.transcript)))', 'path.basename(path.dirname(record.transcript))'],
-  ['decide forgets the session, so nobody is ever refused', G, 'const resumable = priorAgents(description, repoPath, records, now, session);', 'const resumable = priorAgents(description, repoPath, records, now);'],
+  ['decide forgets the session, so nobody is ever refused', G, 'const resumable = priorAgents(description, repoPath, records, now, session, prompt);', 'const resumable = priorAgents(description, repoPath, records, now);'],
   ['the hook entry point drops the payload session id', G, 'records ?? agentRecords(), now, payload?.session_id);', 'records ?? agentRecords(), now);'],
   ['a transcript past the ledger size is offered for resume again', G, 'exhausted: stoppedOnContextLength(record.transcript) || oversized', 'exhausted: stoppedOnContextLength(record.transcript)'],
   ['the size is never read, so no transcript is ever oversized', G, 'bytes = stats.size;', 'bytes = 0;'],
@@ -47,6 +48,19 @@ const MUTANTS = [
   ['the Spanish half of the ledger rule is dropped', G, "    '@es se lanza un agente fresco con alcance acotado que lee el estado de los ficheros.',\n", ''],
   ['the oversized agent is named without its size', G, '...oversized.map((agent) => `  ${address(agent.id)}: ${(agent.bytes / 1e6).toFixed(2)} MB (${agent.bytes} bytes) > ${EXHAUSTED_TRANSCRIPT_BYTES} bytes`)', '...oversized.map((agent) => `  ${address(agent.id)}`)'],
   ['the closing TENANCY line names only the context failure again', G, 'unresumable agent (context failure or oversized transcript)', 'context-exhausted agent'],
+  ['the worktrees the dispatches name are never compared (wording only again)', G, ": sameErrand(wantedTrees, recordWorktrees(record));", ": 'unknown';"],
+  ['a different worktree no longer rules an errand out', G, "identity === 'different' || (", 'false || ('],
+  ['the same worktree no longer matches without matching words', G, "(identity === 'unknown' && !wordingMatches)", '!wordingMatches'],
+  ['an empty description is dropped even when it names a worktree', G, 'if (label.size === 0 && wantedTrees.size === 0) return [];', 'if (label.size === 0) return [];'],
+  ['the prompt is not handed on to the refusal', G, 'priorAgents(description, repoPath, records, now, session, prompt)', 'priorAgents(description, repoPath, records, now, session)'],
+  ['the prompt is not handed on to the oversized advice', G, 'exhaustedAgents(description, repoPath, records, now, prompt))', 'exhaustedAgents(description, repoPath, records, now))'],
+  ['two disjoint worktree sets read as unknown instead of different', W, "? 'same' : 'different'", "? 'same' : 'unknown'"],
+  ['a main checkout (.git directory) is an identity', W, "return statSync(path.join(candidate, '.git')).isFile();", "return statSync(path.join(candidate, '.git')).isFile() || true;"],
+  ['a path that does not exist is an identity', W, 'return false; // missing, or unreadable: not an identity', 'return true;'],
+  ['the harness worktree no longer wins over the brief', W, 'recorded.length > 0 ? linkedNames([recorded]) : declaredWorktrees(briefOf(record.transcript))', 'declaredWorktrees(briefOf(record.transcript))'],
+  ['backslash paths are not read', W, "unwrap(raw.replaceAll('\\\\', '/'))", 'unwrap(raw)'],
+  ['worktree names are compared case-sensitively', W, 'names.add(worktreeName(candidate).toLowerCase())', 'names.add(worktreeName(candidate))'],
+  ['an empty side reads as different instead of unknown', W, 'if (wanted.size === 0 || recorded.size === 0) return', 'if (false) return'],
   ['an agent older than the window is offered', G, '    if (now - lastWrite > RESUMABLE_WINDOW_MS) continue;\n', ''],
   ['a record from another project is offered', G, 'if (projectSlug(record.project) !== slug) continue;', ''],
   ['an agent whose worktree was removed is offered', G, '    if (recordedWorktree.length > 0 && !existsSync(recordedWorktree)) continue;\n', '']

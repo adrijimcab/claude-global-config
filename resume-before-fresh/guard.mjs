@@ -48,6 +48,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { agentRecords } from '../agent-liveness/liveness.mjs';
+import { declaredWorktrees, recordWorktrees, sameErrand } from './worktree-identity.mjs';
 
 const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 
@@ -344,14 +345,15 @@ function sameLabel(left, right) {
  * @es Agentes recientes de ESTE proyecto cuyo encargo ya cubre el que se va a despachar, del más
  * reciente al más antiguo. Se devuelven TODOS: nombrar solo uno esconde los demás.
  */
-function matchingAgents(description, repoPath, records, now) {
+function matchingAgents(description, repoPath, records, now, prompt = '') {
   const wanted = errandWords(description);
   const label = significantWords(description);
+  const wantedTrees = declaredWorktrees(prompt);
   // Overlap needs two shared object words — refusing on a single word would be noise. An IDENTICAL label
   // is judged anyway: measured in the migration replay, «Takeover of context-exhausted demo worker» re-sent
   // verbatim keeps one object word once dispatch words go, and would otherwise pass unseen.
   // @es El solapamiento exige dos palabras de objeto; una etiqueta IDÉNTICA se juzga igual (medido en el replay).
-  if (label.size === 0) return [];
+  if (label.size === 0 && wantedTrees.size === 0) return [];
 
   const slug = projectSlug(repoPath);
   const matches = [];
@@ -367,8 +369,7 @@ function matchingAgents(description, repoPath, records, now) {
 
     const { shared, ratio } = coverage(wanted, errandWords(record.description));
     const overlaps = shared >= 2 && ratio >= OVERLAP_THRESHOLD;
-
-    if (!overlaps && !sameLabel(label, significantWords(record.description))) continue;
+    const wordingMatches = overlaps || sameLabel(label, significantWords(record.description));
 
     // A worktree that was spawned and then REMOVED makes its agent unresumable: the harness refuses
     // with "its worktree no longer exists, and the fallback directory is not covered by the session's
@@ -411,6 +412,16 @@ function matchingAgents(description, repoPath, records, now) {
 
     if (now - lastWrite > RESUMABLE_WINDOW_MS) continue;
 
+    // The worktree the two dispatches NAME decides the errand when both name one: the same worktree is the
+    // same errand whatever the wording, a different one is a different errand whatever the wording. Only
+    // when either side names no linked worktree does the wording rule above decide, unchanged.
+    // @es El worktree que NOMBRAN los dos despachos decide el encargo cuando ambos lo nombran: el mismo
+    // worktree es el mismo encargo con cualquier redacción, otro distinto es otro encargo. Solo si algún
+    // lado no nombra un worktree enlazado decide la regla de palabras de arriba, sin cambios.
+    const identity = wantedTrees.size === 0 ? 'unknown' : sameErrand(wantedTrees, recordWorktrees(record));
+
+    if (identity === 'different' || (identity === 'unknown' && !wordingMatches)) continue;
+
     // Exhausted: either the context ran out (a resume replays the transcript that was already too long) or the
     // transcript passed the ledger size (a resume pays that whole history again). Either way the agent is
     // UNRESUMABLE. It is still returned — marked — because the author must be told where its worktree is.
@@ -447,12 +458,12 @@ export function sessionOf(record) {
  * ellos se rechaza. Un subagente solo se reanuda desde la sesión que lo lanzó, así que el registro de otra
  * sesión nunca es candidato: contarlo es un rechazo falso garantizado. Sin id de sesión no hay candidato.
  */
-export function priorAgents(description, repoPath, records = agentRecords(), now = Date.now(), session = undefined) {
+export function priorAgents(description, repoPath, records = agentRecords(), now = Date.now(), session = undefined, prompt = '') {
   // An absent or empty session matches no record: the fail-open case needs no branch of its own.
   // @es Una sesión ausente o vacía no casa con ningún registro: el caso de fallo abierto no necesita rama.
   const own = records.filter((record) => sessionOf(record) === session);
 
-  return matchingAgents(description, repoPath, own, now).filter((match) => !match.exhausted);
+  return matchingAgents(description, repoPath, own, now, prompt).filter((match) => !match.exhausted);
 }
 
 /**
@@ -460,8 +471,8 @@ export function priorAgents(description, repoPath, records = agentRecords(), now
  * their resume cannot work, but always named, so the fresh replacement inherits their worktree.
  * @es Agentes que tienen el encargo pero pararon por longitud de contexto: nunca rechazan, siempre se nombran.
  */
-export function exhaustedAgents(description, repoPath, records = agentRecords(), now = Date.now()) {
-  return matchingAgents(description, repoPath, records, now).filter((match) => match.exhausted);
+export function exhaustedAgents(description, repoPath, records = agentRecords(), now = Date.now(), prompt = '') {
+  return matchingAgents(description, repoPath, records, now, prompt).filter((match) => match.exhausted);
 }
 
 /**
@@ -614,13 +625,13 @@ export function evaluate(raw, { records = undefined, now = Date.now() } = {}) {
  * solo agotados -> permite nombrándolos irreanudables; worktree vivo -> aviso; si no, nada.
  */
 export function decide(description, prompt, repoPath, records, now, session = undefined) {
-  const resumable = priorAgents(description, repoPath, records, now, session);
+  const resumable = priorAgents(description, repoPath, records, now, session, prompt);
 
   if (resumable.length > 0) {
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason(description, resumable, now) } };
   }
 
-  const advice = [unresumableNotice(exhaustedAgents(description, repoPath, records, now)), relatedNotice(relatedLiveAgents(description, prompt, repoPath, records))].filter((text) => text !== undefined);
+  const advice = [unresumableNotice(exhaustedAgents(description, repoPath, records, now, prompt)), relatedNotice(relatedLiveAgents(description, prompt, repoPath, records))].filter((text) => text !== undefined);
 
   return advice.length === 0 ? undefined : { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: advice.join('\n\n') } };
 }

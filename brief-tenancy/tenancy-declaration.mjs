@@ -65,6 +65,32 @@ export function checkoutName(checkout) {
 }
 
 /**
+ * The text after the marker on every line that HEADS a `TENANCY` marker, in order. The one place that
+ * decides what a marker line is, so a second reader of tenancy lines (the errand identity of
+ * `resume-before-fresh`) never grows a second parser.
+ * @es El texto tras el marcador en cada línea que ENCABEZA un marcador `TENANCY`, en orden. El único sitio
+ * que decide qué es una línea marcadora, para que un segundo lector (la identidad de encargo de
+ * `resume-before-fresh`) no cree un segundo parser.
+ */
+export function tenancyLines(text) {
+  const rests = [];
+
+  for (const rawLine of text.split('\n')) {
+    const line = stripLead(rawLine.split('\r').join(''));
+
+    if (!line.startsWith(TENANCY_WORD)) continue;
+
+    const rest = line.slice(TENANCY_WORD.length);
+
+    if (rest.length > 0 && LETTERS.includes(rest.charAt(0))) continue;
+
+    rests.push(rest);
+  }
+
+  return rests;
+}
+
+/**
  * How `text` declares the tenancy of `checkout`.
  *
  * @returns `'present'` when a `TENANCY` line carries a colon and names the checkout; `'unnamed'` when
@@ -77,20 +103,11 @@ export function checkoutName(checkout) {
 export function declarationOf(text, checkout) {
   const wanted = checkout.toLowerCase();
   const name = checkoutName(checkout).toLowerCase();
-  let headsALine = false;
+  const rests = tenancyLines(text);
+  const headsALine = rests.length > 0;
   let sawColon = false;
 
-  for (const rawLine of text.split('\n')) {
-    const line = stripLead(rawLine.split('\r').join(''));
-
-    if (!line.startsWith(TENANCY_WORD)) continue;
-
-    const rest = line.slice(TENANCY_WORD.length);
-
-    if (rest.length > 0 && LETTERS.includes(rest.charAt(0))) continue;
-
-    headsALine = true;
-
+  for (const rest of rests) {
     if (!rest.includes(':')) continue;
 
     sawColon = true;
