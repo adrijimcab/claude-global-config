@@ -58,10 +58,10 @@ export function controlActions(script, dialect, cwd, resources, listeners, platf
       const found = (kind, detail) => actions.push({ resource: resource.name, description: resource.description, kind, detail, text: command.text.trim() });
       const route = stopRoute(command.words, scriptWords, resource, knownListeners, platform);
 
-      if (startsResource(command.words, directory, resource, platform)) found(ACTION_KINDS.START, 'its declared start command');
+      if (startsResource(command.words, directory, resource, platform)) found(ACTION_KINDS.START, 'start-command');
       if (route !== undefined) found(ACTION_KINDS.STOP, route);
 
-      for (const name of reconfiguredNames(command.words, nextWords, resource)) found(ACTION_KINDS.RECONFIGURE, `the environment variable ${name}`);
+      for (const name of reconfiguredNames(command.words, nextWords, resource)) found(ACTION_KINDS.RECONFIGURE, `env=${name}`);
     }
   });
 

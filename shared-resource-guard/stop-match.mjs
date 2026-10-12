@@ -109,14 +109,14 @@ function routeOf(evidence, resource, bareIsPort, listeners, platform) {
     const previous = evidence[index - 1];
     const port = (resource.ports ?? []).find((candidate) => namesPort(word, previous, candidate, bareIsPort));
 
-    if (port !== undefined) return `port ${port}`;
-    if (namesProcess(word, resource, platform)) return `process "${word}"`;
+    if (port !== undefined) return `port=${port}`;
+    if (namesProcess(word, resource, platform)) return `process=${word}`;
   }
 
   const pids = evidence.filter(isDigits);
   const listening = pids.length === 0 ? undefined : (resource.ports ?? []).find((port) => pids.some((pid) => listeners(port).has(pid)));
 
-  return listening === undefined ? undefined : `a process listening on port ${listening}`;
+  return listening === undefined ? undefined : `pid-listening-on-port=${listening}`;
 }
 
 /**
@@ -124,7 +124,8 @@ function routeOf(evidence, resource, bareIsPort, listeners, platform) {
  * @param {string[]} scriptWords Every word of every command of the script, for an unresolvable target.
  * @param {object} resource A resource of the declaration.
  * @param {(port: number) => Set<string>} listeners PIDs listening on a port right now.
- * @returns {string | undefined} The route by which the command stops the resource, `undefined` when it does not.
+ * @returns {string | undefined} The route by which the command stops the resource (`port=3100`, `process=nodemon`,
+ *   `pid-listening-on-port=3100`), `undefined` when it does not. Language-neutral on purpose: it is shown in both halves of a refusal.
  * @es La ruta por la que el comando detiene el recurso, `undefined` si no lo hace.
  */
 export function stopRoute(words, scriptWords, resource, listeners, platform = process.platform) {
