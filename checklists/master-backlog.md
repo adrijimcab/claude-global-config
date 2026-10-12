@@ -191,6 +191,17 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   already fired. Add the incident as a labelled fail fixture, and its measured counterpart as a pass fixture,
   to the premise judge's calibration set, re-measured over 5 runs. Pending, reason (4): the calibration set is
   its own unit with the rest of the judge's measured precision work.
+- Judge re-stop loops: a model does not apply rule 1 reliably (measured 2026-10-12). The stop-input recorder
+  showed that b100-am-ui-f8's re-stops at 01:12:31Z, 01:12:44Z and 01:12:48Z carried stop_hook_active true and
+  the CURRENT rewrite as last_assistant_message, so the harness input was right. Driving the live v4 rubric with
+  a payload of the recorded 12-key shape, stop_hook_active true and a dry-log message, haiku answered ok:false
+  in 1 of 5 runs (scratchpad restop-voice.mjs). Rule 1 is deterministic, and a model applies it only most of the
+  time. Root fix: take the stop_hook_active decision out of the model, for both prompt judges (voice and premise).
+  Design open: whether Claude Code offers a condition on a `prompt` hook, or the judge becomes a command hook
+  that short-circuits on stop_hook_active and only then asks the model. Research the official hooks docs before
+  choosing, and measure each judge's latency and cost either way. Pending, reason (4): open design. Agent launches
+  in Discovery are also refused until feature/meet lands f14. Supersedes the "voice judge re-stop input" item:
+  the input is right and the gate is the defect.
 - Voice judge v3 over-applies rule 8 (measured 2026-10-11 in the orchestrator session): it rejected four
   consecutive replies written entirely as prose paragraphs, with no bullets, tables or lists, citing "datos de
   estado" (names, counts, references inside sentences). Rule 8 fails only ENUMERATIONS that carry a status
