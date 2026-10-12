@@ -13,7 +13,10 @@ import path from 'node:path';
 
 import { suiteIdentity, writeVerdict } from '../gate-run/verdicts.mjs';
 import { baseConfig, cleanup, commitFiles, git, makeRepository, suite, tempDir, writeConfig } from '../testing/fixtures.mjs';
+import { isolateState } from '../../hook-state/locations.mjs';
 import { evaluate } from './guard.mjs';
+
+isolateState('landing-guard');
 
 const { check, finish } = suite();
 const root = tempDir('landing');
