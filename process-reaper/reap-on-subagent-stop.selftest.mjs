@@ -159,6 +159,10 @@ check('the record counts what was matched and killed', [first?.matched, first?.k
   check('the BOM payload reaped the worktree process', running(viaOther.pid), false);
   check('a reaper that throws is recorded and never blocks', [attempt(() => evaluate(JSON.stringify(payloadFor(idOther, transcriptOther)), { reap: () => { throw new Error('boom'); } })), journal().at(-1)?.malfunction], [undefined, 'boom']);
 
+  const counted = { matched: [{}, {}, {}], killed: [{}, {}], survivors: [{}], protected: [{}, {}, {}, {}], lines: [] };
+  attempt(() => evaluate(JSON.stringify(payloadFor(idOther, transcriptOther)), { reap: () => counted }));
+  check('the record counts matched, killed, survivors and protected apart', [journal().at(-1)?.matched, journal().at(-1)?.killed, journal().at(-1)?.survivors, journal().at(-1)?.protected], [3, 2, 1, 4]);
+
   // 4b. No worktree anywhere: the agent id alone names its scratch. @es Sin worktree: el id solo nombra su scratch.
   const idScratch = 'c0ffee00c0ffee00d';
   const scratch = path.join(root, 'fleet-env', 'scratch', idScratch);
