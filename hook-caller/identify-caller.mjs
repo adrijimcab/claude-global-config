@@ -32,7 +32,7 @@
 const SUBAGENT_TRANSCRIPT_DIRECTORY = 'subagents';
 
 /** Whether `transcriptPath` has a whole segment naming the subagent directory. @es Si la ruta tiene un segmento entero con el directorio de subagentes. */
-function isUnderSubagentDirectory(transcriptPath) {
+export function isUnderSubagentDirectory(transcriptPath) {
   return transcriptPath.split('\\').join('/').split('/').includes(SUBAGENT_TRANSCRIPT_DIRECTORY);
 }
 

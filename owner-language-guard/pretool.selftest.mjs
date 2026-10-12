@@ -9,11 +9,15 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync as readText, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { evaluate } from './pretool.mjs';
+import { isolateState, stateDir } from '../hook-state/locations.mjs';
+
+isolateState('owner-language-guard');
+
+const { evaluate } = await import('./pretool.mjs');
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'pretool-lang-'));
 const results = [];
@@ -217,6 +221,36 @@ try {
     check(`real slip, lagged window: ${label} is refused after the records land`, denied(anchoredCall(lagFixture, id, laggedReal.read)), true);
     check(`real slip, lagged window: ${label} was waited for`, laggedReal.sleeps() >= 2, true);
   }
+
+  // The trace of the last run (2026-10-12): the guard FAILS OPEN on every problem of its own, so a third English line
+  // reached the owner with no way to tell whether the hook ran, skipped the call as a subagent's, or judged nothing.
+  // Every run now overwrites one small record; the next miss is read from it. A failing write never changes the verdict.
+  // @es La traza de la última corrida: el guard FALLA ABIERTO ante todo problema propio, así que una tercera línea en
+  // inglés llegó al dueño sin poder saber si el hook corrió, saltó la llamada por ser de un subagente o no juzgó nada.
+  // Cada corrida sobrescribe un registro pequeño; el próximo fallo se lee de él. Una escritura fallida no cambia el veredicto.
+  const lastRunFile = path.join(stateDir('owner-language-guard'), 'pretool-last-run.json');
+  const lastRun = () => { try { return JSON.parse(readText(lastRunFile, 'utf8')); } catch (error) { return { verdict: `unreadable: ${error.message}` }; } };
+  const traced = (payload, readTexts) => { evaluate(JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'mcp__engram__mem_save', ...payload }), readTexts); return lastRun(); };
+  const tracedFile = transcript(step(ENGLISH));
+
+  check('trace: a refusal is recorded as deny with the tool and its id', (() => { const r = traced({ tool_use_id: 'toolu_trace', transcript_path: tracedFile }); return `${r.verdict}|${r.toolName}|${r.toolUseId}|${r.judged}`; })(), 'deny|mcp__engram__mem_save|toolu_trace|1');
+  check('trace: the transcript path the harness gave is recorded', traced({ tool_use_id: 'toolu_p', transcript_path: tracedFile }).transcriptPath, tracedFile);
+  check('trace: an allow is recorded as allow', traced({ tool_use_id: 'toolu_a', transcript_path: transcript(step(SPANISH)) }).verdict, 'allow');
+  check('trace: a subagent caller is recorded as skipped:subagent', traced({ agent_id: 'a1', transcript_path: tracedFile }).verdict, 'skipped:subagent');
+  check('trace: the subagent skip records which signal fired', (() => { const r = traced({ agent_id: 'a1', transcript_path: tracedFile }); return `${r.hasAgentId}|${r.underSubagentDirectory}`; })(), 'true|false');
+  check('trace: a transcript under subagents/ without agent_id records that signal alone', (() => { const r = traced({ transcript_path: path.join(scratch, 'subagents', 'agent-x.jsonl') }); return `${r.verdict}|${r.hasAgentId}|${r.underSubagentDirectory}`; })(), 'skipped:subagent|false|true');
+  check('trace: a payload without transcript_path is recorded as skipped:no-transcript', traced({}).verdict, 'skipped:no-transcript');
+  check('trace: a reader that throws is recorded as error with its message', (() => { const r = traced({ transcript_path: tracedFile }, () => { throw new Error('boom'); }); return `${r.verdict}|${r.error}`; })(), 'error|boom');
+  check('trace: unparsable payloads are recorded as error', (() => { evaluate('{not json'); return lastRun().verdict; })(), 'error');
+  check('trace: the elapsed time is recorded', typeof traced({ tool_use_id: 'toolu_ms', transcript_path: tracedFile }).ms, 'number');
+  check('trace: a run overwrites the previous record', traced({ tool_use_id: 'toolu_second', transcript_path: tracedFile }).toolUseId, 'toolu_second');
+
+  const blocked = path.join(scratch, 'state-is-a-file');
+
+  writeFileSync(blocked, 'x');
+  process.env.HOOK_STATE_DIR = blocked;
+  check('trace: a state directory that cannot be written never changes the verdict', denied(call(tracedFile)), true);
+  process.env.HOOK_STATE_DIR = path.dirname(path.dirname(lastRunFile));
 
   const cli = (input) => spawnSync(process.execPath, [path.join(import.meta.dirname, 'pretool.mjs')], { input, encoding: 'utf8' });
   const cliEnglish = cli(JSON.stringify({ transcript_path: transcript(step(ENGLISH)) }));
