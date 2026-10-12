@@ -9,7 +9,10 @@ risk or urgency alone. Points 2 and 3 bind on both.
    when the work starts, and any work that is substantial by ODD's own definition: two or more meaningful
    implementation steps, or progress worth recovering after an interruption. Explore, resolve the open decisions, and TRACK before the first write: `odd/tasks/<feature>.md`
    and its engram mirror `odd/<feature>/tasks` carry the decided design and why, the tasks and their
-   checks. Each task closes with a work-unit commit recorded in the document. Every step that measures
+   checks. The document is a working copy that no git repository versions (company clone, tooling backup
+   and this config alike: `/odd/` excluded or ignored in each); its durable copy is the engram mirror, written
+   by the orchestrator and kept current after every task.
+   Each task closes with a work-unit commit recorded in the document. Every step that measures
    a unit (the document, its commit, `gentle-ai review assess --cwd --base-ref`) runs in the unit's own
    worktree with its own base, never the integration checkout. Use `judgment-day` for
    adversarial review and the `review-*` lenses where the risk tier calls for them.
