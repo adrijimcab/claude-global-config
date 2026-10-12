@@ -40,8 +40,9 @@ const GLOBAL_HEAD = '# Lessons Ledger — global\n\n---\n';
 const PROJECT_HEAD = '# Lessons Ledger — demo\n\n---\n';
 const line = (scope, count) => `- [${scope}] 2026-09-14 — it recurred -> RULE: do the thing <!--fc:${KEY}#${String(count)}-->\n`;
 const mention = `- (\`${KEY}\`) face one.\n`;
-const GATE_GREEN = `process.exit(0); // '${KEY}'\n`;
-const GATE_RED = `process.exit(1); // '${KEY}'\n`;
+const ANCHORS_PATH = 'repo/.claude/agent-contract/anchors.json';
+/** A parity declaration over the two contract files of the worlds below. @es Una declaración de paridad sobre los dos ficheros de contrato de los mundos de abajo. */
+const declaration = (anchors, spanish = ['.agents/AGENTS.md']) => JSON.stringify({ english: ['.claude/AGENT-LEDGER.md'], spanish, anchors });
 
 let passed = 0;
 const failures = [];
@@ -159,29 +160,49 @@ const project = (name, { config = { scope: 'demo' }, files = {} } = {}) => makeC
 }
 
 {
-  const config = { scope: 'demo', workerContracts: ['.claude/AGENT-LEDGER.md', '.agents/AGENTS.md'], parityGate: '.claude/parity.mjs' };
-  const world = project('project-gate-not-landed', { config, files: { 'repo/.claude/AGENT-LEDGER.md': mention, 'repo/.agents/AGENTS.md': mention, 'repo/.claude/parity.mjs': 'process.exit(0);\n' } });
-  const gate = path.join(world.repo, '.claude', 'parity.mjs');
+  const config = { scope: 'demo', workerContracts: ['.claude/AGENT-LEDGER.md', '.agents/AGENTS.md'] };
+  const world = project('project-gate-not-landed', { config, files: { 'repo/.claude/AGENT-LEDGER.md': mention, 'repo/.agents/AGENTS.md': mention, [ANCHORS_PATH]: declaration(['other-anchor']) } });
+  const gate = path.join(world.repo, '.claude', 'agent-contract', 'anchors.json');
   const { out } = promote(world, '--no-mechanism', REASON);
 
-  says('a rule missing from the parity anchors', out, 'promote.missing.anchor', { key: KEY, gate });
+  says('a rule missing from the parity anchors', out, 'promote.missing.anchor', { key: KEY, file: gate });
   says('a rule missing from the parity anchors (the headline)', out, 'instructions.contract.gate', { scope: 'demo', count: 2 });
   says('a rule missing from the parity anchors (the many-files warning)', out, 'instructions.contract.many');
   says('a rule missing from the parity anchors (the first contract step)', out, 'instructions.contract.step', { number: 1, file: path.join(world.repo, '.claude', 'AGENT-LEDGER.md'), key: KEY });
   says('a rule missing from the parity anchors (the second contract step)', out, 'instructions.contract.step', { number: 2, file: path.join(world.repo, '.agents', 'AGENTS.md'), key: KEY });
-  says('a rule missing from the parity anchors (its step)', out, 'instructions.contract.parity', { number: 3, key: KEY, gate });
+  says('a rule missing from the parity anchors (its step)', out, 'instructions.contract.parity', { number: 3, key: KEY, file: gate });
   says('a rule missing from the parity anchors (how to close)', out, 'instructions.close', { number: 4 });
   says('a rule missing from the parity anchors (the tail)', out, 'instructions.contract.tail.gate');
   bilingual('a rule missing from the parity anchors', out);
 }
 
 {
-  const config = { scope: 'demo', workerContracts: ['.claude/AGENT-LEDGER.md'], parityGate: '.claude/parity.mjs' };
-  const world = project('parity-red', { config, files: { 'repo/.claude/AGENT-LEDGER.md': mention, 'repo/.claude/parity.mjs': GATE_RED } });
+  const config = { scope: 'demo', workerContracts: ['.claude/AGENT-LEDGER.md'] };
+  const world = project('parity-red', { config, files: { 'repo/.claude/AGENT-LEDGER.md': mention, 'repo/.agents/AGENTS.md': mention, [ANCHORS_PATH]: declaration([KEY, 'absent-anchor']) } });
   const { out } = promote(world, '--no-mechanism', REASON);
 
-  says('a red parity gate', out, 'promote.parityRed');
-  bilingual('a red parity gate', out);
+  says('contracts that drift', out, 'promote.parityRed');
+  check('contracts that drift: the engine names the anchor that is missing', out.includes('absent-anchor'), out);
+  bilingual('contracts that drift', out);
+}
+
+{
+  const config = { scope: 'demo', workerContracts: ['.claude/AGENT-LEDGER.md'] };
+  const world = project('parity-invalid', { config, files: { 'repo/.claude/AGENT-LEDGER.md': mention, [ANCHORS_PATH]: '{ broken' } });
+  const { out } = promote(world, '--no-mechanism', REASON);
+
+  says('an invalid parity declaration', out, 'promote.parityRed');
+  check('an invalid parity declaration: the engine names the file', out.includes('anchors.json'), out);
+  bilingual('an invalid parity declaration', out);
+}
+
+{
+  const config = { scope: 'demo', workerContracts: ['.claude/AGENT-LEDGER.md'] };
+  const world = project('parity-skipped', { config, files: { 'repo/.claude/AGENT-LEDGER.md': mention, [ANCHORS_PATH]: declaration([KEY], ['.agents/NOWHERE.md']) } });
+  const { out } = promote(world, '--no-mechanism', REASON);
+
+  says('a parity side with no file on this machine', out, 'promote.paritySkipped', { sides: 'spanish', file: path.join(world.repo, '.claude', 'agent-contract', 'anchors.json') });
+  bilingual('a parity side with no file on this machine', out);
 }
 
 {
@@ -235,22 +256,22 @@ const project = (name, { config = { scope: 'demo' }, files = {} } = {}) => makeC
 }
 
 {
-  const config = { scope: 'demo', workerContracts: ['.claude/AGENT-LEDGER.md', '.agents/AGENTS.md'], parityGate: '.claude/parity.mjs' };
-  const world = project('closed-gate', { config, files: { 'repo/.claude/AGENT-LEDGER.md': mention, 'repo/.agents/AGENTS.md': mention, 'repo/.claude/parity.mjs': GATE_GREEN } });
+  const config = { scope: 'demo', workerContracts: ['.claude/AGENT-LEDGER.md', '.agents/AGENTS.md'] };
+  const world = project('closed-gate', { config, files: { 'repo/.claude/AGENT-LEDGER.md': mention, 'repo/.agents/AGENTS.md': mention, [ANCHORS_PATH]: declaration([KEY]) } });
   const files = ['.claude/AGENT-LEDGER.md', '.agents/AGENTS.md'].map((file) => path.join(world.repo, ...file.split('/'))).join(', ');
   const { status, out } = promote(world, '--no-mechanism', REASON);
 
-  check('a project promotion with a green parity gate exits 0', status === 0, out);
-  says('a project promotion with a gate (where it landed)', out, 'promote.landed.contract', { count: 2, files });
-  says('a project promotion with a gate (what was verified)', out, 'promote.proof.contractsGate', { count: 2 });
-  bilingual('a project promotion with a gate', out);
+  check('a project promotion with anchors in parity exits 0', status === 0, out);
+  says('a project promotion with declared parity (where it landed)', out, 'promote.landed.contract', { count: 2, files });
+  says('a project promotion with declared parity (what was verified)', out, 'promote.proof.contractsGate', { count: 2 });
+  bilingual('a project promotion with declared parity', out);
 }
 
 {
   const world = project('closed-no-gate', { files: { 'repo/.claude/CLAUDE.md': mention } });
   const { out } = promote(world, '--no-mechanism', REASON);
 
-  says('a project promotion with no gate (what was verified)', out, 'promote.proof.contracts', { count: 1 });
+  says('a project promotion with no declared parity (what was verified)', out, 'promote.proof.contracts', { count: 1 });
 }
 
 console.log(`promote-messages selftest: ${String(passed)} passed, ${String(failures.length)} failed`);

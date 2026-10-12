@@ -11,7 +11,8 @@
  *   - a capture from project A lands in A's ledger, and a spooled A entry folded by a process in project B
  *     still lands in A's ledger, never B's;
  *   - a worker promotion: into `.claude/CLAUDE.md` by default, into the configured contract files plus the
- *     parity gate when configured, and refused while any file lacks the token or the gate is red.
+ *     contract parity when the project declares anchors, and refused while any file lacks the token or the
+ *     shared parity engine reports drift.
  * @es Prueba de discriminación del ruteo POR PROYECTO del bucle, sobre proyectos y home construidos.
  */
 
@@ -260,24 +261,25 @@ try {
   const promoted = run(world, app, 'promote', '--key', 'worker-lesson', '--no-mechanism', REASON);
 
   check('...and closes once the token is in the project CLAUDE.md', promoted.status === 0 && read(path.join(app, '.claude', 'lessons-ledger.md')).includes('[promoted]'), promoted.out);
-  check('...reporting that no parity gate was declared, never that one passed', promoted.out.includes('this project declares no parity gate'), promoted.out);
+  check('...reporting that no contract parity was declared, never that one passed', promoted.out.includes('this project declares no contract parity'), promoted.out);
 
   write(api, {
-    '.claude/failure-capture.json': JSON.stringify({ scope: 'legacy-api', workerContracts: ['.claude/AGENT-LEDGER.md', '.agents/AGENTS.md'], parityGate: '.claude/parity.mjs' }),
+    '.claude/failure-capture.json': JSON.stringify({ scope: 'legacy-api', workerContracts: ['.claude/AGENT-LEDGER.md', '.agents/AGENTS.md'] }),
     '.claude/AGENT-LEDGER.md': '# Ledger\n\n- api-worker-lesson: rule.\n',
     '.agents/AGENTS.md': '# Agents\n',
-    '.claude/parity.mjs': "const text = (await import('node:fs')).readFileSync(new URL('./AGENT-LEDGER.md', import.meta.url), 'utf8');\nconst ANCHORS = ['api-worker-lesson'];\nprocess.exit(ANCHORS.every((a) => text.includes(a)) ? 0 : 1);\n"
+    '.claude/agent-contract/anchors.json': JSON.stringify({ english: ['.claude/AGENT-LEDGER.md'], spanish: ['.agents/AGENTS.md'], anchors: ['api-worker-lesson', 'second-anchor'] })
   });
   capture(world, api, 'api-worker-lesson', 'legacy-api', 'worker:general-purpose');
   capture(world, api, 'api-worker-lesson', 'legacy-api', 'worker:general-purpose');
   check('a configured contract: refused while ANY of its files lacks the token', run(world, api, 'promote', '--key', 'api-worker-lesson', '--no-mechanism', REASON).out.includes(`absent from ${path.join(api, '.agents', 'AGENTS.md')}`));
   write(api, { '.agents/AGENTS.md': '# Agents\n\n- api-worker-lesson: regla.\n' });
-  write(api, { '.claude/parity.mjs': "process.exit(1); // 'api-worker-lesson'\n" });
-  check('a configured parity gate that is RED refuses the promotion', run(world, api, 'promote', '--key', 'api-worker-lesson', '--no-mechanism', REASON).out.includes('parity gate is RED'));
-  write(api, { '.claude/parity.mjs': "process.exit(0); // 'api-worker-lesson'\n" });
+  const drifted = run(world, api, 'promote', '--key', 'api-worker-lesson', '--no-mechanism', REASON);
+
+  check('declared anchors that drift between the two contracts refuse the promotion', drifted.status === 1 && drifted.out.includes('parity check is RED') && drifted.out.includes('second-anchor'), drifted.out);
+  write(api, { '.claude/AGENT-LEDGER.md': '# Ledger\n\n- api-worker-lesson: rule. second-anchor.\n', '.agents/AGENTS.md': '# Agents\n\n- api-worker-lesson: regla. second-anchor.\n' });
   const gated = run(world, api, 'promote', '--key', 'api-worker-lesson', '--no-mechanism', REASON);
 
-  check('a green parity gate and every file carrying the token closes it', gated.status === 0 && gated.out.includes('parity gate ran and passed'), gated.out);
+  check('anchors in parity and every file carrying the token closes it', gated.status === 0 && gated.out.includes('shared parity engine ran and found parity'), gated.out);
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

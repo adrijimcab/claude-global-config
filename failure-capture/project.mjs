@@ -14,16 +14,18 @@
  * because `.claude/` is excluded from git and exists only there. No project found means global-only.
  *
  * PER-PROJECT CONFIG, optional: `<project>/.claude/failure-capture.json`
- *   { "scope": "<label>", "workerContracts": ["<relative>", …], "parityGate": "<relative>", "loadedSetCeiling": <characters> }
+ *   { "scope": "<label>", "workerContracts": ["<relative>", …], "loadedSetCeiling": <characters> }
  * `loadedSetCeiling` is a stricter ceiling on the loaded instruction set for this project (@es un techo más estricto para este proyecto).
  * Without it: the scope is the project folder's name, the worker contract is `.claude/CLAUDE.md` (the file
- * every subagent of the project loads), and there is no parity gate.
+ * every subagent of the project loads). Contract parity is not configured here: a project declares it in
+ * `.claude/agent-contract/anchors.json`, read by the shared engine (`../agent-contract-parity/`).
  *
  * @es A qué PROYECTO pertenece un directorio para el bucle de captura: dónde viven sus lecciones y qué
  * ficheros son su contrato de worker. Un proyecto es el directorio más cercano, subiendo, que tiene
  * `.claude/CLAUDE.md`; un worktree enlazado se mapea antes a su checkout PRINCIPAL. Config opcional en
  * `<proyecto>/.claude/failure-capture.json`; sin ella, el alcance es el nombre de la carpeta, el contrato
- * de worker es `.claude/CLAUDE.md` y no hay gate de paridad.
+ * de worker es `.claude/CLAUDE.md`. La paridad de contrato no se configura aquí: el proyecto la declara en
+ * `.claude/agent-contract/anchors.json`, que lee el motor compartido (`../agent-contract-parity/`).
  */
 
 import { spawnSync } from 'node:child_process';
@@ -36,7 +38,7 @@ export const CONFIG_FILE = path.join('.claude', 'failure-capture.json');
 export const LEDGER_FILE = path.join('.claude', 'lessons-ledger.md');
 export const GLOBAL_SCOPE = 'global';
 
-const CONFIG_KEYS = ['scope', 'workerContracts', 'parityGate', 'loadedSetCeiling'];
+const CONFIG_KEYS = ['scope', 'workerContracts', 'loadedSetCeiling'];
 
 const realpathOf = (directory) => {
   try {
@@ -127,7 +129,6 @@ export function readProjectConfig(root) {
     ...unknown.map((key) => `unknown key "${key}"`),
     ...(config.scope === undefined || (typeof config.scope === 'string' && config.scope.length > 0 && config.scope !== GLOBAL_SCOPE) ? [] : ['"scope" must be a non-empty string other than "global"']),
     ...(config.workerContracts === undefined || (Array.isArray(config.workerContracts) && config.workerContracts.length > 0 && config.workerContracts.every((entry) => typeof entry === 'string')) ? [] : ['"workerContracts" must be a non-empty list of relative paths']),
-    ...(config.parityGate === undefined || typeof config.parityGate === 'string' ? [] : ['"parityGate" must be a relative path']),
     ...(config.loadedSetCeiling === undefined || (Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0) ? [] : ['"loadedSetCeiling" must be a positive integer (characters). @es "loadedSetCeiling" debe ser un entero positivo (caracteres)'])
   ];
 
@@ -137,7 +138,7 @@ export function readProjectConfig(root) {
 }
 
 /**
- * The project context of `directory`: `{ root, scope, ledgerFile, workerContracts, parityGate }`, or
+ * The project context of `directory`: `{ root, scope, ledgerFile, workerContracts, loadedSetCeiling }`, or
  * `undefined` when no project holds it (global lessons only). `homes` is forwarded to `projectRootOf`.
  * @es El contexto de proyecto de `directory`, o `undefined` si ningún proyecto lo contiene. `homes` se
  * pasa a `projectRootOf`.
@@ -154,7 +155,6 @@ export function projectOf(directory, { homes } = {}) {
     scope: config.scope ?? path.basename(root),
     ledgerFile: path.join(root, LEDGER_FILE),
     workerContracts: (config.workerContracts ?? ['.claude/CLAUDE.md']).map((relative) => path.join(root, ...relative.split('/'))),
-    parityGate: config.parityGate === undefined ? undefined : path.join(root, ...config.parityGate.split('/')),
     loadedSetCeiling: config.loadedSetCeiling
   };
 }

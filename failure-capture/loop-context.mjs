@@ -33,7 +33,6 @@ export function resolveLoopContext({ directory, home }) {
     project,
     ledgers: ledgerFiles({ project, home }),
     workerContracts: project?.workerContracts ?? [],
-    parityGate: project?.parityGate,
     scopes: [GLOBAL_SCOPE, ...areaScopes(), ...(project === undefined ? [] : [project.scope])]
   };
 }

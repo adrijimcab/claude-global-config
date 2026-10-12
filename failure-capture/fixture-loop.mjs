@@ -4,14 +4,16 @@
  * `capture.mjs` resolves the same imports it has in the real tree. A shared module the copied code imports
  * but the sandbox lacks is reported by name, here, instead of surfacing as a crash inside a child process.
  * The state-location module (`hook-state/locations.mjs` and the message table it speaks through) is copied
- * beside them, so the copy resolves its state the way the real loop does; `worldEnv` is the environment a
+ * beside them, and so are the modules of the shared contract-parity engine (`agent-contract-parity/`) that
+ * `promote-parity.mjs` imports, so the copy resolves its state the way the real loop does; `worldEnv` is the environment a
  * process of the world runs under, so that resolution lands in the world's own home.
  *
  * @es Aprovisiona la copia del lazo failure-capture de un fixture para un selftest: los módulos del propio
  * lazo más los módulos compartidos de `bilingual-output` que `capture.mjs` importa de su directorio hermano,
  * de modo que un `capture.mjs` en sandbox resuelve los mismos imports que en el árbol real. Un módulo
  * compartido que el código copiado importa pero el sandbox no tiene se informa por su nombre, aquí, en vez de
- * aparecer como un fallo dentro de un proceso hijo. El módulo de ubicaciones de estado (`hook-state/locations.mjs`
+ * aparecer como un fallo dentro de un proceso hijo. Junto a ellos se copian los módulos del motor compartido de
+ * paridad de contratos (`agent-contract-parity/`) que importa `promote-parity.mjs`. El módulo de ubicaciones de estado (`hook-state/locations.mjs`
  * y su tabla de mensajes) se copia al lado, así la copia resuelve su estado como el lazo real; `worldEnv` es el
  * entorno de un proceso del mundo, para que esa resolución caiga en el home del propio mundo.
  */
@@ -24,6 +26,10 @@ import { CLAUDE_HOME_VARIABLE, STATE_ROOT_VARIABLE } from '../hook-state/locatio
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SHARED_DIRECTORY = 'bilingual-output';
+/** The shared contract-parity engine the promotion reads. @es El motor compartido de paridad de contratos que lee la promoción. */
+const ENGINE_DIRECTORY = 'agent-contract-parity';
+/** A product module: never a selftest or a mutant campaign. @es Un módulo de producto: nunca un selftest ni una campaña de mutantes. */
+const isProduct = (file) => !file.includes('selftest') && !file.includes('mutants');
 /** The state-location module and the message table it imports, by name. @es El módulo de ubicaciones y su tabla. */
 const STATE_DIRECTORY = 'hook-state';
 const STATE_MODULES = new Set(['locations.mjs', 'message-table.mjs']);
@@ -31,7 +37,7 @@ const STATE_MODULES = new Set(['locations.mjs', 'message-table.mjs']);
 const SHARED_IMPORT = /^import [^\n]*from '\.\.\/bilingual-output\/([A-Za-z0-9._-]+\.mjs)'/gm;
 
 /** The real tree's source directories. @es Los directorios de origen del árbol real. */
-const REAL_SOURCES = { loop: HERE, shared: path.join(HERE, '..', SHARED_DIRECTORY), state: path.join(HERE, '..', STATE_DIRECTORY) };
+const REAL_SOURCES = { loop: HERE, shared: path.join(HERE, '..', SHARED_DIRECTORY), engine: path.join(HERE, '..', ENGINE_DIRECTORY), state: path.join(HERE, '..', STATE_DIRECTORY) };
 
 /**
  * The environment a process of a constructed world runs under: `home` is the user's home, the Claude home is
@@ -75,7 +81,8 @@ export function provisionLoop(loop, accept = () => true, sources = REAL_SOURCES)
   const shared = path.join(loop, '..', SHARED_DIRECTORY);
 
   copyModules(sources.loop, loop, accept);
-  copyModules(sources.shared, shared, (file) => !file.includes('selftest') && !file.includes('mutants'));
+  copyModules(sources.shared, shared, isProduct);
+  copyModules(sources.engine ?? REAL_SOURCES.engine, path.join(loop, '..', ENGINE_DIRECTORY), isProduct);
   copyModules(sources.state ?? REAL_SOURCES.state, path.join(loop, '..', STATE_DIRECTORY), (file) => STATE_MODULES.has(file));
 
   const missing = missingSharedModules(loop, shared);

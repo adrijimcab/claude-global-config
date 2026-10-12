@@ -18,7 +18,9 @@ const MUTANTS = [
   ['the loop modules are not copied', PROVISIONER, 'copyModules(sources.loop, loop, accept);', 'mkdirSync(loop, { recursive: true });'],
   ['the filter is ignored', PROVISIONER, 'copyModules(sources.loop, loop, accept);', 'copyModules(sources.loop, loop, () => true);'],
   ['the shared modules are not copied', PROVISIONER, "copyModules(sources.shared, shared, (file) => !file.includes('selftest') && !file.includes('mutants'));", 'mkdirSync(shared, { recursive: true });'],
-  ['the shared selftests and campaigns are copied too', PROVISIONER, "(file) => !file.includes('selftest') && !file.includes('mutants')", '() => true'],
+  ['the selftests and campaigns are copied too', PROVISIONER, "const isProduct = (file) => !file.includes('selftest') && !file.includes('mutants');", 'const isProduct = () => true;'],
+  ['the parity engine is not copied', PROVISIONER, 'copyModules(sources.engine ?? REAL_SOURCES.engine, path.join(loop, \'..\', ENGINE_DIRECTORY), isProduct);', 'void ENGINE_DIRECTORY;'],
+  ['the parity engine is copied with its selftests', PROVISIONER, 'path.join(loop, \'..\', ENGINE_DIRECTORY), isProduct);', 'path.join(loop, \'..\', ENGINE_DIRECTORY), () => true);'],
   ['a missing shared module is not reported', PROVISIONER, 'if (missing.length > 0) throw', 'if (false) throw'],
   ['a present shared module is reported as missing', PROVISIONER, '.filter((name) => !existsSync(path.join(shared, name)))', '.filter((name) => existsSync(path.join(shared, name)))'],
   ['the missing modules are not sorted', PROVISIONER, '.sort();\n}', ';\n}'],
@@ -28,7 +30,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'bilingual-output', 'mutation-proof', 'hook-state'],
+  paths: ['failure-capture', 'bilingual-output', 'agent-contract-parity', 'mutation-proof', 'hook-state'],
   selftest: 'failure-capture/fixture-loop.selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

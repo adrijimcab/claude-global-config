@@ -24,10 +24,11 @@ const MUTANTS = [
   ['any scope is accepted', C, 'if (!SCOPES.includes(scope))', 'if (false)'],
   ['init adds the import every time', C, '  if (!imported) {', '  if (true) {'],
   ['init rewrites an existing ledger', C, '  if (created) writeFileSync(PROJECT.ledgerFile,', '  writeFileSync(PROJECT.ledgerFile,'],
-  ['a configured parity gate is never run', C, "if (target === PROJECT_TARGET && PARITY_GATE !== undefined) {", 'if (false) {'],
+  ['a declared parity is never checked on promote', C, 'if (parity.refusal !== undefined) {', 'if (false) {'],
   ['only the first contract file has to carry the token', C, 'for (const file of WORKER_CONTRACTS) if (!readFileOr(file,', 'for (const file of WORKER_CONTRACTS.slice(0, 1)) if (!readFileOr(file,'],
   ['the walk stops only at the process HOME, so a fixture HOME lets it reach the real one', 'failure-capture/project.mjs', '    homes.push(userInfo().homedir);', '    void userInfo;'],
-  ['the project ceiling key is unknown to the config', P, "'parityGate', 'loadedSetCeiling'];", "'parityGate'];"],
+  ['the project ceiling key is unknown to the config', P, "'workerContracts', 'loadedSetCeiling'];", "'workerContracts'];"],
+  ['the retired parityGate key is accepted again', P, "const CONFIG_KEYS = ['scope', 'workerContracts', 'loadedSetCeiling'];", "const CONFIG_KEYS = ['scope', 'workerContracts', 'parityGate', 'loadedSetCeiling'];"],
   ['a fractional project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', 'typeof config.loadedSetCeiling === \'number\' && config.loadedSetCeiling > 0'],
   ['a zero or negative project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', 'Number.isInteger(config.loadedSetCeiling)'],
   ['a zero project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling >= 0'],
@@ -43,8 +44,7 @@ const MUTANTS = [
   ['the init refusal outside a project loses its Spanish half', C, "speaker.complain('init.noProject');", "console.error('init REFUSED — no project holds this directory.');"],
   ['the loop context ignores the project scope', L, 'scopes: [GLOBAL_SCOPE, ...areaScopes(), ...(project === undefined ? [] : [project.scope])]', 'scopes: [GLOBAL_SCOPE, ...areaScopes()]'],
   ['the loop context drops the project ledger', L, 'ledgers: ledgerFiles({ project, home }),', 'ledgers: ledgerFiles({ project: undefined, home }),'],
-  ['the loop context drops the worker contract', L, 'workerContracts: project?.workerContracts ?? [],', 'workerContracts: [],'],
-  ['the loop context drops the parity gate', L, 'parityGate: project?.parityGate,', 'parityGate: undefined,']
+  ['the loop context drops the worker contract', L, 'workerContracts: project?.workerContracts ?? [],', 'workerContracts: [],']
 ];
 
 const survivors = runMutants({

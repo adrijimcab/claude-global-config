@@ -45,6 +45,11 @@ try {
   equal('every loop module is copied, selftests and campaigns included', mjsOf(everything), mjsOf(HERE));
   equal('the shared modules are copied beside the loop, without their selftests or campaigns', mjsOf(path.join(everything, '..', 'bilingual-output')), ['message.mjs', 'speaker.mjs']);
 
+  const engine = mjsOf(path.join(everything, '..', 'agent-contract-parity'));
+
+  equal('the parity engine modules the promotion imports are copied beside the loop', ['anchors-file.mjs', 'contract-presence.mjs', 'parity.mjs', 'refusal-text.mjs'].every((name) => engine.includes(name)), true);
+  equal('...without the engine selftest or its mutant campaign', engine.some((name) => name.includes('selftest') || name.includes('mutants')), false);
+
   const filtered = loopAt('filtered');
 
   equal('a filtered provisioning is accepted too', attempt(() => provisionLoop(filtered, (file) => file === 'capture.mjs')), 'ok');

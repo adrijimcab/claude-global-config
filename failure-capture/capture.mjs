@@ -35,7 +35,6 @@
  * un spool se borra solo tras plegarse, así que perder el lock cuesta latencia, nunca datos.
  */
 
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync, appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -54,6 +53,7 @@ import { describeSupersede, runSupersede } from './supersede.mjs';
 import { isPromotedStub, promotedRecurrenceLines } from './promoted-recurrence.mjs';
 import { GLOBAL_TARGET, PROJECT_TARGET, promotionFiles, promotionTargetOf } from './promotion-target.mjs';
 import { PROMOTE_MESSAGES } from './promote-messages.mjs';
+import { promotionParity } from './promote-parity.mjs';
 import { facesByFile, staleFiles } from './text-growth.mjs';
 import { HEADER, homeLedgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { commitHeaderRoute, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, routeOutcome } from './ledger-route.mjs';
@@ -103,19 +103,17 @@ const ORCHESTRATOR_RULES = path.join(homedir(), '.claude', 'rules', 'promoted-ru
 // token count the text-growth check reads.
 // @es El contrato de worker de ESTE proyecto: sus ficheros configurados, o `.claude/CLAUDE.md`.
 let WORKER_CONTRACTS;
-// The parity gate LEFT the repository (owner directive: nothing AI-related lives inside the lib).
-// This constant pointed at the removed `scripts/` path afterwards, which silently killed the loop's
-// escalation arm: `promote` verifies the anchor on disk, the file was absent, so EVERY promotion
-// refused forever while `capture` kept counting recurrences no one could ever act on. A dangling
-// reference after a move is not cosmetic — here it disabled the only mechanism that turns a repeated
-// incident into a binding rule.
-// @es El gate de paridad salió del repo; esta constante siguió apuntando a la ruta eliminada, lo que
-// mató en silencio el brazo de escalada del loop: `promote` verifica el ancla en disco, el fichero no
-// estaba, y toda promoción se negaba para siempre mientras `capture` seguía contando reincidencias.
-// Since the loop went global the gate is per project, and optional: only a project whose contract lives in
-// several files declares one (`parityGate` in `.claude/failure-capture.json`).
-// @es Desde que el bucle es global, el gate es por proyecto y opcional.
-let PARITY_GATE;
+/**
+ * The contract parity of the project a promotion into `target` would write into, read from the shared
+ * engine (`promote-parity.mjs`); a global promotion has none. The per-project `parityGate` script is gone:
+ * a project declares its anchors in `.claude/agent-contract/anchors.json`.
+ * @es La paridad de contrato del proyecto en que escribiría una promoción a `target`, leída del motor
+ * compartido; una promoción global no tiene. El script `parityGate` por proyecto ya no existe: el proyecto
+ * declara sus anchors en `.claude/agent-contract/anchors.json`.
+ */
+function parityOf(target) {
+  return target === PROJECT_TARGET ? promotionParity(PROJECT.root) : { declared: false, absentSides: [] };
+}
 
 /** The scopes a capture from here may declare. @es Los alcances que puede declarar una captura desde aquí. */
 let SCOPES;
@@ -125,7 +123,7 @@ const PROJECT_COMMANDS = new Set(['init', 'keys', 'capture', 'promote', 'condens
 
 /** Resolves the project of the current directory and binds what derives from it. @es Resuelve el proyecto del directorio actual y fija lo que se deriva de él. */
 function bindLoopContext() {
-  ({ project: PROJECT, ledgers: LEDGERS, workerContracts: WORKER_CONTRACTS, parityGate: PARITY_GATE, scopes: SCOPES } = resolveLoopContext({ directory: process.cwd(), home: homedir() }));
+  ({ project: PROJECT, ledgers: LEDGERS, workerContracts: WORKER_CONTRACTS, scopes: SCOPES } = resolveLoopContext({ directory: process.cwd(), home: homedir() }));
 }
 
 /** Recurrences needed before a lesson stops being an incident and becomes a rule. @es Recurrencias necesarias para que una lección deje de ser incidente y pase a regla. */
@@ -497,15 +495,16 @@ function promotionInstructions(key, target) {
 
 
   const contractSteps = WORKER_CONTRACTS.map((file, at) => speaker.line('instructions.contract.step', { number: at + 1, file, key }));
-  const paritySteps = PARITY_GATE === undefined ? [] : [speaker.line('instructions.contract.parity', { number: contractSteps.length + 1, key, gate: PARITY_GATE })];
+  const parity = parityOf(target);
+  const paritySteps = parity.declared ? [speaker.line('instructions.contract.parity', { number: contractSteps.length + 1, key, file: parity.file })] : [];
 
   return [
-    speaker.line(PARITY_GATE === undefined ? 'instructions.contract' : 'instructions.contract.gate', { scope: PROJECT.scope, count: WORKER_CONTRACTS.length }),
+    speaker.line(parity.declared ? 'instructions.contract.gate' : 'instructions.contract', { scope: PROJECT.scope, count: WORKER_CONTRACTS.length }),
     ...(WORKER_CONTRACTS.length > 1 ? [speaker.line('instructions.contract.many')] : []),
     ...contractSteps,
     ...paritySteps,
     ...closeSteps(contractSteps.length + paritySteps.length + 1),
-    speaker.line(PARITY_GATE === undefined ? 'instructions.contract.tail' : 'instructions.contract.tail.gate')
+    speaker.line(parity.declared ? 'instructions.contract.tail.gate' : 'instructions.contract.tail')
   ].join('\n');
 }
 
@@ -545,14 +544,14 @@ function textGrowthProblem(key, target) {
 }
 
 /**
- * What a promotion actually verified, and nothing more: claiming "parity gate green" where no gate ran
+ * What a promotion actually verified, and nothing more: claiming parity where none was measured
  * would be this tool committing the defect it exists to catch.
  * @es Lo que una promoción verificó de verdad, y nada más.
  */
 function proofMessage(target) {
   if (target !== PROJECT_TARGET) return ['promote.proof.token', {}];
 
-  return [PARITY_GATE === undefined ? 'promote.proof.contracts' : 'promote.proof.contractsGate', { count: WORKER_CONTRACTS.length }];
+  return [parityOf(target).declared ? 'promote.proof.contractsGate' : 'promote.proof.contracts', { count: WORKER_CONTRACTS.length }];
 }
 
 function commandPromote(args) {
@@ -591,7 +590,9 @@ function commandPromote(args) {
     for (const file of contractFilesOf(target, key)) if (!readFileOr(file, '').includes(key)) missing.push(speaker.line('promote.missing.token', { key, file }));
   } else {
     for (const file of WORKER_CONTRACTS) if (!readFileOr(file, '').includes(key)) missing.push(speaker.line('promote.missing.token', { key, file }));
-    if (PARITY_GATE !== undefined && !readFileOr(PARITY_GATE, '').includes(`'${key}'`)) missing.push(speaker.line('promote.missing.anchor', { key, gate: PARITY_GATE }));
+    const { anchors, file } = parityOf(target);
+
+    if (anchors !== undefined && !anchors.includes(key)) missing.push(speaker.line('promote.missing.anchor', { key, file }));
   }
 
   if (missing.length > 0) {
@@ -612,15 +613,19 @@ function commandPromote(args) {
     return 1;
   }
 
-  if (target === PROJECT_TARGET && PARITY_GATE !== undefined) {
-    try {
-      execFileSync(process.execPath, [PARITY_GATE], { cwd: PROJECT.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (error) {
-      speaker.complain('promote.parityRed');
-      speaker.dataError(String(error.stdout ?? '') + String(error.stderr ?? ''));
+  const parity = parityOf(target);
 
-      return 1;
-    }
+  if (parity.refusal !== undefined) {
+    speaker.complain('promote.parityRed');
+    speaker.dataError(parity.refusal);
+
+    return 1;
+  }
+
+  if (parity.absentSides.length > 0) {
+    speaker.complain('promote.paritySkipped', { sides: parity.absentSides.join(', '), file: parity.file });
+
+    return 1;
   }
 
   // The expensive check runs LAST, once every cheap refusal has had its chance: the mechanism's own
