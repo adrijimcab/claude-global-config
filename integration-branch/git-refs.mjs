@@ -32,9 +32,9 @@ export function mainCheckoutOf(dir) {
 
 /** The branch `origin/HEAD` points at, or `undefined` when it is not set. @es La rama a la que apunta `origin/HEAD`, o `undefined` si no está fijada. */
 export function originHeadBranch(clone) {
-  const run = git(clone, ['symbolic-ref', '-q', ORIGIN_HEAD], { timeoutMs: GIT_QUICK_TIMEOUT_MS });
-  if (run.status !== 0) return undefined;
-  const target = run.stdout.trim();
+  // A failing command (no origin/HEAD) prints nothing, which is not under the remote's prefix and reads as unset.
+  // @es Un comando que falla (sin origin/HEAD) no imprime nada, que no está bajo el prefijo del remoto y se lee como sin fijar.
+  const target = git(clone, ['symbolic-ref', '-q', ORIGIN_HEAD], { timeoutMs: GIT_QUICK_TIMEOUT_MS }).stdout.trim();
   return target.startsWith(REMOTE_PREFIX) ? target.slice(REMOTE_PREFIX.length) : undefined;
 }
 

@@ -77,10 +77,10 @@ const moduleRead = readOf(moduleOnly);
 check(JSON.stringify(moduleRead?.branches) === '["develop","main"]' && moduleRead.source === path.join(moduleOnly, MODULE), 'the project module is read, naming its file');
 const both = declare('.claude/fleet-kit.json', '{"integrationBranches":["feature/meet"]}');
 put(both, MODULE, "export const INTEGRATION_BRANCHES = ['develop'];\n");
-check(readOf(both)?.branches[0] === 'feature/meet', 'fleet-kit outranks the project module');
+check(readOf(both)?.branches?.[0] === 'feature/meet', 'fleet-kit outranks the project module');
 const noList = declare('.claude/fleet-kit.json', '{"landingGuard":{"mode":"enforce"}}');
 put(noList, MODULE, "export const INTEGRATION_BRANCHES = ['develop'];\n");
-check(readOf(noList)?.branches[0] === 'develop', 'a fleet-kit without the list falls through to the module');
+check(readOf(noList)?.branches?.[0] === 'develop', 'a fleet-kit without the list falls through to the module');
 check(readOf(declare('unrelated.txt', 'x')) === undefined, 'a repository declaring nothing reads as undefined');
 
 const unreadable = (name, relative, content) => {
@@ -148,7 +148,8 @@ check(viaWorktree.code === 0 && originHeadBranch(worktreeBase.clone) === 'develo
 
 const noHead = repository(['develop']);
 git(noHead.clone, 'symbolic-ref', '--delete', 'refs/remotes/origin/HEAD');
-check(sync(noHead.clone).code === 0 && originHeadBranch(noHead.clone) === 'develop', 'sync recreates a missing origin/HEAD');
+const recreated = sync(noHead.clone);
+check(recreated.code === 0 && originHeadBranch(noHead.clone) === 'develop' && recreated.out.includes('(unset @es sin fijar)'), `sync recreates a missing origin/HEAD and says it was unset: ${recreated.out}`);
 
 const localOnly = repository(['unpublished', 'develop']);
 git(localOnly.clone, 'branch', 'unpublished');

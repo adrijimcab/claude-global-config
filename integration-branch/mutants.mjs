@@ -49,7 +49,7 @@ const MUTANTS = [
   ['the common dir is resolved against the process, not git', REFS, "'--path-format=absolute', ", ''],
   ['a bare repository counts as a main checkout', REFS, "path.basename(common) === '.git' ? path.dirname(common) : undefined", 'path.dirname(common)'],
   ['an origin/HEAD pointing outside the remote reads as a branch', REFS, 'target.startsWith(REMOTE_PREFIX) ? target.slice(REMOTE_PREFIX.length) : undefined', 'target.slice(REMOTE_PREFIX.length)'],
-  ['a missing origin/HEAD reads as a branch', REFS, "if (run.status !== 0) return undefined;\n  const target", "const target"],
+  ['a missing origin/HEAD reads as a branch', REFS, "{ timeoutMs: GIT_QUICK_TIMEOUT_MS }).stdout.trim();\n  return target.startsWith", "{ timeoutMs: GIT_QUICK_TIMEOUT_MS }).stdout.trim() || 'refs/remotes/origin/main';\n  return target.startsWith"],
   ['a missing remote-tracking ref reads as present', REFS, "'--quiet', `${REMOTE_PREFIX}${branch}`], { timeoutMs: GIT_QUICK_TIMEOUT_MS }).status === 0", "'--quiet', `${REMOTE_PREFIX}${branch}`], { timeoutMs: GIT_QUICK_TIMEOUT_MS }).status !== 0"],
   ['a local branch counts as a remote-tracking ref', REFS, '`${REMOTE_PREFIX}${branch}`], { timeoutMs', '`refs/heads/${branch}`], { timeoutMs'],
   ['origin/HEAD is never pointed', REFS, "gitOutput(clone, ['remote', 'set-head', REMOTE, branch], { timeoutMs: GIT_QUICK_TIMEOUT_MS });", 'void branch;'],
