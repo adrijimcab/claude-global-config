@@ -28,7 +28,7 @@
  * rama del principal, ni su árbol de trabajo, ni el remoto se movieron.
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -576,6 +576,71 @@ try {
   check(snapshotOf(checkForeign) === checkForeignBefore, 'check mode on a company remote: nothing moved');
   const landedViaCli = cli(...argsOf(viaCli));
   expectLanded('the command line lands', viaCli, { exitCode: landedViaCli.status, lines: landedViaCli.stdout.trimEnd().split('\n') });
+
+  // ── --reap: the processes that name the landed worktree die after a written landing, and only then ──
+  // The listing runs with a PRIVATE profile: PowerShell writes its profile folders there, never into the real
+  // home. @es El listado corre con un perfil PRIVADO: PowerShell escribe ahí sus carpetas de perfil.
+  const reapProfile = path.join(scratchRoot, 'reap-profile');
+  mkdirSync(reapProfile);
+  const realEnv = { ...process.env };
+  Object.assign(process.env, { USERPROFILE: reapProfile, HOME: reapProfile, APPDATA: path.join(reapProfile, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(reapProfile, 'AppData', 'Local') });
+  const reapHolders = [];
+  const holderNaming = (directory) => {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', directory], { stdio: 'ignore', windowsHide: true });
+    reapHolders.push(child);
+    return child;
+  };
+  const isRunning = (child) => {
+    try {
+      process.kill(child.pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const settle = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+  try {
+    const reaped = layout({ work: { 'r.txt': 'r\n' } });
+    const unreaped = layout({ work: { 'r.txt': 'r\n' } });
+    const checkedOnly = layout({ work: { 'r.txt': 'r\n' } });
+    const onReaped = holderNaming(reaped.worktree);
+    const onUnreaped = holderNaming(unreaped.worktree);
+    const onChecked = holderNaming(checkedOnly.worktree);
+    await settle(2000);
+    check(isRunning(onReaped) && isRunning(onUnreaped) && isRunning(onChecked), 'reap: the processes naming the worktrees are running before any landing');
+    const checkedReap = cli(...argsOf(checkedOnly), '--check', '--reap');
+    check(checkedReap.status === 0 && isRunning(onChecked), `reap: --check never reaps: ${checkedReap.status} ${checkedReap.stderr}`);
+    const plain = cli(...argsOf(unreaped));
+    check(plain.status === 0 && isRunning(onUnreaped), `reap: a landing without --reap leaves the processes alone: ${plain.status} ${plain.stderr}`);
+    const withReap = cli(...argsOf(reaped), '--reap');
+    await settle(1500);
+    check(withReap.status === 0 && withReap.stdout.startsWith('LANDED '), `reap: the landing with --reap lands: ${withReap.status} ${withReap.stdout}${withReap.stderr}`);
+    check(!isRunning(onReaped), 'reap: a process naming the landed worktree is dead after the landing');
+    check(isRunning(onUnreaped) && isRunning(onChecked), 'reap: the processes of other worktrees survive');
+    check(withReap.stdout.includes('Reaped ') && withReap.stdout.includes('@es Segados '), `reap: the report says what was reaped in both languages: ${withReap.stdout}`);
+    const refusedReap = layout({ work: { verdict: '1\n' } });
+    const onRefused = holderNaming(refusedReap.worktree);
+    await settle(2000);
+    const redReap = cli(...argsOf(refusedReap), '--reap');
+    check(redReap.status === 1 && isRunning(onRefused), `reap: a refused landing reaps nothing: ${redReap.status} ${redReap.stderr}`);
+    const injected = [];
+    const viaInjected = layout({ work: { 'i.txt': 'i\n' } });
+    const outcome = landFixture(viaInjected, { reap: true, reaper: (ownership) => (injected.push(ownership), { lines: ['injected reaper line'] }) });
+    check(outcome.exitCode === 0 && injected.length === 1 && injected[0].worktree === viaInjected.worktree && outcome.lines.includes('injected reaper line'), 'reap: the landing hands the reaper exactly the landed worktree and prints its lines');
+    const viaDefault = layout({ work: { 'd.txt': 'd\n' } });
+    const withoutReap = landFixture(viaDefault, { reaper: (ownership) => (injected.push(ownership), { lines: ['must not appear'] }) });
+    check(withoutReap.exitCode === 0 && injected.length === 1 && !withoutReap.lines.includes('must not appear'), 'reap: the reaper is not called unless reap is asked for');
+  } finally {
+    for (const child of reapHolders) {
+      try {
+        process.kill(child.pid);
+      } catch {
+        /* already gone @es ya muerto */
+      }
+    }
+    for (const name of Object.keys(process.env)) if (!(name in realEnv)) delete process.env[name];
+    Object.assign(process.env, realEnv);
+  }
 
   const refusedViaCli = layout({ work: { verdict: '1\n' } });
   const redViaCli = cli(...argsOf(refusedViaCli));

@@ -103,6 +103,13 @@ const MUTANTS = [
   ['a repeated option is accepted', ARGUMENTS, '|| key in inputs ||', '||'],
   ['a missing option is accepted', ARGUMENTS, 'return missing.length === 0 ? inputs : { error: USAGE };', 'return inputs;'],
   ['the process exit ignores the outcome', LAND, '  return exitCode;\n}', '  return 0;\n}'],
+  // The reaping of the landed worktree / El segado del worktree aterrizado
+  ['a landing never reaps', LAND, '...(reap ? reaper({ worktree }).lines : [])', '...(false ? reaper({ worktree }).lines : [])'],
+  ['a landing always reaps', LAND, '...(reap ? reaper({ worktree }).lines : [])', '...reaper({ worktree }).lines'],
+  ['the reaper is given the main checkout', LAND, 'reaper({ worktree }).lines', 'reaper({ worktree: main }).lines'],
+  ['reaping is on by default', LAND, 'check = false, reap = false, verifyTimeoutMs', 'check = false, reap = true, verifyTimeoutMs'],
+  ['the --reap flag is not known', ARGUMENTS, "'--reap': 'reap' }", '}'],
+  ['the command line reaps by default', ARGUMENTS, 'const inputs = { check: false, reap: false };', 'const inputs = { check: false, reap: true };'],
 ];
 
 // Each mutant needs ONE failed assertion, so the selftest it runs may stop at the first (see the selftest).

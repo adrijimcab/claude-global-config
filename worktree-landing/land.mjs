@@ -25,7 +25,7 @@
  * report says the check did not apply), and an unreadable declaration refuses.
  * Exit 0 landed (or ready, with `--check`), 1 verification red, 2 refused precondition or git failure.
  *
- * Usage: node land.mjs --worktree <dir> --main <dir> --branch <shared branch> --remote <remote> [--check]
+ * Usage: node land.mjs --worktree <dir> --main <dir> --branch <shared branch> --remote <remote> [--check] [--reap]
  *
  * @es Aterriza una rama de trabajo verificada sobre la rama compartida, para que nunca haya en ella estado
  * sin verificar. Cierra el incidente `unverified-commit-published-by-another-sessions-sync`: la guarda Stop
@@ -50,6 +50,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { reapAgentProcesses } from '../process-reaper/reaper.mjs';
 import { parseArguments } from './arguments.mjs';
 import { GitFailure } from './git.mjs';
 import { EXIT_LANDED, EXIT_REFUSED, EXIT_VERIFICATION_RED, Refusal } from './outcome.mjs';
@@ -73,11 +74,17 @@ function stoppedBy(refusal) {
 }
 
 /**
- * @param {{ worktree: string, main: string, branch: string, remote: string, check?: boolean, verifyTimeoutMs?: number }} inputs
+ * `reap` (off by default) closes the landed worktree's loose ends AFTER a written landing: the processes that name
+ * it are killed (`process-reaper/reaper.mjs`) and the report says which. It never changes whether or how the
+ * landing happened, and `--check` never reaps. `reaper` is injected for the selftest.
+ * @es `reap` (apagado por defecto) cierra los cabos sueltos del worktree aterrizado DESPUÉS de un aterrizaje
+ * escrito: se matan los procesos que lo nombran y el informe dice cuáles. Nunca cambia si el aterrizaje ocurrió
+ * ni cómo, y `--check` nunca siega.
+ * @param {{ worktree: string, main: string, branch: string, remote: string, check?: boolean, reap?: boolean, verifyTimeoutMs?: number, reaper?: typeof reapAgentProcesses }} inputs
  * @returns {{ exitCode: number, lines: string[] }}
  * @es Devuelve el código de salida y las líneas del informe.
  */
-export function land({ worktree, main, branch, remote, check = false, verifyTimeoutMs }) {
+export function land({ worktree, main, branch, remote, check = false, reap = false, verifyTimeoutMs, reaper = reapAgentProcesses }) {
   const inputs = { worktree, main, branch, remote };
   try {
     const before = landingRangeOf(inputs);
@@ -104,7 +111,7 @@ export function land({ worktree, main, branch, remote, check = false, verifyTime
         : `LANDED LOCALLY ${range} on ${branch} (${commits.length} commit(s)); verification: ${summary}. NOT published: ${remote} is not an owner backup remote, so nothing was pushed; the owner publishes with: @es ATERRIZADO EN LOCAL ${range} en ${branch} (${commits.length} commit(s)); verificación: ${summary}. NO publicado: ${remote} no es un remoto de respaldo del dueño, así que no se empujó nada; el dueño publica con:`;
     return {
       exitCode: EXIT_LANDED,
-      lines: [headline, ...(pushCommand === undefined ? [] : [`    ${pushCommand}`]), ...commits.map((line) => `    ${line}`), after.integration],
+      lines: [headline, ...(pushCommand === undefined ? [] : [`    ${pushCommand}`]), ...commits.map((line) => `    ${line}`), after.integration, ...(reap ? reaper({ worktree }).lines : [])],
     };
   } catch (error) {
     if (error instanceof Refusal) return stoppedBy(error);
