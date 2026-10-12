@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Self-test for odd-mirror-guard, against a project and an engram database CONSTRUCTED here, never the live
- * ones. The database carries engram's real v3 `sessions` and `observations` tables, their DDL read from the
- * live database's `sqlite_master` (read-only) so the fixture cannot drift from the schema the guard reads.
+ * ones. The database carries engram's real v3 `sessions` and `observations` tables, built from the DDL captured
+ * in `engram-v3-schema.mjs` (never read from the machine: a selftest depends on no live state). Whether that
+ * fixture still matches the live schema is the separate, on-demand `schema-drift-check.mjs`.
  *
  * THE STATE SPACE, enumerated from the decision:
  *   - THE MIRROR: absent (refuse); soft-deleted (refuse, it is absent); another project's (refuse); older
@@ -18,8 +19,8 @@
  *   - THE SHIM: the real `guard.mjs` process on stdin, BOM-prefixed, and an unreadable payload.
  *
  * @es Auto-test contra un proyecto y una base de engram CONSTRUIDOS aquí, nunca los vivos. La base lleva las
- * tablas v3 reales `sessions` y `observations`, con su DDL leído (solo lectura) del `sqlite_master` de la
- * base viva. Estados: el espejo (ausente, borrado, de otro proyecto, más viejo, del mismo segundo, más nuevo,
+ * tablas v3 reales `sessions` y `observations`, con el DDL capturado en `engram-v3-schema.mjs` (nunca leído de
+ * la máquina); si ese fixture sigue igual al esquema vivo lo dice `schema-drift-check.mjs`, bajo demanda. Estados: el espejo (ausente, borrado, de otro proyecto, más viejo, del mismo segundo, más nuevo,
  * nombre con otra grafía), el proyecto (sin `odd/`, `odd/tasks` vacío, un fichero no Markdown, varias
  * features), el llamante (subagente, parada ya dentro de un rechazo, orquestador), quién lo vio (misma
  * sesión, feature nueva, otra sesión), cuando no se puede medir (almacén ilegible: deja pasar y anota la
@@ -33,8 +34,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import { defaultDatabasePath } from '../backlog-owner-guard/resolve-topic-key.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
+import { OBSERVATIONS_DDL, SESSIONS_DDL } from './engram-v3-schema.mjs';
 import { featureDocuments } from './feature-documents.mjs';
 import { decide, mirrorTopicKey } from './guard.mjs';
 
@@ -45,7 +46,18 @@ isolateState('odd-mirror-guard');
 const GUARD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'guard.mjs');
 const root = mkdtempSync(path.join(os.tmpdir(), 'odd-mirror-guard-'));
 
-process.once('exit', () => rmSync(root, { recursive: true, force: true }));
+/** The constructed engram database; closed before the temp directory goes (Windows cannot delete an open file). @es La base construida; se cierra antes de borrar el directorio. */
+let database;
+
+process.once('exit', () => {
+  try {
+    database?.close();
+  } catch {
+    /* closing a handle that never opened must not stop the cleanup */
+  }
+
+  rmSync(root, { recursive: true, force: true });
+});
 
 let passed = 0;
 let failed = 0;
@@ -60,25 +72,12 @@ function check(label, condition, detail = '') {
   }
 }
 
-// ── the constructed engram database, with the live schema ─────────────────────────────────────────
-function liveDdl() {
-  const live = new DatabaseSync(defaultDatabasePath(), { readOnly: true });
-
-  try {
-    const ddl = live.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name IN ('sessions', 'observations') ORDER BY name DESC").all().map((row) => row.sql);
-
-    if (ddl.length !== 2) throw new Error(`expected the sessions and observations tables, found ${ddl.length}`);
-
-    return ddl;
-  } finally {
-    live.close();
-  }
-}
-
+// ── the constructed engram database, from the captured v3 DDL ─────────────────────────────────────
 const databasePath = path.join(root, 'engram.db');
-const database = new DatabaseSync(databasePath);
 
-for (const statement of liveDdl()) database.exec(statement);
+database = new DatabaseSync(databasePath);
+database.exec(SESSIONS_DDL);
+database.exec(OBSERVATIONS_DDL);
 
 database.prepare("INSERT INTO sessions (id, project, directory) VALUES ('s1', 'foo-bar', '/x')").run();
 
