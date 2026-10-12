@@ -48,10 +48,11 @@ const SYNC = path.join(import.meta.dirname, 'sync.mjs');
 const drifted = world.repository(['feature/meet', 'develop']);
 const warned = ask(drifted.clone);
 const text = noticeOf(warned);
+const [english, spanish] = text.split(' @es ');
 check(warned?.hookSpecificOutput?.hookEventName === 'UserPromptSubmit', 'a drifted clone gets a UserPromptSubmit notice');
-check(text.includes(drifted.clone) && text.includes('feature/meet') && text.includes(' main') && text.includes(path.join(drifted.clone, '.claude/fleet-kit.json')), `the notice names the clone, the declared branch, where origin/HEAD points and the source: ${text}`);
-check(text.includes(`node "${SYNC}" "${drifted.clone}"`), 'the notice names the exact sync command');
-check(text.includes(' @es ') && text.includes('DERIVA'), 'the notice is bilingual');
+const names = (half) => half !== undefined && half.includes(drifted.clone) && half.includes('feature/meet') && half.includes(' main;') && half.includes(path.join(drifted.clone, '.claude/fleet-kit.json')) && half.includes(`node "${SYNC}" "${drifted.clone}"`);
+check(names(english) === true, `the English half names the clone, the declared branch, where origin/HEAD points, the source and the exact sync command: ${english}`);
+check(spanish?.includes(drifted.clone) && spanish.includes('apunta a main') && spanish.includes(`node "${SYNC}" "${drifted.clone}"`) && spanish.startsWith('DERIVA'), `the Spanish half says the same: ${spanish}`);
 check(warned && !('decision' in warned) && !('decision' in (warned.hookSpecificOutput ?? {})), 'the notice never blocks');
 check(noticeOf(ask(drifted.clone)) === text, 'the warning repeats on every prompt while the drift lasts');
 
@@ -66,10 +67,15 @@ git(driftedAgain.clone, 'worktree', 'add', '-q', '-b', 'work', linked);
 const viaWorktree = noticeOf(ask(linked));
 check(viaWorktree.includes(driftedAgain.clone) && viaWorktree.includes(`"${driftedAgain.clone}"`), 'a session in a linked worktree is warned about the main checkout and told to sync it');
 
+const unset = world.repository(['develop']);
+git(unset.clone, 'symbolic-ref', '--delete', 'refs/remotes/origin/HEAD');
+check(noticeOf(ask(unset.clone)).includes('(unset @es sin fijar)'), 'a clone whose origin/HEAD is unset is warned and the notice says it is unset');
+
 const unpublished = world.repository(['unpublished']);
 git(unpublished.clone, 'branch', 'unpublished');
 const missing = noticeOf(ask(unpublished.clone));
-check(missing.includes('refs/remotes/origin/unpublished') && missing.includes('fetch or the push') && missing.includes(' @es '), `a drift whose declared branch has no remote-tracking ref says the owner decides the fetch or the push: ${missing}`);
+const [missingEnglish, missingSpanish] = missing.split(' @es ');
+check(missingEnglish.includes('refs/remotes/origin/unpublished') && missingEnglish.includes('fetch or the push') && missingSpanish?.includes('fetch o el push'), `a drift whose declared branch has no remote-tracking ref says the owner decides the fetch or the push: ${missing}`);
 
 check(ask(world.repository(undefined).clone) === undefined, 'a repository declaring nothing is silent');
 const broken = world.repository(undefined);

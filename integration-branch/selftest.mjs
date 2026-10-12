@@ -28,10 +28,22 @@ isolateState('integration-branch');
 
 const { DeclarationUnreadable, readIntegrationDeclaration } = await import('./declaration.mjs');
 const { syncVerdict } = await import('./sync-verdict.mjs');
-const { originHeadBranch, remoteBranchExists } = await import('./git-refs.mjs');
+const { mainCheckoutOf, originHeadBranch, remoteBranchExists } = await import('./git-refs.mjs');
 const { originHeadState } = await import('./origin-head-state.mjs');
 
 const SYNC = path.join(import.meta.dirname, 'sync.mjs');
+
+/** A throw of the code under test becomes a wrong answer, so a broken decision fails a check instead of crashing the run. @es Un lanzamiento del código probado pasa a ser una respuesta errónea, para que una decisión rota falle un check en vez de tumbar la corrida. */
+const safely = (fn) => {
+  try {
+    return fn();
+  } catch (error) {
+    return { thrown: error.message };
+  }
+};
+const readOf = (dir) => safely(() => readIntegrationDeclaration(dir));
+const stateOf = (dir) => safely(() => originHeadState(dir));
+const mainOf = (dir) => safely(() => mainCheckoutOf(dir));
 const CHILD_TIMEOUT_MS = 60_000;
 const world = makeWorld();
 const { repository } = world;
@@ -58,18 +70,18 @@ const MODULE = '.claude/integrate/integration-branches.mjs';
 const declare = (relative, content) => world.directory(relative, content);
 
 const fleet = declare('.claude/fleet-kit.json', '{"integrationBranches":["feature/meet","develop"]}');
-const fleetRead = readIntegrationDeclaration(fleet);
+const fleetRead = readOf(fleet);
 check(JSON.stringify(fleetRead?.branches) === '["feature/meet","develop"]' && fleetRead.source === path.join(fleet, '.claude/fleet-kit.json'), 'fleet-kit list is read in order, naming its file');
 const moduleOnly = declare(MODULE, "export const INTEGRATION_BRANCHES = Object.freeze(['develop', 'main']);\n");
-const moduleRead = readIntegrationDeclaration(moduleOnly);
+const moduleRead = readOf(moduleOnly);
 check(JSON.stringify(moduleRead?.branches) === '["develop","main"]' && moduleRead.source === path.join(moduleOnly, MODULE), 'the project module is read, naming its file');
 const both = declare('.claude/fleet-kit.json', '{"integrationBranches":["feature/meet"]}');
 put(both, MODULE, "export const INTEGRATION_BRANCHES = ['develop'];\n");
-check(readIntegrationDeclaration(both)?.branches[0] === 'feature/meet', 'fleet-kit outranks the project module');
+check(readOf(both)?.branches[0] === 'feature/meet', 'fleet-kit outranks the project module');
 const noList = declare('.claude/fleet-kit.json', '{"landingGuard":{"mode":"enforce"}}');
 put(noList, MODULE, "export const INTEGRATION_BRANCHES = ['develop'];\n");
-check(readIntegrationDeclaration(noList)?.branches[0] === 'develop', 'a fleet-kit without the list falls through to the module');
-check(readIntegrationDeclaration(declare('unrelated.txt', 'x')) === undefined, 'a repository declaring nothing reads as undefined');
+check(readOf(noList)?.branches[0] === 'develop', 'a fleet-kit without the list falls through to the module');
+check(readOf(declare('unrelated.txt', 'x')) === undefined, 'a repository declaring nothing reads as undefined');
 
 const unreadable = (name, relative, content) => {
   const dir = declare(relative, content);
@@ -77,7 +89,7 @@ const unreadable = (name, relative, content) => {
     readIntegrationDeclaration(dir);
     check(false, `${name} throws`);
   } catch (error) {
-    check(error instanceof DeclarationUnreadable && error.message.includes(path.join(dir, relative)) && bilingual(error.message), `${name} throws DeclarationUnreadable naming the file, bilingual`);
+    check(error instanceof DeclarationUnreadable && error.file === path.join(dir, relative) && error.message.includes(path.join(dir, relative)) && bilingual(error.message), `${name} throws DeclarationUnreadable naming the file, bilingual`);
   }
 };
 unreadable('a malformed fleet-kit.json', '.claude/fleet-kit.json', '{ not json');
@@ -104,12 +116,18 @@ check(remoteBranchExists(probe.clone, 'nowhere') === false, 'an unknown branch h
 git(probe.clone, 'symbolic-ref', '--delete', 'refs/remotes/origin/HEAD');
 check(originHeadBranch(probe.clone) === undefined, 'a missing origin/HEAD reads as undefined');
 
+const bare = repository(['develop']);
+check(mainOf(bare.remote) === undefined && stateOf(bare.remote) === undefined, 'a bare repository has no main checkout and no state');
+check(mainOf(probe.clone) === probe.clone, 'the main checkout of a clone is the clone itself');
+git(probe.clone, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/heads/main');
+check(originHeadBranch(probe.clone) === undefined, 'an origin/HEAD pointing outside the remote reads as undefined');
+
 // ── The state ────────────────────────────────────────────────────────────────────────────────────
 const stateRepo = repository(['feature/meet', 'develop']);
-const state = originHeadState(stateRepo.clone);
+const state = stateOf(stateRepo.clone);
 check(state?.verdict === 'set' && state.want === 'feature/meet' && state.current === 'main' && state.main === stateRepo.clone && state.source === path.join(stateRepo.clone, '.claude/fleet-kit.json'), 'state: a drifted clone reads want, current, main, source and verdict set');
-check(originHeadState(repository(undefined).clone)?.governed === false, 'state: a clone declaring nothing is not governed');
-check(originHeadState(world.directory('placeholder.txt', 'x')) === undefined, 'state: a directory that is not a repository reads as undefined');
+check(stateOf(repository(undefined).clone)?.governed === false, 'state: a clone declaring nothing is not governed');
+check(stateOf(world.directory('placeholder.txt', 'x')) === undefined, 'state: a directory that is not a repository reads as undefined');
 
 // ── The sync ─────────────────────────────────────────────────────────────────────────────────────
 const drifted = repository(['feature/meet', 'develop']);
@@ -138,7 +156,7 @@ const refsLocal = refsOf(localOnly.clone);
 const remoteLocal = git(localOnly.remote, 'for-each-ref', '--format=%(refname) %(objectname)');
 const refused = sync(localOnly.clone);
 check(refused.code === 2 && refsOf(localOnly.clone) === refsLocal && originHeadBranch(localOnly.clone) === 'main', `sync refuses a declared branch with no remote-tracking ref and changes nothing (exit ${refused.code})`);
-check(refused.err.includes('refs/remotes/origin/unpublished') && refused.err.includes('fetch') && refused.err.includes('push') && bilingual(refused.err), `the refusal names the missing ref and the owner's fetch or push decision, bilingual: ${refused.err}`);
+check(refused.err.includes('refs/remotes/origin/unpublished') && refused.err.includes('fetch origin unpublished') && refused.err.includes('push origin unpublished') && bilingual(refused.err), `the refusal names the missing ref and the owner's fetch or push decision, bilingual: ${refused.err}`);
 check(git(localOnly.remote, 'for-each-ref', '--format=%(refname) %(objectname)') === remoteLocal, 'the refusal pushes nothing');
 
 const nearMiss = repository(['feature']);
@@ -161,7 +179,8 @@ const plain = world.directory('placeholder.txt', 'x');
 const notRepo = sync(plain);
 check(notRepo.code === 2 && bilingual(notRepo.err), 'a directory that is not a repository is refused, bilingual');
 check(sync().code === 2 && bilingual(sync().err), 'no argument prints the usage and exits 2');
-check(sync('a', 'b').code === 2, 'two arguments are refused');
+const twoArguments = repository(['feature/meet']);
+check(sync(twoArguments.clone, 'b').code === 2 && originHeadBranch(twoArguments.clone) === 'main', 'two arguments are refused and nothing is changed');
 
 world.dispose();
 const total = passed + failures.length;

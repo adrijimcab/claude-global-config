@@ -26,6 +26,7 @@ import { originHeadState } from './origin-head-state.mjs';
 
 const SYNC_COMMAND = path.join(import.meta.dirname, 'sync.mjs');
 const withoutBom = (raw) => (raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
+/** The notice each drifted verdict gets; a verdict with none (in sync, ungoverned, no repository) is silence. @es El aviso de cada veredicto con deriva; un veredicto sin aviso (sincronizado, sin gobierno, sin repositorio) es silencio. */
 const NOTICE_BY_VERDICT = { set: 'drift-set', 'missing-remote-ref': 'drift-missing-ref' };
 
 /**
@@ -36,19 +37,20 @@ export function evaluate(raw) {
   try {
     const payload = JSON.parse(withoutBom(raw));
 
-    if (isSubagentCaller(payload) || typeof payload?.cwd !== 'string') return undefined;
+    if (isSubagentCaller(payload)) return undefined;
 
     const state = originHeadState(payload.cwd);
+    const notice = NOTICE_BY_VERDICT[state?.verdict];
 
-    if (state === undefined || !state.governed || state.verdict === 'in-sync') return undefined;
+    if (notice === undefined) return undefined;
 
-    const { main, want, source, verdict } = state;
+    const { main, want, source } = state;
     const current = state.current ?? '(unset @es sin fijar)';
 
     return {
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
-        additionalContext: speaker.line(NOTICE_BY_VERDICT[verdict], { main, want, source, current, sync: SYNC_COMMAND })
+        additionalContext: speaker.line(notice, { main, want, source, current, sync: SYNC_COMMAND })
       }
     };
   } catch {
