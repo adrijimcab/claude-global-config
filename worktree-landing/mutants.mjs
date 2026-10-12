@@ -73,19 +73,14 @@ const MUTANTS = [
   ['the push is skipped', PUBLICATION, '  push({ main, branch, remote, head });\n', ''],
   ['the remote tip is not read back', PUBLICATION, '  confirmRemoteTip({ main, branch, remote, head });\n', ''],
   // The integration branch / La rama de integración
-  ['a branch that is not the first declared one lands', INTEGRATION, 'if (list[0] !== branch) {', 'if (false) {'],
-  ['the LAST declared branch is taken as the integration branch', INTEGRATION, 'if (list[0] !== branch) {', 'if (list.at(-1) !== branch) {'],
+  ['a branch that is not the first declared one lands', INTEGRATION, 'if (branches[0] !== branch) {', 'if (false) {'],
+  ['the LAST declared branch is taken as the integration branch', INTEGRATION, 'if (branches[0] !== branch) {', 'if (branches.at(-1) !== branch) {'],
   ['the integration check is not asked by the preconditions', PRECONDITIONS, 'const integration = requireIntegrationBranch({ main, branch });', "const integration = '';"],
-  ['fleet-kit.json is not read', INTEGRATION, 'existsSync(fleetKit) ? fromFleetKit(fleetKit) : undefined', 'undefined'],
-  ['a malformed fleet-kit.json is ignored', INTEGRATION, 'throw unreadable(file, `${error.message}`);', 'return undefined;'],
-  ['a fleet-kit without the list does not fall through to the module', INTEGRATION, " || !('integrationBranches' in parsed)", ''],
-  ['an empty or non-list declaration is accepted', INTEGRATION, 'if (!ok) throw', 'if (false) throw'],
-  ['a project module that fails to import is accepted', INTEGRATION, 'if (run.status !== 0) throw', 'if (false) throw'],
   ['check mode always says it would publish', LAND, 'mayPublishTo({ main, remote })\n            ? `Publication', 'true\n            ? `Publication'],
   ['check mode always says it would land locally only', LAND, 'mayPublishTo({ main, remote })\n            ? `Publication', 'false\n            ? `Publication'],
   ['check mode names the wrong remote when it would publish', LAND, 'would publish to ${remote}.', 'would publish to origin.'],
-  ['the project module is not read', INTEGRATION, '(existsSync(ownModule) ? fromOwnModule(ownModule) : undefined)', 'undefined'],
-  ['a repository with no source is refused', INTEGRATION, 'if (list === undefined) {', 'if (false) {'],
+  ['a repository with no source is refused', INTEGRATION, 'if (declaration === undefined) {', 'if (false) {'],
+  ['an unreadable declaration is not turned into a refusal', INTEGRATION, 'if (error instanceof DeclarationUnreadable) throw', 'if (false) throw'],
   // Where it publishes / Dónde publica
   ['every remote is published to', PUBLICATION, 'const publishes = mayPublishTo({ main, remote });', 'const publishes = true;'],
   ['the push runs whatever the policy says', PUBLICATION, 'if (publishes) {', 'if (true) {'],
@@ -116,7 +111,7 @@ process.env.WORKTREE_LANDING_SELFTEST_FAIL_FAST = '1';
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['worktree-landing', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['worktree-landing', 'integration-branch', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'worktree-landing/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

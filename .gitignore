@@ -279,6 +279,14 @@
 !/worktree-landing/*.mjs
 /worktree-landing/state/
 
+# Reads the integration branch a project declares and keeps origin/HEAD pointed at it (sync, drift warning).
+# Code and sidecars yes; live state no. @es Lee la rama de integración que declara un proyecto y mantiene
+# origin/HEAD apuntando a ella (sincronización, aviso de deriva). Código y sidecars sí; estado en vivo no.
+!/integration-branch/
+!/integration-branch/*.mjs
+!/integration-branch/*.json
+/integration-branch/state/
+
 # ── Reincluir ficheros sueltos de config propia ──────────────────────────────────────────────────
 !/CLAUDE.md
 !/settings.json
