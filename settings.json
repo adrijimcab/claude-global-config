@@ -43,16 +43,6 @@
         ]
       },
       {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "gentle-ai sdd-preflight-hook --agent claude-code",
-            "timeout": 30
-          }
-        ]
-      },
-      {
         "matcher": "Agent|Task|SendMessage|TaskCreate|TaskUpdate|mcp__plugin_engram_engram__mem_save|mcp__engram__mem_save|mcp__plugin_engram_engram__mem_update|mcp__engram__mem_update|mcp__plugin_engram_engram__mem_delete|mcp__engram__mem_delete",
         "hooks": [
           {
@@ -274,7 +264,7 @@
       "### User-specific",
       "**Primary use of Claude Code**: software development (Angular 19 design-system library, b100-am-ui)",
       "**Trusted repo**: b100-am-ui at C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui, remote gitlab.base100.local/frontend/b100-am-ui.git",
-      "**Org-specific CLIs**: gentle-ai (SDD/review workflow CLI, used in this project); ng (Angular CLI)"
+      "**Org-specific CLIs**: gentle-ai (ODD/review workflow CLI, used in this project); ng (Angular CLI)"
     ]
   }
 }
