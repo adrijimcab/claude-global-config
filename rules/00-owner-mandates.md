@@ -313,7 +313,8 @@ corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
     (`node .claude/backup-repo.mjs …`, rama `master`);
   - `<di_1700002_discovery_fe>/.claude/**` → `adrijimcab/di-1700002-discovery-fe-claude-tooling`
     (`node .claude/backup-repo.mjs …`, rama `master`; creado el 2026-10-11 con autorización del dueño);
-  - un repo de proyecto nuevo con `.claude/` propio declara aquí su repo de respaldo antes de usarlo.
+  - un repo de proyecto nuevo con `.claude/` propio declara aquí su repo de respaldo antes de usarlo;
+  - ese proyecto declara también `.claude/agent-contract/anchors.json` con el par inglés/español de su contrato, y el guard `agent-contract-parity` rechaza toda delegación mientras falte.
 - **Nada de IA va al remoto de la empresa** (directiva del dueño 2026-10-11: «NO SE SUBE A BASE 100 NADA DE
   IA, TODO ESTO A adrijimcab»): el `.claude/`, los artefactos de agentes y toda regla que nombre una
   herramienta de IA viven en `.git/info/exclude` del proyecto (nunca en su `.gitignore` versionado) y se
