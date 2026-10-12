@@ -82,6 +82,10 @@ try {
   await both('marcador con BOM', `﻿${payload(MARKED)}`, true);
   await both('sin marcador', payload('Listo, corrí los tests y pasaron.'), false);
   await both('mensaje vacío', payload('   '), false);
+  // «corrección» como sustantivo no frena el turno (falsos positivos reales del 2026-10-12); la autocorrección sí.
+  await both('«corrección y seguridad» deja pasar', payload('El orden de desempate es corrección y seguridad, después los gates, después performance y después simplicidad.'), false);
+  await both('«corrección» como arreglo pedido deja pasar', payload('Le pasé a a8a1cf09 la corrección del scratch en el contrato.'), false);
+  await both('«corrección mía» bloquea', payload('Corrección mía: le había dicho al agente que sus ficheros estaban en el checkout principal.'), true);
   await both('stop_hook_active', payload(MARKED, { stop_hook_active: true }), false);
   await both('dentro del cooldown', payload(MARKED), false, (dir) => {
     mkdirSync(path.join(dir, 'state'), { recursive: true });
