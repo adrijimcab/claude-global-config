@@ -173,21 +173,34 @@ export function briefOf(transcript) {
 }
 
 /**
- * Whether `path` is a linked agent worktree: a directory directly under a `worktrees` directory.
+ * Whether `path` is a LINKED worktree: git marks one by keeping `.git` as a FILE, while a main checkout
+ * keeps it as a directory. The same question `process-reaper/linked-worktree.mjs` answers, written here
+ * because a b100 module must not import from the Claude home.
  *
  * WHY THE BRIEF CLAIM IS LIMITED TO THESE. A `TENANCY:` line names its checkout by the last path
  * segment. Nearly every brief in this project declares `TENANCY: b100-am-ui`, so accepting brief claims
- * for any directory would make EVERY live agent the "owner" of the main checkout, and
- * `worktree-tenancy` would then refuse mutating git there. A worktree's name is an agent id, unique by
- * construction; the main checkout's name is shared by everyone.
- * @es Si `path` es un worktree enlazado de agente, directo bajo un directorio `worktrees`. La reclamación
- * por brief se limita a estos porque casi todo brief declara `TENANCY: b100-am-ui`: aceptarla para
- * cualquier directorio haría «dueño» del checkout principal a cualquier agente vivo.
+ * for the main checkout would make EVERY live agent its "owner", and `worktree-tenancy` would then
+ * refuse mutating git there. A linked worktree's name is unique to its task; the main checkout's name
+ * is shared by everyone.
+ *
+ * WHY NOT THE FOLDER NAME. This used to ask whether the parent folder was called `worktrees`, which is
+ * where the harness puts isolated agents. A non-isolated worker may legitimately take over a linked
+ * worktree anywhere (measured 2026-10-12: `~/.claude-wt/odd-mirror-guard`), and the folder name made
+ * its live owner invisible. A path that does not exist or has no `.git` is not a worktree.
+ * @es Si `path` es un worktree ENLAZADO: git lo marca con `.git` como FICHERO, y un checkout principal
+ * lo tiene como directorio. Es la misma pregunta de `process-reaper/linked-worktree.mjs`, escrita aquí
+ * porque un módulo de b100 no importa del home de Claude. La reclamación por brief se limita a estos
+ * porque casi todo brief declara `TENANCY: b100-am-ui`: aceptarla para el checkout principal haría
+ * «dueño» a cualquier agente vivo. Antes se miraba si la carpeta madre se llamaba `worktrees`, y eso
+ * dejaba invisible al dueño vivo de un worktree enlazado en cualquier otro sitio. Una ruta inexistente o
+ * sin `.git` no es un worktree.
  */
-function isAgentWorktree(path) {
-  const parts = String(path).replaceAll('\\', '/').split('/').filter((part) => part.length > 0);
-
-  return parts.length >= 2 && parts.at(-2).toLowerCase() === 'worktrees';
+function isLinkedWorktree(path) {
+  try {
+    return statSync(join(String(path), '.git')).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -218,7 +231,7 @@ export function activeOwner(path, records = agentRecords(), now = Date.now()) {
 
   for (const record of records) {
     const byHarness = record.worktree !== '';
-    const candidate = byHarness ? record.worktree.toLowerCase() === wanted : isAgentWorktree(path);
+    const candidate = byHarness ? record.worktree.toLowerCase() === wanted : isLinkedWorktree(path);
 
     if (!candidate) continue;
 
