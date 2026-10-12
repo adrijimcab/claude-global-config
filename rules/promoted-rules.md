@@ -114,3 +114,4 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
 
 - **`brief-measured-line-carried-an-unmeasured-claim`** — A `MEASURED:` line carries only what a command in THIS turn measured.
   RULE: before a durable record's state claim (contract, memory, backlog) goes into a brief, re-measure it in the same turn and write the command beside it. Otherwise it goes under `HYPOTHESIS:` with the record and its date.
+  RULE (face of 2026-10-12, b100-am-ui-f8): a claim about what a gate can SEE is measured on the build that gate actually runs (development or production) before it enters a `MEASURED:` line; a previous worker's claim relayed in the same block is re-measured too. A brief said the demo crawler fails on a missing-engine DevMode warning, but `check:demo-crawler` runs the production `build:demo` output, where DevMode guards are compiled out.

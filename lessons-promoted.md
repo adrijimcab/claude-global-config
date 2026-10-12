@@ -31,4 +31,4 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-10-01 — replied-to-owner-in-english: no mechanism <!--fc:replied-to-owner-in-english#12-->
 - [promoted] 2026-10-04 — root-cause-stated-before-measured: no mechanism <!--fc:root-cause-stated-before-measured#2-->
 - [promoted] 2026-10-02 — brief-had-workers-open-every-image: no mechanism <!--fc:brief-had-workers-open-every-image#2-->
-- [promoted] 2026-10-05 — brief-measured-line-carried-an-unmeasured-claim: no mechanism <!--fc:brief-measured-line-carried-an-unmeasured-claim#5-->
+- [promoted] 2026-10-05 — brief-measured-line-carried-an-unmeasured-claim: no mechanism <!--fc:brief-measured-line-carried-an-unmeasured-claim#6-->
