@@ -102,6 +102,8 @@
 /company-commit-guard/state/
 !/company-scan/
 !/company-scan/**
+!/ai-exclusion/
+!/ai-exclusion/**
 !/company-remote/
 !/company-remote/**
 !/company-config/
