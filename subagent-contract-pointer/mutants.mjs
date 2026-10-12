@@ -57,7 +57,14 @@ const MUTANTS = [
   ['the route rule drops the owner of the documents', TEXT, 'the orchestrator owns those documents.', 'those documents are shared.'],
   ['the route rule lets a worker touch a feature document', TEXT, 'Never create or edit an ODD feature document', 'You may edit an ODD feature document'],
   ['a brief with no ROUTE is not direct', TEXT, 'A brief with no ROUTE line is "direct"', 'A brief with no ROUTE line is "tracked-odd"'],
-  ['the route rule is not appended', TEXT, "return [contract.join('\\n'), line('route-rule')].join('\\n\\n');", "return contract.join('\\n');"],
+  ['the route rule is not appended', TEXT, "return [contract.join('\\n'), line('route-rule'), line('engineering-standard', { file: STANDARD_FILE })].join('\\n\\n');", "return [contract.join('\\n'), line('engineering-standard', { file: STANDARD_FILE })].join('\\n\\n');"],
+  ['the engineering standard is not appended', TEXT, ", line('engineering-standard', { file: STANDARD_FILE })].join", '].join'],
+  ['the standard path is not under the Claude home', TEXT, "path.join(claudeHome(), 'engineering-standard.md')", "path.join('.claude', 'engineering-standard.md')"],
+  ['the worker is not told to read the standard before writing', TEXT, 'before your first write', 'whenever you wish'],
+  ['the tie-break rule is dropped from the pointer', TEXT, 'Tie-break: correctness and security, gates, performance, simplicity.', 'Be careful.'],
+  ['the KISS rule is dropped from the pointer', TEXT, 'KISS and YAGNI: the simplest design', 'Good design: the most complete design'],
+  ['the SOLID and architecture rules are dropped from the pointer', TEXT, 'SOLID: one responsibility per unit, dependencies inward. Architecture: hexagonal', 'Write code. Layers: hexagonal'],
+  ['the route summary ignores size', TEXT, 'two or more meaningful steps; direct when', 'a step; direct when'],
   ['the contract files are not listed', TEXT, '...located.files.map((file) => `  ${file}`), ', ''],
   ['a project with files is told none was found', TEXT, 'const contract = located.files.length > 0', 'const contract = located.files.length < 0'],
   // The hook / El hook
@@ -68,7 +75,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['subagent-contract-pointer', 'settings.json', 'agent-contract-parity', 'brief-feasibility', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['subagent-contract-pointer', 'engineering-standard.md', 'rules', 'settings.json', 'agent-contract-parity', 'brief-feasibility', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'subagent-contract-pointer/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { isolateState } from '../hook-state/locations.mjs';
+import { claudeHome, isolateState } from '../hook-state/locations.mjs';
 import { importedFiles as readImports } from './claude-md-imports.mjs';
 import { contractLocations as readLocations } from './contract-locations.mjs';
 import { workerPointer as readPointer } from './worker-pointer.mjs';
@@ -184,8 +184,18 @@ check('the pointer names Explore as the reason', pointer.includes('Explore agent
 check('the pointer carries the route rule', pointer.includes('ROUTE: tracked-odd') && pointer.includes('orchestrator owns'));
 check('the pointer says a brief without ROUTE is direct', pointer.includes('A brief with no ROUTE line is "direct"'));
 check('the pointer says never to touch a feature document unless ROUTE names it', pointer.includes('Never create or edit an ODD feature document'));
+const STANDARD_FILE = path.join(claudeHome(), 'engineering-standard.md');
+
+check('the pointer names the engineering standard by its absolute path', pointer.includes(STANDARD_FILE), STANDARD_FILE);
+check('the pointer tells the worker to read the standard before its first write', pointer.includes('[Engineering standard]') && pointer.includes('before your first write'));
+check('the pointer summarises the five rules', ['Tie-break:', 'KISS and YAGNI', 'SOLID:', 'Architecture:', 'Route:'].every((rule) => pointer.includes(rule)));
+check('the pointer route summary counts both the type and the size of the work', pointer.includes('the design is open or') && pointer.includes('two or more meaningful steps') && pointer.includes('settled and it is one step'));
+check('the standard block is bilingual', pointer.includes('[Estándar de ingeniería]') && pointer.includes('antes de tu primera escritura'));
+check('the pointer stays under 4000 characters with the standard block', pointer.length < 4000, String(pointer.length));
+check('the standard file exists and is at most 40 lines', readFileSync(path.join(FLEET, 'engineering-standard.md'), 'utf8').split('\n').length <= 40);
+check('rules/10-contracts.md imports the standard once', readFileSync(path.join(FLEET, 'rules', '10-contracts.md'), 'utf8').split('@~/.claude/engineering-standard.md').length === 2);
 check('the pointer is bilingual', pointer.includes('@es') && pointer.includes('Regla de ruta'));
-check('the pointer is a pointer, short of the 10000 characters the harness persists to a file', pointer.length < 3000, String(pointer.length));
+check('the pointer is a pointer, short of the 10000 characters the harness persists to a file', pointer.length < 4000, String(pointer.length));
 check('the pointer is the same for a resume (another agent id)', workerPointer(payloadAt(imported, { agent_id: 'ZZZ', agent_type: 'general-purpose' }), NO_ENV) === pointer);
 check('the project is found from a subdirectory', workerPointer(payloadAt(path.join(imported, 'src', 'deep')), NO_ENV) === pointer);
 check('the project is found from CLAUDE_PROJECT_DIR when the cwd is elsewhere', workerPointer(payloadAt(path.join(ROOT, 'elsewhere')), { CLAUDE_PROJECT_DIR: imported }) === pointer);
