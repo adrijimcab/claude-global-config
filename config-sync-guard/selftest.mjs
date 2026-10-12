@@ -408,9 +408,11 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   recordAuthoredWrites([{ path: realFile, mtimeMs: statSync(realFile).mtimeMs }], 's-9');
 
   const realRepo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n', worktree: real });
-  const realKind = (session) => decide(STOP_PAYLOAD({ session_id: session }), { repos: [realRepo], liveAgents: new Map() })?.kind ?? 'allow';
+  const realKind = (session) => threw('decide', () => decide(STOP_PAYLOAD({ session_id: session }), { repos: [realRepo], liveAgents: new Map() })?.kind ?? 'allow', 'threw');
 
   check('the default journal credits the recorded author of a real file (block) and no other session (allow)', [realKind('s-9'), realKind('s-2')], ['block', 'allow']);
+  // The default journal is left as it was found, so no later check reads this run's record. @es El journal por defecto queda como estaba, para que ningún check posterior lea este registro.
+  rmSync(path.join(stateDir('config-sync-guard'), 'authored-writes.jsonl'), { force: true });
 
   check('the snapshot names the files that were rewritten or created, not the vanished or untouched ones', changed, ['new.txt', 'sub/old.txt']);
   check('a file given as a root is measured as itself', [...snapshotMtimes([path.join(root, 'new.txt')]).keys()], [path.join(root, 'new.txt')]);
