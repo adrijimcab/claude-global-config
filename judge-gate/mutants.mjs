@@ -26,14 +26,11 @@ const NESTING = 'judge-gate/nesting.mjs';
 const MUTANTS = [
   // --- WHAT A VERDICT IS.
   ['an ok true is not a pass', VERDICT, 'if (verdict.ok === true) return { kind: \'pass\' };', 'if (verdict.ok === true) return { kind: \'malfunction\', why: \'x\' };'],
-  ['a non-boolean ok is read as a block', VERDICT, "if (verdict.ok !== false) return", "if (false) return"],
+  ['a non-boolean ok is read as a block', VERDICT, 'if (verdict.ok !== false) return', 'if (false) return'],
   ['a reason without the marker blocks', VERDICT, ' || !verdict.reason.trim().startsWith(marker)', ''],
-  ['a missing reason blocks', VERDICT, "typeof verdict.reason !== 'string' || ", ''],
-  ['the reason is not trimmed', VERDICT, "reason: verdict.reason.trim() }", "reason: verdict.reason }"],
-  ['an array is read as a verdict', VERDICT, ' && !Array.isArray(parsed)', ''],
+  ['the reason is not trimmed', VERDICT, "verdict.reason.trim() : ''", "verdict.reason : ''"],
   ['prose around the object is not tolerated', VERDICT, 'const match = /\\{[\\s\\S]*\\}/.exec(text);', 'const match = /^\\{[\\s\\S]*\\}$/.exec(text);'],
   ['an unparsable answer throws', VERDICT, '  } catch {\n    return undefined;\n  }', '  } catch (error) {\n    throw error;\n  }'],
-  ['an answer that is not text is read', VERDICT, "typeof answer === 'string' ? answer : ''", 'answer'],
 
   // --- THE GATE'S CODE DECISIONS.
   ['a nested run asks the model', GATE, "if (nested) return free('pass-nested');", ''],
@@ -71,7 +68,7 @@ const MUTANTS = [
   ['the log forgets the cost', LOG, 'outcome, costUsd, durationMs, ...(reason', 'outcome, durationMs, ...(reason'],
   ['the log forgets the reason', LOG, '...(reason === undefined ? {} : { reason }), ', ''],
   ['the log forgets the why', LOG, ', ...(why === undefined ? {} : { why }) }', ' }'],
-  ['the log is not appended', LOG, 'appendFileSync(outcomesPath()', 'writeFileSync(outcomesPath()'],
+  ['the log is overwritten, not appended', LOG, "import { appendFileSync, mkdirSync } from 'node:fs';", "import { writeFileSync as appendFileSync, mkdirSync } from 'node:fs';"],
   ['the mechanism is not this folder', LOG, "MECHANISM = 'judge-gate'", "MECHANISM = 'judge-gateX'"],
   ['the hook timeout leaves no room', JUDGES, 'const HEADROOM_SECONDS = 5;', 'const HEADROOM_SECONDS = 0;'],
   ['the command differs from the wiring', JUDGES, 'run.mjs" ${name}', 'run.mjs" ${name}x'],

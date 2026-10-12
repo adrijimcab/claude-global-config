@@ -43,6 +43,8 @@ const { JUDGES, hookCommand } = await import('./judges.mjs');
 const { decide, NESTED_VARIABLE } = await import('./gate.mjs');
 const { askModel, modelArguments } = await import('./model.mjs');
 const { outcomesPath, recordOutcome } = await import('./outcome-log.mjs');
+const { isNested } = await import('./nesting.mjs');
+const { run } = await import('./run.mjs');
 
 let passed = 0;
 const failures = [];
@@ -69,6 +71,10 @@ check('verdict: no JSON is a malfunction', readVerdict('I cannot judge this', vo
 check('verdict: empty is a malfunction', readVerdict('', voice.marker).kind, 'malfunction');
 check('verdict: an unparsable object is a malfunction', readVerdict('{ok: true', voice.marker).kind, 'malfunction');
 check('verdict: an array is a malfunction', readVerdict('[true]', voice.marker).kind, 'malfunction');
+check('verdict: a string ok is a malfunction even with a marked reason', readVerdict(JSON.stringify({ ok: 'false', reason: goodBlock }), voice.marker).kind, 'malfunction');
+check('verdict: a reason padded with blanks is trimmed', readVerdict(JSON.stringify({ ok: false, reason: `  ${goodBlock}\n` }), voice.marker), { kind: 'block', reason: goodBlock });
+check('verdict: an object that is not JSON is a malfunction', readVerdict('{ok: true}', voice.marker).kind, 'malfunction');
+check('verdict: an answer that is not text is a malfunction', [readVerdict(undefined, voice.marker).kind, readVerdict(null, voice.marker).kind], ['malfunction', 'malfunction']);
 check('verdict: impossible is ignored, a marked block stays a block', readVerdict(JSON.stringify({ ok: false, impossible: true, reason: goodBlock }), voice.marker), { kind: 'block', reason: goodBlock });
 check('verdict: the malfunction says why', typeof readVerdict('nope', voice.marker).why, 'string');
 
@@ -107,6 +113,7 @@ const unreadable = await gate('not json', answering('{"ok": true}'));
 check('gate: unreadable input is a malfunction that passes', [unreadable.outcome, typeof unreadable.why], ['malfunction', 'string']);
 check('gate: unreadable input has no block reason', unreadable.reason, undefined);
 check('gate: an input that is not an object is a malfunction', (await gate('3', answering('{"ok": true}'))).outcome, 'malfunction');
+check('gate: an array input is a malfunction', (await gate('[1]', answering('{"ok": true}'))).outcome, 'malfunction');
 check('gate: a BOM before the input is tolerated', (await gate(`﻿${payload()}`, answering('{"ok": true}'))).outcome, 'pass');
 
 const passes = await gate(payload(), answering('{"ok": true}'));
@@ -120,6 +127,7 @@ check('gate: the premise judge asks its own rubric', (await gate(payload(), answ
 const blocks = await gate(payload(), answering(JSON.stringify({ ok: false, reason: goodBlock })));
 
 check('gate: a marked ok false blocks with its reason', [blocks.outcome, blocks.reason], ['block', goodBlock]);
+check('gate: a block keeps the cost and latency', [blocks.costUsd, blocks.durationMs], [0.0002, 900]);
 
 const stray = await gate(payload(), answering('{"ok": false, "reason": "insufficient evidence in transcript"}'));
 
@@ -130,19 +138,29 @@ const down = await gate(payload(), failing);
 
 check('gate: a model call that throws passes as a malfunction', [down.outcome, down.why?.includes('model unavailable')], ['malfunction', true]);
 check('gate: a failed model call has no reason to block with', down.reason, undefined);
+check('gate: a malfunction keeps the cost and latency of the answer', [stray.costUsd, stray.durationMs], [0.0002, 900]);
 
 // --- OUTCOME LOG. @es REGISTRO DE DESENLACES.
 recordOutcome('voice', 's1', { outcome: 'block', costUsd: 0.0002, durationMs: 900, reason: goodBlock });
 recordOutcome('premise', 's1', { outcome: 'malfunction', costUsd: 0, durationMs: 4, why: 'nope' });
 
-const lines = readFileSync(outcomesPath(), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line));
+const readLog = () => {
+  try {
+    return readFileSync(outcomesPath(), 'utf8');
+  } catch {
+    return '';
+  }
+};
+const lines = readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line));
 
 check('log: one line per outcome', lines.length, 2);
 check('log: a line names judge, session, outcome, cost and latency', [lines[0].judge, lines[0].session, lines[0].outcome, lines[0].costUsd, lines[0].durationMs], ['voice', 's1', 'block', 0.0002, 900]);
 check('log: a line carries a timestamp', Number.isFinite(Date.parse(lines[0].ts)), true);
 check('log: a malfunction keeps its why', lines[1].why, 'nope');
 check('log: the reason is kept for a block', lines[0].reason, goodBlock);
-check('log: the file lives under the judge-gate state directory', outcomesPath().startsWith(path.resolve(process.env.HOOK_STATE_DIR)) && outcomesPath().includes('judge-gate'), true);
+check('log: the file lives under the judge-gate state directory', outcomesPath().startsWith(path.resolve(process.env.HOOK_STATE_DIR)) && path.basename(path.dirname(outcomesPath())) === 'judge-gate', true);
+recordOutcome('voice', 's2', { outcome: 'pass', costUsd: 0, durationMs: 1 });
+check('log: a second outcome is appended, the first is kept', readLog().split('\n').filter((line) => line !== '').length, 3);
 
 // --- MODEL COMMAND LINE. @es LÍNEA DE COMANDOS DEL MODELO.
 const args = modelArguments('haiku');
@@ -163,13 +181,23 @@ const fakeSpawn = (stdout, status = 0) => (command, argv, options) => {
   return { status, stdout, stderr: '' };
 };
 const reply = await askModel('PROMPT TEXT', { spawn: fakeSpawn(JSON.stringify({ result: '{"ok": true}', total_cost_usd: 0.00013, is_error: false })), timeoutMs: 5000 });
+const firstCall = spawned.at(-1);
 
 check('model: the answer is the result field', reply.answer, '{"ok": true}');
 check('model: the cost is total_cost_usd', reply.costUsd, 0.00013);
-check('model: the latency is measured around the call', Number.isFinite(reply.durationMs) && reply.durationMs >= 0, true);
-check('model: the prompt goes in on stdin', spawned.at(-1).options.input, 'PROMPT TEXT');
-check('model: the child is marked as nested', spawned.at(-1).options.env[NESTED_VARIABLE], '1');
-check('model: the child runs with the timeout', spawned.at(-1).options.timeout, 5000);
+const slowSpawn = (command, argv, options) => {
+  const until = Date.now() + 25;
+
+  while (Date.now() < until);
+
+  return fakeSpawn(JSON.stringify({ result: '{"ok": true}', total_cost_usd: 0 }))(command, argv, options);
+};
+
+check('model: the latency is the wall time around the call', (await askModel('x', { spawn: slowSpawn, timeoutMs: 5000 })).durationMs >= 20, true);
+check('model: a missing cost is zero', (await askModel('x', { spawn: fakeSpawn(JSON.stringify({ result: 'r' })), timeoutMs: 5000 })).costUsd, 0);
+check('model: the prompt goes in on stdin', firstCall.options.input, 'PROMPT TEXT');
+check('model: the child is marked as nested', firstCall.options.env[NESTED_VARIABLE], '1');
+check('model: the child runs with the timeout', firstCall.options.timeout, 5000);
 
 const thrownBy = async (stdout, status = 0) => {
   try {
@@ -182,9 +210,32 @@ const thrownBy = async (stdout, status = 0) => {
 };
 
 check('model: a non-zero exit throws a bilingual error', (await thrownBy('', 1)).includes('@es'), true);
+check('model: a non-zero exit throws even when it printed a valid envelope', (await thrownBy(JSON.stringify({ result: '{"ok": true}', is_error: false }), 1)).includes('@es'), true);
 check('model: an unreadable envelope throws a bilingual error', (await thrownBy('not json')).includes('@es'), true);
 check('model: an error envelope throws a bilingual error', (await thrownBy(JSON.stringify({ result: 'x', is_error: true }))).includes('@es'), true);
 check('model: an envelope with no result throws a bilingual error', (await thrownBy(JSON.stringify({ is_error: false }))).includes('@es'), true);
+
+// --- RUN IN-PROCESS. @es RUN EN PROCESO.
+check('nesting: the variable at 1 is nested', isNested({ [NESTED_VARIABLE]: '1' }), true);
+check('nesting: any other value or none is not nested', [isNested({ [NESTED_VARIABLE]: '0' }), isNested({ [NESTED_VARIABLE]: '2' }), isNested({})], [false, false, false]);
+
+const seen = [];
+const blockingModel = async (prompt, options) => {
+  seen.push(options);
+
+  return { answer: JSON.stringify({ ok: false, reason: goodBlock }), costUsd: 0.0002, durationMs: 700 };
+};
+const printed = await run('voice', payload({ session_id: 'run-1' }), { model: blockingModel });
+
+check('run: a block prints a Stop decision with its reason', JSON.parse(printed), { decision: 'block', reason: goodBlock });
+check('run: the model call gets the judge\'s timeout', seen.at(-1), { timeoutMs: voice.askTimeoutMs });
+check('run: the outcome is logged with the session', readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'run-1' && line.outcome === 'block' && line.judge === 'voice'), true);
+check('run: a pass prints nothing', await run('voice', payload(), { model: async () => ({ answer: '{"ok": true}', costUsd: 0, durationMs: 1 }) }), '');
+
+process.env[NESTED_VARIABLE] = '1';
+seen.length = 0;
+check('run: a nested process prints nothing and never asks the model', [await run('voice', payload(), { model: blockingModel }), seen.length], ['', 0]);
+delete process.env[NESTED_VARIABLE];
 
 // --- CLI. @es CLI.
 const RUN = path.join(HERE, 'run.mjs');
@@ -192,7 +243,7 @@ const runCli = (cliArgs, input, env = {}) => spawnSync(process.execPath, [RUN, .
 const continuedRun = runCli(['voice'], payload({ stop_hook_active: true }));
 
 check('cli: a continued stop exits 0 and prints nothing', [continuedRun.status, continuedRun.stdout, continuedRun.stderr], [0, '', '']);
-check('cli: the continued stop was logged', readFileSync(outcomesPath(), 'utf8').includes('"pass-continued"'), true);
+check('cli: the continued stop was logged', readLog().includes('"pass-continued"'), true);
 
 const nestedRun = runCli(['premise'], payload(), { [NESTED_VARIABLE]: '1' });
 
@@ -205,7 +256,7 @@ check('cli: an unknown judge exits 0 (a hook never holds a turn by its own fault
 const garbageRun = runCli(['voice'], 'garbage');
 
 check('cli: unreadable stdin exits 0 and prints nothing', [garbageRun.status, garbageRun.stdout], [0, '']);
-check('cli: unreadable stdin is logged as a malfunction', readFileSync(outcomesPath(), 'utf8').includes('"malfunction"'), true);
+check('cli: unreadable stdin is logged as a malfunction', readLog().includes('"malfunction"'), true);
 
 // --- WIRING. @es CABLEADO.
 const settings = JSON.parse(readFileSync(path.join(HERE, '..', 'settings.json'), 'utf8'));

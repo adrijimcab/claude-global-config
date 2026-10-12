@@ -38,8 +38,11 @@ function sessionOf(raw) {
   }
 }
 
-/** Runs the gate for `judgeName` over `raw`; returns the text to print ('' for none). @es Corre la compuerta; devuelve el texto a imprimir. */
-export async function run(judgeName, raw) {
+/**
+ * Runs the gate for `judgeName` over `raw`; returns the text to print ('' for none). `model` is the model call (a test seam).
+ * @es Corre la compuerta; devuelve el texto a imprimir. `model` es la llamada al modelo (punto de inyección de pruebas).
+ */
+export async function run(judgeName, raw, { model = askModel } = {}) {
   const judge = JUDGES[judgeName];
 
   if (judge === undefined) {
@@ -48,7 +51,7 @@ export async function run(judgeName, raw) {
     return '';
   }
 
-  const outcome = await decide({ judge, raw, nested: isNested(), ask: (prompt) => askModel(prompt, { timeoutMs: judge.askTimeoutMs }) });
+  const outcome = await decide({ judge, raw, nested: isNested(), ask: (prompt) => model(prompt, { timeoutMs: judge.askTimeoutMs }) });
 
   try {
     recordOutcome(judgeName, sessionOf(raw), outcome);

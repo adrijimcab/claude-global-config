@@ -22,9 +22,7 @@ function objectIn(text) {
   if (match === null) return undefined;
 
   try {
-    const parsed = JSON.parse(match[0]);
-
-    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined;
+    return JSON.parse(match[0]);
   } catch {
     return undefined;
   }
@@ -36,14 +34,16 @@ function objectIn(text) {
  * @es Lee la respuesta `answer` del modelo para el juez cuyos motivos de bloqueo empiezan por `marker`.
  */
 export function readVerdict(answer, marker) {
-  const verdict = objectIn(typeof answer === 'string' ? answer : '');
+  const verdict = objectIn(answer);
 
   if (verdict === undefined) return { kind: 'malfunction', why: 'the answer holds no JSON object @es la respuesta no trae un objeto JSON' };
   if (verdict.ok === true) return { kind: 'pass' };
   if (verdict.ok !== false) return { kind: 'malfunction', why: 'the field ok is not a boolean @es el campo ok no es booleano' };
-  if (typeof verdict.reason !== 'string' || !verdict.reason.trim().startsWith(marker)) {
+  const reason = typeof verdict.reason === 'string' ? verdict.reason.trim() : '';
+
+  if (!reason.startsWith(marker)) {
     return { kind: 'malfunction', why: `ok false without a reason starting with ${marker} @es ok false sin un motivo que empiece por ${marker}` };
   }
 
-  return { kind: 'block', reason: verdict.reason.trim() };
+  return { kind: 'block', reason };
 }
