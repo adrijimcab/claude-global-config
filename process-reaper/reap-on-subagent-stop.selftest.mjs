@@ -174,9 +174,17 @@ check('the record counts what was matched and killed', [first?.matched, first?.k
   check('with no worktree the agent id still reaps its scratch process', running(viaScratch.pid), false);
 
   // 5. What the payload says. @es Lo que dice el payload.
-  check('a payload without agent fields yields nothing', stoppedAgentOf({ hook_event_name: 'SubagentStop' }), {});
-  check('an empty agent id is no id', stoppedAgentOf({ agent_id: '', agent_transcript_path: '' }), {});
-  check('a transcript that is not a .jsonl has no meta to read', stoppedAgentOf({ agent_id: 'x'.repeat(10), agent_transcript_path: path.join(root, 'nothing.txt') }, () => ''), { agentId: 'xxxxxxxxxx' });
+  check('a payload without agent fields yields nothing', attempt(() => stoppedAgentOf({ hook_event_name: 'SubagentStop' })), {});
+  check('an empty agent id is no id', attempt(() => stoppedAgentOf({ agent_id: '', agent_transcript_path: '' })), {});
+  check('an agent id without a transcript is an id and no worktree', attempt(() => stoppedAgentOf({ agent_id: 'q'.repeat(10) })), { agentId: 'qqqqqqqqqq' });
+  check('a transcript that is not a .jsonl has no meta to read', attempt(() => stoppedAgentOf({ agent_id: 'x'.repeat(10), agent_transcript_path: path.join(root, 'nothing.txt') }, () => '')), { agentId: 'xxxxxxxxxx' });
+  const metaDirectory = path.join(root, 'meta-cases');
+  mkdirSync(metaDirectory);
+  writeFileSync(path.join(metaDirectory, 'agent-w.meta.json'), JSON.stringify({ worktreePath: path.join(root, 'would-be-worktree') }));
+  check('a transcript whose name only ends like .jsonl is not cut to find a meta', attempt(() => stoppedAgentOf({ agent_id: 'w'.repeat(10), agent_transcript_path: path.join(metaDirectory, 'agent-w.jsonX') }, () => '')), { agentId: 'wwwwwwwwww' });
+  writeFileSync(path.join(metaDirectory, 'agent-n.meta.json'), JSON.stringify({ worktreePath: 42 }));
+  check('a worktreePath that is not text is ignored', attempt(() => stoppedAgentOf({ agent_id: 'n'.repeat(10), agent_transcript_path: path.join(metaDirectory, 'agent-n.jsonl') }, () => '')), { agentId: 'nnnnnnnnnn' });
+  check('a meta file that is not JSON is ignored', (writeFileSync(path.join(metaDirectory, 'agent-j.meta.json'), '{oops'), attempt(() => stoppedAgentOf({ agent_id: 'j'.repeat(10), agent_transcript_path: path.join(metaDirectory, 'agent-j.jsonl') }, () => ''))), { agentId: 'jjjjjjjjjj' });
 
   // 6. The registration. @es El registro.
   const registered = JSON.parse(readFileSync(path.join(HERE, '..', 'hook-dispatch', 'manifests', 'subagent-stop.json'), 'utf8'));
