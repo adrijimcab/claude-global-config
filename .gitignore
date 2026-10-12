@@ -9,6 +9,8 @@
 !/rules/**
 !/lessons/
 !/lessons/**
+!/odd/
+!/odd/**
 !/checklists/
 !/checklists/**
 !/hooks/
