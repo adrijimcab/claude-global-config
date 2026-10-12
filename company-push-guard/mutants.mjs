@@ -60,6 +60,7 @@ const MUTANTS = [
   ['HEAD is not judged when the push names nothing', RANGE, 'if (selectsNothingElse && runGit', 'if (false && runGit'],
   ['what the remote already has is judged again', RANGE, "const range = [...revisions, '--not', ...remoteNames.map((name) => `--remotes=${name}`), '--'];", "const range = [...revisions, '--'];"],
   ['commit messages are not scanned', RANGE, "return scanMessage(message, names, `commit ${short(commit)} message`);", 'return [];'],
+  ['attribution in commit messages is not judged', RANGE, "return scanMessage(message, names, `commit ${short(commit)} message`);", "return scanMessage(message, names, `commit ${short(commit)} message`).filter((finding) => finding.name === 'claude');"],
   ['added lines are not scanned', RANGE, 'found.push(...scanText(entry.text, names, `${entry.path}:${entry.line} (${short(entry.commit)})`));', ''],
   ['added paths are not scanned', RANGE, 'found.push(...scanPaths([entry.path], names).map((finding) => ({ ...finding, where: `${entry.path} (${short(entry.commit)})` })));', ''],
   ['deleted paths are listed too', RANGE, "'--name-only', '--diff-filter=ACMRT', '--format=%x00%H'", "'--name-only', '--format=%x00%H'"],

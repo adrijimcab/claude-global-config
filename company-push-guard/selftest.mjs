@@ -118,6 +118,18 @@ scenario({ setup: clean, command: 'git push origin main', expected: 'allow', lab
 scenario({ setup: taintedMessage, command: 'git push origin main', expected: 'deny', label: 'company: name in a commit message', mention: 'message' });
 scenario({ setup: taintedLine, command: 'git push origin main', expected: 'deny', label: 'company: name in an added line, located as file:line', mention: 'src/a.ts:2' });
 scenario({ setup: taintedPath, command: 'git push origin main', expected: 'deny', label: 'company: name in an added path', mention: '.claude/notes.md' });
+for (const [path, term] of [['.cursor/rules/a.mdc', '.cursor/'], ['.windsurf/rules.md', '.windsurf/'], ['.atl/skill-registry.md', '.atl/'], ['.aider.conf.yml', '.aider*'], ['AGENTS.md', 'agents.md'], ['AGENT-LEDGER.md', 'agent-ledger*'], ['scripts/subagent-runner.ts', '*subagent*'], ['docs/agent-contract.md', '*agent-contract*'], ['rules.cursorrules', '*.cursorrules']]) {
+  scenario({ setup: (world) => commitFile(world, path, 'plain\n', 'docs: add a file'), command: 'git push origin main', expected: 'deny', label: `company: pushed tool PATH ${term}`, mention: term });
+}
+scenario({ setup: (world) => commitFile(world, 'src/cursor-styles.css', '.a { cursor: pointer; }\n', 'style: pointer on the card'), command: 'git push origin main', expected: 'allow', label: 'company: NEAR MISS "cursor:" in CSS, in a path and an added line' });
+scenario({ setup: (world) => commitFile(world, 'src/agents/list.ts', 'export const agents = [];\n', 'feat: list the sales agents'), command: 'git push origin main', expected: 'allow', label: 'company: NEAR MISS an "agents" folder is no tool path' });
+scenario({ setup: (world) => commitFile(world, 'src/b.ts', 'b\n', 'feat: b\n\nCo-Authored-By: Someone <s@x.test>'), command: 'git push origin main', expected: 'deny', label: 'company: attribution trailer in a commit message', mention: 'co authored by' });
+scenario({ setup: (world) => commitFile(world, 'src/b.ts', 'b\n', 'feat: b\n\nGenerated with a tool'), command: 'git push origin main', expected: 'deny', label: 'company: "Generated with" in a commit message' });
+scenario({ setup: (world) => commitFile(world, 'src/b.ts', 'b\n', 'fix: b\n\n(cherry picked from commit 84d60721d886557d75b57d5b8e6cb69b2ae7d135)'), command: 'git push origin main', expected: 'deny', label: 'company: cherry-pick provenance line in a commit message' });
+scenario({ setup: (world) => commitFile(world, 'src/b.ts', 'b\n', 'feat: b \u{1F916}'), command: 'git push origin main', expected: 'deny', label: 'company: robot emoji in a commit message' });
+scenario({ setup: (world) => commitFile(world, 'src/b.ts', 'b\n', 'test(visual): regenerated with the update script'), command: 'git push origin main', expected: 'allow', label: 'company: NEAR MISS "regenerated with" is not "generated with"' });
+scenario({ setup: (world) => commitFile(world, 'src/b.ts', 'Co-Authored-By: a documented trailer format\n', 'docs: explain the trailer format'), command: 'git push origin main', expected: 'allow', label: 'company: attribution wording in an ADDED LINE is content, not a message, and is not judged' });
+scenario({ world: personal, setup: (world) => commitFile(world, '.cursor/rules.mdc', 'x\n', 'feat: b\n\nCo-Authored-By: Someone'), command: 'git push origin main', expected: 'allow', label: 'personal remote: tool paths and attribution are never judged' });
 scenario({ setup: (world) => { taintedMessage(world); commitFile(world, 'src/b.ts', 'b\n', 'feat(b): add b'); commitFile(world, 'src/c.ts', 'c\n', 'feat(c): add c'); }, command: 'git push origin main', expected: 'deny', label: 'company: a tainted commit EARLY in a range of three' });
 scenario({ setup: (world) => commitFile(world, 'src/claudette.ts', 'const copilots = 1;\n', 'feat: claudette and copilots'), command: 'git push origin main', expected: 'allow', label: 'company: NEAR MISS claudette / copilots in message, path and line' });
 scenario({ setup: (world) => { taintedMessage(world); world.git('rm', '-q', 'src/a.ts'); world.commit('fix: remove it again'); }, command: 'git push origin main', expected: 'deny', label: 'company: a tainted commit stays tainted even when a later commit removes the file' });
@@ -294,6 +306,30 @@ report(verdictOf(`﻿${payloadAt('Bash', company.repo, 'git push --no-verify ori
   reset(company);
   report(reason.includes('COMPANY-PUSH GUARD REFUSED') && refused.problems.length === 0, 'dispatch.mjs: a company push naming a tool is refused through its own registration');
   report(!allowedReason.includes('COMPANY-PUSH GUARD') && allowed.problems.length === 0, 'dispatch.mjs: a clean company push passes through its own registration');
+}
+
+// --- the same through the dispatcher for the NEW families, each with a real-shaped Bash payload: a tool path and an
+// attribution trailer (hit), CSS and "regenerated with" (near miss).
+{
+  const ownManifest = join(company.repo, '..', 'own-manifest.json');
+  const refusalOf = async (setup) => {
+    setup(company);
+
+    const result = await dispatch(ownManifest, payloadAt('Bash', company.repo, 'git push origin main'));
+
+    reset(company);
+
+    return { reason: result.output?.hookSpecificOutput?.permissionDecisionReason ?? '', problems: result.problems.length };
+  };
+  const pathHit = await refusalOf((world) => commitFile(world, '.cursor/rules/a.mdc', 'x\n', 'docs: rules'));
+  const trailerHit = await refusalOf((world) => commitFile(world, 'src/b.ts', 'b\n', 'feat: b\n\nCo-Authored-By: Someone <s@x.test>'));
+  const cssMiss = await refusalOf((world) => commitFile(world, 'src/cursor-styles.css', '.a { cursor: pointer; }\n', 'style: pointer'));
+  const wordingMiss = await refusalOf((world) => commitFile(world, 'src/b.ts', 'b\n', 'test: regenerated with the update script'));
+
+  report(pathHit.reason.includes('COMPANY-PUSH GUARD REFUSED') && pathHit.reason.includes('.cursor/') && pathHit.problems === 0, 'dispatch.mjs: a pushed .cursor/ path is refused, naming the term');
+  report(trailerHit.reason.includes('COMPANY-PUSH GUARD REFUSED') && trailerHit.reason.includes('co authored by') && trailerHit.problems === 0, 'dispatch.mjs: a pushed Co-Authored-By trailer is refused, naming the phrase');
+  report(!cssMiss.reason.includes('COMPANY-PUSH GUARD') && cssMiss.problems === 0, 'dispatch.mjs: NEAR MISS, "cursor:" in CSS passes');
+  report(!wordingMiss.reason.includes('COMPANY-PUSH GUARD') && wordingMiss.problems === 0, 'dispatch.mjs: NEAR MISS, "regenerated with" passes');
 }
 
 // --- the wiring.
