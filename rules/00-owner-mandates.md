@@ -118,9 +118,6 @@ A written rule alone does not prevent a repeat (`memory-used-where-a-hook-must-e
    above remains the floor for what has no mechanism yet.
 3. **Where no mechanism is possible**, the record says why, and the rule text goes to the lessons file of its
    area (loaded only when that area is touched), never into the always-loaded set.
-@es Todo incidente se registra en el mismo turno con `capture.mjs`; su mecanismo (guard, gate o chequeo con un
-selftest que pruebe que discrimina) se construye en la PRIMERA ocurrencia cuando es posible; si no lo es, el
-registro dice por qué y el texto va al fichero de lecciones de su área, nunca al conjunto que se carga siempre.
 
 ## A CHANGE TO A SHARED RESOURCE IS COORDINATED WITH EVERY LIVE SESSION (owner directive 2026-10-11)
 
@@ -136,9 +133,7 @@ tooling repo, shared toolchains. Before changing one, the orchestrator runs this
    "stop at a safe point and reply when paused". **Pausing means not WRITING to that shared resource —
    never stopping work.** The pause names exactly the writes it forbids (for `~/.claude`: commits there and
    `capture.mjs`, which writes the live lessons ledger; for engram: every engram call while its server is
-   replaced); everything else — Agent launches, project work, other repositories — continues. Measured
-   2026-10-11: a pause that also forbade Agent launches left a session idle with three units queued; the
-   owner ordered that it never happen again.
+   replaced); everything else — Agent launches, project work, other repositories — continues.
 2. **Wait for every acknowledgement.** A peer that does not answer is not assumed paused; the change waits
    or goes to the owner.
 3. **Free the resource when processes hold it.** A paused session can still hold the resource open (each
@@ -152,11 +147,6 @@ tooling repo, shared toolchains. Before changing one, the orchestrator runs this
 
 Mechanism: the rule is enforced by a coordination window that commands mutating a shared resource require
 (backlog item, built test-first); until it lands, this text is the control.
-@es Un cambio a un recurso compartido (engram, gentle-ai y su sync, `~/.claude`, el tooling de b100,
-toolchains compartidos) se coordina con todas las sesiones vivas: anunciar y pedir pausa, esperar la
-confirmación de cada una, liberar los procesos que retienen el recurso solo cuando su sesión pausó,
-aplicar con respaldo y rollback, avisar que sigan (y reinicien si hace falta) y prueben, y dar el cambio
-por hecho solo cuando todas reportan que está bien; un fallo activa el rollback.
 
 ## Standing workflow premise — ODD + full contract + tooling leverage + senior audit stance (owner directive 2026-07-28)
 
@@ -179,11 +169,7 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
   cada decisión y un cierre que diga algo), también en un reporte de estado, en un turno lleno de
   herramientas y después de compactar. **Precedencia:** las reglas de brevedad («default to short
   answers», «choose the shorter response») gobiernan el LARGO, nunca la VOZ; una respuesta corta sigue
-  siendo Gentleman, y un log de commits con acentos no lo es. Causa medida el 2026-10-11: esas reglas de
-  brevedad se leían como permiso para escribir seco. Mecanismo: un juez de voz (hook `prompt` de `Stop`,
-  separado del juez de premisas, cuya rúbrica excluye el tono) que rechaza el cierre de un turno cuya
-  respuesta al dueño no tiene esa voz (en construcción, con su tasa de aciertos medida como la del juez de
-  premisas).
+  siendo Gentleman, y un log de commits con acentos no lo es.
 - **Código e identificadores, API pública, nombres de fichero, claves i18n:** inglés.
 - **Comentarios, JSDoc y documentación:** bilingües — inglés primero y el espejo `@es` en español con
   ortografía correcta (ñ, tildes, acentos; nunca aplanado a ASCII).
@@ -245,17 +231,11 @@ feature ODD queda verificada), el ORQUESTADOR hace, en el MISMO turno, las tres 
 5. **Sus procesos** (directiva del dueño 2026-10-12): todo proceso vivo o zombi de ese agente se mata al
    cerrarlo, sea cual sea su ejecutable (bash, sh, node, cmd, powershell). Se identifica porque su línea de
    comandos nombra el worktree del agente, su id o su scratch, y se mata su árbol entero
-   (`taskkill /PID <pid> /T /F`). Un proceso de otra sesión no se toca. Medido: bucles de espera `until …
-   sleep` vivieron unas 18 h tras su worker, y procesos de un worktree borrado siguen vivos desde el 2026-09-27.
+   (`taskkill /PID <pid> /T /F`). Un proceso de otra sesión no se toca.
 
-Reafirmado por el dueño el 2026-10-11 para toda sesión, también las nuevas: «siempre que se integra un
-agente, se borre su worktree y su rama local si la hizo y que se suba lo hecho a engram y lo encontrado y
-que surja que se arregle». Mecanismo: un guard `Stop` del orquestador que rechaza cerrar el turno mientras
+Mecanismo: un guard `Stop` del orquestador que rechaza cerrar el turno mientras
 quede un worktree cuyo contenido ya está integrado (`git cherry` vacío contra su rama de integración),
 limpio y sin actor vivo, y que la sesión creó o en el que trabajó (`integrated-worktree-guard`).
-@es Al integrar un agente: guardar en engram lo hecho y lo encontrado, borrar su worktree y su rama, y
-arreglar lo que surja; lo hace cumplir un guard `Stop` que rechaza el cierre de turno con un worktree ya
-integrado abierto.
 
 ## Resolver en el momento antes que encolar (directiva del dueño 2026-10-11, global)
 
@@ -271,10 +251,6 @@ no crezca, siempre que se pueda, SIEMPRE COMO REGLA».
   para ser su propio cambio con diseño abierto.
 - Lo resuelto en el momento también se registra, pero como HECHO con su comprobante (commit, medición), nunca
   como pendiente: la traza no se pierde y el backlog no crece.
-@es Resolve now rather than queue: a finding is fixed in the turn it appears, at the root and with its gates;
-it is queued as PENDING only when blocked externally, when it needs a decision only the owner holds, when it
-would preempt work in flight, or when it is large enough to be its own change — and the item names which. What
-is fixed at once is recorded as DONE with its receipt.
 
 ## Backlog maestro — todo hallazgo entra en el momento (directiva del dueño 2026-09-30, global; alcance
 corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
