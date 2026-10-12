@@ -89,6 +89,8 @@ check('rubric: a present-subjunctive second-person form is voseo, never a tú fa
 check('rubric: the subjunctive sentence sits inside rule 4, before the rule 5 pass', PROMPT.indexOf('A present-subjunctive second-person form') < PROMPT.indexOf('5. Answer {"ok": true} when the message is one or two lines'), true);
 check('rubric: a Spanish reply with tu or usted forms fails', PROMPT.includes('answer {"ok": false} when it addresses him with tú or usted forms (tienes, tiene usted, puedes, quieres, su as his possessive) instead of Rioplatense voseo (tenés, podés, querés, vos)'), true);
 check('rubric: quoted text, code and the words of other people do not count for voseo', PROMPT.includes('Quoted text, code and the words of other people do not count,'), true);
+check('rubric: su counts as usted only when its antecedent is the owner', PROMPT.includes('The possessive su or sus counts as usted only when its antecedent is the owner himself; judge it from the antecedent'), true);
+check('rubric: a su of a third person never asks to be turned into tu', PROMPT.includes('is never usted, so the reason must not ask to turn it into tu.'), true);
 check('rubric: tu alone is not a tuteo marker', PROMPT.includes('tu alone is normal in voseo and does not count'), true);
 check('rubric: a cold, stiff or bureaucratic reply fails', PROMPT.includes('reads cold, stiff or bureaucratic'), true);
 check('rubric: the wanted voice is simpatico, comfortable and pleasant', PROMPT.includes('simpático, comfortable and pleasant, the voice of a warm Argentine mentor'), true);

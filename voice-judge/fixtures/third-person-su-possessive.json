@@ -1,0 +1,6 @@
+{
+  "id": "third-person-su-possessive",
+  "expect": "pass",
+  "source": "real refusal 2026-10-12: the live judge read the possessive su as usted in \"medidas por su sesión\", \"Su prueba reprodujo\", \"Su brief ya no le pide\" and \"subió su declaración\", all of which refer to the Discovery session (third person), never to the owner; its suggested \"tu sesión\" would have misattributed the work",
+  "message": "Discovery me devolvió el informe y lo leí entero. Las cifras están medidas por su sesión, no por la mía, así que las marco con su nombre.\n\nSu prueba reprodujo el defecto con un worktree real. Su brief ya no le pide al worker tocar nada fuera de su carpeta, y la sesión subió su declaración al respaldo con su commit.\n\nSi querés, después reviso su rama."
+}
