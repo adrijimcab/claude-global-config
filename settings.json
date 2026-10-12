@@ -107,7 +107,7 @@
       {
         "hooks": [
           {
-            "command": "gentle-ai review stop-hook --agent claude-code",
+            "command": "node \"$HOME/.claude/review-site/stop-hook.mjs\"",
             "timeout": 30,
             "type": "command"
           }
@@ -165,7 +165,7 @@
       {
         "hooks": [
           {
-            "command": "gentle-ai review stop-hook --agent claude-code",
+            "command": "node \"$HOME/.claude/review-site/stop-hook.mjs\"",
             "timeout": 60,
             "type": "command"
           }

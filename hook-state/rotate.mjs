@@ -115,6 +115,7 @@ export const KINDS = Object.freeze([
   ['owner-language-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['owner-language-guard', 'guard.log', ARCHIVE, 'guard log'],
   ['review-cwd-guard', 'journal.jsonl', ARCHIVE, 'refusal and fail-open journal'],
+  ['review-site', 'journal.jsonl', ARCHIVE, 'review stop-hook decision journal'],
   ['stash-watch', 'observed.jsonl', ARCHIVE, 'observation journal'],
   ['stop-input-recorder', 'stops.jsonl', ARCHIVE, 'what each Stop hook received'],
   ['stash-watch', 'noticed.json', KEEP, 'the stash sets each session was shown'],
