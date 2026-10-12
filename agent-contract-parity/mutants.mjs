@@ -26,6 +26,7 @@ const REFUSAL = 'agent-contract-parity/refusal-text.mjs';
 const ROOT = 'agent-contract-parity/project-root.mjs';
 const PRESENCE = 'agent-contract-parity/contract-presence.mjs';
 const HOME = 'agent-contract-parity/user-home.mjs';
+const REAL = 'agent-contract-parity/real-path.mjs';
 
 const TOKEN_LINE = "const TOKEN_CHARACTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';";
 
@@ -110,6 +111,8 @@ const MUTANTS = [
   ['the process home is not a home', HOME, 'const homes = [homedir()];', 'const homes = [];'],
   ['the account profile is not a home', HOME, 'homes.push(userInfo().homedir);', ''],
   ['a directory is never a home', HOME, "=== '');", "=== 'x');"],
+  ['two different folders compare as the same', REAL, "=== '';", "!== '';"],
+  ['a path that does not exist is not made absolute', REAL, '    return path.resolve(directory);', '    return directory;'],
   // Project resolution / Resolución del proyecto
   ['CLAUDE_PROJECT_DIR is ignored', ROOT, "typeof env.CLAUDE_PROJECT_DIR === 'string' && env.CLAUDE_PROJECT_DIR !== '' ? env.CLAUDE_PROJECT_DIR : undefined", 'undefined'],
   ['the cwd is not searched upward', ROOT, 'if (path.dirname(dir) === dir) return undefined;', 'return undefined;'],

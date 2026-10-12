@@ -29,9 +29,11 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { homedir, userInfo } from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+
+import { realpathOf, sameFolder } from '../agent-contract-parity/real-path.mjs';
+import { userHomes } from '../agent-contract-parity/user-home.mjs';
 
 export const PROJECT_MARKER = path.join('.claude', 'CLAUDE.md');
 export const CONFIG_FILE = path.join('.claude', 'failure-capture.json');
@@ -39,14 +41,6 @@ export const LEDGER_FILE = path.join('.claude', 'lessons-ledger.md');
 export const GLOBAL_SCOPE = 'global';
 
 const CONFIG_KEYS = ['scope', 'workerContracts', 'loadedSetCeiling'];
-
-const realpathOf = (directory) => {
-  try {
-    return realpathSync.native(directory);
-  } catch {
-    return path.resolve(directory);
-  }
-};
 
 function git(directory, ...args) {
   const answer = spawnSync('git', ['-C', directory, ...args], { encoding: 'utf8', windowsHide: true });
@@ -65,33 +59,6 @@ export function mainCheckoutPath(directory) {
   if (top === undefined || common === undefined) return realpathOf(directory);
 
   return path.join(realpathOf(path.dirname(common)), path.relative(realpathOf(top), realpathOf(directory)));
-}
-
-/** Whether two paths name the same folder (Windows compares case-insensitively). @es Si dos rutas nombran la misma carpeta. */
-const sameFolder = (left, right) => path.relative(realpathOf(left), realpathOf(right)) === '';
-
-/**
- * Every folder whose `.claude/CLAUDE.md` is USER-level instructions, never a project: the process's home
- * (`HOME`/`USERPROFILE`, which a fixture overrides) AND the account's own profile, which the OS reports
- * whatever the environment says.
- *
- * MEASURED 2026-09-30: with only the first, a process whose HOME pointed at a fixture and whose cwd sat
- * outside it walked up to the REAL home, took `~/.claude/CLAUDE.md` for a project, and `init` appended an
- * `@lessons-ledger.md` section to the owner's global instructions — twice, the second time after a revert.
- * @es Toda carpeta cuyo `.claude/CLAUDE.md` son instrucciones de USUARIO, nunca un proyecto: el home del
- * proceso (que un fixture sobrescribe) Y el perfil real de la cuenta, que el SO informa diga lo que diga el
- * entorno. Medido el 2026-09-30: con solo el primero, `init` añadió una sección al CLAUDE.md global real.
- */
-function userHomes() {
-  const homes = [homedir()];
-
-  try {
-    homes.push(userInfo().homedir);
-  } catch {
-    // an account the OS cannot describe has no second home to stop at
-  }
-
-  return homes;
 }
 
 /**

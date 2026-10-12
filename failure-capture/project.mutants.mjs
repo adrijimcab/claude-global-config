@@ -26,7 +26,6 @@ const MUTANTS = [
   ['init rewrites an existing ledger', C, '  if (created) writeFileSync(PROJECT.ledgerFile,', '  writeFileSync(PROJECT.ledgerFile,'],
   ['a declared parity is never checked on promote', C, 'if (parity.refusal !== undefined) {', 'if (false) {'],
   ['only the first contract file has to carry the token', C, 'for (const file of WORKER_CONTRACTS) if (!readFileOr(file,', 'for (const file of WORKER_CONTRACTS.slice(0, 1)) if (!readFileOr(file,'],
-  ['the walk stops only at the process HOME, so a fixture HOME lets it reach the real one', 'failure-capture/project.mjs', '    homes.push(userInfo().homedir);', '    void userInfo;'],
   ['the project ceiling key is unknown to the config', P, "'workerContracts', 'loadedSetCeiling'];", "'workerContracts'];"],
   ['the retired parityGate key is accepted again', P, "const CONFIG_KEYS = ['scope', 'workerContracts', 'loadedSetCeiling'];", "const CONFIG_KEYS = ['scope', 'workerContracts', 'parityGate', 'loadedSetCeiling'];"],
   ['a fractional project ceiling is accepted', P, 'Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0', 'typeof config.loadedSetCeiling === \'number\' && config.loadedSetCeiling > 0'],
@@ -49,7 +48,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'bilingual-output', 'mutation-proof', 'hook-state'],
+  paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'],
   selftest: 'failure-capture/project.selftest.mjs',
   mutants: MUTANTS
 });
