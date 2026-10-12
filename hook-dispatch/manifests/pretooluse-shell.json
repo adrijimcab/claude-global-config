@@ -11,6 +11,7 @@
     "../../review-cwd-guard/guard.mjs",
     "../../worker-stash-guard/guard.mjs",
     "../../company-commit-guard/guard.mjs",
-    "../../company-push-guard/guard.mjs"
+    "../../company-push-guard/guard.mjs",
+    "../../shared-resource-guard/guard.mjs"
   ]
 }

@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "on 2026-10-12 a delegated writer restarted the shared local PROD (bin/www, port 3100) with FRT_URL set to its own ng serve port and later stopped PROD and its guard on :3000, cutting three other writers off the backend; a project now declares its shared resources in .claude/shared-resources.json and only the orchestrator session may start, stop or reconfigure them."
+}

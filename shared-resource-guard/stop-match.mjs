@@ -83,11 +83,9 @@ function namesPort(word, previous, port, bareIsPort) {
 /** Whether the single `word` is a declared process name or ends at a declared start path. @es Si `word` es un nombre de proceso declarado o termina en una ruta de arranque. */
 function namesProcess(word, resource, platform) {
   const bare = executableName(word);
-  const multiWord = word.trim().includes(' ');
-
-  const byName = !multiWord && (resource.processNames ?? []).some((name) => executableName(name) === bare);
+  const byName = (resource.processNames ?? []).some((name) => executableName(name) === bare);
   const startPaths = (resource.startCommands ?? []).flatMap((pattern) => pattern.slice(1)).filter(isPathLike);
-  const tokens = multiWord ? word.trim().split(' ').filter((token) => token !== '') : [word];
+  const tokens = word.trim().split(' ').filter((token) => token !== '');
 
   return byName || startPaths.some((startPath) => tokens.some((token) => endsAtSegment(token, startPath, platform)));
 }
