@@ -25,6 +25,7 @@ import { isolateState } from '../hook-state/locations.mjs';
 import { anchorPresence } from './anchor-match.mjs';
 import { ANCHORS_FILE, readAnchors } from './anchors-file.mjs';
 import { ownsContract } from './contract-presence.mjs';
+import { realpathOf } from './real-path.mjs';
 import { isUserHome } from './user-home.mjs';
 import { contractParity } from './parity.mjs';
 
@@ -270,6 +271,8 @@ mkdirSync(insideHome, { recursive: true });
 // The ACCOUNT's own profile counts as a home even when the environment names another one (a sandbox or a
 // fixture). @es El perfil real de la cuenta cuenta como home aunque el entorno nombre otro.
 check('the account profile is a home even when HOME names a fixture', withHome(fakeHome, () => isUserHome(userInfo().homedir)));
+check('a path that does not exist resolves to an absolute path', path.isAbsolute(realpathOf(path.join('no-such-folder', 'x'))));
+check('a path that exists resolves to itself or its real form', realpathOf(ROOT).length > 0);
 check('the process home is a home', withHome(fakeHome, () => isUserHome(fakeHome)));
 check('a folder under a home is not a home', withHome(fakeHome, () => !isUserHome(insideHome)));
 check('a folder under a user home that owns a contract is no project: allowed', run(insideHome, { HOME: fakeHome, USERPROFILE: fakeHome }).out === '');

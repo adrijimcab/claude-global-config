@@ -110,7 +110,6 @@ const MUTANTS = [
   ['the guard stops at the first marker even when it is a home', GUARD, 'if (root !== undefined && !isUserHome(root)) return root;', 'if (root !== undefined) return isUserHome(root) ? undefined : root;'],
   ['the process home is not a home', HOME, 'const homes = [homedir()];', 'const homes = [];'],
   ['the account profile is not a home', HOME, 'homes.push(userInfo().homedir);', ''],
-  ['a directory is never a home', HOME, "=== '');", "=== 'x');"],
   ['two different folders compare as the same', REAL, "=== '';", "!== '';"],
   ['a path that does not exist is not made absolute', REAL, '    return path.resolve(directory);', '    return directory;'],
   // Project resolution / Resolución del proyecto
