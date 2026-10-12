@@ -19,7 +19,7 @@
  */
 
 import { addedLines, pathsByCommit } from '../company-scan/diff-added.mjs';
-import { scanPaths, scanText } from '../company-scan/findings.mjs';
+import { scanMessage, scanPaths, scanText } from '../company-scan/findings.mjs';
 import { runGit } from '../company-remote/remotes.mjs';
 
 /** Flags that keep a diff to added content only, with no external drivers. @es Banderas que dejan solo el contenido añadido. */
@@ -63,7 +63,7 @@ export function rangeFindings(dir, revisions, remoteNames, names) {
   const found = messages.flatMap((entry) => {
     const [commit, message = ''] = entry.split('\u0001');
 
-    return scanText(message, names, `commit ${short(commit)} message`);
+    return scanMessage(message, names, `commit ${short(commit)} message`);
   });
 
   for (const entry of addedLines(runGit(dir, ['log', '-p', ...DIFF_FLAGS, '--format=%x00%H', ...range]).stdout)) {

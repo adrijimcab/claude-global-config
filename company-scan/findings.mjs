@@ -11,6 +11,8 @@
  */
 
 import { findNames } from '../company-config/names.mjs';
+import { attributionHits } from './attribution.mjs';
+import { toolPathTerms } from './tool-paths.mjs';
 
 /** The widest excerpt shown, so a minified line never floods a refusal. @es El extracto más ancho que se muestra. */
 const EXCERPT_WIDTH = 100;
@@ -29,14 +31,28 @@ export function scanText(text, names, where) {
   return findNames(text, names).map((hit) => ({ where, name: hit.name, excerpt: lineAround(text, hit.index) }));
 }
 
+/** `scanText` plus the attribution a COMMIT MESSAGE may not carry. @es `scanText` más la atribución que un MENSAJE DE COMMIT no puede llevar. */
+export function scanMessage(text, names, where) {
+  const lines = text.split('\n');
+  const attributed = attributionHits(text).map((hit) => ({ where, name: hit.name, excerpt: `(attribution) ${lines[hit.line - 1].trim().slice(0, EXCERPT_WIDTH)}` }));
+
+  return [...scanText(text, names, where), ...attributed];
+}
+
 /** Findings in added lines, reported as `path:line`. @es Hallazgos en líneas añadidas, como `ruta:línea`. */
 export function scanAdded(added, names) {
   return added.flatMap((entry) => scanText(entry.text, names, `${entry.path}:${entry.line}`));
 }
 
-/** Findings in file PATHS: a path that names a tool is itself a leak. @es Hallazgos en RUTAS de fichero. */
+/**
+ * Findings in file PATHS: a path that names a tool, or sits where a tool keeps its files, is itself a leak.
+ * @es Hallazgos en RUTAS de fichero: una ruta que nombra una herramienta, o que está donde una herramienta guarda sus ficheros, ya es una fuga.
+ */
 export function scanPaths(paths, names) {
-  return paths.flatMap((path) => scanText(path, names, path).map((finding) => ({ ...finding, excerpt: `(path) ${finding.excerpt}` })));
+  return paths.flatMap((path) => [
+    ...scanText(path, names, path).map((finding) => ({ ...finding, excerpt: `(path) ${finding.excerpt}` })),
+    ...toolPathTerms(path).map((term) => ({ where: path, name: term, excerpt: `(tool path) ${path}` }))
+  ]);
 }
 
 /** The bilingual list of findings, at most `limit` shown. @es La lista bilingüe de hallazgos, con tope `limit`. */

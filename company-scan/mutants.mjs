@@ -11,6 +11,8 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const DIFF = 'company-scan/diff-added.mjs';
 const FINDINGS = 'company-scan/findings.mjs';
+const PATHS = 'company-scan/tool-paths.mjs';
+const ATTRIBUTION = 'company-scan/attribution.mjs';
 
 const MUTANTS = [
   // --- diff-added.mjs
@@ -35,7 +37,39 @@ const MUTANTS = [
   ['a path finding no longer says it is a path', FINDINGS, 'excerpt: `(path) ${finding.excerpt}`', 'excerpt: finding.excerpt'],
   ['the rendered list is no longer capped', FINDINGS, 'const shown = findings.slice(0, limit);', 'const shown = findings;'],
   ['the "more" line is never added', FINDINGS, 'if (more > 0) lines.push', 'if (false) lines.push'],
-  ['the "more" line loses its Spanish half', FINDINGS, ' @es ... y ${more} más.`', '`']
+  ['the "more" line loses its Spanish half', FINDINGS, ' @es ... y ${more} más.`', '`'],
+  ['a tool path is no longer a path finding', FINDINGS, '...toolPathTerms(path).map(', '...[].map('],
+  ['a message is no longer checked for attribution', FINDINGS, 'return [...scanText(text, names, where), ...attributed];', 'return scanText(text, names, where);'],
+  ['an attribution finding stops quoting its line', FINDINGS, '`(attribution) ${lines[hit.line - 1].trim().slice(0, EXCERPT_WIDTH)}`', "'(attribution)'"],
+
+  // --- tool-paths.mjs: segment matching.
+  ['path matching becomes case-sensitive', PATHS, 'path.toLowerCase().replaceAll', 'path.replaceAll'],
+  ['a Windows separator is no longer read', PATHS, "replaceAll('\\\\', '/')", "replaceAll('\\\\', '\\\\')"],
+  ['a directory term also matches the last segment (a file)', PATHS, 'segments.slice(0, last).includes(directory)', 'segments.includes(directory)'],
+  ['a directory term needs no whole segment (substring of the path)', PATHS, 'segments.slice(0, last).includes(directory)', 'lowered.includes(directory)'],
+  ['a file name matches as a mere suffix of the path', PATHS, 'segments[last] === file', 'lowered.endsWith(file)'],
+  ['a file name matches at any segment, not only the last', PATHS, 'segments[last] === file', 'segments.includes(file)'],
+  ['a segment prefix matches anywhere inside the segment', PATHS, 'segment.startsWith(prefix)', 'segment.includes(prefix)'],
+  ['a segment suffix matches anywhere inside the segment', PATHS, 'segment.endsWith(suffix)', 'segment.includes(suffix)'],
+  ['a path fragment is searched only in the file name', PATHS, 'lowered.includes(fragment)', 'segments[last].includes(fragment)'],
+  ['the directory list loses .windsurf', PATHS, "'.windsurf', ", ''],
+  ['the directory list loses agent-lifecycle', PATHS, ", 'agent-lifecycle']", ']'],
+  ['the file list loses gemini.md', PATHS, ", 'gemini.md']", ']'],
+  ['the prefix list loses agent-ledger', PATHS, ", 'agent-ledger']", ']'],
+  ['the suffix list is empty', PATHS, "SEGMENT_SUFFIXES = ['.cursorrules']", 'SEGMENT_SUFFIXES = []'],
+  ['the fragment list loses agent-contract', PATHS, ", 'agent-contract']", ']'],
+
+  // --- attribution.mjs: phrases and term boundaries.
+  ['the "generated with" phrase is dropped', ATTRIBUTION, "  ['generated', 'with'],\n", ''],
+  ['the "cherrypicked from" phrase is dropped', ATTRIBUTION, ",\n  ['cherrypicked', 'from']", ''],
+  ['the "co authored by" phrase is dropped', ATTRIBUTION, "  ['co', 'authored', 'by'],\n", ''],
+  ['the robot emoji is no longer looked for', ATTRIBUTION, 'text.includes(ROBOT_FACE)', 'false'],
+  ['the robot emoji line is off by one', ATTRIBUTION, 'line: index + 1 }] : []', 'line: index }] : []'],
+  ['words of a phrase may be separated by anything', ATTRIBUTION, "term.gapBefore.trim() === ''", 'true'],
+  ['the phrase length is not checked, so a longer compound matches', ATTRIBUTION, 'parts.length === phrase.length && ', ''],
+  ['the joiners at a term edge are kept in the term, not in the gap', ATTRIBUTION, 'gap + leading', 'gap'],
+  ['trailing joiners no longer go to the gap of the next term', ATTRIBUTION, 'gap = run.slice(leading.length + text.length);', "gap = '';"],
+  ['line breaks inside a gap are not counted', ATTRIBUTION, "line += run.split('\\n').length - 1;", '']
 ];
 
 const survivors = runMutants({

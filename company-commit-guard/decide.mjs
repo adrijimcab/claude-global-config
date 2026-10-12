@@ -30,7 +30,7 @@ import { companyConfig } from '../company-config/config.mjs';
 import { invocationDirectory } from '../company-remote/invocation-directory.mjs';
 import { companyRemoteNames, runGit } from '../company-remote/remotes.mjs';
 import { addedLines } from '../company-scan/diff-added.mjs';
-import { scanAdded, scanPaths, scanText } from '../company-scan/findings.mjs';
+import { scanAdded, scanMessage, scanPaths } from '../company-scan/findings.mjs';
 import { gitInvocations } from '../shell-command/git-invocations.mjs';
 import { dialectOfTool } from '../shell-command/shell-command.mjs';
 import { parseCommitArguments } from './commit-arguments.mjs';
@@ -40,24 +40,24 @@ const DIFF_FLAGS = ['-U0', '--no-color', '--no-ext-diff', '--no-textconv'];
 
 /** The message sources of one commit, as findings. @es Los hallazgos de las fuentes de mensaje de un commit. */
 function messageFindings(parsed, { dir, command, invocationText, names }) {
-  const findings = parsed.texts.flatMap(({ label, text }) => scanText(text, names, label));
+  const findings = parsed.texts.flatMap(({ label, text }) => scanMessage(text, names, label));
 
   for (const file of parsed.files) {
     if (file === '-' || file === '/dev/stdin') {
       const at = command.indexOf(invocationText);
 
-      findings.push(...scanText(command.slice(at + invocationText.length), names, 'commit message (stdin)'));
+      findings.push(...scanMessage(command.slice(at + invocationText.length), names, 'commit message (stdin)'));
       continue;
     }
 
     try {
-      findings.push(...scanText(readFileSync(path.resolve(dir, file), 'utf8'), names, `commit message file ${file}`));
+      findings.push(...scanMessage(readFileSync(path.resolve(dir, file), 'utf8'), names, `commit message file ${file}`));
     } catch {
       // An unreadable message file is git's own error to report; this guard cannot judge it.
     }
   }
 
-  for (const revision of parsed.reuse) findings.push(...scanText(runGit(dir, ['log', '-1', '--format=%B', revision]).stdout, names, `reused message of ${revision}`));
+  for (const revision of parsed.reuse) findings.push(...scanMessage(runGit(dir, ['log', '-1', '--format=%B', revision]).stdout, names, `reused message of ${revision}`));
 
   return findings;
 }
