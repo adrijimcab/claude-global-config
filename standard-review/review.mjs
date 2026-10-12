@@ -74,18 +74,18 @@ function parse(argv) {
 }
 
 /**
- * Runs the command line: what it prints and its exit code. The model is injected for the selftest.
+ * Runs the command line: what it prints and its exit code. The model and the standard file are injected for the selftest.
  * @es Ejecuta la línea de órdenes: lo que imprime y su código de salida. El modelo se inyecta en el selftest.
  * @returns {Promise<{ exitCode: number, stdout: string, stderr: string }>}
  */
-export async function runCommandLine(argv, ask = askModel) {
+export async function runCommandLine(argv, { ask = askModel, standardFile } = {}) {
   const inputs = parse(argv);
 
   if (inputs === undefined) {
     return { exitCode: 2, stdout: '', stderr: 'Usage: node review.mjs --worktree <dir> --base <ref>. @es Uso: node review.mjs --worktree <dir> --base <ref>.' };
   }
   try {
-    const review = await reviewUnit({ ...inputs, ask });
+    const review = await reviewUnit({ ...inputs, ask, standardFile });
 
     return { exitCode: review.verdict === 'pass' ? 0 : 1, stdout: reportOf(review), stderr: '' };
   } catch (error) {

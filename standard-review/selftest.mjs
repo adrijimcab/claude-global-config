@@ -278,18 +278,19 @@ git(reviewed.root, 'commit', '-q', '-m', 'more');
 check('requirement: a pass does not survive a change of the tree', requirement(reviewed.root).reason, 'review-missing');
 
 // --- THE COMMAND LINE. @es LA LÍNEA DE ÓRDENES.
+const cliRun = (argv, ask) => runCommandLine(argv, { ask, standardFile });
 const cliFixture = repository();
 const args = ['--worktree', cliFixture.root, '--base', cliFixture.base];
-const cliFail = await runCommandLine(args, askWith(answerOf({})));
+const cliFail = await cliRun(args, askWith(answerOf({})));
 check('cli: a fail exits 1 and prints the finding', [cliFail.exitCode, cliFail.stdout.startsWith('FAIL tree '), cliFail.stdout.includes('src/b.mjs:1 [standard item 2] over-built')], [1, true, true]);
-const cliPass = await runCommandLine(args, askWith(passAnswer));
+const cliPass = await cliRun(args, askWith(passAnswer));
 check('cli: a pass exits 0 and prints the cost and time', [cliPass.exitCode, cliPass.stdout.startsWith('PASS tree '), cliPass.stdout.includes('$0.0200, 1.2 s')], [0, true, true]);
-const cliAgain = await runCommandLine(args, askWith('never read'));
+const cliAgain = await cliRun(args, askWith('never read'));
 check('cli: a recorded pass says so', [cliAgain.exitCode, cliAgain.stdout.includes('already recorded')], [0, true]);
-const cliGarbled = await runCommandLine(['--worktree', garbled.root, '--base', garbled.base], askWith('hmm'));
+const cliGarbled = await cliRun(['--worktree', garbled.root, '--base', garbled.base], askWith('hmm'));
 check('cli: an answer that is not a review exits 2', [cliGarbled.exitCode, cliGarbled.stderr.startsWith('NOT REVIEWED'), cliGarbled.stderr.includes('@es')], [2, true, true]);
 for (const bad of [[], ['--worktree', cliFixture.root], ['--base', 'x', '--worktree', cliFixture.root], [...args, 'extra'], ['--worktree', '', '--base', 'x']]) {
-  const usage = await runCommandLine(bad, askWith(passAnswer));
+  const usage = await cliRun(bad, askWith(passAnswer));
   check(`cli: arguments ${JSON.stringify(bad)} exit 2 with the usage`, [usage.exitCode, usage.stderr.startsWith('Usage:')], [2, true]);
 }
 const real = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'review.mjs')], { encoding: 'utf8' });
