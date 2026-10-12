@@ -32,6 +32,7 @@ config que necesita a su propio árbol y la conecta a sus propios scripts/CI.
 | `run-tool.mjs` | The launcher every gate runs its package through: finds the binary under `GATES_KIT_TOOLCHAIN`, exits 3 rather than pass when it cannot |
 | `findings-register.mjs` | The per-repository findings register (`.claude/FINDINGS.jsonl`): append-only findings and closures with receipts; `list`, `validate`, `add`, `close`. Every `templates/<stack>/AGENT-CONTRACT.md` names its path |
 | `templates/gitlab-ci-quality/`, `gitlab-ci-quality.md` | The copyable GitLab CI quality stage (styles lint, gitleaks, dependency audit, Lighthouse CI; all blocking) with the lint standard, the `.npmrc` pattern and its checker; the page holds the zero-offenders adoption rule and the open company items. Its files name nothing of this kit, because they land in company repositories |
+| `clean-code-profile/` | The ONE clean-code gate profile every project adopts (`profile.mjs`: complexity, size, duplication, layering, dead code, security lint, audit, each with tool, config, threshold and why), its checker `check.mjs <project root>` (per gate: enforced on the landing path, configured-only or absent, with evidence), and the adoption guide in its `README.md` |
 
 @es
 | Fichero | Qué contiene |
@@ -51,6 +52,7 @@ config que necesita a su propio árbol y la conecta a sus propios scripts/CI.
 | `run-tool.mjs` | El lanzador por el que cada gate corre su paquete: busca el binario bajo `GATES_KIT_TOOLCHAIN` y sale con 3 en vez de pasar si no puede |
 | `templates/gitlab-ci-quality/`, `gitlab-ci-quality.md` | La etapa de calidad de GitLab CI copiable (lint de estilos, gitleaks, auditoría de dependencias, Lighthouse CI; todos bloqueantes) con el estándar de lint, el patrón de `.npmrc` y su verificador; la página guarda la regla de adopción con cero infractores y los pendientes de la empresa. Sus ficheros no nombran nada de este kit, porque caen en repositorios de la empresa |
 | `findings-register.mjs` | El registro de hallazgos por repositorio (`.claude/FINDINGS.jsonl`): hallazgos y cierres con recibos, solo se añade; `list`, `validate`, `add`, `close`. Cada `templates/<stack>/AGENT-CONTRACT.md` nombra su ruta |
+| `clean-code-profile/` | El perfil ÚNICO de gates de código limpio que todo proyecto adopta (`profile.mjs`: complejidad, tamaño, duplicación, capas, código muerto, lint de seguridad, auditoría, cada uno con herramienta, config, umbral y porqué), su checker `check.mjs <raíz del proyecto>` (por gate: aplicado en el camino de aterrizaje, solo configurado o ausente, con evidencia) y la guía de adopción en su `README.md` |
 
 ## No hidden failures, through any channel (owner directive 2026-09-30, absolute)
 
