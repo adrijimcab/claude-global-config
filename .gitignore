@@ -318,3 +318,7 @@
 !/hook-reload-probe/*.mjs
 !/hook-reload-probe/fixtures/
 !/hook-reload-probe/fixtures/*
+
+# Reaps the processes a closed agent leaves behind. @es Siega los procesos que deja un agente cerrado.
+!/process-reaper/
+!/process-reaper/**
