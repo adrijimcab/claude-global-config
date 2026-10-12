@@ -130,6 +130,9 @@
 !/voice-judge/
 !/voice-judge/**
 /voice-judge/state/
+!/judge-gate/
+!/judge-gate/**
+/judge-gate/state/
 !/delegation-receipts/
 !/delegation-receipts/**
 /delegation-receipts/state/

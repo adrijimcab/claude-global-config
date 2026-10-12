@@ -3,7 +3,7 @@
  * The latency the premise judge adds to a turn, read from the transcripts the harness already writes. Every
  * Stop leaves a `system` record of subtype `stop_hook_summary` whose `hookInfos` lists each Stop hook with its
  * `durationMs` (seen in Claude Code 2.1.292 transcripts). The judge's entry is the one whose label holds
- * `PROMPT_SIGNATURE`, the rubric's first line. Stop hooks run in parallel, so what the judge ADDS to a stop is
+ * the gate command of the premise judge (`hookCommand('premise')`). Stop hooks run in parallel, so what the judge ADDS to a stop is
  * how much longer it ran than the slowest other hook: `max(0, judge - slowest other)`.
  *
  *   node latency.mjs [--projects <dir>] [--since <ISO date>]
@@ -18,7 +18,7 @@
  *
  * @es La latencia que el juez de premisas añade a un turno, leída de los transcripts que el harness ya escribe:
  * cada Stop deja un registro `system` `stop_hook_summary` cuyo `hookInfos` lista cada hook con su `durationMs`.
- * La entrada del juez es la que lleva `PROMPT_SIGNATURE`. Los hooks de Stop corren en paralelo, así que lo que
+ * La entrada del juez es la que lleva su comando de compuerta (`hookCommand('premise')`). Los hooks de Stop corren en paralelo, así que lo que
  * AÑADE el juez es cuánto más tardó que el más lento de los otros. Imprime un JSON con las cifras y, si ningún
  * resumen lleva al juez, las etiquetas que sí llevan, para que un formato distinto del supuesto se vea. Sale
  * con 0 impreso y 2 rechazado. NO VERIFICADO: que `hookInfos` liste un hook `prompt` y con qué etiqueta (H8).
@@ -32,7 +32,7 @@ import { parseArgs } from 'node:util';
 
 import { medianOf, percentile95 } from '../hook-dispatch/latency.mjs';
 import { claudeHome } from '../hook-state/locations.mjs';
-import { PROMPT_SIGNATURE } from './prompt.mjs';
+import { hookCommand } from '../judge-gate/judges.mjs';
 
 /** Labels listed when no summary carries the judge. @es Etiquetas listadas cuando ningún resumen lleva al juez. */
 const LABELS_SHOWN = 10;
@@ -49,7 +49,7 @@ export function judgeLatency(record) {
   if (record?.type !== 'system' || record.subtype !== 'stop_hook_summary' || !Array.isArray(record.hookInfos)) return undefined;
 
   const timed = record.hookInfos.filter((info) => Number.isFinite(info?.durationMs));
-  const judge = timed.find((info) => labelOf(info).includes(PROMPT_SIGNATURE));
+  const judge = timed.find((info) => labelOf(info).includes(hookCommand('premise')));
 
   if (judge === undefined) return undefined;
 

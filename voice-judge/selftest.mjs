@@ -42,6 +42,7 @@ process.on('exit', () => {
 });
 
 const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./prompt.mjs');
+const { JUDGES: GATE_JUDGES, hookCommand } = await import('../judge-gate/judges.mjs');
 const { MARKER: PREMISE_MARKER } = await import('../premise-judge/prompt.mjs');
 const { JUDGES, VOICE_MECHANISM, evaluate, journalJudgeBlocks } = await import('../premise-judge/journal-guard.mjs');
 const { digestInput, firesPath, journalPath } = await import('../hook-state/journal.mjs');
@@ -57,15 +58,16 @@ const check = (label, actual, expected) => {
 
 // --- WIRING. @es CABLEADO.
 const settings = JSON.parse(readFileSync(path.join(HERE, '..', 'settings.json'), 'utf8'));
-const promptHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks ?? []).filter((hook) => hook.type === 'prompt' && hook.prompt.startsWith(`${PROMPT_SIGNATURE}\n`));
+const commandHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks ?? []).filter((hook) => hook.command === hookCommand('voice'));
 
-check('settings: exactly one prompt Stop hook is the voice judge', promptHooks.length, 1);
-check('settings: its prompt is the rubric of prompt.mjs, byte for byte', promptHooks[0]?.prompt === PROMPT, true);
-check('settings: its timeout is the pinned one', promptHooks[0]?.timeout, TIMEOUT_SECONDS);
+check('settings: exactly one command Stop hook runs the voice judge through the gate', commandHooks.length, 1);
+check('settings: its timeout is the pinned one', commandHooks[0]?.timeout, TIMEOUT_SECONDS);
+check('rubric: the gate runs this rubric, the single source', GATE_JUDGES.voice.prompt === PROMPT, true);
 check('rubric: starts with its signature', PROMPT.startsWith(`${PROMPT_SIGNATURE}\n`), true);
 check('rubric: the signature is not the premise judge\'s', PROMPT_SIGNATURE.includes('premise-judge'), false);
 check('rubric: one $ and it is $ARGUMENTS', [PROMPT.split('$').length - 1, PROMPT.split('$ARGUMENTS').length - 1], [1, 1]);
-check('rubric: passes on stop_hook_active', PROMPT.includes('If the input field stop_hook_active is true, answer {"ok": true}.'), true);
+check('rubric: the gate passes continued stops in code', PROMPT.includes('The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.'), true);
+check('rubric: the model is no longer asked to test stop_hook_active', PROMPT.includes('If the input field stop_hook_active'), false);
 check('rubric: judges only the final message', PROMPT.includes('Judge only the field last_assistant_message.'), true);
 check('rubric: never judges earlier messages or the transcript', PROMPT.includes('Never judge earlier messages or anything you could read through transcript_path.'), true);
 check('rubric: passes a message addressed to a subagent or peer', PROMPT.includes('addressed to a subagent or a peer session rather than to the owner (for example a brief with MEASURED: and HYPOTHESIS: lines'), true);
@@ -76,7 +78,7 @@ check('rubric: voseo does not rescue a changelog', PROMPT.includes('Voseo does n
 check('rubric: prose that explains the why with a closing is the one exception', PROMPT.includes('full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands'), true);
 check('rubric: prose with a supporting list passes', PROMPT.includes('when prose carries the message and a list only supports it (a few short items, or a command block the owner must run)'), true);
 check('rubric: unsure passes', PROMPT.includes('When unsure, answer {"ok": true}.'), true);
-check('rubric: the signature is the v4 line', PROMPT_SIGNATURE, 'voice-judge rubric v4.');
+check('rubric: the signature is the v5 line', PROMPT_SIGNATURE, 'voice-judge rubric v5.');
 check('rubric: tuteo fails only on a quoted tú or usted word, never on a reply with no second person', PROMPT.includes('Rule 4 fails only a tú or usted word that actually appears, and the reason must quote it: a reply with no second-person verb at all'), true);
 check('rubric: a first-person reply is not cold for lacking a second-person verb', PROMPT.includes('a reply is never failed for not addressing him with a second-person verb'), true);
 check('rubric: a Spanish reply with tu or usted forms fails', PROMPT.includes('answer {"ok": false} when it addresses him with tú or usted forms (tienes, tiene usted, puedes, quieres, su as his possessive) instead of Rioplatense voseo (tenés, podés, querés, vos)'), true);

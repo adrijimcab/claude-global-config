@@ -18,7 +18,8 @@ const GUARD = 'premise-judge/journal-guard.mjs';
 
 const MUTANTS = [
   // --- THE RUBRIC AND ITS WIRING.
-  ['the rubric stops passing on stop_hook_active', PROMPT, "  '1. If the input field stop_hook_active is true, answer {\"ok\": true}.',\n", ''],
+  ['the rubric stops telling the model the gate passes continued stops', PROMPT, "  '1. The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.',\n", ''],
+  ['the rubric asks the model to test stop_hook_active again', PROMPT, 'so you only see first stops.', 'so you only see first stops. If the input field stop_hook_active is true, answer ok.'],
   ['the rubric judges more than the final message', PROMPT, 'Judge only the field last_assistant_message.', 'Judge the whole input.'],
   ['the rubric judges the transcript too', PROMPT, ' Never judge earlier messages or anything you could read through transcript_path.', ''],
   ['the rubric stops passing briefs to subagents', PROMPT, 'addressed to a subagent or a peer session rather than to the owner', 'addressed to the owner'],
@@ -28,7 +29,7 @@ const MUTANTS = [
   ['the rubric drops the prose exception', PROMPT, 'The one exception is a body whose full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands.', ''],
   ['the rubric blocks prose with a supporting list', PROMPT, 'Answer {"ok": true} when prose carries the message and a list only supports it', 'Answer ok false when a list is present'],
   ['the rubric stops looking at what carries the reply', PROMPT, 'Look at what CARRIES it:', 'Look at it:'],
-  ['the signature is still v1', PROMPT, "'voice-judge rubric v4.'", "'voice-judge rubric v1.'"],
+  ['the signature is still v1', PROMPT, "'voice-judge rubric v5.'", "'voice-judge rubric v1.'"],
   ['a reply with no second person can fail as tuteo', PROMPT, ' Rule 4 fails only a tú or usted word that actually appears, and the reason must quote it: a reply with no second-person verb at all, written in the first person ("cierro la unidad", "me traiga") and the third person ("tiene que quedar"), is not tuteo.', ''],
   ['a first-person reply can fail as cold for lacking a second-person verb', PROMPT, ' Sentences in the first person (cierro, paso, lo medí, me traiga) are a first-person voice, so a reply that explains its why in them is not cold, and a reply is never failed for not addressing him with a second-person verb.', ''],
   ['the rubric blocks when unsure', PROMPT, 'When unsure, answer {"ok": true}.', 'When unsure, answer ok false.'],
@@ -47,10 +48,9 @@ const MUTANTS = [
   ['the rubric drops the mentor voice', PROMPT, 'Gentleman mentor voice: prose that talks to the person', 'a neutral voice: text that talks to the person'],
   ['the rubric spells the marker literally', PROMPT, 'starts with the word VOICE-JUDGE followed by a colon', 'starts with VOICE-JUDGE:'],
   ['the rubric loses its signature line', PROMPT, '  PROMPT_SIGNATURE,\n', ''],
-  ['the rubric drifts from the settings entry', PROMPT, 'for voice only', 'for tone only'],
   ['the pinned timeout is not the settings one', PROMPT, 'TIMEOUT_SECONDS = 30', 'TIMEOUT_SECONDS = 20'],
   ['the marker is not what the rubric spells', PROMPT, "MARKER = 'VOICE-JUDGE:'", "MARKER = 'VOICE JUDGE:'"],
-  ['the signature is the premise judge\'s', PROMPT, "'voice-judge rubric v4.'", "'premise-judge rubric v2.'"],
+  ['the signature is the premise judge\'s', PROMPT, "'voice-judge rubric v5.'", "'premise-judge rubric v2.'"],
 
   // --- THE SHARED JOURNAL GUARD, FOR THE VOICE JUDGE.
   ['the guard does not journal the voice judge', GUARD, '  { mechanism: VOICE_MECHANISM, marker: VOICE_MARKER },\n', ''],
@@ -65,7 +65,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['voice-judge', 'premise-judge', 'hook-state', 'hook-dispatch', 'bilingual-output', 'settings.json'],
+  paths: ['voice-judge', 'premise-judge', 'judge-gate', 'hook-state', 'hook-dispatch', 'bilingual-output', 'settings.json'],
   selftest: 'voice-judge/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

@@ -21,15 +21,15 @@ const LATENCY = 'premise-judge/latency.mjs';
 
 const MUTANTS = [
   // --- THE RUBRIC AND ITS WIRING.
-  ['the rubric stops passing on stop_hook_active', PROMPT, "  '1. If the input field stop_hook_active is true, answer {\"ok\": true}.',\n", ''],
+  ['the rubric stops telling the model the gate passes continued stops', PROMPT, "  '1. The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.',\n", ''],
+  ['the rubric asks the model to test stop_hook_active again', PROMPT, 'so you only see first stops.', 'so you only see first stops. If the input field stop_hook_active is true, answer ok.'],
   ['the rubric drops the own-decision case', PROMPT, '(c) The message states its own decision', '(x) The message states its own decision'],
   ['the rubric brings case d back', PROMPT, "  '4. In every other case", "  '   (d) A reply is judged for a state.',\n  '4. In every other case"],
   ['rule 4 lets any unverified claim pass', PROMPT, 'as unverified passes ONLY when it cannot be measured this turn (', 'as unverified passes ('],
   ['the rubric counts four cases', PROMPT, 'in one of these three cases', 'in one of these four cases'],
-  ['the signature is still v3', PROMPT, 'premise-judge rubric v4.', 'premise-judge rubric v3.'],
+  ['the signature is still v3', PROMPT, 'premise-judge rubric v5.', 'premise-judge rubric v3.'],
   ['the rubric spells the marker literally', PROMPT, 'starts with the word PREMISE-JUDGE followed by a colon', 'starts with PREMISE-JUDGE:'],
   ['the rubric loses its signature line', PROMPT, '  PROMPT_SIGNATURE,\n', ''],
-  ['the rubric drifts from the settings entry', PROMPT, 'and whenever you are unsure, answer', 'and when unsure, answer'],
   ['the pinned timeout is not the settings one', PROMPT, 'TIMEOUT_SECONDS = 30', 'TIMEOUT_SECONDS = 20'],
   ['the marker is not what the rubric spells', PROMPT, "MARKER = 'PREMISE-JUDGE:'", "MARKER = 'PREMISE JUDGE:'"],
 
@@ -70,7 +70,7 @@ const MUTANTS = [
   ['any system record is read as a summary', LATENCY, "record.subtype !== 'stop_hook_summary' || !Array", '!Array'],
   ['a summary with no hook list is read', LATENCY, " || !Array.isArray(record.hookInfos)) return undefined;", ') return undefined;'],
   ['an entry with no duration is timed', LATENCY, 'const timed = record.hookInfos.filter((info) => Number.isFinite(info?.durationMs));', 'const timed = record.hookInfos;'],
-  ['the judge is not found by its signature', LATENCY, 'labelOf(info).includes(PROMPT_SIGNATURE)', "labelOf(info).includes('x-none')"],
+  ['the judge is not found by its signature', LATENCY, "labelOf(info).includes(hookCommand('premise'))", "labelOf(info).includes('x-none')"],
   ['the judge is its own slowest other', LATENCY, '.filter((info) => info !== judge)', ''],
   ['a judge alone is compared with nothing', LATENCY, 'Math.max(0, ...timed', 'Math.max(...timed'],
   ['a judge faster than another adds negative time', LATENCY, 'addedMs: Math.max(0, judge.durationMs - slowestOther)', 'addedMs: judge.durationMs - slowestOther'],
@@ -86,7 +86,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['premise-judge', 'hook-state', 'hook-dispatch', 'bilingual-output', 'settings.json'],
+  paths: ['premise-judge', 'judge-gate', 'voice-judge', 'hook-state', 'hook-dispatch', 'bilingual-output', 'settings.json'],
   selftest: 'premise-judge/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

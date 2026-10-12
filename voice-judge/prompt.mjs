@@ -26,7 +26,7 @@
 export const MARKER = 'VOICE-JUDGE:';
 
 /** The first line of the rubric: how this hook is told apart among the Stop hooks of a transcript. @es La primera línea de la rúbrica. */
-export const PROMPT_SIGNATURE = 'voice-judge rubric v4.';
+export const PROMPT_SIGNATURE = 'voice-judge rubric v5.';
 
 /** The timeout of the hook, in seconds: the documented default, written down so the selftest pins it. @es El timeout del hook, en segundos. */
 export const TIMEOUT_SECONDS = 30;
@@ -37,7 +37,7 @@ export const PROMPT = [
   'You review the FINAL message of one assistant turn for voice only. The hook input JSON is: $ARGUMENTS',
   '',
   'Rules, in order:',
-  '1. If the input field stop_hook_active is true, answer {"ok": true}.',
+  '1. The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.',
   '2. Judge only the field last_assistant_message. Never judge earlier messages or anything you could read through transcript_path.',
   '3. Answer {"ok": true} when the message is addressed to a subagent or a peer session rather than to the owner (for example a brief with MEASURED: and HYPOTHESIS: lines, or instructions to "the worker").',
   '4. When the message is a reply to the owner written in Spanish, answer {"ok": false} when it addresses him with tú or usted forms (tienes, tiene usted, puedes, quieres, su as his possessive) instead of Rioplatense voseo (tenés, podés, querés, vos). Quoted text, code and the words of other people do not count, and before citing a tú form check its subject: a verb whose subject is a thing or a third person ("el juez de voz ... Revisa mi mensaje") is not a tú form. Voseo forms (tenés, probalo, fijate, decime, avisame) are correct and never a failure, and the possessive tu alone is normal in voseo and does not count. Rule 4 fails only a tú or usted word that actually appears, and the reason must quote it: a reply with no second-person verb at all, written in the first person ("cierro la unidad", "me traiga") and the third person ("tiene que quedar"), is not tuteo.',

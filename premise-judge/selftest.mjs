@@ -42,6 +42,7 @@ process.on('exit', () => {
 });
 
 const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./prompt.mjs');
+const { JUDGES, hookCommand } = await import('../judge-gate/judges.mjs');
 const { MECHANISM, REASON_LIMIT, TAIL_RECORDS, evaluate, journalJudgeBlocks, judgeReasons } = await import('./journal-guard.mjs');
 const { judgeLatency, latencyReport, main: latencyMain } = await import('./latency.mjs');
 const { digestInput, firesPath, journalPath } = await import('../hook-state/journal.mjs');
@@ -57,19 +58,20 @@ const check = (label, actual, expected) => {
 
 // --- WIRING. @es CABLEADO.
 const settings = JSON.parse(readFileSync(path.join(HERE, '..', 'settings.json'), 'utf8'));
-const promptHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks ?? []).filter((hook) => hook.type === 'prompt' && hook.prompt.startsWith(`${PROMPT_SIGNATURE}\n`));
+const commandHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks ?? []).filter((hook) => hook.command === hookCommand('premise'));
 
-check('settings: exactly one prompt Stop hook is the premise judge', promptHooks.length, 1);
-check('settings: its prompt is the rubric of prompt.mjs, byte for byte', promptHooks[0]?.prompt === PROMPT, true);
-check('settings: its timeout is the pinned one', promptHooks[0]?.timeout, TIMEOUT_SECONDS);
+check('settings: exactly one command Stop hook runs the premise judge through the gate', commandHooks.length, 1);
+check('settings: its timeout is the pinned one', commandHooks[0]?.timeout, TIMEOUT_SECONDS);
+check('rubric: the gate runs this rubric, the single source', JUDGES.premise.prompt === PROMPT, true);
 check('rubric: starts with its signature', PROMPT.startsWith(`${PROMPT_SIGNATURE}\n`), true);
 check('rubric: one $ and it is $ARGUMENTS', [PROMPT.split('$').length - 1, PROMPT.split('$ARGUMENTS').length - 1], [1, 1]);
-check('rubric: passes on stop_hook_active', PROMPT.includes('If the input field stop_hook_active is true, answer {"ok": true}.'), true);
+check('rubric: the gate passes continued stops in code', PROMPT.includes('The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.'), true);
+check('rubric: the model is no longer asked to test stop_hook_active', PROMPT.includes('If the input field stop_hook_active'), false);
 check('rubric: judges an own decision justified as the easier path while it names a better one', PROMPT.includes('(c) The message states its own decision or recommendation and justifies it as the easier'), true);
 check('rubric: unverified passes only when it cannot be measured this turn', PROMPT.includes("passes ONLY when it cannot be measured this turn (another machine, the future, a third party's intent, a cost not yet incurred)"), true);
 check('rubric: case d is retired', PROMPT.includes('(d) '), false);
 check('rubric: three cases', PROMPT.includes('in one of these three cases'), true);
-check('rubric: the signature is the v4 line', PROMPT_SIGNATURE, 'premise-judge rubric v4.');
+check('rubric: the signature is the v5 line', PROMPT_SIGNATURE, 'premise-judge rubric v5.');
 check('rubric: never holds the literal marker', PROMPT.includes(MARKER), false);
 check('rubric: spells the marker in words', PROMPT.includes('starts with the word PREMISE-JUDGE followed by a colon'), true);
 check('rubric: the marker is what the words spell', MARKER, 'PREMISE-JUDGE:');
@@ -178,7 +180,7 @@ check('hook: as its own process it journals', journal().some((record) => record.
 
 // --- LATENCY. @es LATENCIA.
 const summary = (infos, timestamp = '2026-10-06T10:00:00.000Z') => ({ type: 'system', subtype: 'stop_hook_summary', timestamp, hookInfos: infos });
-const judgeInfo = (durationMs) => ({ command: PROMPT, durationMs });
+const judgeInfo = (durationMs) => ({ command: hookCommand('premise'), durationMs });
 const latencyOf = (record) => {
   try {
     return judgeLatency(record);
