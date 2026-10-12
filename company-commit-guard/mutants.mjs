@@ -28,7 +28,11 @@ const MUTANTS = [
   ['/dev/stdin is no longer read as the heredoc', DECIDE, " || file === '/dev/stdin'", ''],
   ['a -F file is resolved against the guard\'s cwd, not the repository', DECIDE, 'readFileSync(path.resolve(dir, file), \'utf8\')', 'readFileSync(file, \'utf8\')'],
   ['a reused commit message is no longer read', DECIDE, "for (const revision of parsed.reuse) findings.push(", "for (const revision of []) findings.push("],
-  ['message texts are no longer scanned', DECIDE, 'const findings = parsed.texts.flatMap(({ label, text }) => scanText(text, names, label));', 'const findings = [];'],
+  ['attribution is no longer judged in the -m / --trailer texts', DECIDE, 'scanMessage(text, names, label))', "scanMessage(text, names, label).filter((finding) => finding.name === 'claude'))"],
+  ['attribution is no longer judged in the heredoc body', DECIDE, "names, 'commit message (stdin)'));", "names, 'commit message (stdin)').filter((finding) => finding.name === 'claude'));"],
+  ['attribution is no longer judged in a -F message file', DECIDE, 'names, `commit message file ${file}`));', "names, `commit message file ${file}`).filter((finding) => finding.name === 'claude'));"],
+  ['attribution is no longer judged in a reused message', DECIDE, 'names, `reused message of ${revision}`));', "names, `reused message of ${revision}`).filter((finding) => finding.name === 'claude'));"],
+  ['message texts are no longer scanned', DECIDE, 'const findings = parsed.texts.flatMap(({ label, text }) => scanMessage(text, names, label));', 'const findings = [];'],
 
   // --- decide.mjs: the committed content.
   ['-a / --only / a pathspec no longer compare with HEAD', DECIDE, "parsed.all || parsed.only || parsed.paths.length > 0 ? 'HEAD' : '--cached'", "'--cached'"],

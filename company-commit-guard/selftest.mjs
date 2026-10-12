@@ -121,6 +121,33 @@ scenario({ setup: stage('src/a.ts', 'export const a = 1;\n'), command: 'git comm
 scenario({ setup: stage('src/claudette.ts', 'const claudette = "copilots";\n'), command: 'git commit -m "feat: claudette"', expected: 'allow', label: 'company: NEAR MISS claudette / copilots in message, path and line' });
 scenario({ setup: (world) => { world.write('.claude/old.md', 'x\n'); world.commit('chore: seed'); world.git('rm', '-q', '.claude/old.md'); }, command: 'git commit -m "chore: remove the leftover"', expected: 'allow', label: 'company: DELETING a tainted path is allowed (cleaning up)' });
 
+// --- AI tool PATHS by segment, and attribution in the MESSAGE (company-scan/tool-paths.mjs, attribution.mjs).
+for (const [path, label] of [
+  ['.cursor/rules/a.mdc', '.cursor/'], ['.gemini/settings.json', '.gemini/'], ['.codex/config.toml', '.codex/'], ['.opencode/x.json', '.opencode/'],
+  ['.kimi/x.json', '.kimi/'], ['.windsurf/rules.md', '.windsurf/'], ['.aider.conf.yml', '.aider*'], ['.atl/skill-registry.md', '.atl/'],
+  ['.mimocode/x.json', '.mimocode/'], ['.playwright-mcp/page.yml', '.playwright-mcp/'], ['.agents/x.md', '.agents/'], ['AGENTS.md', 'AGENTS.md'],
+  ['docs/GEMINI.md', 'GEMINI.md at depth'], ['AGENT-LEDGER.md', 'AGENT-LEDGER*'], ['scripts/agent-worktree-lifecycle/a.ts', '*agent-worktree*'],
+  ['src/subagent-runner.ts', '*subagent*'], ['docs/agent-contract.md', '*agent-contract*'], ['rules.cursorrules', '*.cursorrules']
+]) {
+  scenario({ setup: stage(path, 'x\n'), command: 'git commit -m "chore: add a file"', expected: 'deny', label: `company: staged tool PATH ${label}`, mention: path });
+}
+scenario({ setup: stage('src/cursor-styles.css', '.a { cursor: pointer; }\n'), command: 'git commit -m "style: pointer on the card"', expected: 'allow', label: 'NEAR MISS: "cursor:" in CSS, in an added line and in a file name, is no tool path' });
+scenario({ setup: stage('src/agents/list.ts', 'export const agents = [];\n'), command: 'git commit -m "feat: list the sales agents"', expected: 'allow', label: 'NEAR MISS: an "agents" folder and the word "agents" are no tool path' });
+scenario({ setup: stage('docs/aiderman.md', 'x\n'), command: 'git commit -m "docs: a"', expected: 'allow', label: 'NEAR MISS: "aiderman.md" does not begin with the ".aider" segment prefix' });
+scenario({ setup: stage('docs/my.cursor.notes.md', 'x\n'), command: 'git commit -m "docs: a"', expected: 'allow', label: 'NEAR MISS: ".cursor" inside a file name, not as a directory segment' });
+scenario({ setup: stage('.cursor/old.mdc', 'x\n'), command: 'git commit -m "docs: a" -- README.md', expected: 'allow', label: 'a tool path OUTSIDE the explicit pathspec is not part of this commit' });
+scenario({ command: 'git commit -m "feat: x" -m "Co-Authored-By: Someone <s@x.test>"', expected: 'deny', label: 'company: attribution trailer in the message', mention: 'co authored by' });
+scenario({ command: 'git commit -m "feat: x" --trailer "Co-authored-by: Someone"', expected: 'deny', label: 'company: attribution --trailer' });
+scenario({ command: 'git commit -m "feat: x" -m "Generated with a tool"', expected: 'deny', label: 'company: "Generated with" line' });
+scenario({ command: 'git commit -m "fix: x" -m "(cherry picked from commit 84d60721d886557d75b57d5b8e6cb69b2ae7d135)"', expected: 'deny', label: 'company: cherry-pick provenance line' });
+scenario({ command: 'git commit -m "feat: x \u{1F916}"', expected: 'deny', label: 'company: robot emoji in the message' });
+scenario({ setup: (world) => world.write('msg.txt', 'feat: x\n\nCo-Authored-By: A <a@x.test>\n'), command: 'git commit -F msg.txt', expected: 'deny', label: 'company: attribution in a -F message file' });
+scenario({ command: "git commit -F - <<'EOF'\nfeat: x\n\nGenerated with a tool\nEOF", expected: 'deny', label: 'company: attribution in a -F - heredoc body', mention: 'stdin' });
+scenario({ setup: (world) => { world.write('src/b.ts', 'b\n'); world.commit('feat: b\n\nCo-Authored-By: Someone <s@x.test>'); }, command: 'git commit --allow-empty -C HEAD', expected: 'deny', label: 'company: -C HEAD reusing a message with an attribution trailer', mention: 'reused message' });
+scenario({ command: 'git commit -m "test(visual): regenerated with the update script"', expected: 'allow', label: 'NEAR MISS: "regenerated with" is not "generated with"' });
+scenario({ command: 'git commit -m "feat: the user-agent header" -m "ensure:harness-generated) with care"', expected: 'allow', label: 'NEAR MISS: a clause break between "generated" and "with"' });
+scenario({ world: personal, setup: stage('.cursor/rules.mdc', 'x\n'), command: 'git commit -m "feat: x" -m "Co-Authored-By: Someone"', expected: 'allow', label: 'personal repository: tool paths and attribution are never judged' });
+
 // --- other repositories.
 scenario({ world: personal, setup: stage('.claude/settings.json', 'by Claude\n'), command: 'git commit -m "chore: claude config, Anthropic"', expected: 'allow', label: 'personal repository: names everywhere, never judged' });
 scenario({ command: 'git commit -m "claude"', cwd: join(personal.repo, '..'), expected: 'allow', label: 'a directory that is no repository is never judged' });
@@ -223,6 +250,30 @@ for (const [input, label] of [['NOT JSON AT ALL', 'garbage payload'], ['', 'empt
   reset(company);
   report(reason.includes('COMPANY-COMMIT GUARD REFUSED') && refused.problems.length === 0, 'dispatch.mjs: a company commit naming a tool is refused through its own registration');
   report(!allowedReason.includes('COMPANY-COMMIT GUARD') && allowed.problems.length === 0, 'dispatch.mjs: a clean company commit passes through its own registration');
+}
+
+// --- the same through the dispatcher for the NEW families: a tool path and an attribution trailer (hit), CSS and
+// "regenerated with" (near miss), each with a real-shaped Bash payload.
+{
+  const ownManifest = join(company.repo, '..', 'own-manifest.json');
+  const refusalOf = async (setup, command) => {
+    setup(company);
+
+    const result = await dispatch(ownManifest, payloadAt('Bash', company.repo, command));
+
+    reset(company);
+
+    return { reason: result.output?.hookSpecificOutput?.permissionDecisionReason ?? '', problems: result.problems.length };
+  };
+  const pathHit = await refusalOf(stage('.cursor/rules/a.mdc', 'x\n'), 'git commit -m "chore: rules"');
+  const trailerHit = await refusalOf(() => {}, 'git commit -m "feat: x" -m "Co-Authored-By: Someone <s@x.test>"');
+  const cssMiss = await refusalOf(stage('src/cursor-styles.css', '.a { cursor: pointer; }\n'), 'git commit -m "style: pointer"');
+  const wordingMiss = await refusalOf(() => {}, 'git commit -m "test: regenerated with the update script"');
+
+  report(pathHit.reason.includes('COMPANY-COMMIT GUARD REFUSED') && pathHit.reason.includes('.cursor/') && pathHit.problems === 0, 'dispatch.mjs: a staged .cursor/ path is refused, naming the term');
+  report(trailerHit.reason.includes('COMPANY-COMMIT GUARD REFUSED') && trailerHit.reason.includes('co authored by') && trailerHit.problems === 0, 'dispatch.mjs: a Co-Authored-By trailer is refused, naming the phrase');
+  report(!cssMiss.reason.includes('COMPANY-COMMIT GUARD') && cssMiss.problems === 0, 'dispatch.mjs: NEAR MISS, "cursor:" in CSS passes');
+  report(!wordingMiss.reason.includes('COMPANY-COMMIT GUARD') && wordingMiss.problems === 0, 'dispatch.mjs: NEAR MISS, "regenerated with" passes');
 }
 
 // --- the wiring.

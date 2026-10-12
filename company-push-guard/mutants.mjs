@@ -59,7 +59,7 @@ const MUTANTS = [
   ['HEAD is judged even when a refspec names the source', RANGE, 'const selectsNothingElse = parsed.refspecs.length === 0 && !parsed.all && !parsed.tags;', 'const selectsNothingElse = true;'],
   ['HEAD is not judged when the push names nothing', RANGE, 'if (selectsNothingElse && runGit', 'if (false && runGit'],
   ['what the remote already has is judged again', RANGE, "const range = [...revisions, '--not', ...remoteNames.map((name) => `--remotes=${name}`), '--'];", "const range = [...revisions, '--'];"],
-  ['commit messages are not scanned', RANGE, "return scanText(message, names, `commit ${short(commit)} message`);", 'return [];'],
+  ['commit messages are not scanned', RANGE, "return scanMessage(message, names, `commit ${short(commit)} message`);", 'return [];'],
   ['added lines are not scanned', RANGE, 'found.push(...scanText(entry.text, names, `${entry.path}:${entry.line} (${short(entry.commit)})`));', ''],
   ['added paths are not scanned', RANGE, 'found.push(...scanPaths([entry.path], names).map((finding) => ({ ...finding, where: `${entry.path} (${short(entry.commit)})` })));', ''],
   ['deleted paths are listed too', RANGE, "'--name-only', '--diff-filter=ACMRT', '--format=%x00%H'", "'--name-only', '--format=%x00%H'"],
