@@ -43,6 +43,9 @@ const MUTANTS = [
   ['the decision is not journaled', H, '  recordDecision(decision);\n', ''],
   ['the injected stand-in is ignored', H, 'injected === undefined ? [\'gentle-ai\'] : JSON.parse(injected)', "['gentle-ai']"],
 
+  ['a decision module that cannot load drops the review', H, "return { run: true, reason: 'fail-open', detail: error instanceof", "return { run: false, reason: 'fail-open', detail: error instanceof"],
+  ['a journal that cannot load crashes the hook', H, '/* evidence, never a precondition @es evidencia, nunca una precondición */', "throw new Error('journal');"],
+
   // --- journal.mjs: what is recorded.
   ['a skipped hook is journaled as run', J, "if (!run) return 'skipped';", "if (!run) return 'ran';"],
   ['a hook run on a linked worktree is journaled as a fail-open', J, "reason === 'linked-worktree' ? 'ran' : 'fail-open'", "reason === 'linked-worktree' ? 'fail-open' : 'ran'"],

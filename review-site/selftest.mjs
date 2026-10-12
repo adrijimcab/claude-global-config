@@ -21,7 +21,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -107,11 +107,11 @@ const payload = (cwd, event = 'Stop', extra = {}) => ({
 });
 
 /** Runs the hook as the harness does: stdin bytes in, a process out. @es Corre el hook como el harness. */
-function runHook(input, { launch = STAND_IN_LAUNCH, cwd = main } = {}) {
+function runHook(input, { launch = STAND_IN_LAUNCH, cwd = main, hook = HOOK } = {}) {
   resetCalls();
   resetJournal();
 
-  const result = spawnSync(process.execPath, [HOOK], { input, cwd, encoding: 'buffer', windowsHide: true, env: { ...process.env, REVIEW_SITE_GENTLE_AI_LAUNCH: launch } });
+  const result = spawnSync(process.execPath, [hook], { input, cwd, encoding: 'buffer', windowsHide: true, env: { ...process.env, REVIEW_SITE_GENTLE_AI_LAUNCH: launch } });
 
   return { status: result.status, stdout: result.stdout.toString('utf8'), stderr: result.stderr.toString('utf8') };
 }
@@ -202,6 +202,36 @@ for (const event of ['Stop', 'SessionStart']) {
   check(`settings: ${event} runs the review-site stop hook exactly once`, commandsOf(event).filter((command) => command === WIRED).length, 1);
   check(`settings: ${event} no longer runs gentle-ai's stop hook directly`, commandsOf(event).filter((command) => command.includes('gentle-ai review stop-hook')).length, 0);
 }
+
+// ---- a sibling module that cannot load: the original hook still runs. @es Un módulo hermano que no carga: el hook original corre igual.
+/** A copy of the mechanism whose `broken` file throws when it loads; returns the copy's hook path. @es Una copia del mecanismo cuyo fichero `broken` lanza al cargar. */
+function copyWithBroken(name, broken) {
+  const root = path.join(sandbox.root, name);
+
+  for (const directory of ['review-site', 'git-worktree', 'hook-state', 'bilingual-output']) cpSync(path.join(HERE, '..', directory), path.join(root, directory), { recursive: true });
+
+  writeFileSync(path.join(root, 'review-site', broken), "throw new Error('broken on purpose');\n");
+
+  return path.join(root, 'review-site', 'stop-hook.mjs');
+}
+
+behave({ stdout: 'ran anyway', exit: 0 });
+const brokenDecision = copyWithBroken('broken-decision', 'decide.mjs');
+for (const [label, directory] of [['a main checkout', main], ['a linked worktree', linked]]) {
+  const bytes = asBytes(payload(directory));
+  const run = runHook(bytes, { hook: brokenDecision });
+  const [call] = callsMade();
+
+  check(`the decision module cannot load, cwd in ${label}: the original hook runs and its output passes through`, [run.status, run.stdout, callsMade().length], [0, 'ran anyway', 1]);
+  check(`the decision module cannot load, cwd in ${label}: it received the payload byte for byte`, call === undefined ? undefined : Buffer.from(call.stdin, 'base64').equals(bytes), true);
+  check(`the decision module cannot load, cwd in ${label}: the fail-open is journaled`, journal().map((entry) => [entry.decision, entry.reason]), [['fail-open', 'fail-open']]);
+}
+
+const brokenJournal = copyWithBroken('broken-journal', 'journal.mjs');
+const skippedWithoutJournal = runHook(asBytes(payload(main)), { hook: brokenJournal });
+check('the journal cannot load, cwd in a main checkout: still silent, exit 0, gentle-ai not called', [skippedWithoutJournal.status, skippedWithoutJournal.stdout, callsMade().length], [0, '', 0]);
+const ranWithoutJournal = runHook(asBytes(payload(linked)), { hook: brokenJournal });
+check('the journal cannot load, cwd in a linked worktree: gentle-ai runs and its output passes through', [ranWithoutJournal.status, ranWithoutJournal.stdout, callsMade().length], [0, 'ran anyway', 1]);
 
 // ---- the exit code for every way a gentle-ai run can end. @es El código de salida de cada forma en que termina gentle-ai.
 const { exitCodeFor } = await import(pathToFileURL(HOOK).href);

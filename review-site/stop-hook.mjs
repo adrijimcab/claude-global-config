@@ -24,9 +24,6 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-import { decide } from './decide.mjs';
-import { recordDecision } from './journal.mjs';
-
 /** The arguments gentle-ai's own hook is registered with. @es Los argumentos con que gentle-ai registra su hook. */
 const GENTLE_AI_HOOK = ['review', 'stop-hook', '--agent', 'claude-code'];
 
@@ -75,11 +72,39 @@ function runGentleAi(input, environment) {
   return exitCodeFor(result);
 }
 
-function main() {
-  const input = readInput();
-  const decision = decide(input);
+/**
+ * The decision for `input`. It never throws: a decision module that cannot load or decide yields the fail-open
+ * decision, so the original hook still runs. The modules are imported here, not at the top, for that reason: a broken
+ * sibling file must land in this catch. @es La decisión para `input`. Nunca lanza: un módulo de decisión que no carga
+ * o no decide da la decisión de fallar abierto, y el hook original corre igual. Los módulos se importan aquí y no
+ * arriba por eso: un fichero hermano roto debe caer en este catch.
+ */
+async function decisionFor(input) {
+  try {
+    const { decide } = await import('./decide.mjs');
 
-  recordDecision(decision);
+    return decide(input);
+  } catch (error) {
+    return { run: true, reason: 'fail-open', detail: error instanceof Error ? error.message.split('\n')[0] : String(error) };
+  }
+}
+
+/** Journals the decision; the journal is evidence, so a journal that cannot load or write costs nothing. @es Registra la decisión; el registro es evidencia, así que uno que no carga o no escribe no cuesta nada. */
+async function journal(decision) {
+  try {
+    const { recordDecision } = await import('./journal.mjs');
+
+    recordDecision(decision);
+  } catch {
+    /* evidence, never a precondition @es evidencia, nunca una precondición */
+  }
+}
+
+async function main() {
+  const input = readInput();
+  const decision = await decisionFor(input);
+
+  await journal(decision);
 
   process.exitCode = decision.run ? runGentleAi(input, process.env) : 0;
 }
