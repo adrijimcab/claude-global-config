@@ -73,7 +73,15 @@ check('verdict: an unparsable object is a malfunction', readVerdict('{ok: true',
 check('verdict: an array is a malfunction', readVerdict('[true]', voice.marker).kind, 'malfunction');
 check('verdict: a string ok is a malfunction even with a marked reason', readVerdict(JSON.stringify({ ok: 'false', reason: goodBlock }), voice.marker).kind, 'malfunction');
 check('verdict: a reason padded with blanks is trimmed', readVerdict(JSON.stringify({ ok: false, reason: `  ${goodBlock}\n` }), voice.marker), { kind: 'block', reason: goodBlock });
-check('verdict: an object that is not JSON is a malfunction', readVerdict('{ok: true}', voice.marker).kind, 'malfunction');
+const kindOf = (answer) => {
+  try {
+    return readVerdict(answer, voice.marker).kind;
+  } catch {
+    return 'threw';
+  }
+};
+
+check('verdict: an object that is not JSON is a malfunction, never an exception', kindOf('{ok: true}'), 'malfunction');
 check('verdict: an answer that is not text is a malfunction', [readVerdict(undefined, voice.marker).kind, readVerdict(null, voice.marker).kind], ['malfunction', 'malfunction']);
 check('verdict: impossible is ignored, a marked block stays a block', readVerdict(JSON.stringify({ ok: false, impossible: true, reason: goodBlock }), voice.marker), { kind: 'block', reason: goodBlock });
 check('verdict: the malfunction says why', typeof readVerdict('nope', voice.marker).why, 'string');
@@ -154,10 +162,10 @@ const readLog = () => {
 const lines = readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line));
 
 check('log: one line per outcome', lines.length, 2);
-check('log: a line names judge, session, outcome, cost and latency', [lines[0].judge, lines[0].session, lines[0].outcome, lines[0].costUsd, lines[0].durationMs], ['voice', 's1', 'block', 0.0002, 900]);
-check('log: a line carries a timestamp', Number.isFinite(Date.parse(lines[0].ts)), true);
-check('log: a malfunction keeps its why', lines[1].why, 'nope');
-check('log: the reason is kept for a block', lines[0].reason, goodBlock);
+check('log: a line names judge, session, outcome, cost and latency', [lines[0]?.judge, lines[0]?.session, lines[0]?.outcome, lines[0]?.costUsd, lines[0]?.durationMs], ['voice', 's1', 'block', 0.0002, 900]);
+check('log: a line carries a timestamp', Number.isFinite(Date.parse(lines[0]?.ts)), true);
+check('log: a malfunction keeps its why', lines[1]?.why, 'nope');
+check('log: the reason is kept for a block', lines[0]?.reason, goodBlock);
 check('log: the file lives under the judge-gate state directory', outcomesPath().startsWith(path.resolve(process.env.HOOK_STATE_DIR)) && path.basename(path.dirname(outcomesPath())) === 'judge-gate', true);
 recordOutcome('voice', 's2', { outcome: 'pass', costUsd: 0, durationMs: 1 });
 check('log: a second outcome is appended, the first is kept', readLog().split('\n').filter((line) => line !== '').length, 3);
@@ -227,7 +235,15 @@ const blockingModel = async (prompt, options) => {
 };
 const printed = await run('voice', payload({ session_id: 'run-1' }), { model: blockingModel });
 
-check('run: a block prints a Stop decision with its reason', JSON.parse(printed), { decision: 'block', reason: goodBlock });
+const printedDecision = (() => {
+  try {
+    return JSON.parse(printed);
+  } catch {
+    return null;
+  }
+})();
+
+check('run: a block prints a Stop decision with its reason', printedDecision, { decision: 'block', reason: goodBlock });
 check('run: the model call gets the judge\'s timeout', seen.at(-1), { timeoutMs: voice.askTimeoutMs });
 check('run: the outcome is logged with the session', readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'run-1' && line.outcome === 'block' && line.judge === 'voice'), true);
 check('run: a pass prints nothing', await run('voice', payload(), { model: async () => ({ answer: '{"ok": true}', costUsd: 0, durationMs: 1 }) }), '');
