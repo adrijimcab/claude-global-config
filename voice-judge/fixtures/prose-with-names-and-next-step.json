@@ -1,0 +1,6 @@
+{
+  "id": "prose-with-names-and-next-step",
+  "expect": "pass",
+  "source": "orchestrator session 2026-10-11: an all-prose reply (no bullet, numbered or table lines) that v3 refused for naming tools and a next step inside sentences",
+  "message": "b100 me avisó que una línea en inglés se le escapó al chequeo de idioma justo antes de lanzar agentes. Sospechaba que el guard no cubría esa herramienta. Lo fui a medir, y la causa es otra: es el mismo fenómeno que descubrimos hoy en mi propia sesión.\n\nUna sesión de Claude Code lee los grupos de hooks de `settings.json` una sola vez, al arrancar. Si después se registra un grupo nuevo, esa sesión sigue funcionando con la foto que sacó al empezar y no lo ve hasta reiniciar. Los guards que se suman a un grupo existente sí entran en caliente, porque el dispatcher relee su lista en cada ejecución. El chequeo de idioma, en cambio, llegó como un grupo nuevo, y la sesión de b100 arrancó varias horas antes de que existiera.\n\nNo hace falta tocar código. b100 ya tiene previsto reiniciar cuando terminen sus tres workers, y con ese reinicio carga el chequeo de idioma y también el aviso de sesiones viejas. A veces el arreglo correcto no es escribir código, sino entender bien qué pasó."
+}
