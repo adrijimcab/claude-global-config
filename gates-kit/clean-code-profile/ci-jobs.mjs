@@ -13,7 +13,7 @@
  */
 
 const GLOBAL_KEYWORDS = new Set(['stages', 'variables', 'default', 'include', 'workflow', 'cache', 'image', 'services', 'before_script', 'after_script']);
-const TOP_LEVEL_KEY = /^([A-Za-z0-9_][A-Za-z0-9_.-]*):/;
+const TOP_LEVEL_KEY = /^([A-Za-z0-9_.][A-Za-z0-9_.-]*):/;
 const SCRIPT_KEY = /^(\s+)(before_script|script):\s*$/;
 const ALLOW_FAILURE = /^ {2}allow_failure:\s*(\S*)/;
 

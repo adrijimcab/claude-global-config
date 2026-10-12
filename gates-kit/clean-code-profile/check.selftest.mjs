@@ -87,6 +87,8 @@ check('an aggregator names its scripts, not its flags', aggregatedNames(['jiti',
 // --- CI jobs ----------------------------------------------------------------------------------------------------
 const jobs = ciJobs(readFileSync(path.join(fixture('configured-angular'), '.gitlab-ci.yml'), 'utf8'));
 check('hidden templates and global keywords are not jobs', jobs.map((job) => job.name).join() === 'lint,audit');
+const beforeTemplate = ciJobs('job:\n  script:\n    - a\n.tpl:\n  allow_failure: true\n  script:\n    - b\n');
+check('a hidden template ends the job before it and is no job', beforeTemplate.length === 1 && beforeTemplate[0].commands.map((command) => command.text).join() === 'a' && beforeTemplate[0].allowFailure === false);
 check('allow_failure at the job level is read', jobs[1].allowFailure === true && jobs[0].allowFailure === false);
 check('a job lists its script lines with their line numbers', jobs[0].commands.length === 1 && jobs[0].commands[0].text === 'npm run build:ci-pr' && jobs[0].commands[0].line === 10);
 const nested = ciJobs('job:\n  rules:\n    - if: x\n      allow_failure: true\n  script:\n    - |\n      # comment\n      npm audit\n    - *alias\n');
