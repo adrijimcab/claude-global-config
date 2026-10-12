@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "SubagentStart"
+    }
+  ],
+  "why": "a worker that does not load CLAUDE.md (every Explore agent, a session started inside a worktree) runs without its project contract and without the route rule, and nothing tells it where to read them. 3 of the 250 subagent transcripts of the Discovery project never held the contract, all Explore agents, measured 2026-10-12. SubagentStart fires for fresh spawns and resumes alike and delivers into the worker, unlike PreToolUse additionalContext, which reaches the caller."
+}

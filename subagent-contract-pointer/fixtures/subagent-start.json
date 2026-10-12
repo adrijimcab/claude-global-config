@@ -1,0 +1,12 @@
+{
+  "provenance": "CAPTURED verbatim from the live harness on 2026-10-12 (Claude Code 2.1.296): `claude -p --setting-sources project --settings <probe>` with a SubagentStart command hook that appended its stdin to a file, and a prompt that made the session launch one Explore subagent through the Agent tool. Fields: session_id, transcript_path, cwd, prompt_id, agent_id, agent_type, hook_event_name. permission_mode and effort did NOT appear in this capture. cwd is the SESSION's working directory, not a project directory the hook can assume; transcript_path is the MAIN session's transcript.",
+  "payload": {
+    "session_id": "85808741-ab06-41d7-bbd1-89b43980f731",
+    "transcript_path": "C:\\Users\\adrian.jimenez\\.claude\\projects\\C--Users-adrian-jimenez-AppData-Local-Temp-claude-C--Users-adrian-jimenez-Desktop-Projects-di-1700002-discovery-fe-5f411d3c-9331-4b00-8d07-466c793d523f-scratchpad-probe-cwd\\85808741-ab06-41d7-bbd1-89b43980f731.jsonl",
+    "cwd": "C:\\Users\\adrian.jimenez\\AppData\\Local\\Temp\\claude\\C--Users-adrian-jimenez-Desktop-Projects-di-1700002-discovery-fe\\5f411d3c-9331-4b00-8d07-466c793d523f\\scratchpad\\probe\\cwd",
+    "prompt_id": "c3cea1c0-8e42-4589-9b99-962bed0f23c4",
+    "agent_id": "a12863f71540b26c4",
+    "agent_type": "Explore",
+    "hook_event_name": "SubagentStart"
+  }
+}

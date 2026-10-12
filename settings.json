@@ -184,6 +184,17 @@
         "matcher": ""
       }
     ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "node \"$HOME/.claude/subagent-contract-pointer/start-hook.mjs\"",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "hooks": [
