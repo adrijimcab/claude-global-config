@@ -11,8 +11,13 @@
 export function lineageOf(rows, pid) {
   const parentOf = new Map(rows.map((entry) => [entry.pid, entry.parentPid]));
   const lineage = new Set();
+  let current = pid;
 
-  for (let current = pid; current !== undefined && !lineage.has(current); current = parentOf.get(current)) lineage.add(current);
+  // At most one step per row: a parent cycle ends the walk instead of looping. @es Como mucho un paso por fila: un ciclo de padres termina el recorrido.
+  for (let step = 0; current !== undefined && step <= rows.length; step += 1) {
+    lineage.add(current);
+    current = parentOf.get(current);
+  }
 
   return lineage;
 }

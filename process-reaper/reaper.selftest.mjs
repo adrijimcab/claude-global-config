@@ -78,6 +78,8 @@ const world = [
   row(301, 1, `sh C:/p/.claude/fleet-env/scratch/${AGENT}/watch.sh`),
   row(302, 1, `node ${AGENT}x/not-the-id.mjs`),
   row(303, 1, `node x${AGENT}/not-the-id.mjs`),
+  row(304, 1, 'node eight888 z.mjs'),
+  row(305, 1, 'node seven77 y.mjs'),
   row(400, 900, `node land.mjs --worktree ${WT}`),
   row(900, 1, `bash -c node land.mjs --worktree ${WT}`)
 ];
@@ -116,13 +118,21 @@ check('a blank worktree matches nothing', nothingGiven({ worktree: '   ' }), [])
 check('an undefined ownership matches nothing', nothingGiven({}), []);
 check('an empty id matches nothing', nothingGiven({ agentId: '' }), []);
 check('the bare agent- prefix matches nothing', nothingGiven({ agentId: 'agent-' }), []);
-check('an id too short to be an identity matches nothing', nothingGiven({ agentId: 'abc' }), []);
+check('an id too short to be an identity matches nothing', nothingGiven({ agentId: 'status' }), []);
+check('a seven-character id is still too short', nothingGiven({ agentId: 'seven77' }), []);
+check('an eight-character id is an identity', killedOf({ agentId: 'eight888' }), [304]);
+check('an id with a space in it is no identity', nothingGiven({ agentId: 'node status' }), []);
 check('an empty scratch matches nothing', nothingGiven({ scratch: '' }), []);
 check('with nothing to match the outcome says so', reaperRun({}).outcome.refused, 'no-markers');
 
 const outcomeLines = reaperRun({ worktree: WT }).outcome.lines;
 check('every reported line is bilingual', outcomeLines.length > 0 && outcomeLines.every((line) => line.includes('@es')), true);
 check('the report names what it killed', outcomeLines.some((line) => line.includes('100')), true);
+check('the report names what it left alone', outcomeLines.some((line) => line.includes('Left alone 400')), true);
+check('the first line counts the processes and the trees', outcomeLines[0], 'Reaped 4 process(es) of the closed agent in 1 tree(s). @es Segados 4 proceso(s) del agente cerrado en 1 árbol(es).');
+check('nothing to reap says so', reaperRun({ worktree: 'C:/fx/.claude-wt/never-used' }).outcome.lines[0].startsWith('No live process belongs to the closed agent.'), true);
+check('a trailing slash on the worktree still matches', killedOf({ worktree: `${WT}/` }, { rows: [row(700, 1, `sh watch.sh ${WT}`)] }), [700]);
+check('a child with a lower pid than its matched parent is not a second root', killedOf({ worktree: WT }, { rows: [row(810, 1, `bash ${WT}/a.sh`), row(805, 810, `bash ${WT}/b.sh`)], self: 1 }), [810]);
 
 const afterNothingDies = () => world;
 const stubborn = reaperRun({ worktree: WT }, { after: afterNothingDies }).outcome;

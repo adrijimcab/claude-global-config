@@ -41,12 +41,12 @@ const COMMAND_LIMIT = 120;
 const shown = ({ pid, commandLine }) => ({ pid, command: commandLine.length <= COMMAND_LIMIT ? commandLine : `${commandLine.slice(0, COMMAND_LIMIT)}…` });
 const byPid = (left, right) => left.pid - right.pid;
 
-/** Kills one tree with the shared killer; true unless it failed or refused. @es Mata un árbol con el ejecutor compartido. */
-const killWithSharedKiller = (pid) => !['failed', 'refused'].includes(killTree(pid).outcome);
+/** Kills one tree with the shared killer; its report is not trusted, the second listing measures. @es Mata un árbol con el ejecutor compartido; su informe no se da por bueno, lo mide el segundo listado. */
+const killWithSharedKiller = (pid) => killTree(pid);
 
 /**
  * @param {{ worktree?: string, agentId?: string, scratch?: string }} ownership what names the agent
- * @param {{ list?: () => Array<{ pid: number, parentPid?: number, commandLine: string }>, kill?: (pid: number) => boolean, selfPid?: number }} [deps]
+ * @param {{ list?: () => Array<{ pid: number, parentPid?: number, commandLine: string }>, kill?: (pid: number) => unknown, selfPid?: number }} [deps]
  *   injected for proofs: the process listing, the tree killer, and the pid whose lineage is protected
  * @returns {{ refused?: string, matched: object[], protected: object[], killed: object[], survivors: object[], lines: string[] }}
  * @es Devuelve lo hallado, lo protegido, lo muerto, los supervivientes y las líneas bilingües del informe.
