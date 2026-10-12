@@ -5,7 +5,9 @@
  * file, so a deciding module added without a campaign (a new guard in a manifest, a new `decide.mjs`) turns
  * the runner, and every gate that runs it, RED, naming the module and why it is demanded.
  *
- * It measures the repository this copy sits in, as the command `scope.mjs` does; how each decision is made is
+ * It measures the repository this copy sits in, as the command `scope.mjs` does. When the selftest runner names
+ * that tree's repository (`SELFTEST_GIT_DIR`, set from its `--git-dir` for a tooling tree its code repository
+ * ignores), the population is listed from it; otherwise from the repository that holds the tree. How each decision is made is
  * proved over constructed trees by `scope.selftest.mjs`. Campaigns over modules that do not decide are
  * information only and never fail this file. The campaigns themselves are not run here (that is
  * `mutants-all`): this proves they EXIST for every decision, not that they are green.
@@ -39,7 +41,10 @@ function expect(name, predicate) {
   }
 }
 
-const scope = await measureRepository(ROOT);
+// The repository the runner was told holds this tree, or none: `-C` then finds the one that holds it.
+// @es El repositorio que el runner dice que contiene este árbol, o ninguno: entonces `-C` encuentra el que lo contiene.
+const gitDir = process.env.SELFTEST_GIT_DIR || undefined;
+const scope = await measureRepository(ROOT, { gitDir });
 const shown = renderScope(scope).filter((line) => !line.startsWith('OPTIONAL'));
 
 expect('every campaign could be planned and every deciding module could be found', scope.problems.length === 0);

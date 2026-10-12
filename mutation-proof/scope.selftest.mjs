@@ -417,13 +417,13 @@ try {
   writeFileSync(path.join(repository, 'sub', 'decide.mjs'), 'export const decide = () => 1;\n');
 
   expect('the population is what git lists: tracked and untracked-not-ignored, minus ignored and minus deleted', same(listPopulation(repository), ['.gitignore', 'sub/decide.mjs', 'tracked.mjs', 'untracked.mjs']));
-  expect('a directory that is not a git repository cannot be listed, and the error is bilingual', (() => {
+  expect('a directory that is not a git repository cannot be listed, the error says git failed, and it is bilingual', (() => {
     try {
       listPopulation(sandbox);
 
       return false;
     } catch (error) {
-      return error instanceof Error && error.message.includes('@es');
+      return error instanceof Error && error.message.startsWith('Cannot list the files of') && error.message.includes('@es');
     }
   })());
 
@@ -471,6 +471,47 @@ try {
     return result.status === 2 && result.stderr.includes('Usage') && result.stderr.includes('@es');
   })());
   expect('a root that is not a repository measures nothing (exit 2)', cli('--root', sandbox).status === 2);
+
+  // --- a tree its code repository IGNORES, versioned in a repository of its own whose git dir lives elsewhere
+  // (b100-am-ui's `.claude`). Through its code repository it lists nothing; through its own, its files.
+  // @es Un árbol que su repo de código IGNORA, versionado en un repositorio propio con el git dir en otro sitio.
+  const outer = path.join(sandbox, 'outer');
+  const tooling = path.join(outer, 'tooling');
+  const toolingGitDir = path.join(sandbox, 'tooling.git');
+
+  mkdirSync(path.join(tooling, 'ignored'), { recursive: true });
+  spawnSync('git', ['-C', outer, 'init', '-q'], { encoding: 'utf8' });
+  writeFileSync(path.join(outer, '.gitignore'), 'tooling/\n');
+  writeFileSync(path.join(tooling, '.gitignore'), 'ignored/\n');
+  writeFileSync(path.join(tooling, 'ignored', 'x.mjs'), '');
+  writeFileSync(path.join(tooling, 'tracked.mjs'), '');
+  writeFileSync(path.join(tooling, 'untracked.mjs'), '');
+  spawnSync('git', ['init', '-q', '--bare', toolingGitDir], { encoding: 'utf8' });
+  spawnSync('git', ['--git-dir', toolingGitDir, '--work-tree', tooling, 'add', 'tracked.mjs'], { encoding: 'utf8' });
+
+  expect('an ignored tree listed through its code repository is NOT an empty population: it throws, bilingual', (() => {
+    try {
+      listPopulation(tooling);
+
+      return false;
+    } catch (error) {
+      return error instanceof Error && error.message.includes('--git-dir') && error.message.includes('@es');
+    }
+  })());
+  expect('the same tree listed through its own repository is its tracked and untracked-not-ignored files', (() => {
+    try {
+      return same(listPopulation(tooling, { gitDir: toolingGitDir }), ['.gitignore', 'tracked.mjs', 'untracked.mjs']);
+    } catch {
+      return false;
+    }
+  })());
+  expect('the command measures an ignored tree with --git-dir (exit 0, nothing decides there)', (() => {
+    const result = cli('--root', tooling, '--git-dir', toolingGitDir);
+
+    return result.status === 0 && result.stdout.includes('no deciding module without a campaign');
+  })());
+  expect('...and without it measures nothing (exit 2)', cli('--root', tooling).status === 2);
+  expect('a third argument that is not --git-dir measures nothing (exit 2)', cli('--root', tooling, '--bogus', toolingGitDir).status === 2);
 } finally {
   rmSync(sandbox, { recursive: true, force: true });
 }

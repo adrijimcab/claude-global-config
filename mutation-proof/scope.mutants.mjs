@@ -162,11 +162,17 @@ const MUTANTS = [
   ['a declaration that is no list is accepted', SCOPE, '!Array.isArray(DECLARED_DECIDING)', 'false'],
   ['the declaration is not read', SCOPE, 'declared: await declaredIn(root)', 'declared: []'],
   ['a campaign is planned against the wrong root', SCOPE, 'planCampaign({ root, campaign })', "planCampaign({ root: '.', campaign })"],
-  ['no argument measures nothing', SCOPE, 'if (argv.length === 0) return OWN_ROOT;', ''],
+  ['no argument measures nothing', SCOPE, 'if (argv.length === 0) return { root: OWN_ROOT };', ''],
+  ['--git-dir is never read', SCOPE, "if (argv.length === 4 && argv[0] === '--root' && argv[2] === '--git-dir') return", 'if (false) return'],
+  ['any third argument names the git dir', SCOPE, "argv.length === 4 && argv[0] === '--root' && argv[2] === '--git-dir'", "argv.length === 4 && argv[0] === '--root'"],
+  ['the git dir named on the command line is dropped', SCOPE, 'measureRepository(options.root, { gitDir: options.gitDir })', 'measureRepository(options.root, {})'],
+  ['the git dir is dropped on the way to the population', SCOPE, 'listPopulation(root, { gitDir });', 'listPopulation(root);'],
+  ['a git dir is never used to list', SCOPE, "gitDir === undefined ? ['-C', root]", "true ? ['-C', root]"],
+  ['an empty population is measured as one with nothing deciding', SCOPE, 'if (files.length === 0) {', 'if (false) {'],
   ['any first argument names the root', SCOPE, "argv.length === 2 && argv[0] === '--root'", 'argv.length === 2'],
   ['one argument names the root', SCOPE, "argv.length === 2 && argv[0] === '--root'", "argv[0] === '--root'"],
   ['the repository this copy sits in is the folder it is in', SCOPE, "path.dirname(fileURLToPath(import.meta.url)), '..')", "path.dirname(fileURLToPath(import.meta.url)), '.')"],
-  ['a bad command line is measured as the own repository', SCOPE, 'if (root === undefined) {', 'if (false) {'],
+  ['a bad command line is measured as the own repository', SCOPE, 'if (options === undefined) {', 'if (false) {'],
   ['the check measures whenever it is imported', SCOPE, 'if (path.resolve(process.argv[1] ?? \'\') === fileURLToPath(import.meta.url))', 'if (true)']
 ];
 

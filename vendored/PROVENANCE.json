@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-11T15:07:41.308Z",
+  "syncedAt": "2026-10-12T13:48:15.699Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -76,19 +76,19 @@
     },
     {
       "path": "mutation-proof/scope.mjs",
-      "sha256": "d883de5f8ac00dc071958574d96e8d59a751fc84bb9826abfe0eceef5641950a"
+      "sha256": "f87f0802c41c0054ab10c73c8dedbe20bdc526943b6a57bed3c9aa4f1bf01ba1"
     },
     {
       "path": "mutation-proof/scope.selftest.mjs",
-      "sha256": "612fbd02a3bd2f56507d9509e70d1c9c077cf59f2dbfca2ae590962569e1070a"
+      "sha256": "415e9d56cc2dd7c44261994fa4526a095ffcaa7e7892a91b36dadf6ece2564a4"
     },
     {
       "path": "mutation-proof/scope.mutants.mjs",
-      "sha256": "1094157100ddc612a0d100aeb7b80b2e104111acb6a44f9c87d74c6c95a3e105"
+      "sha256": "fb3bac407baf000ce5b162f12cd8ade101997b8cd2ac41da97d7bfda7e67da0c"
     },
     {
       "path": "mutation-proof/scope-repository.selftest.mjs",
-      "sha256": "3235c422bd1cedab588ae621d2cdefe26a2257073fd5228b695e4f603412de0f"
+      "sha256": "28a9a751f14828f6705d67dd7ebef22df727b374e9fdece6536c335218d5c3fc"
     },
     {
       "path": "mutation-proof/import-closure.mjs",

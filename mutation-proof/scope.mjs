@@ -3,7 +3,7 @@
  * The SCOPE of mutation testing: it is demanded in the modules that DECIDE, and this check says which those
  * are, which of them no campaign mutates, and which campaigns mutate a module that does not decide.
  *
- *   node scope.mjs [--root <repository>]      exit 0 no gap, 1 a gap, 2 not measured
+ *   node scope.mjs [--root <repository> [--git-dir <its git dir>]]      exit 0 no gap, 1 a gap, 2 not measured
  *
  * A deciding module (`deciding-modules.mjs` defines it) is COVERED when some campaign puts a mutant in it. Not
  * when a campaign merely copies it: the `paths` of a campaign are the folders its selftest needs, and half of
@@ -40,10 +40,19 @@ const EXIT_NOT_MEASURED = 2;
 /**
  * Every file of the repository as git sees it: tracked and untracked-but-not-ignored, minus what is gone from
  * disk. The same population the selftest runner measures, so a fixture or a scratch copy is never scanned.
+ *
+ * `gitDir` names the repository of a tree its code repository ignores (b100-am-ui's `.claude`, versioned in a
+ * backup repository whose git dir lives elsewhere), exactly as the selftest runner's `--git-dir` does. Without it
+ * such a tree lists NOTHING, and an empty population is never measured: it throws, so "no file" can never read as
+ * "no deciding module".
  * @returns {string[]} sorted, with `/` separators, relative to `root`. @es Ordenados, con `/`, relativos a `root`.
+ * @es `gitDir` nombra el repositorio de un árbol que su repo de código ignora, como el `--git-dir` del runner. Sin
+ * él ese árbol no lista NADA, y una población vacía nunca se mide: lanza, así «ningún fichero» nunca se lee como
+ * «ningún módulo que decide».
  */
-export function listPopulation(root) {
-  const listed = spawnSync('git', ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+export function listPopulation(root, { gitDir } = {}) {
+  const repository = gitDir === undefined ? ['-C', root] : ['--git-dir', path.resolve(gitDir), '--work-tree', root];
+  const listed = spawnSync('git', [...repository, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
 
   if (listed.error !== undefined || listed.status !== 0) {
     const reason = (listed.error?.message ?? listed.stderr ?? '').trim();
@@ -51,10 +60,16 @@ export function listPopulation(root) {
     throw new Error(`Cannot list the files of ${root} with git: ${reason} @es No se pueden listar los ficheros de ${root} con git: ${reason}`);
   }
 
-  return listed.stdout
+  const files = listed.stdout
     .split('\0')
     .filter((file) => file !== '' && existsSync(path.join(root, file)))
     .toSorted();
+
+  if (files.length === 0) {
+    throw new Error(`git lists no file of ${root}: a tree its code repository ignores is measured with --git-dir <its repository> @es git no lista ningún fichero de ${root}: un árbol que su repo de código ignora se mide con --git-dir <su repositorio>`);
+  }
+
+  return files;
 }
 
 /**
@@ -141,9 +156,12 @@ async function declaredIn(root) {
   return DECLARED_DECIDING;
 }
 
-/** The scope of the repository at `root`, planning every campaign it holds. @es El alcance del repositorio en `root`. */
-export async function measureRepository(root) {
-  const files = listPopulation(root);
+/**
+ * The scope of the repository at `root`, planning every campaign it holds; `gitDir` as `listPopulation` takes it.
+ * @es El alcance del repositorio en `root`; `gitDir` como lo toma `listPopulation`.
+ */
+export async function measureRepository(root, { gitDir } = {}) {
+  const files = listPopulation(root, { gitDir });
 
   return scopeOf({ files, declared: await declaredIn(root), readText: (file) => readFileSync(path.join(root, file), 'utf8'), plan: (campaign) => planCampaign({ root, campaign }) });
 }
@@ -151,24 +169,28 @@ export async function measureRepository(root) {
 /** The repository this copy of the check lives in: `mutation-proof/` sits directly under it. @es El repositorio de esta copia del chequeo. */
 const OWN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Reads the command line: nothing, or `--root <dir>`. @es Lee la línea de órdenes: nada, o `--root <dir>`. */
-function rootOf(argv) {
-  if (argv.length === 0) return OWN_ROOT;
+/**
+ * Reads the command line: nothing, `--root <dir>`, or `--root <dir> --git-dir <dir>`; anything else is undefined.
+ * @es Lee la línea de órdenes: nada, `--root <dir>` o `--root <dir> --git-dir <dir>`; otra cosa es undefined.
+ */
+function optionsOf(argv) {
+  if (argv.length === 0) return { root: OWN_ROOT };
+  if (argv.length === 4 && argv[0] === '--root' && argv[2] === '--git-dir') return { root: path.resolve(argv[1]), gitDir: path.resolve(argv[3]) };
 
-  return argv.length === 2 && argv[0] === '--root' ? path.resolve(argv[1]) : undefined;
+  return argv.length === 2 && argv[0] === '--root' ? { root: path.resolve(argv[1]) } : undefined;
 }
 
 async function main() {
-  const root = rootOf(process.argv.slice(2));
+  const options = optionsOf(process.argv.slice(2));
 
-  if (root === undefined) {
-    console.error('Usage: node scope.mjs [--root <repository>] @es Uso: node scope.mjs [--root <repositorio>]');
+  if (options === undefined) {
+    console.error('Usage: node scope.mjs [--root <repository> [--git-dir <its git dir>]] @es Uso: node scope.mjs [--root <repositorio> [--git-dir <su git dir>]]');
 
     return EXIT_NOT_MEASURED;
   }
 
   try {
-    const scope = await measureRepository(root);
+    const scope = await measureRepository(options.root, { gitDir: options.gitDir });
 
     console.log(renderScope(scope).join('\n'));
 
