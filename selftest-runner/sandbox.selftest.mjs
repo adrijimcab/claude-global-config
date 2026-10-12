@@ -37,6 +37,9 @@ import { runSelftests } from './run.mjs';
 import { createSandbox, removeSandbox, sandboxEnv } from './sandbox.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
+/** The fleet this selftest belongs to, computed here and not from the module under test. @es La flota a la que pertenece este selftest. */
+const FLEET_ROOT = path.resolve(import.meta.dirname, '..');
+
 isolateState('selftest-runner-sandbox');
 
 const { check, bareDir, repo, finish } = fixtureKit('selftest-runner sandbox selftest');
@@ -100,7 +103,7 @@ import module from 'node:module';
 const compileCache = module.enableCompileCache().status;
 const e = process.env;
 const list = (d) => (d && existsSync(d) ? readdirSync(d) : null);
-writeFileSync('seen.json', JSON.stringify({ compileCache, HOME: e.HOME, USERPROFILE: e.USERPROFILE, homedir: os.homedir(), claude: e.HOOK_CLAUDE_HOME, state: e.HOOK_STATE_DIR, TMP: e.TMP, TEMP: e.TEMP, TMPDIR: e.TMPDIR, tmpdir: os.tmpdir(), tree: e.SELFTEST_TREE, homeList: list(os.homedir()), claudeList: list(e.HOOK_CLAUDE_HOME), stateList: list(e.HOOK_STATE_DIR), tempList: list(os.tmpdir()) }));`);
+writeFileSync('seen.json', JSON.stringify({ compileCache, fleet: e.SELFTEST_FLEET, HOME: e.HOME, USERPROFILE: e.USERPROFILE, homedir: os.homedir(), claude: e.HOOK_CLAUDE_HOME, state: e.HOOK_STATE_DIR, TMP: e.TMP, TEMP: e.TEMP, TMPDIR: e.TMPDIR, tmpdir: os.tmpdir(), tree: e.SELFTEST_TREE, homeList: list(os.homedir()), claudeList: list(e.HOOK_CLAUDE_HOME), stateList: list(e.HOOK_STATE_DIR), tempList: list(os.tmpdir()) }));`);
 const probeWorld = realWorld();
 const probed = repo({ tracked: { 'a/selftest.mjs': probe, 'b/selftest.mjs': probe }, ignore: 'seen.json\n' });
 const probeRun = runIn(probed, probeWorld);
@@ -118,6 +121,7 @@ for (const [index, given] of seen.entries()) {
   check(path.isAbsolute(given.state ?? '') && JSON.stringify(given.stateList) === '[]' && !given.state.startsWith(given.homedir), `${label}: HOOK_STATE_DIR is absolute, empty and outside the home: ${given.state}`);
   check(given.TMP === given.tmpdir && given.TEMP === given.tmpdir && given.TMPDIR === given.tmpdir && JSON.stringify(given.tempList) === '[]', `${label}: TMP, TEMP and TMPDIR are one empty directory, what tmpdir() returns: ${given.TMP} ${given.TEMP} ${given.TMPDIR} ${given.tmpdir}`);
   check(given.tree === probed, `${label}: SELFTEST_TREE is the tree's top level: ${given.tree}`);
+  check(given.fleet === FLEET_ROOT && !given.fleet.startsWith(given.homedir), `${label}: SELFTEST_FLEET is the fleet the runner belongs to, never the sandbox home: ${given.fleet}`);
   check(given.compileCache === 3, `${label}: Node's compile cache is disabled (status 3), so npm leaves no cache in the temp: ${given.compileCache}`);
   for (const place of [given.homedir, given.state, given.tmpdir]) {
     check(typeof place === 'string' && !place.startsWith(probeWorld.home) && place !== probeWorld.temp && !place.startsWith(probed), `${label}: ${place} is neither in the real home nor in the tree, nor the real temp itself`);
@@ -130,6 +134,9 @@ const unit = createSandbox(bareDir());
 const unitEnv = sandboxEnv(unit, { base: { Temp: 'stale', home: 'stale', Hook_State_Dir: 'stale', PATH: 'kept' }, tree: '.' });
 check(!('Temp' in unitEnv) && !('home' in unitEnv) && !('Hook_State_Dir' in unitEnv) && unitEnv.TEMP === unit.temp && unitEnv.HOME === unit.home && unitEnv.HOOK_STATE_DIR === unit.state, `a variable spelled in another case is replaced, never left beside the new one: ${Object.keys(unitEnv)}`);
 check(unitEnv.PATH === 'kept' && unitEnv.SELFTEST_TREE === path.resolve('.'), 'the rest of the environment is kept and the tree is made absolute');
+check(unitEnv.SELFTEST_FLEET === FLEET_ROOT, `the fleet root is the directory that holds the runner, absolute: ${unitEnv.SELFTEST_FLEET}`);
+const staleFleet = sandboxEnv(unit, { base: { Selftest_Fleet: 'stale' }, tree: '.' });
+check(!('Selftest_Fleet' in staleFleet) && staleFleet.SELFTEST_FLEET === FLEET_ROOT, 'a SELFTEST_FLEET spelled in another case is replaced, never left beside the new one');
 removeSandbox(unit);
 check(!existsSync(unit.root), 'removeSandbox removes the whole sandbox');
 

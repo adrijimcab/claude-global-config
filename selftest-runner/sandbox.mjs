@@ -12,6 +12,8 @@
  *   - `temp/`         is `TMP`, `TEMP` and `TMPDIR` (what `os.tmpdir()` returns on every platform).
  * `SELFTEST_TREE` carries the top level of the tree under test, absolute: a selftest that has to read the tree
  * (a contract file, a settings file) reads it from there, never from the home, which is now empty.
+ * `SELFTEST_FLEET` carries the fleet that holds this runner (`~/.claude`), for a project selftest that imports a
+ * shared fleet module; it is read-only by contract.
  * `NODE_DISABLE_COMPILE_CACHE` is set, so no Node process of the child leaves a compile cache in its temp.
  *
  * WHAT IT CANNOT REACH: a path a module builds without the environment (a hard-coded absolute path), and the
@@ -24,7 +26,9 @@
  * que mira el runner. DISPOSICIÓN: `home/` es `HOME` y `USERPROFILE`; `home/.claude/` es `HOOK_CLAUDE_HOME`,
  * creado vacío; `state/` es `HOOK_STATE_DIR`, el ÚNICO sitio donde un mecanismo puede escribir su estado, fuera
  * del home; `temp/` es `TMP`, `TEMP` y `TMPDIR`. `SELFTEST_TREE` lleva el nivel superior del árbol bajo prueba,
- * absoluto: un selftest que necesita leer el árbol lo lee de ahí, nunca del home, que ahora está vacío. Se fija
+ * absoluto: un selftest que necesita leer el árbol lo lee de ahí, nunca del home, que ahora está vacío.
+ * `SELFTEST_FLEET` lleva la flota que contiene este runner (`~/.claude`), para un selftest de proyecto que importa
+ * un módulo compartido; por contrato es de solo lectura. Se fija
  * `NODE_DISABLE_COMPILE_CACHE`, así ningún proceso Node del hijo deja una caché de compilación en su temporal. NO
  * ALCANZA una ruta que un módulo construye sin el entorno (una ruta absoluta fija) ni los demás directorios por
  * usuario de Windows (`APPDATA`/`LOCALAPPDATA`), que siguen siendo los reales.
@@ -38,6 +42,21 @@ import { CLAUDE_HOME_VARIABLE, STATE_ROOT_VARIABLE } from '../hook-state/locatio
 
 /** The variable that names the tree under test. @es La variable que nombra el árbol bajo prueba. */
 export const TREE_VARIABLE = 'SELFTEST_TREE';
+
+/**
+ * The variable that names the FLEET: the configuration tree that holds this runner (`~/.claude`), derived from
+ * where this module lives and never from the home, which in the sandbox is empty. A project's selftest that
+ * imports a shared module of the fleet (for example `hook-payloads/payloads.mjs`) resolves it from here. It is
+ * for reading shared modules only: anything written under it is the real fleet, outside every sandbox seam.
+ * @es La variable que nombra la FLOTA: el árbol de configuración que contiene este runner (`~/.claude`), derivado
+ * de dónde vive este módulo y nunca del home, que en el sandbox está vacío. Un selftest de proyecto que importa un
+ * módulo compartido de la flota lo resuelve desde aquí. Es solo para leer módulos compartidos: lo que se escriba
+ * debajo es la flota real, fuera de toda costura del sandbox.
+ */
+export const FLEET_VARIABLE = 'SELFTEST_FLEET';
+
+/** The fleet root: the directory above `selftest-runner/`. @es La raíz de la flota: el directorio sobre `selftest-runner/`. */
+const FLEET_ROOT = path.resolve(import.meta.dirname, '..');
 
 /** The variables `os.homedir()` reads. @es Las variables que lee `os.homedir()`. */
 const HOME_VARIABLES = ['HOME', 'USERPROFILE'];
@@ -99,6 +118,7 @@ export function sandboxEnv(sandbox, { base, tree }) {
   setVariable(env, CLAUDE_HOME_VARIABLE, sandbox.claudeHome);
   setVariable(env, STATE_ROOT_VARIABLE, sandbox.state);
   setVariable(env, TREE_VARIABLE, path.resolve(tree));
+  setVariable(env, FLEET_VARIABLE, FLEET_ROOT);
   setVariable(env, COMPILE_CACHE_OFF, '1');
 
   return env;

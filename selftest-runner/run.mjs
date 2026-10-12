@@ -21,7 +21,8 @@
  * `HOOK_STATE_DIR` a fresh state root outside that home, and `TMP`, `TEMP` and `TMPDIR` a private temp directory.
  * THE TREE UNDER TEST is passed explicitly as `SELFTEST_TREE` (the absolute top level `--root` resolves to): a
  * selftest that has to read the tree reads it from there, never through `homedir()`, which now names the
- * sandbox.
+ * sandbox. A project selftest that imports a SHARED fleet module resolves it from `SELFTEST_FLEET`, the fleet
+ * that holds this runner, read-only by contract.
  *
  * THE LEAK VERDICT (`sandbox-verdict.mjs`) looks only at what no other process writes: anything left in the
  * sandbox home (a module that bypassed the state seam), anything left in the private temp directory, and any
@@ -38,7 +39,8 @@
  * borra al acabar: `HOME` y `USERPROFILE` son un home vacío, `HOOK_CLAUDE_HOME` su `.claude` vacío,
  * `HOOK_STATE_DIR` una raíz de estado nueva fuera de ese home, y `TMP`, `TEMP` y `TMPDIR` un temporal privado.
  * EL ÁRBOL BAJO PRUEBA se pasa explícito en `SELFTEST_TREE` (el nivel superior absoluto de `--root`): un
- * selftest que necesita leer el árbol lo lee de ahí, nunca por `homedir()`. EL VEREDICTO DE FUGAS
+ * selftest que necesita leer el árbol lo lee de ahí, nunca por `homedir()`. Un selftest de proyecto que importa
+ * un módulo COMPARTIDO de la flota lo resuelve desde `SELFTEST_FLEET`, de solo lectura. EL VEREDICTO DE FUGAS
  * (`sandbox-verdict.mjs`) mira solo lo que ningún otro proceso escribe: lo que quede en el home del sandbox, lo
  * que quede en el temporal privado y cualquier cambio del `git status` del árbol; cualquiera pone el selftest
  * ROJO, sea cual sea su salida, con cada ruta. El home real no se vigila, así una sesión viva que lo escriba no
