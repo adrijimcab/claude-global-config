@@ -126,6 +126,9 @@
 !/worker-stash-guard/
 !/worker-stash-guard/**
 /worker-stash-guard/state/
+!/shared-resource-guard/
+!/shared-resource-guard/**
+/shared-resource-guard/state/
 !/integrated-worktree-guard/
 !/integrated-worktree-guard/**
 /integrated-worktree-guard/state/
