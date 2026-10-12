@@ -368,6 +368,15 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
 - Post-audit research (official Anthropic docs and repos) for further gains in quality, speed and token
   use -> implement.
 - Final list to the owner: done + host-only (`host-backlog.md`).
+- Stranded branch `feat/gate-summary` (worktree `.claude-wt/gate-summary`, tip e9bbc0e, 1 commit, 11 files,
+  457 lines: run a command and print a short verdict with a per-run log; measured 2026-10-12 with `git cherry`,
+  not on master). PENDING, reason (4): it is its own change and no item states the need it serves; decide
+  land or drop against the gate-output budget before touching it. Kept, not removed.
+- CLOSED 2026-10-12: worktrees `land-odd` (land/odd, dd2ce66) and `odd-migration` (feat/odd-migration,
+  19cfcb0) removed on purpose. Their three commits each (route mandate restated for ODD, its budget
+  tightening, a v4 settings render) are superseded on master by 4886719, d1c6b04 and the 2026-10-12
+  route-mandate rewrite (`route-mandate.md` "Every change runs through ODD"); patch-ids differ only because
+  the later versions were rebuilt.
 
 ## ORDER (decided 2026-10-11)
 
