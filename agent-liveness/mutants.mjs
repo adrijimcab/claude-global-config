@@ -38,7 +38,6 @@ const MUTANTS = [
   ['a started agent without a worktree of its own is joined without its brief', A, 'if (mtime === undefined) return undefined;\n\n  return quietOwner(path, [record], mtime) === undefined ? undefined :', 'if (mtime === undefined) return undefined;\n\n  return false ? undefined :'],
   ['a started taker with no transcript is joined', A, 'if (mtime === undefined) return undefined;', 'if (mtime === undefined) return { id: record.id, quietForMs: 0 };'],
   ['the brief is asked with the real clock (a quiet taker is lost)', A, 'quietOwner(path, [record], mtime)', 'quietOwner(path, [record], now)'],
-  ['an empty worktree name matches', A, "if (wanted === '') return undefined;", ''],
   ['the quiet time ignores the start', A, 'Math.max(startedAt, mtime ?? 0)', 'mtime ?? 0'],
   ['the quiet time ignores the writes', A, 'Math.max(startedAt, mtime ?? 0)', 'startedAt'],
   ['the quiet time is counted to the wrong end', A, '{ id: record.id, quietForMs: now - lastSign } : undefined;', '{ id: record.id, quietForMs: lastSign - now } : undefined;'],

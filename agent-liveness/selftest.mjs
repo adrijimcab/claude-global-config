@@ -45,6 +45,20 @@ function check(name, actual, expected) {
   else failures.push(`${name} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
 
+/**
+ * Runs one section of checks. A production path that THROWS is a failed check of that section, never a crash of
+ * the selftest: a crash proves nothing about which decision broke.
+ * @es Corre una sección de checks. Un camino de producción que LANZA es un check fallido de la sección, nunca una
+ * caída del selftest: una caída no prueba qué decisión se rompió.
+ */
+async function section(name, run) {
+  try {
+    await run();
+  } catch (error) {
+    failures.push(`${name} — threw ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 /** A run that exits before its summary is reported as a failed check. @es Una corrida que sale antes del resumen cuenta como fallo. */
 let summarised = false;
 process.on('exit', () => {
@@ -89,16 +103,16 @@ const idOf = (owner) => owner?.id;
 const ownerOf = (worktree, records, lifecycle) => activeOwner(`C:/repo/.claude/worktrees/${worktree}`, records, NOW, lifecycle);
 
 // --- 1. a recorded STOP means stopped, immediately -------------------------------------------------------------
-{
+await section("1. a recorded STOP means stopped, immediately", async () => {
   const fresh = transcript('a1', 5 * 1000);
 
   check('a finished agent with a fresh transcript reads stopped', idOf(ownerOf('wt1', [isolated('agent-a1', 'wt1', fresh)], recorded(['start', 'a1', 20 * MINUTE], ['stop', 'a1', 10 * 1000]))), undefined);
   check('the same agent with NO lifecycle record keeps the window rule: working', idOf(ownerOf('wt1', [isolated('agent-a1', 'wt1', fresh)], recorded())), 'agent-a1');
   check('a stop alone (no start recorded) is stopped', idOf(ownerOf('wt1', [isolated('agent-a1', 'wt1', fresh)], recorded(['stop', 'a1', 1000]))), undefined);
-}
+});
 
 // --- 2. a recorded START with no stop means working, before any write ------------------------------------------
-{
+await section("2. a recorded START with no stop means working, before any write", async () => {
   const missing = transcript('a2', undefined);
   const owner = ownerOf('wt2', [isolated('agent-a2', 'wt2', missing)], recorded(['start', 'a2', 3 * MINUTE]));
 
@@ -112,19 +126,21 @@ const ownerOf = (worktree, records, lifecycle) => activeOwner(`C:/repo/.claude/w
   check('its quiet time counts from the latest sign: the later write', ownerOf('wt2', [isolated('agent-a2s', 'wt2', stale)], recorded(['start', 'a2s', 3 * 60 * MINUTE]))?.quietForMs, 2 * 60 * MINUTE);
   check('a start on a worktree of another name is not an owner there', idOf(ownerOf('other', [isolated('agent-a2', 'wt2', missing)], recorded(['start', 'a2', 1000]))), undefined);
   check('the worktree name is compared without case', idOf(ownerOf('WT2', [isolated('agent-a2', 'wt2', missing)], recorded(['start', 'a2', 1000]))), 'agent-a2');
-}
+  check('the record\'s own name is compared without case too', idOf(ownerOf('wt2', [isolated('agent-a2', 'Wt2', missing)], recorded(['start', 'a2', 1000]))), 'agent-a2');
+  check('a path with no name is no worktree of anyone', idOf(activeOwner('', [isolated('agent-a2', 'wt2', missing)], NOW, recorded(['start', 'a2', 1000]))), undefined);
+});
 
 // --- 3. no lifecycle record keeps TODAY'S window behaviour ------------------------------------------------------
-{
+await section("3. no lifecycle record keeps TODAY'S window behaviour", async () => {
   check('unrecorded + written a minute ago: working', idOf(ownerOf('wt3', [isolated('agent-a3', 'wt3', transcript('a3f', MINUTE))], recorded())), 'agent-a3');
   check('unrecorded + written just inside the window: working', idOf(ownerOf('wt3', [isolated('agent-a3', 'wt3', transcript('a3e', ACTIVE_WINDOW_MS - 1000))], recorded())), 'agent-a3');
   check('unrecorded + written exactly at the window: not working', idOf(ownerOf('wt3', [isolated('agent-a3', 'wt3', transcript('a3w', ACTIVE_WINDOW_MS))], recorded())), undefined);
   check('unrecorded + written an hour ago: not working', idOf(ownerOf('wt3', [isolated('agent-a3', 'wt3', transcript('a3h', 60 * MINUTE))], recorded())), undefined);
   check('the default lifecycle (nothing recorded in this state) is the window rule', idOf(activeOwner('C:/repo/.claude/worktrees/wt3', [isolated('agent-a3', 'wt3', transcript('a3d', MINUTE))], NOW)), 'agent-a3');
-}
+});
 
 // --- 4. near misses --------------------------------------------------------------------------------------------
-{
+await section("4. near misses", async () => {
   const fresh = transcript('a4', MINUTE);
   const own = [isolated('agent-a4', 'wt4', fresh)];
 
@@ -143,21 +159,22 @@ const ownerOf = (worktree, records, lifecycle) => activeOwner(`C:/repo/.claude/w
   check('the same with the records in the other order', idOf(ownerOf('wt5', [second, first], recorded(['start', 'first', 20 * MINUTE], ['stop', 'first', 10 * MINUTE], ['start', 'second', 5 * MINUTE]))), 'agent-second');
   check('both stopped: nobody works on that worktree', idOf(ownerOf('wt5', [first, second], recorded(['start', 'first', 20 * MINUTE], ['stop', 'first', 10 * MINUTE], ['start', 'second', 8 * MINUTE], ['stop', 'second', 5 * MINUTE]))), undefined);
   check('a stopped agent on the worktree does not hide an unrecorded writing one', idOf(ownerOf('wt5', [first, isolated('agent-legacy', 'wt5', transcript('legacy', MINUTE))], recorded(['stop', 'first', 10 * 1000]))), 'agent-legacy');
-}
+});
 
 // --- 5. a START with no STOP older than the ceiling is a crashed session ---------------------------------------
-{
+await section("5. a START with no STOP older than the ceiling is a crashed session", async () => {
   const old = STARTED_CEILING_MS + MINUTE;
 
   check('a start past the ceiling with a quiet transcript is stopped', idOf(ownerOf('wt6', [isolated('agent-a6', 'wt6', transcript('a6q', 90 * MINUTE))], recorded(['start', 'a6', old]))), undefined);
   check('a start past the ceiling with no transcript is stopped', idOf(ownerOf('wt6', [isolated('agent-a6', 'wt6', transcript('a6m', undefined))], recorded(['start', 'a6', old]))), undefined);
   check('a start past the ceiling whose transcript is fresh is working (the window rule)', idOf(ownerOf('wt6', [isolated('agent-a6', 'wt6', transcript('a6f', MINUTE))], recorded(['start', 'a6', old]))), 'agent-a6');
   check('a start just inside the ceiling is working', idOf(ownerOf('wt6', [isolated('agent-a6', 'wt6', transcript('a6i', 90 * MINUTE))], recorded(['start', 'a6', STARTED_CEILING_MS - MINUTE]))), 'agent-a6');
+  check('a start exactly at the ceiling is read as unrecorded: a quiet transcript means stopped', idOf(ownerOf('wt6', [isolated('agent-a6', 'wt6', transcript('a6x', 90 * MINUTE))], recorded(['start', 'a6', STARTED_CEILING_MS]))), undefined);
   check('a stop past the ceiling is still a stop', idOf(ownerOf('wt6', [isolated('agent-a6', 'wt6', transcript('a6s', MINUTE))], recorded(['stop', 'a6', old]))), undefined);
-}
+});
 
 // --- 6. an agent joined only by the TENANCY line of its brief ---------------------------------------------------
-{
+await section("6. an agent joined only by the TENANCY line of its brief", async () => {
   const tenant = 'wt7';
   const claimed = transcript('t7', 90 * MINUTE, brief(`C:/repo/.claude/worktrees/${tenant}`));
   const unclaimed = transcript('t7n', 90 * MINUTE, brief('C:/repo/.claude/worktrees/elsewhere'));
@@ -168,10 +185,10 @@ const ownerOf = (worktree, records, lifecycle) => activeOwner(`C:/repo/.claude/w
   check('a stopped taker is stopped though its brief claims the worktree and it wrote a second ago', idOf(ownerOf(tenant, [taker('agent-t7s', transcript('t7s', 1000, brief(`C:/repo/.claude/worktrees/${tenant}`)))], recorded(['stop', 't7s', 500]))), undefined);
   check('an unrecorded taker keeps the window rule through its brief', idOf(ownerOf(tenant, [taker('agent-t7u', transcript('t7u', MINUTE, brief(`C:/repo/.claude/worktrees/${tenant}`)))], recorded())), 'agent-t7u');
   check('a taker never claims the main checkout (not under worktrees/)', idOf(activeOwner('C:/repo', [taker('agent-t7c', claimed)], NOW, recorded(['start', 't7c', MINUTE]))), undefined);
-}
+});
 
 // --- 7. the store: keys, corrupt text, a missing file ----------------------------------------------------------
-{
+await section("7. the store: keys, corrupt text, a missing file", async () => {
   check('agentKey strips the harness prefix', agentKey('agent-abc'), 'abc');
   check('agentKey keeps a bare id', agentKey('abc'), 'abc');
   check('agentKey refuses an empty id', agentKey(''), undefined);
@@ -194,10 +211,10 @@ const ownerOf = (worktree, records, lifecycle) => activeOwner(`C:/repo/.claude/w
   check('its event and time are kept', map.get('good'), { event: 'start', at: NOW });
   check('an empty text records nothing', lifecycleFrom('').size, 0);
   check('a lifecycle file that does not exist reads as nothing recorded', existsSync(lifecyclePath()) ? 'exists' : readLifecycle().size, 0);
-}
+});
 
 // --- 8. the recorder ---------------------------------------------------------------------------------------------
-{
+await section("8. the recorder", async () => {
   const lines = () => (existsSync(lifecyclePath()) ? readFileSync(lifecyclePath(), 'utf8').trim().split('\n').map((line) => JSON.parse(line)) : []);
   const start = { session_id: 's1', transcript_path: 'C:/t/main.jsonl', cwd: 'C:/repo/.claude/worktrees/wtR', hook_event_name: 'SubagentStart', agent_id: 'ar1', agent_type: 'general-purpose' };
   const stop = { ...start, hook_event_name: 'SubagentStop', stop_hook_active: false, agent_transcript_path: 'C:/t/subagents/agent-ar1.jsonl', last_assistant_message: 'done' };
@@ -223,10 +240,10 @@ const ownerOf = (worktree, records, lifecycle) => activeOwner(`C:/repo/.claude/w
   check('a start with no agent id is a malfunction, not a start', (evaluate(JSON.stringify({ ...start, agent_id: undefined }), { now: when }), lines().at(-1)), { event: 'malfunction', time: iso(NOW), why: 'SubagentStart without agent_id', keys: ['agent_type', 'cwd', 'hook_event_name', 'session_id', 'transcript_path'] });
   check('a malfunction line never makes an agent live', [...readLifecycle().keys()].sort(), ['ar1', 'ar2', 'ar3']);
   check('lineOf of a non-object is nothing', [lineOf(null), lineOf('x'), lineOf(undefined)], [undefined, undefined, undefined]);
-}
+});
 
 // --- 9. a write that cannot happen: fail open --------------------------------------------------------------------
-{
+await section("9. a write that cannot happen: fail open", async () => {
   const blocked = mkdtempSync(path.join(os.tmpdir(), 'agent-lifecycle-blocked-'));
   const file = path.join(blocked, 'a-file-not-a-directory');
 
@@ -248,10 +265,10 @@ const ownerOf = (worktree, records, lifecycle) => activeOwner(`C:/repo/.claude/w
   process.env.HOOK_STATE_DIR = saved;
   rmSync(blocked, { recursive: true, force: true });
   check('an impossible write neither throws nor blocks', [threw, result], [false, undefined]);
-}
+});
 
 // --- 10. the real dispatcher on real-shaped payloads from the real manifests -----------------------------------
-{
+await section("10. the real dispatcher on real-shaped payloads from the real manifests", async () => {
   const manifests = path.join(HERE, '..', 'hook-dispatch', 'manifests');
   const startManifest = path.join(manifests, 'subagent-start.json');
   const stopManifest = path.join(manifests, 'subagent-stop.json');
@@ -278,7 +295,7 @@ const ownerOf = (worktree, records, lifecycle) => activeOwner(`C:/repo/.claude/w
   const afterStart = await dispatch(own('SubagentStart'), payload('SubagentStart', 'ad2'));
 
   check('a dispatched start alone leaves the agent working', [afterStart.problems, readLifecycle().get('ad2')?.event], [[], 'start']);
-}
+});
 
 summarised = true;
 process.stdout.write(failures.length === 0 ? `${passed}/${passed} cases green @es ${passed}/${passed} casos en verde\n` : `${failures.map((line) => `FAIL ${line}`).join('\n')}\n${passed} passed, ${failures.length} failed @es ${passed} pasan, ${failures.length} fallan\n`);

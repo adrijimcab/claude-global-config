@@ -78,9 +78,6 @@ function writtenAt(transcript) {
  */
 function startedOwner(path, record, startedAt, now) {
   const wanted = worktreeName(path).toLowerCase();
-
-  if (wanted === '') return undefined;
-
   const mtime = writtenAt(record.transcript);
   const lastSign = Math.max(startedAt, mtime ?? 0);
 
