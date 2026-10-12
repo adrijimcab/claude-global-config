@@ -19,11 +19,10 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { isolateState } from '../hook-state/locations.mjs';
+import { git, makeWorld, put } from './fixtures.mjs';
 
 isolateState('integration-branch');
 
@@ -34,7 +33,8 @@ const { originHeadState } = await import('./origin-head-state.mjs');
 
 const SYNC = path.join(import.meta.dirname, 'sync.mjs');
 const CHILD_TIMEOUT_MS = 60_000;
-const root = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'integration-branch-')));
+const world = makeWorld();
+const { repository } = world;
 
 let passed = 0;
 const failures = [];
@@ -43,42 +43,6 @@ function check(condition, name) {
   if (condition) passed += 1;
   else failures.push(name);
   console.log(`${condition ? 'ok  ' : 'FAIL'} ${name}`);
-}
-
-function git(cwd, ...args) {
-  const run = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: CHILD_TIMEOUT_MS });
-  if (run.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${run.stderr}`);
-  return run.stdout.trim();
-}
-
-const put = (base, relative, content) => {
-  mkdirSync(path.dirname(path.join(base, relative)), { recursive: true });
-  writeFileSync(path.join(base, relative), content, 'utf8');
-};
-
-let counter = 0;
-
-/** A bare remote with `main`, `feature/meet` and `develop`, and a clone of it whose origin/HEAD is `main`. */
-function repository(declared) {
-  counter += 1;
-  const home = path.join(root, `case-${counter}`);
-  const remote = path.join(home, 'remote.git');
-  const seed = path.join(home, 'seed');
-  const clone = path.join(home, 'clone');
-  mkdirSync(home);
-  git(home, 'init', '-q', '--bare', '-b', 'main', remote);
-  git(home, 'init', '-q', '-b', 'main', seed);
-  git(seed, 'config', 'user.email', 't@example.invalid');
-  git(seed, 'config', 'user.name', 'tester');
-  put(seed, 'a.txt', 'a\n');
-  git(seed, 'add', '.');
-  git(seed, 'commit', '-q', '-m', 'seed');
-  git(seed, 'remote', 'add', 'origin', remote);
-  for (const branch of ['feature/meet', 'develop']) git(seed, 'branch', branch);
-  git(seed, 'push', '-q', 'origin', 'main', 'feature/meet', 'develop');
-  git(home, 'clone', '-q', remote, clone);
-  if (declared !== undefined) put(clone, '.claude/fleet-kit.json', JSON.stringify({ integrationBranches: declared }));
-  return { home, remote, clone };
 }
 
 const sync = (...args) => {
@@ -91,12 +55,7 @@ const refsOf = (cwd) => git(cwd, 'for-each-ref', '--format=%(refname) %(objectna
 
 // ── The declaration: one reader ──────────────────────────────────────────────────────────────────
 const MODULE = '.claude/integrate/integration-branches.mjs';
-const declare = (relative, content) => {
-  counter += 1;
-  const dir = path.join(root, `declaration-${counter}`);
-  put(dir, relative, content);
-  return dir;
-};
+const declare = (relative, content) => world.directory(relative, content);
 
 const fleet = declare('.claude/fleet-kit.json', '{"integrationBranches":["feature/meet","develop"]}');
 const fleetRead = readIntegrationDeclaration(fleet);
@@ -150,7 +109,7 @@ const stateRepo = repository(['feature/meet', 'develop']);
 const state = originHeadState(stateRepo.clone);
 check(state?.verdict === 'set' && state.want === 'feature/meet' && state.current === 'main' && state.main === stateRepo.clone && state.source === path.join(stateRepo.clone, '.claude/fleet-kit.json'), 'state: a drifted clone reads want, current, main, source and verdict set');
 check(originHeadState(repository(undefined).clone)?.governed === false, 'state: a clone declaring nothing is not governed');
-check(originHeadState(path.join(root, 'not-a-repo')) === undefined, 'state: a directory that is not a repository reads as undefined');
+check(originHeadState(world.directory('placeholder.txt', 'x')) === undefined, 'state: a directory that is not a repository reads as undefined');
 
 // ── The sync ─────────────────────────────────────────────────────────────────────────────────────
 const drifted = repository(['feature/meet', 'develop']);
@@ -198,14 +157,13 @@ put(broken.clone, '.claude/fleet-kit.json', '{ not json');
 const brokenRun = sync(broken.clone);
 check(brokenRun.code === 2 && brokenRun.err.includes(path.join(broken.clone, '.claude/fleet-kit.json')) && originHeadBranch(broken.clone) === 'main', 'an unreadable declaration is refused naming the file, nothing changed');
 
-const plain = path.join(root, 'plain');
-mkdirSync(plain);
+const plain = world.directory('placeholder.txt', 'x');
 const notRepo = sync(plain);
 check(notRepo.code === 2 && bilingual(notRepo.err), 'a directory that is not a repository is refused, bilingual');
 check(sync().code === 2 && bilingual(sync().err), 'no argument prints the usage and exits 2');
 check(sync('a', 'b').code === 2, 'two arguments are refused');
 
-rmSync(root, { recursive: true, force: true });
+world.dispose();
 const total = passed + failures.length;
 console.log(`${passed}/${total} assertions passed @es ${passed}/${total} aserciones correctas`);
 if (failures.length > 0) console.log(`FAILED: ${failures.join(' | ')}`);

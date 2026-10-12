@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "UserPromptSubmit"
+    }
+  ],
+  "why": "A project declares its integration branch in one source, but tools take the default branch from the clone's origin/HEAD (the gentle-ai review base, the base of agent worktrees). When the two disagree every session of that project starts from the wrong branch without knowing; this hook tells the session, on each prompt while it lasts, which sync command fixes it."
+}
