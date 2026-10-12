@@ -59,6 +59,22 @@ const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 export const RESUMABLE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Size past which a stopped agent's transcript is no longer resumed. SOURCE: the global lessons ledger,
+ * key `resumed-giant-transcripts-exhausted-quota` («once a worker's transcript passes ~2 MB, do not resume
+ * it: launch a fresh agent with a narrow scope that reads the state from the files»); the ledger writes
+ * "~2 MB", read here as 2,000,000 bytes. The one place this number lives: the decision and the printed
+ * rule both read it.
+ * @es Tamaño a partir del cual el transcript de un agente parado ya no se reanuda. FUENTE: el ledger
+ * global de lecciones, clave `resumed-giant-transcripts-exhausted-quota` («pasados ~2 MB no se reanuda:
+ * agente fresco con alcance acotado que lee el estado de los ficheros»); "~2 MB" se lee como 2.000.000
+ * bytes. Es el único sitio donde vive el número: la decisión y la regla impresa lo leen.
+ */
+export const EXHAUSTED_TRANSCRIPT_BYTES = 2_000_000;
+
+/** The ledger key the size rule comes from. @es La clave del ledger de la que sale la regla de tamaño. */
+const SIZE_RULE_LEDGER_KEY = 'resumed-giant-transcripts-exhausted-quota';
+
+/**
  * Share of the SMALLER errand's identifying words that must appear in the other before this refuses: all
  * of them. "The same errand, phrased differently" means one description is the other plus qualifiers;
  * the moment EACH side carries a word the other lacks, they name two objects of one verb — the siblings
@@ -378,20 +394,32 @@ function matchingAgents(description, repoPath, records, now) {
     if (recordedWorktree.length > 0 && !existsSync(recordedWorktree)) continue;
 
     let lastWrite;
+    let bytes;
 
     try {
-      lastWrite = statSync(record.transcript).mtimeMs;
+      // One stat answers both questions, so a transcript whose size cannot be read is also one whose age
+      // cannot: it is skipped, exactly as before.
+      // @es Un solo stat responde a ambas preguntas: un transcript cuyo tamaño no se lee tampoco tiene edad
+      // legible, y se salta igual que antes.
+      const stats = statSync(record.transcript);
+
+      lastWrite = stats.mtimeMs;
+      bytes = stats.size;
     } catch {
       continue; // no transcript is nothing to resume
     }
 
     if (now - lastWrite > RESUMABLE_WINDOW_MS) continue;
 
-    // Context exhausted: a resume replays the transcript that was already too long, so this agent is
+    // Exhausted: either the context ran out (a resume replays the transcript that was already too long) or the
+    // transcript passed the ledger size (a resume pays that whole history again). Either way the agent is
     // UNRESUMABLE. It is still returned — marked — because the author must be told where its worktree is.
-    // @es Contexto agotado: un resume reproduce el mismo transcript, así que NO se puede reanudar. Se
-    // devuelve marcado, porque al autor hay que decirle dónde está su worktree.
-    matches.push({ id: record.id, description: record.description, lastWrite, ratio, worktreePath: recordedWorktree, exhausted: stoppedOnContextLength(record.transcript) });
+    // @es Agotado: o se acabó el contexto (un resume reproduce el transcript ya demasiado largo) o el
+    // transcript pasó el tamaño del ledger (un resume paga de nuevo todo ese historial). En ambos casos NO se
+    // puede reanudar. Se devuelve marcado, porque al autor hay que decirle dónde está su worktree.
+    const oversized = bytes > EXHAUSTED_TRANSCRIPT_BYTES;
+
+    matches.push({ id: record.id, description: record.description, lastWrite, ratio, worktreePath: recordedWorktree, bytes, oversized, exhausted: stoppedOnContextLength(record.transcript) || oversized });
   }
 
   return matches.sort((left, right) => right.lastWrite - left.lastWrite);
@@ -597,16 +625,35 @@ export function decide(description, prompt, repoPath, records, now, session = un
   return advice.length === 0 ? undefined : { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: advice.join('\n\n') } };
 }
 
+/**
+ * The ledger rule, in both languages, naming each oversized agent and its size.
+ * @es La regla del ledger, en ambos idiomas, nombrando a cada agente sobredimensionado y su tamaño.
+ */
+function sizeRule(oversized) {
+  return [
+    '',
+    `LEDGER RULE (${SIZE_RULE_LEDGER_KEY}): once a worker's transcript passes ~${EXHAUSTED_TRANSCRIPT_BYTES / 1e6} MB, do not resume it:`,
+    'launch a fresh agent with a narrow scope that reads the state from the files.',
+    `@es REGLA DEL LEDGER (${SIZE_RULE_LEDGER_KEY}): pasados ~${EXHAUSTED_TRANSCRIPT_BYTES / 1e6} MB el transcript de un worker no se reanuda:`,
+    '@es se lanza un agente fresco con alcance acotado que lee el estado de los ficheros.',
+    ...oversized.map((agent) => `  ${address(agent.id)}: ${(agent.bytes / 1e6).toFixed(2)} MB (${agent.bytes} bytes) > ${EXHAUSTED_TRANSCRIPT_BYTES} bytes`)
+  ];
+}
+
 /** The advice for errand holders whose context ran out, or `undefined`. @es El aviso para quienes agotaron el contexto. */
 function unresumableNotice(exhausted) {
   if (exhausted.length === 0) return undefined;
 
+  const oversized = exhausted.filter((agent) => agent.oversized);
+
   return [
     'RESUME-BEFORE-FRESH — NOT refused: the agent(s) that hold this errand are UNRESUMABLE.',
-    'Each stopped on a context-length failure ("Prompt is too long"), and a resume replays that same',
-    'oversized transcript, so a fresh replacement is the right dispatch.',
+    'Each stopped on a context-length failure ("Prompt is too long") or holds a transcript past the ledger',
+    'size, and a resume replays that same oversized transcript, so a fresh replacement is the right dispatch.',
+    '@es Ninguno se puede reanudar: pararon por longitud de contexto o su transcript pasa el tamaño del ledger.',
     '',
     ...exhausted.map((agent) => `  ${address(agent.id)}  —  "${agent.description}"${agent.worktreePath === '' ? '  (ran in the main checkout)' : `\n    worktree: ${agent.worktreePath}`}`),
+    ...(oversized.length === 0 ? [] : sizeRule(oversized)),
     '',
     'Its worktree may hold uncommitted or unlanded work. Give the replacement a line naming it, e.g.:',
     '  TENANCY: <that worktree folder> — taking over from a context-exhausted agent; read its diff first.'

@@ -31,7 +31,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { priorAgents, relatedLiveAgents, significantWords, canonicalWord, coverage, projectSlug, address, decide, evaluate, sessionOf } from './guard.mjs';
+import { EXHAUSTED_TRANSCRIPT_BYTES, exhaustedAgents, priorAgents, relatedLiveAgents, significantWords, canonicalWord, coverage, projectSlug, address, decide, evaluate, sessionOf } from './guard.mjs';
 
 const NOW = Date.parse('2026-09-09T21:00:00Z');
 const MINUTE = 60 * 1000;
@@ -99,7 +99,7 @@ const COMPLETED_RECORD = { type: 'assistant', message: { role: 'assistant', cont
 const SERVER_ERROR_RECORD = { type: 'assistant', isApiErrorMessage: true, error: 'api_error', message: { model: '<synthetic>', content: [{ type: 'text', text: 'API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}}' }] } };
 
 /** A constructed record whose transcript really exists on disk with a chosen age. */
-function record({ id, description, project = SLUG, session = SESSION, ageMs = 5 * MINUTE, transcript = true, worktreePath = '', lastRecord = {} }) {
+function record({ id, description, project = SLUG, session = SESSION, ageMs = 5 * MINUTE, transcript = true, worktreePath = '', lastRecord = {}, sizeBytes = 0 }) {
   // The harness layout, as `agentRecords` walks it: <store>/<project>/<session>/subagents/<id>.jsonl.
   // @es La disposición del harness tal como la recorre `agentRecords`.
   const folder = join(scratch, project, session, 'subagents');
@@ -108,7 +108,14 @@ function record({ id, description, project = SLUG, session = SESSION, ageMs = 5 
   mkdirSync(folder, { recursive: true });
 
   if (transcript) {
-    writeFileSync(path, `{}\n${JSON.stringify(lastRecord)}\n`);
+    // A padding line FIRST, so the last record stays at the tail where the guard reads it.
+    // @es Una línea de relleno PRIMERO, para que el último registro siga al final, donde el guard lo lee.
+    // `sizeBytes` is the EXACT size of the file, so the threshold edge can be built to the byte.
+    // @es `sizeBytes` es el tamaño EXACTO del fichero, para construir el borde del umbral al byte.
+    const body = `{}\n${JSON.stringify(lastRecord)}\n`;
+    const padding = sizeBytes > 0 ? `${JSON.stringify({ pad: 'x'.repeat(sizeBytes - body.length - '{"pad":""}\n'.length) })}\n` : '';
+
+    writeFileSync(path, `${padding}${body}`);
 
     const seconds = (NOW - ageMs) / 1000;
 
@@ -156,7 +163,17 @@ const records = [
   // ANOTHER SESSION of the same project: stopped, recent, transcript on disk — and not resumable from here.
   // @es OTRA SESIÓN del mismo proyecto: parada, reciente, con transcript, y no reanudable desde aquí.
   record({ id: 'agent-aOTHERSESSION00', description: 'Compile the typography scale report', session: OTHER_SESSION }),
-  record({ id: 'agent-aOTHERSESSDUP0', description: 'Re-measure coverage floors', session: OTHER_SESSION })
+  record({ id: 'agent-aOTHERSESSDUP0', description: 'Re-measure coverage floors', session: OTHER_SESSION }),
+  // TRANSCRIPT SIZE, ledger key resumed-giant-transcripts-exhausted-quota: past the threshold a resume is
+  // never offered. The reported case was a 2,575,678-byte stopped agent; the near misses sit either side.
+  // @es TAMAÑO DEL TRANSCRIPT: pasado el umbral nunca se ofrece un resume. Caso real: 2.575.678 bytes.
+  record({ id: 'agent-aHUGE00000000000', description: 'Wire the tooling selftests ladder', sizeBytes: 2_500_000 }),
+  record({ id: 'agent-aBELOW0000000000', description: 'Profile the sidebar scroll jank', sizeBytes: 1_900_000 }),
+  record({ id: 'agent-aEDGE000000000000', description: 'Audit the toast stacking order', sizeBytes: EXHAUSTED_TRANSCRIPT_BYTES }),
+  record({ id: 'agent-aOVER0000000000', description: 'Reorder the legend swatch rows', sizeBytes: EXHAUSTED_TRANSCRIPT_BYTES + 1 }),
+  record({ id: 'agent-aPAIRHUGE0000000', description: 'Replace the pagination footer layout', sizeBytes: 2_500_000, ageMs: 1 * MINUTE }),
+  record({ id: 'agent-aPAIRSMALL000000', description: 'Replace the pagination footer layout', ageMs: 10 * MINUTE }),
+  record({ id: 'agent-aGONE0000000000', description: 'Rewrite the breadcrumb separator', transcript: false })
 ];
 
 const cases = [
@@ -225,7 +242,18 @@ const cases = [
   ['pass', 'Reopen tasks 89 127 130', 'one different number is a different errand'],
   ['refuse', 'Reopen tasks 89 127 129 130', 'the same numbers plus one more is the same errand, extended'],
   ['refuse', 'Refresh the visual regression baselines', 'a normal completion: resumable, still offered'],
-  ['refuse', 'Trace the demo crawler timeout', 'failed for ANOTHER reason (server error): resumable, still offered']
+  ['refuse', 'Trace the demo crawler timeout', 'failed for ANOTHER reason (server error): resumable, still offered'],
+
+  // --- TRANSCRIPT SIZE, added 2026-10-12 (reported by session b100-am-ui-15): the ledger says a transcript
+  // past ~2 MB is not resumed, and the guard used to refuse the fresh launch anyway.
+  // @es TAMAÑO DEL TRANSCRIPT: el ledger dice que no se reanuda un transcript de más de ~2 MB y el guard
+  // rechazaba igualmente el lanzamiento fresco.
+  ['pass', 'Wire the tooling selftests ladder', 'REAL CASE: a 2.5 MB stopped match is exhausted, never offered for resume'],
+  ['refuse', 'Profile the sidebar scroll jank', 'a 1.9 MB stopped match is still resumable'],
+  ['refuse', 'Audit the toast stacking order', 'a transcript of exactly the threshold (not past it) is still resumable'],
+  ['pass', 'Reorder the legend swatch rows', 'one byte past the threshold is exhausted'],
+  ['refuse', 'Replace the pagination footer layout', 'a huge match beside a small similar one: refused toward the small one'],
+  ['pass', 'Rewrite the breadcrumb separator', 'the size cannot be read (no transcript): today behaviour, nothing to resume']
 ];
 
 let failures = 0;
@@ -256,6 +284,29 @@ for (const [expected, description, label] of cases) {
     [!context.includes('SendMessage'), 'the advice never prints a resume recipe that cannot work'],
     [decide('Measure the storybook render budget', '', REPO, records, NOW, SESSION)?.hookSpecificOutput?.permissionDecision === 'deny', 'a rate-limited agent still gets the resume-first refusal'],
     [decide('Extract the reorder state machine into its own controller', '', REPO, records, NOW, SESSION) === undefined, 'unrelated work gets no output at all']
+  ];
+
+  for (const [ok, label] of checks) {
+    checked += 1; if (!ok) failures += 1;
+
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  }
+}
+
+// --- THE OUTPUT for the oversized state: allowed, the rule printed bilingually, the old agent and its size named.
+{
+  const huge = decide('Wire the tooling selftests ladder', '', REPO, records, NOW, SESSION);
+  const context = huge?.hookSpecificOutput?.additionalContext ?? '';
+  const pair = decide('Replace the pagination footer layout', '', REPO, records, NOW, SESSION);
+  const reason = pair?.hookSpecificOutput?.permissionDecisionReason ?? '';
+  const checks = [
+    [huge?.hookSpecificOutput?.permissionDecision === undefined && context.length > 0, 'the fresh launch beside an oversized match is allowed, with the rule'],
+    [context.includes('aHUGE00000000000') && context.includes('2500'), 'the rule names the old agent and its size'],
+    [context.includes('resumed-giant-transcripts-exhausted-quota') && context.includes('narrow scope') && context.includes('@es') && context.includes('alcance acotado'), 'the ledger rule is printed in English and in Spanish'],
+    [!context.includes('SendMessage'), 'the oversized advice never prints a resume recipe'],
+    [pair?.hookSpecificOutput?.permissionDecision === 'deny' && reason.includes('aPAIRSMALL000000') && !reason.includes('aPAIRHUGE0000000'), 'beside a small similar match the refusal points at the small one only'],
+    [exhaustedAgents('Wire the tooling selftests ladder', REPO, records, NOW).every((match) => match.oversized && match.bytes > EXHAUSTED_TRANSCRIPT_BYTES), 'the exhausted match records that it is oversized and how large'],
+    [EXHAUSTED_TRANSCRIPT_BYTES === 2_000_000, 'the threshold is the ledger 2 MB, 2,000,000 bytes']
   ];
 
   for (const [ok, label] of checks) {

@@ -15,7 +15,7 @@ const G = 'resume-before-fresh/guard.mjs';
 
 const MUTANTS = [
   ['dispatch vocabulary counts as the errand again (the 2026-09-30 false identity)', G, '.filter((word) => !DISPATCH_VOCABULARY.has(word))', '.filter(() => true)'],
-  ['a context-exhausted agent is offered for a resume that cannot work', G, 'exhausted: stoppedOnContextLength(record.transcript)', 'exhausted: false'],
+  ['a context-exhausted agent is offered for a resume that cannot work', G, 'exhausted: stoppedOnContextLength(record.transcript) || oversized', 'exhausted: oversized'],
   ['exhausted agents are refused like resumable ones', G, 'return matchingAgents(description, repoPath, own, now).filter((match) => !match.exhausted);', 'return matchingAgents(description, repoPath, own, now);'],
   ['the unresumable advice is dropped, so the replacement is told nothing', G, 'const advice = [unresumableNotice(', 'const advice = [undefined && unresumableNotice('],
   ['the advice stops asking for a TENANCY line', G, "'  TENANCY: <that worktree folder>", "'  <that worktree folder>"],
@@ -37,6 +37,15 @@ const MUTANTS = [
   ['the session is read one folder too low (the subagents folder)', G, 'path.basename(path.dirname(path.dirname(record.transcript)))', 'path.basename(path.dirname(record.transcript))'],
   ['decide forgets the session, so nobody is ever refused', G, 'const resumable = priorAgents(description, repoPath, records, now, session);', 'const resumable = priorAgents(description, repoPath, records, now);'],
   ['the hook entry point drops the payload session id', G, 'records ?? agentRecords(), now, payload?.session_id);', 'records ?? agentRecords(), now);'],
+  ['a transcript past the ledger size is offered for resume again', G, 'exhausted: stoppedOnContextLength(record.transcript) || oversized', 'exhausted: stoppedOnContextLength(record.transcript)'],
+  ['the size is never read, so no transcript is ever oversized', G, 'bytes = stats.size;', 'bytes = 0;'],
+  ['a transcript of exactly the threshold is written off', G, 'const oversized = bytes > EXHAUSTED_TRANSCRIPT_BYTES;', 'const oversized = bytes >= EXHAUSTED_TRANSCRIPT_BYTES;'],
+  ['one byte past the threshold is still resumable', G, 'const oversized = bytes > EXHAUSTED_TRANSCRIPT_BYTES;', 'const oversized = bytes > EXHAUSTED_TRANSCRIPT_BYTES + 1;'],
+  ['the threshold drops to 1 MB, so a 1.9 MB transcript is written off', G, 'export const EXHAUSTED_TRANSCRIPT_BYTES = 2_000_000;', 'export const EXHAUSTED_TRANSCRIPT_BYTES = 1_000_000;'],
+  ['the threshold rises to 3 MB, so the reported 2.5 MB transcript is offered', G, 'export const EXHAUSTED_TRANSCRIPT_BYTES = 2_000_000;', 'export const EXHAUSTED_TRANSCRIPT_BYTES = 3_000_000;'],
+  ['the ledger rule is not printed for an oversized agent', G, '...(oversized.length === 0 ? [] : sizeRule(oversized)),', ''],
+  ['the Spanish half of the ledger rule is dropped', G, "    '@es se lanza un agente fresco con alcance acotado que lee el estado de los ficheros.',\n", ''],
+  ['the oversized agent is named without its size', G, '...oversized.map((agent) => `  ${address(agent.id)}: ${(agent.bytes / 1e6).toFixed(2)} MB (${agent.bytes} bytes) > ${EXHAUSTED_TRANSCRIPT_BYTES} bytes`)', '...oversized.map((agent) => `  ${address(agent.id)}`)'],
   ['an agent older than the window is offered', G, '    if (now - lastWrite > RESUMABLE_WINDOW_MS) continue;\n', ''],
   ['a record from another project is offered', G, 'if (projectSlug(record.project) !== slug) continue;', ''],
   ['an agent whose worktree was removed is offered', G, '    if (recordedWorktree.length > 0 && !existsSync(recordedWorktree)) continue;\n', '']
