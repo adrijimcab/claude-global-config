@@ -241,6 +241,10 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   owner's SDD sweep 2026-10-12; the rest of that sweep is clean (history and gentle-ai-rendered text kept;
   Discovery CLAUDE.md fixed 0eee82b; host H9 closed). Pending, reason (4): a rename across state,
   rotate.mjs, census and two manifests is its own change.
+  CLOSED 2026-10-12 — Rename `sdd-attempt-cwd-guard` to a name: now `review-cwd-guard` (889a278). Selftest 59/59,
+  verified by the orchestrator. The worker measured 24/24 mutants, scope with 0 gaps, census, rotate,
+  dispatch and contract-path-check all green. A dispatch proof shows `review status` refused from the main
+  checkout with a unit worktree ahead and allowed from the unit worktree. No rule line named the guard.
 - Brief preflight face: derived gates (contract delivered 2026-10-12 by session b100-am-ui-f8; measured the same
   day by running `node .claude/gate-scope/gates-for.mjs src/lib/components/b100-dashboard/b100-dashboard.component.ts`
   in b100: exit 0, 19 gates, 64 unscoped). The deriver prints `{ gates, reasons, unscoped }` on stdout with exit 0,
