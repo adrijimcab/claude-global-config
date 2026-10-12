@@ -118,6 +118,15 @@ git -C $HOME\.claude checkout -- .   # or restore ~/.gentle-ai/backups/<id>
 @es Quedarse en 2.9.1: la v4 cambia SDD por ODD (decisión del dueño), sube el set siempre cargado a 87,5k
 y deja un hook que falla en cada prompt. Se revisa en la fecha indicada.
 
+CLOSED 2026-10-12 — H9 — gentle-ai v4: decide SDD -> ODD: the owner chose ODD and ordered the install.
+The port landed on master (4886719; sdd-mandate.md -> route-mandate.md, SDD agents, skills and commands
+removed, preflight hook dropped, spans lazy-loaded), `go install …/v4/cmd/gentle-ai@v4.0.0` exit 0,
+`migrate-v4.mjs --apply` exit 0 with 5/5 checks held and rollback point
+`~/.gentle-ai-migrations/v4-20261012T112049-688Z`, v4 settings render landed d1c6b04. Still open from
+this item, carried to the master backlog: the always-loaded budget (last step), and receipt-driven
+development, which v4 turns on by default (owner's switch).
+@es CERRADO 2026-10-12: el dueño eligió ODD y ordenó instalarlo; el port y la instalación están hechos.
+
 ## H10 — Karma gate and Angular 22 Node floor on the host — OPEN
 
 The Karma coverage gate of the angular-19..22 toolchains could not run in the cloud (no Chrome; the
