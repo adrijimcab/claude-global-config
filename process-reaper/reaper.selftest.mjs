@@ -206,7 +206,12 @@ try {
   check('precondition: the node process has a child that does not name the worktree', grandchildren.length > 0, true);
   check('precondition: the sibling processes are running', [other, prefix].every((child) => before.some((entry) => entry.pid === child.pid)), true);
 
-  const real = reapAgentProcesses({ worktree: target }, { list: realList });
+  let real = CRASHED;
+  try {
+    real = reapAgentProcesses({ worktree: target }, { list: realList });
+  } catch {
+    /* the crash stays the CRASHED outcome, which fails the checks below @es el crash queda como CRASHED y hace fallar los checks siguientes */
+  }
   await wait(1500);
   const after = realList();
   const present = (pid) => after.some((entry) => entry.pid === pid);
