@@ -38,6 +38,8 @@ import { fileURLToPath } from 'node:url';
 import { isolateState } from '../hook-state/locations.mjs';
 import { requireIntegrationBranch } from './integration-branch.mjs';
 import { land } from './land.mjs';
+import { treeOf } from '../standard-review/unit.mjs';
+import { recordVerdict } from '../standard-review/verdict-store.mjs';
 import { mayPublishTo } from './remote-policy.mjs';
 import { testCommandOf } from './test-command.mjs';
 
@@ -168,12 +170,20 @@ const seed = (() => {
 })();
 
 /**
+ * Records a PASS of the standard review for the worktree's current tree, so a fixture lands unless a test says it is unreviewed.
+ * @es Registra un PASS de la revisión contra el estándar para el árbol actual del worktree; así un fixture aterriza salvo que un test diga que no está revisado.
+ */
+function approve(worktree) {
+  recordVerdict({ tree: treeOf(worktree), base: 'fixture', verdict: 'pass', summary: 'fixture', findings: [], model: 'fixture', costUsd: 0, durationMs: 0 });
+}
+
+/**
  * Copies the seed, then adds a worktree on branch `work`. `work` files are committed in the worktree;
  * `forced` ones are committed with `add -f` (ignored in the main).
  * @es Copia la semilla y le añade un worktree en la rama `work`. Los ficheros de `work` se commitean en el
  * worktree; los `forced` con `add -f` (ignorados en el principal).
  */
-function layout({ work = {}, forced = {}, removed = [], remoteUrl = OWNER_URL } = {}) {
+function layout({ work = {}, forced = {}, removed = [], remoteUrl = OWNER_URL, reviewed = true } = {}) {
   fixtures += 1;
   const base = path.join(scratchRoot, `f${fixtures}`);
   mkdirSync(base);
@@ -196,6 +206,7 @@ function layout({ work = {}, forced = {}, removed = [], remoteUrl = OWNER_URL } 
     for (const name of Object.keys(forced)) must(worktree, 'add', '-f', name);
     must(worktree, 'commit', '-q', '-m', 'work');
   }
+  if (reviewed) approve(worktree);
   return { base, remote, main, worktree };
 }
 
@@ -558,8 +569,35 @@ try {
   check(!mayPublishTo({ main: classified.main, remote: 'origin' }), 'one foreign pushurl among owner ones makes the remote foreign');
   check(!mayPublishTo({ main: classified.main, remote: 'no-such-remote' }), 'a remote that does not exist is not published');
 
+  // ── The standard review: no landing without a recorded PASS for the exact tree ─────────────────
+  const unreviewed = layout({ work: { 'gate-1.txt': '1\n' }, reviewed: false });
+  const missingReport = expectRefused('an unreviewed tree', unreviewed, { reason: 'review-missing', text: 'no recorded PASS from the standard review' });
+  check(missingReport.includes('review.mjs') && missingReport.includes(unreviewed.worktree), `an unreviewed tree: the report names the command to run: ${missingReport}`);
+  expectRefused('an unreviewed tree in check mode', unreviewed, { reason: 'review-missing', text: 'no recorded PASS', extra: { check: true } });
+  const unreviewedAndRed = layout({ work: { verdict: '1\n', 'gate-2.txt': '2\n' }, reviewed: false });
+  expectRefused('the review is required before the verification runs', unreviewedAndRed, { reason: 'review-missing', text: 'no recorded PASS' });
+
+  const reviewFailed = layout({ work: { 'gate-3.txt': '3\n' }, reviewed: false });
+  recordVerdict({ tree: treeOf(reviewFailed.worktree), base: 'fixture', verdict: 'fail', summary: 'too clever', findings: [{ file: 'b.txt', line: 1, standard: 2, why: 'speculative layer' }], model: 'fixture', costUsd: 0, durationMs: 0 });
+  const failedReport = expectRefused('a tree whose review failed', reviewFailed, { reason: 'review-failed', text: 'b.txt:1 [standard item 2] speculative layer' });
+  check(failedReport.includes('too clever'), `a failed review: the report carries its summary: ${failedReport}`);
+
+  const changedAfterReview = layout({ work: { 'gate-4.txt': '4\n' } });
+  put(changedAfterReview.worktree, 'c.txt', 'c\n');
+  must(changedAfterReview.worktree, 'add', '-A');
+  must(changedAfterReview.worktree, 'commit', '-q', '-m', 'after the review');
+  expectRefused('a verdict does not survive a change of the tree', changedAfterReview, { reason: 'review-missing', text: 'no recorded PASS' });
+
+  const injectedReview = [];
+  const viaInjectedReview = layout({ work: { 'j.txt': 'j\n' }, reviewed: false });
+  const injectedOutcome = landFixture(viaInjectedReview, { reviewRequirement: (inputs) => (injectedReview.push(inputs), { ok: true, tree: 'x' }) });
+  check(injectedOutcome.exitCode === 0 && injectedReview.length === 1 && injectedReview[0].worktree === viaInjectedReview.worktree, 'the landing asks the requirement about exactly the landed worktree');
+
   // ── The command line ──────────────────────────────────────────────────────────────────────────
-  const viaCli = layout({ work: { 'b.txt': 'b\n' } });
+  const unreviewedViaCli = layout({ work: { 'gate-5.txt': '5\n' }, reviewed: false });
+  const refusedUnreviewed = cli(...argsOf(unreviewedViaCli));
+  check(refusedUnreviewed.status === 2 && refusedUnreviewed.stderr.startsWith('REFUSED [review-missing]'), `the command line refuses an unreviewed tree: ${refusedUnreviewed.status} ${refusedUnreviewed.stderr}`);
+  const viaCli =layout({ work: { 'b.txt': 'b\n' } });
   const cliBefore = snapshotOf(viaCli);
   const checked = cli(...argsOf(viaCli), '--check');
   check(checked.status === 0 && checked.stdout.startsWith('READY ') && checked.stdout.includes('nothing was landed'), `check mode: exit 0 READY: ${checked.status} ${checked.stdout}${checked.stderr}`);

@@ -10,6 +10,8 @@
  *   1. preconditions (`preconditions.mjs`): two checkouts of one repository, a fully committed worktree,
  *      the main checkout on the shared branch, a HEAD that contains both the local and the remote tip, and
  *      no landed path colliding with the main checkout's uncommitted work or with a differing ignored file;
+ *   1b. the standard review (`../standard-review/review-requirement.mjs`): the worktree's tree must hold a
+ *      recorded PASS, else the landing is refused naming the command that reviews it;
  *   2. verification (`verification.mjs`): the worktree's test command, run in the worktree — the unit suite
  *      the project declares in its `.claude/fleet-kit.json` `unitSuite`, else `selftest-runner/run.mjs`
  *      (`test-command.mjs`); with neither, the landing is refused;
@@ -34,7 +36,7 @@
  * seguro para que un commit llegue ahí es después de verificarlo, y es la única forma en que esta
  * herramienta lo mueve. Secuencia, un solo proceso, nada escrito antes del último paso: precondiciones;
  * verificación en el worktree (la suite unitaria que declara el `unitSuite` de `.claude/fleet-kit.json` del
- * proyecto, o si no `selftest-runner/run.mjs`; sin ninguna, se rechaza); las precondiciones otra vez, que deben dar el MISMO head y punta (lo que
+ * proyecto, o si no `selftest-runner/run.mjs`; sin ninguna, se rechaza); antes de ella, la revisión contra el estándar (el árbol debe tener un PASS registrado, si no se rechaza nombrando la orden que lo revisa); las precondiciones otra vez, que deben dar el MISMO head y punta (lo que
  * aterriza es lo verificado); publicación (fast-forward y, SOLO si el remoto es un respaldo del dueño
  * (`remote-policy.mjs`: github.com/adrijimcab/*), push y relectura de la punta remota). Cualquier otro
  * remoto no se empuja jamás: se hace fast-forward de la rama local, el informe dice «ATERRIZADO EN LOCAL ...
@@ -58,6 +60,7 @@ import { landingRangeOf } from './preconditions.mjs';
 import { publish } from './publication.mjs';
 import { mayPublishTo } from './remote-policy.mjs';
 import { verifyWorktree } from './verification.mjs';
+import { reviewRequirementOf } from '../standard-review/review-requirement.mjs';
 
 /** The range must not have moved while the verification ran. @es El rango no debe haberse movido durante la verificación. */
 function requireUnmoved(before, after) {
@@ -74,20 +77,24 @@ function stoppedBy(refusal) {
 }
 
 /**
+ * `reviewRequirement` is injected for the selftest; the real one reads the recorded standard-review verdict of the
+ * worktree's tree. @es `reviewRequirement` se inyecta en el selftest; el real lee el veredicto registrado de la revisión del árbol.
  * `reap` (off by default) closes the landed worktree's loose ends AFTER a written landing: the processes that name
  * it are killed (`process-reaper/reaper.mjs`) and the report says which. It never changes whether or how the
  * landing happened, and `--check` never reaps. `reaper` is injected for the selftest.
  * @es `reap` (apagado por defecto) cierra los cabos sueltos del worktree aterrizado DESPUÉS de un aterrizaje
  * escrito: se matan los procesos que lo nombran y el informe dice cuáles. Nunca cambia si el aterrizaje ocurrió
  * ni cómo, y `--check` nunca siega.
- * @param {{ worktree: string, main: string, branch: string, remote: string, check?: boolean, reap?: boolean, verifyTimeoutMs?: number, reaper?: typeof reapAgentProcesses }} inputs
+ * @param {{ worktree: string, main: string, branch: string, remote: string, check?: boolean, reap?: boolean, verifyTimeoutMs?: number, reaper?: typeof reapAgentProcesses, reviewRequirement?: typeof reviewRequirementOf }} inputs
  * @returns {{ exitCode: number, lines: string[] }}
  * @es Devuelve el código de salida y las líneas del informe.
  */
-export function land({ worktree, main, branch, remote, check = false, reap = false, verifyTimeoutMs, reaper = reapAgentProcesses }) {
+export function land({ worktree, main, branch, remote, check = false, reap = false, verifyTimeoutMs, reaper = reapAgentProcesses, reviewRequirement = reviewRequirementOf }) {
   const inputs = { worktree, main, branch, remote };
   try {
     const before = landingRangeOf(inputs);
+    const review = reviewRequirement({ worktree });
+    if (!review.ok) throw new Refusal(review.reason, review.lines);
     const summary = verifyWorktree(worktree, { main, timeoutMs: verifyTimeoutMs });
     const after = landingRangeOf(inputs);
     requireUnmoved(before, after);

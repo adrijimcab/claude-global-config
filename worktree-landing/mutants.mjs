@@ -110,6 +110,11 @@ const MUTANTS = [
   ['reaping is on by default', LAND, 'check = false, reap = false, verifyTimeoutMs', 'check = false, reap = true, verifyTimeoutMs'],
   ['the --reap flag is not known', ARGUMENTS, "'--reap': 'reap' }", '}'],
   ['the command line reaps by default', ARGUMENTS, 'const inputs = { check: false, reap: false };', 'const inputs = { check: false, reap: true };'],
+  // The standard review / La revisión contra el estándar
+  ['a tree with no recorded review lands', LAND, 'if (!review.ok) throw new Refusal(review.reason, review.lines);', 'if (false) throw new Refusal(review.reason, review.lines);'],
+  ['the review is asked about the main checkout', LAND, 'reviewRequirement({ worktree })', 'reviewRequirement({ worktree: main })'],
+  ['the review is asked after the verification', LAND, '    const review = reviewRequirement({ worktree });\n    if (!review.ok) throw new Refusal(review.reason, review.lines);\n    const summary = verifyWorktree(worktree, { main, timeoutMs: verifyTimeoutMs });', '    const summary = verifyWorktree(worktree, { main, timeoutMs: verifyTimeoutMs });\n    const review = reviewRequirement({ worktree });\n    if (!review.ok) throw new Refusal(review.reason, review.lines);'],
+  ['the real requirement accepts every tree', LAND, 'reviewRequirement = reviewRequirementOf })', "reviewRequirement = () => ({ ok: true, tree: 'x' }) })"],
 ];
 
 // Each mutant needs ONE failed assertion, so the selftest it runs may stop at the first (see the selftest).
@@ -118,7 +123,7 @@ process.env.WORKTREE_LANDING_SELFTEST_FAIL_FAST = '1';
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['worktree-landing', 'integration-branch', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['worktree-landing', 'standard-review', 'judge-gate', 'integration-branch', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'worktree-landing/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',
