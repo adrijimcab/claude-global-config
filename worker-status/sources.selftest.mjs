@@ -55,6 +55,8 @@ try {
   check('processes: a line without the encoded half is one row with no text', attempt(() => rowsOfListing('7')), [{ pid: 7, commandLine: '' }]);
   check('processes: every line is a row, decoded from UTF-8', attempt(() => rowsOfListing(`1 ${encoded('a ñ')}\r\n2 ${encoded('b')}\r\n`)), [{ pid: 1, commandLine: 'a ñ' }, { pid: 2, commandLine: 'b' }]);
   check('processes: empty output is no rows', attempt(() => rowsOfListing('')), []);
+  check('processes: a `pid:parent` token is a row with its parent', attempt(() => rowsOfListing(`7:3 ${encoded('x')}`)), [{ pid: 7, parentPid: 3, commandLine: 'x' }]);
+  check('processes: a non-numeric parent is no parent', attempt(() => rowsOfListing(`7:abc ${encoded('x')}`)), [{ pid: 7, commandLine: 'x' }]);
 
   // The real-OS listing runs with a PRIVATE profile inside this selftest's temp: PowerShell writes its profile
   // folders there, never into the home of whoever runs the proof. @es El listado real corre con un perfil
@@ -70,6 +72,7 @@ try {
 
   check('processes: the real listing does not throw', listed === 'THROWS', false);
   check('processes: the real listing is non-empty rows with numeric pid', real.length > 0 && real.every((row) => Number.isInteger(row.pid) && typeof row.commandLine === 'string'), true);
+  check('processes: the real listing carries the parent of this very process', real.some((row) => row.pid === process.pid && row.parentPid === process.ppid), true);
   check('processes: the real listing contains this very process', real.some((row) => row.pid === process.pid), true);
   // On Windows the System process (pid 4) has no command line; it must still be a row, with empty text.
   // @es En Windows el proceso System (pid 4) no tiene línea de comandos; igual debe ser una fila, con texto vacío.
