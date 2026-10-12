@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Agent|Task"
+    }
+  ],
+  "why": "a worker is sent out under a project's agent contract, which is split across two files (English for Claude Code, Spanish for other runtimes) that each carry the same rules. Drift between them means the worker runs under a contract missing a rule its sibling runtime enforces. It is checked at the moment the contract is CONSUMED, before a delegation, because the contract files are usually gitignored and no commit hook ever sees them. Not registered for SendMessage: a resume carries no new contract."
+}

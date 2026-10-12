@@ -167,6 +167,15 @@
 !/brief-tenancy/
 !/brief-tenancy/**
 /brief-tenancy/state/
+!/agent-contract-parity/
+!/agent-contract-parity/**
+/agent-contract-parity/state/
+!/subagent-contract-pointer/
+!/subagent-contract-pointer/**
+/subagent-contract-pointer/state/
+!/brief-route/
+!/brief-route/**
+/brief-route/state/
 !/failure-capture/
 !/failure-capture/**
 !/bilingual-output/
