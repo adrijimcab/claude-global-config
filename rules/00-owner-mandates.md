@@ -242,6 +242,11 @@ feature ODD queda verificada), el ORQUESTADOR hace, en el MISMO turno, las tres 
 4. **Lo encontrado:** todo hallazgo que trae la unidad (del informe del worker o de la integración) se
    resuelve en ese turno según «Resolver en el momento antes que encolar», y si no puede, entra al
    backlog con su razón.
+5. **Sus procesos** (directiva del dueño 2026-10-12): todo proceso vivo o zombi de ese agente se mata al
+   cerrarlo, sea cual sea su ejecutable (bash, sh, node, cmd, powershell). Se identifica porque su línea de
+   comandos nombra el worktree del agente, su id o su scratch, y se mata su árbol entero
+   (`taskkill /PID <pid> /T /F`). Un proceso de otra sesión no se toca. Medido: bucles de espera `until …
+   sleep` vivieron unas 18 h tras su worker, y procesos de un worktree borrado siguen vivos desde el 2026-09-27.
 
 Reafirmado por el dueño el 2026-10-11 para toda sesión, también las nuevas: «siempre que se integra un
 agente, se borre su worktree y su rama local si la hizo y que se suba lo hecho a engram y lo encontrado y
