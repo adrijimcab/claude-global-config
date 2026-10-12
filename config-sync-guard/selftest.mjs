@@ -378,7 +378,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
 
   const kept = threw('readAuthoredWrites', () => readAuthoredWrites(journal), []);
 
-  check('the journal keeps only the newest MAX_RECORDS', [kept.length, kept[kept.length - 1].mtimeMs, kept[0].mtimeMs], [MAX_RECORDS, MAX_RECORDS + 4, 5]);
+  check('the journal keeps only the newest MAX_RECORDS', [kept.length, kept.at(-1)?.mtimeMs, kept[0]?.mtimeMs], [MAX_RECORDS, MAX_RECORDS + 4, 5]);
 
   const root = scratchDir('touched-paths-');
 
