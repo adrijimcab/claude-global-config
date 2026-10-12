@@ -30,6 +30,9 @@ const SHARED_DIRECTORY = 'bilingual-output';
 const ENGINE_DIRECTORY = 'agent-contract-parity';
 /** A product module: never a selftest or a mutant campaign. @es Un módulo de producto: nunca un selftest ni una campaña de mutantes. */
 const isProduct = (file) => !file.includes('selftest') && !file.includes('mutants');
+/** The journal of authored writes the loop records into, and what it imports, by name. @es El journal de escrituras con autor en que registra el lazo, y lo que importa. */
+const GUARD_DIRECTORY = 'config-sync-guard';
+const GUARD_MODULES = new Set(['authored-writes.mjs', 'touched-paths.mjs', 'transcript-writes.mjs']);
 /** The state-location module and the message table it imports, by name. @es El módulo de ubicaciones y su tabla. */
 const STATE_DIRECTORY = 'hook-state';
 const STATE_MODULES = new Set(['locations.mjs', 'message-table.mjs']);
@@ -37,7 +40,7 @@ const STATE_MODULES = new Set(['locations.mjs', 'message-table.mjs']);
 const SHARED_IMPORT = /^import [^\n]*from '\.\.\/bilingual-output\/([A-Za-z0-9._-]+\.mjs)'/gm;
 
 /** The real tree's source directories. @es Los directorios de origen del árbol real. */
-const REAL_SOURCES = { loop: HERE, shared: path.join(HERE, '..', SHARED_DIRECTORY), engine: path.join(HERE, '..', ENGINE_DIRECTORY), state: path.join(HERE, '..', STATE_DIRECTORY) };
+const REAL_SOURCES = { guard: path.join(HERE, '..', GUARD_DIRECTORY), loop: HERE, shared: path.join(HERE, '..', SHARED_DIRECTORY), engine: path.join(HERE, '..', ENGINE_DIRECTORY), state: path.join(HERE, '..', STATE_DIRECTORY) };
 
 /**
  * The environment a process of a constructed world runs under: `home` is the user's home, the Claude home is
@@ -83,6 +86,7 @@ export function provisionLoop(loop, accept = () => true, sources = REAL_SOURCES)
   copyModules(sources.loop, loop, accept);
   copyModules(sources.shared, shared, isProduct);
   copyModules(sources.engine ?? REAL_SOURCES.engine, path.join(loop, '..', ENGINE_DIRECTORY), isProduct);
+  copyModules(sources.guard ?? REAL_SOURCES.guard, path.join(loop, '..', GUARD_DIRECTORY), (file) => GUARD_MODULES.has(file));
   copyModules(sources.state ?? REAL_SOURCES.state, path.join(loop, '..', STATE_DIRECTORY), (file) => STATE_MODULES.has(file));
 
   const missing = missingSharedModules(loop, shared);

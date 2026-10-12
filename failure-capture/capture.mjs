@@ -40,6 +40,8 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { recordAuthoredWrites } from '../config-sync-guard/authored-writes.mjs';
+import { changedBetween, snapshotMtimes } from '../config-sync-guard/touched-paths.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { closureRecord, MECHANISM_FLAG, NO_MECHANISM_FLAG, NO_MECHANISM_REASON_FORM, readClosure, verifyMechanism } from './closure.mjs';
 import { adviseOnBudget } from './budget-advisory.mjs';
@@ -1164,23 +1166,52 @@ function sessionOf(args) {
   return typeof fromHarness === 'string' && fromHarness.length > 0 ? fromHarness : undefined;
 }
 
+/**
+ * Where a command of this loop can write configuration: the rules and lessons folders of the home, every
+ * ledger it sees and the worker contracts of its project. Read after `bindLoopContext`.
+ * @es Dónde puede escribir configuración un comando de este bucle: las carpetas de reglas y lecciones del home, cada ledger que ve y los contratos de worker de su proyecto.
+ */
+const writableRoots = () => [path.join(homedir(), '.claude', 'rules'), path.join(homedir(), '.claude', 'lessons'), ...Object.values(LEDGERS).map(({ file }) => file), ...WORKER_CONTRACTS];
+
+/**
+ * Runs `command` and journals every file it changed under the session that ran it
+ * (`config-sync-guard/authored-writes.mjs`), so the turn guard credits a write to its author and not to a
+ * session whose shell call merely overlapped it (measured 2026-10-12). With no known session nothing is
+ * recorded: an author nobody knows is not a fact.
+ * @es Corre `command` y registra cada fichero que cambió bajo la sesión que lo corrió, para que la guardia de turno acredite la escritura a su autor y no a una sesión cuyo shell solo la solapó (medido el 2026-10-12). Sin sesión conocida no se registra nada.
+ */
+function runAuthored(session, command) {
+  const roots = writableRoots();
+  const before = snapshotMtimes(roots);
+  const code = command();
+
+  recordAuthoredWrites(changedBetween(before, snapshotMtimes(roots)), session);
+
+  return code;
+}
+
 function main() {
   const [command, ...rest] = process.argv.slice(2);
   const parsed = parseArgs(rest);
   const args = { ...parsed, session: sessionOf(parsed) };
 
-  if (PROJECT_COMMANDS.has(command)) {
-    try {
-      bindLoopContext();
-    } catch (error) {
-      const defect = error instanceof Error ? error.message : String(error);
+  if (!PROJECT_COMMANDS.has(command)) return dispatch(command, args);
 
-      speaker.complain('project.configUnreadable', { command, defect });
+  try {
+    bindLoopContext();
+  } catch (error) {
+    const defect = error instanceof Error ? error.message : String(error);
 
-      return 2;
-    }
+    speaker.complain('project.configUnreadable', { command, defect });
+
+    return 2;
   }
 
+  return runAuthored(args.session, () => dispatch(command, args));
+}
+
+/** The command's own work. @es El trabajo propio del comando. */
+function dispatch(command, args) {
   switch (command) {
     case 'init':
       return commandInit();
