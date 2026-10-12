@@ -92,6 +92,38 @@ const none = cli(empty, '--root', empty);
 check(none.status === 2, `zero discovered exits 2, never 0: ${none.status}`);
 check(none.stderr.includes('@es'), 'the zero-discovered message is bilingual');
 
+// ── Discovery: a tooling tree ignored by its code repository, with its own repository elsewhere ──
+// (b100-am-ui's `.claude`: ignored by the code repo, versioned in a backup repo whose git dir lives outside.)
+// `--git-dir` makes that repository the population: its tracked and not-ignored files, never the scratch copies
+// its own `.gitignore` excludes. @es Un árbol de tooling ignorado por su repo de código, con su propio repo fuera.
+const codeRepo = repo({
+  tracked: { 'README.md': 'code' },
+  loose: {
+    '.claude/tool/selftest.mjs': GREEN,
+    '.claude/other/x.selftest.mjs': GREEN,
+    '.claude/scratch/copy/tool/selftest.mjs': RED,
+    '.claude/.gitignore': 'scratch/\n',
+  },
+  ignore: '.claude/\n',
+});
+const toolingTree = path.join(codeRepo, '.claude');
+const toolingGitDir = path.join(bareDir(), 'tooling.git');
+const viaGitDir = (...args) => spawnSync('git', [`--git-dir=${toolingGitDir}`, `--work-tree=${toolingTree}`, ...args], { encoding: 'utf8' });
+spawnSync('git', ['init', '-q', '--bare', toolingGitDir], { encoding: 'utf8' });
+viaGitDir('add', 'tool/selftest.mjs', '.gitignore');
+viaGitDir('-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '-m', 'tooling');
+const ownRepo = discoverSelftests(toolingTree, { gitDir: toolingGitDir });
+check(
+  JSON.stringify(ownRepo.entries.map((entry) => `${entry.path}${entry.untracked ? '*' : ''}`).sort()) === JSON.stringify(['other/x.selftest.mjs', 'tool/selftest.mjs']),
+  `with --git-dir the tooling tree's own repository is the population, scratch excluded: ${JSON.stringify(ownRepo.entries)}`,
+);
+check(path.resolve(ownRepo.root) === path.resolve(toolingTree), `with --git-dir the root is the tooling tree itself: ${ownRepo.root}`);
+const ownRepoCli = cli(codeRepo, '--root', toolingTree, '--git-dir', toolingGitDir);
+check(ownRepoCli.status === 0 && ownRepoCli.stdout.includes('2/2 green'), `the command line runs the tooling tree's selftests through --git-dir: ${ownRepoCli.status} ${ownRepoCli.stdout}`);
+check(cli(codeRepo, '--git-dir', toolingGitDir).status === 2, '--git-dir without --root is refused');
+check(cli(codeRepo, '--only', toolingTree, '--git-dir', toolingGitDir).status === 2, '--git-dir after an option that is not --root is refused');
+check(cli(codeRepo, '--root', toolingTree, '--git-dir', path.join(bareDir(), 'missing.git')).status === 2, 'a --git-dir that is not a repository exits 2, never green');
+
 // ── Verdict: red paths leave the rest running ────────────────────────────────────────────────────
 const sentinel = 'later-selftest-ran';
 const withRed = repo({
@@ -259,6 +291,6 @@ check(gaveUp.error?.code === 'EAGAIN' && attempts === 4, `a pipe that never drai
 // ── Nothing to filter with ───────────────────────────────────────────────────────────────────────
 const filtered = cli(allGreen, '--root', allGreen, '--only', 'a/selftest.mjs');
 check(filtered.status === 2, `an option that would filter is refused: ${filtered.status}`);
-check(filtered.stderr.startsWith('Usage: node run.mjs [--root <dir>].') && filtered.stderr.includes(' @es Uso:') && filtered.stdout === '', `the refusal is bilingual usage on stderr: ${filtered.stderr}`);
+check(filtered.stderr.startsWith('Usage: node run.mjs [--root <dir> [--git-dir <dir>]].') && filtered.stderr.includes(' @es Uso:') && filtered.stdout === '', `the refusal is bilingual usage on stderr: ${filtered.stderr}`);
 
 finish();

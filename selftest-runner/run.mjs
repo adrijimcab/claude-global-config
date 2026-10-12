@@ -5,7 +5,12 @@
  * or fail-fast option on purpose: a self-selected subset is not a verdict about the repository, and a
  * selftest that is red at baseline is reported RED, never omitted. To run one selftest, call it with node.
  *
- * Usage: node run.mjs [--root <dir>]
+ * Usage: node run.mjs [--root <dir> [--git-dir <dir>]]
+ *
+ * `--git-dir` names the repository of a tree its code repository ignores (a tooling tree versioned elsewhere,
+ * like b100-am-ui's `.claude`); that repository then decides which selftests exist (`discovery.mjs`).
+ * @es `--git-dir` nombra el repositorio de un árbol que su repo de código ignora; ese repositorio decide entonces
+ * qué selftests existen.
  *
  * Each selftest's GREEN or RED line (and, for a RED one, why) is printed the moment that selftest ends, so a
  * long run is watchable; the summary line comes last. Streaming changes WHEN lines appear, never which lines,
@@ -144,14 +149,14 @@ function whyRed({ failure, escapes }) {
  * `report` is the same lines. `notMeasured`, present only with exit 2, is why nothing (more) was measured.
  * @es `onLine` recibe cada línea del informe al producirse, antes de que empiece el siguiente selftest; el
  * `report` devuelto son las mismas líneas. `notMeasured`, solo con salida 2, dice por qué no se midió (más).
- * @param {{ root: string, timeoutMs?: number, spawn?: typeof spawnSync, onLine?: (line: string) => void }} options
+ * @param {{ root: string, gitDir?: string, timeoutMs?: number, spawn?: typeof spawnSync, onLine?: (line: string) => void }} options
  * @returns {{ exitCode: number, report: string[], notMeasured?: string }}
  * @es Devuelve el código de salida y las líneas del informe.
  */
-export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spawnSync, onLine = () => {} }) {
+export function runSelftests({ root, gitDir, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spawnSync, onLine = () => {} }) {
   let discovered;
   try {
-    discovered = discoverSelftests(root);
+    discovered = discoverSelftests(root, { gitDir });
   } catch (error) {
     if (!(error instanceof DiscoveryError)) throw error;
     return { exitCode: EXIT_NOT_MEASURED, report: [error.message], notMeasured: error.message };
@@ -191,14 +196,17 @@ export function runSelftests({ root, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = spa
 }
 
 /**
- * Reads the command line: nothing, or `--root <dir>`; anything else is refused, so no filter can exist.
- * @es Lee la línea de órdenes: nada, o `--root <dir>`; todo lo demás se rechaza, así no puede existir filtro.
+ * Reads the command line: nothing, `--root <dir>`, or `--root <dir> --git-dir <dir>`; anything else is refused,
+ * so no filter can exist.
+ * @es Lee la línea de órdenes: nada, `--root <dir>` o `--root <dir> --git-dir <dir>`; todo lo demás se rechaza,
+ * así no puede existir filtro.
  * @param {string[]} argv
- * @returns {{ root: string } | { error: true }}
+ * @returns {{ root: string, gitDir?: string } | { error: true }}
  */
 function parseArgs(argv) {
   if (argv.length === 0) return { root: process.cwd() };
   if (argv.length === 2 && argv[0] === '--root') return { root: argv[1] };
+  if (argv.length === 4 && argv[0] === '--root' && argv[2] === '--git-dir') return { root: argv[1], gitDir: argv[3] };
   return { error: true };
 }
 
@@ -212,7 +220,7 @@ function main() {
     speaker.complain('usage');
     return EXIT_NOT_MEASURED;
   }
-  const { exitCode, notMeasured } = runSelftests({ root: parsed.root, onLine: writeLineSync });
+  const { exitCode, notMeasured } = runSelftests({ root: parsed.root, gitDir: parsed.gitDir, onLine: writeLineSync });
   // Why nothing (more) was measured goes to stderr; the lines already streamed are not repeated.
   // @es Por qué no se midió (más) va a stderr; las líneas ya emitidas no se repiten.
   if (notMeasured !== undefined) speaker.dataError(notMeasured);

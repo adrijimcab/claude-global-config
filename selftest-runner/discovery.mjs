@@ -33,9 +33,13 @@ function isSelftestName(name) {
   return name === BARE_NAME || name.endsWith(SUFFIX);
 }
 
-/** Runs git and returns its stdout, or throws a bilingual DiscoveryError. @es Ejecuta git o lanza DiscoveryError. */
-function git(root, ...args) {
-  const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+/**
+ * Runs git against a repository and returns its stdout, or throws a bilingual DiscoveryError. `repository` is
+ * `['-C', <dir>]` for a checkout, or `['--git-dir', <dir>, '--work-tree', <tree>]` for a tree whose repository
+ * lives elsewhere; `root` only names the tree in the error. @es Ejecuta git contra un repositorio o lanza DiscoveryError.
+ */
+function git(repository, root, ...args) {
+  const result = spawnSync('git', [...repository, ...args], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   if (result.error || result.status !== 0) {
     const reason = (result.error?.message ?? result.stderr ?? '').trim();
     throw new DiscoveryError(
@@ -81,18 +85,30 @@ function selftestsHeldDirectlyBy(top, directory) {
 }
 
 /**
+ * With `gitDir`, the tree at `root` is the work tree of the repository at `gitDir` (a tooling tree that its code
+ * repository ignores and that is versioned elsewhere, like b100-am-ui's `.claude`): that repository, its index and
+ * its own ignore rules decide the population, and `root` is the top level. Walking such a tree instead would sweep
+ * in every scratch copy its ignore rules exclude (measured on b100-am-ui's `.claude`: 511 selftest files on disk
+ * against the 55 its repository holds).
+ * @es Con `gitDir`, el árbol en `root` es el árbol de trabajo del repositorio en `gitDir` (un árbol de tooling que
+ * su repo de código ignora y que se versiona aparte, como el `.claude` de b100-am-ui): ese repositorio, su índice
+ * y sus propias reglas de ignorado deciden la población, y `root` es el nivel superior. Recorrer ese árbol
+ * arrastraría cada copia de trabajo que sus reglas excluyen (medido: 511 ficheros en disco frente a 55).
  * @param {string} root any directory inside a repository, absolute or relative to the process cwd
+ * @param {{ gitDir?: string }} [options]
  * @returns {{ root: string, entries: { path: string, untracked: boolean }[] }} paths relative to the top level, posix separators
  * @es Devuelve la raíz real del repo y sus selftests (ruta relativa a la raíz, separadores posix).
  */
-export function discoverSelftests(root) {
-  const top = git(path.resolve(root), 'rev-parse', '--show-toplevel').trim();
-  const listed = entriesOf(git(top, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'));
+export function discoverSelftests(root, { gitDir } = {}) {
+  const resolved = path.resolve(root);
+  const top = gitDir === undefined ? git(['-C', resolved], resolved, 'rev-parse', '--show-toplevel').trim() : resolved;
+  const repository = gitDir === undefined ? ['-C', top] : ['--git-dir', path.resolve(gitDir), '--work-tree', top];
+  const listed = entriesOf(git(repository, top, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'));
   const tracked = listed
     .filter((entry) => isSelftestName(path.posix.basename(entry)) && isRegularOrMissing(top, entry))
     .map((entry) => ({ path: entry, untracked: false }));
 
-  const ignored = entriesOf(git(top, 'ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'));
+  const ignored = entriesOf(git(repository, top, 'ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'));
   const direct = ignored
     .filter((entry) => entry.endsWith('/'))
     .flatMap((directory) => selftestsHeldDirectlyBy(top, directory).map((name) => ({ path: directory + name, untracked: true })));

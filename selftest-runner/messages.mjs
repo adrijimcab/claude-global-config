@@ -17,8 +17,8 @@ export const MESSAGES = {
     es: 'No se encontró ningún selftest en {root}; no se midió nada.'
   },
   usage: {
-    en: 'Usage: node run.mjs [--root <dir>]. No filter or skip option exists.',
-    es: 'Uso: node run.mjs [--root <dir>]. No existe ninguna opción de filtro ni de salto.'
+    en: 'Usage: node run.mjs [--root <dir> [--git-dir <dir>]]. No filter or skip option exists.',
+    es: 'Uso: node run.mjs [--root <dir> [--git-dir <dir>]]. No existe ninguna opción de filtro ni de salto.'
   },
   missing: {
     en: 'file missing on disk',
