@@ -191,6 +191,22 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   already fired. Add the incident as a labelled fail fixture, and its measured counterpart as a pass fixture,
   to the premise judge's calibration set, re-measured over 5 runs. Pending, reason (4): the calibration set is
   its own unit with the rest of the judge's measured precision work.
+- Receipt-driven development ON globally (owner order 2026-10-12: «dejar activo lo de gentle-ai y vamos viendo
+  trabajando con ello cómo es mejor, dejar anotado de verificar esto»). `gentle-ai review mode status`:
+  on (decided by global). VERIFY in practice: the review base follows origin/HEAD, so every clone needs the
+  integration-branch sync first. Measure a real review's cost and value on one candidate before reporting.
+  Turning it on made the v4 overlay inline the whole review contract in ~/.claude/CLAUDE.md (+104 lines
+  always loaded, where a lazy pointer stood before), which the always-loaded budget step must weigh.
+- worktree-tenancy (fleet-kit) treats a FINISHED agent as live for its liveness window (measured 2026-10-12:
+  agent ac6365ee returned its hand-back, and `git worktree remove` on its worktree was still refused 23 s
+  and 77 s later). Fix: end tenancy on the agent's completion record (SubagentStop or the hand-back), not
+  only on transcript age. Pending, reason (3): fleet-kit has a writer in flight (landing-guard --git-dir).
+- DONE 2026-10-12: f14 landed locally on feature/meet (33943eb..8af8528, land.mjs exit 0, test:all
+  green). The @if change is not user-visible (the worker measured 15 panels in one mutation batch either
+  way), so its proof is the unit spec, which goes red with the fix reverted (2 of 13 failed) and green
+  with it (13 of 13). The migration study was rescued from the company branch into local
+  Discovery-FE/docs/migration and the private adrijimcab/discovery-migration-study (3f14d8a, read back);
+  the company branch docs/migration-study was deleted on the owner's order.
 - Integration branch as ONE source that every tool follows (owner order 2026-10-12: every session must keep
   it current; measured the same day). gentle-ai v4 takes the review base from `refs/remotes/origin/HEAD`
   (v4.0.0 internal/reviewtransaction/target_status.go:248-262). The harness bases Agent isolation worktrees
