@@ -110,6 +110,8 @@ export const KINDS = Object.freeze([
   ['hook-dispatch', 'errors.jsonl', ARCHIVE, 'dispatcher malfunction journal'],
   ['integrated-worktree-guard', 'observed.jsonl', ARCHIVE, 'observation journal'],
   ['integrated-worktree-guard', 'noticed.json', KEEP, 'the worktree sets each session was shown'],
+  ['odd-mirror-guard', 'observed.jsonl', ARCHIVE, 'observation journal'],
+  ['odd-mirror-guard', 'noticed.json', KEEP, 'the document sets each session was shown'],
   ['owner-language-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['owner-language-guard', 'guard.log', ARCHIVE, 'guard log'],
   ['review-cwd-guard', 'journal.jsonl', ARCHIVE, 'refusal and fail-open journal'],

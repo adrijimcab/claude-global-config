@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "Stop"
+    }
+  ],
+  "why": "ODD feature documents are never versioned in git, so the working file and its engram mirror are the only copies; measured 2026-10-12 in Discovery, 4 documents and 2 mirrors, and prose did not keep them in step."
+}

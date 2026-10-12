@@ -118,6 +118,9 @@
 !/stash-watch/
 !/stash-watch/**
 /stash-watch/state/
+!/odd-mirror-guard/
+!/odd-mirror-guard/**
+/odd-mirror-guard/state/
 !/worker-stash-guard/
 !/worker-stash-guard/**
 /worker-stash-guard/state/
