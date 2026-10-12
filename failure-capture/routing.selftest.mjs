@@ -117,6 +117,16 @@ function mkLoaded(world) {
   check('...and it is told ALREADY PROMOTED, naming the rules file to read', again.out.includes('ALREADY PROMOTED') && again.out.includes('promoted-rules.md'), again.out);
 }
 
+{
+  const world = makeCaptureWorld({ scratch, name: 'on-demand-rules', files: { 'home/.claude/lessons-ledger.md': `${GLOBAL_HEAD}${lessonLine('global', KEY, 2)}`, 'home/.claude/rules/promoted-rules.md': '# Contract\n\nThe rule text of the keys below is on demand.\n', 'home/.claude/lessons/on-demand/promoted-demo.md': rulesFor(KEY) } });
+  const done = promote(world);
+  const again = world.run(['capture', '--key', KEY, '--scope', 'global', '--actor', 'orchestrator', '--lesson', lessonFor(KEY)]);
+
+  check('a lesson whose rule text is in an ON-DEMAND file promotes: that file is a rules file of the family', done.status === 0, done.out);
+  check('...a recurrence names the on-demand file as the rules file to read, not the global one', again.out.includes('ALREADY PROMOTED') && again.out.includes('promoted-demo.md') && !again.out.includes('promoted-rules.md'), again.out);
+  check('...and the global rules file is not given the key a second time', !readOrEmpty(homeFile(world, 'rules', 'promoted-rules.md')).includes(KEY), readOrEmpty(homeFile(world, 'rules', 'promoted-rules.md')));
+}
+
 // ---------------------------------------------------------------------------------------------
 // `route --stubs` moves what is already there
 // ---------------------------------------------------------------------------------------------

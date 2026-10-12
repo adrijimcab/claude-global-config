@@ -58,7 +58,7 @@ import { facesByFile, staleFiles } from './text-growth.mjs';
 import { HEADER, homeLedgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
 import { commitHeaderRoute, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, routeOutcome } from './ledger-route.mjs';
 import { placeStub } from './stub-placement.mjs';
-import { PROMOTED_SCOPE, areaRulesFile, areaRulesHeader, areaScopes, isAreaScope, stubScopeOf } from './ledger-routes.mjs';
+import { PROMOTED_SCOPE, areaRulesFile, areaRulesHeader, areaScopes, isAreaScope, onDemandRulesFiles, stubScopeOf } from './ledger-routes.mjs';
 import { commitBlockRoute, findBlock, planBlockRoute } from './rule-block.mjs';
 import { withLock } from './ledger-lock.mjs';
 import { resolveLoopContext } from './loop-context.mjs';
@@ -98,6 +98,13 @@ let LEDGERS;
 // reescribe las regiones gestionadas de CLAUDE.md). El destino conserva el nombre histórico
 // `claude-md` en los registros de cierre para no romper `incidents.jsonl`.
 const ORCHESTRATOR_RULES = path.join(homedir(), '.claude', 'rules', 'promoted-rules.md');
+
+/**
+ * Every file that can hold the rule text of a promoted key: the global rules file, the rules file of each area, and the
+ * on-demand files the global one names.
+ * @es Cada fichero que puede guardar el texto de regla de una clave promovida: el global, el de cada área y los ficheros bajo demanda que el global nombra.
+ */
+const rulesFamily = () => [ORCHESTRATOR_RULES, ...areaScopes().map((area) => areaRulesFile(homedir(), area)), ...onDemandRulesFiles(homedir())];
 // The delegated-worker contract of THIS project: its configured files (`.claude/failure-capture.json`),
 // or `.claude/CLAUDE.md`, which every subagent of the project loads. The first file is the one whose
 // token count the text-growth check reads.
@@ -462,7 +469,7 @@ function globalRulesOf(key) {
 
   if (isAreaScope(found?.ledger.scope)) return [areaRulesFile(homedir(), found.ledger.scope)];
 
-  const holding = [ORCHESTRATOR_RULES, ...areaScopes().map((area) => areaRulesFile(homedir(), area))].filter((file) => readFileOr(file, '').includes(key));
+  const holding = rulesFamily().filter((file) => readFileOr(file, '').includes(key));
 
   return holding.length > 0 ? holding : [ORCHESTRATOR_RULES];
 }
@@ -826,7 +833,7 @@ function linesRoute({ source, destination, plan }) {
  * @es Lo que haría enrutar el TEXTO de una regla promovida al fichero de reglas de un área: el muñón de una lección promovida se queda donde está y el bloque que dice qué es la regla sale del fichero siempre cargado.
  */
 function blockRoute(key, area) {
-  const family = [ORCHESTRATOR_RULES, ...areaScopes().map((one) => areaRulesFile(homedir(), one))];
+  const family = rulesFamily();
   const holding = family.filter((file) => findBlock(readFileOr(file, ''), key).start !== undefined);
   const target = areaRulesFile(homedir(), area);
 

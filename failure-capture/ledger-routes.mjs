@@ -30,6 +30,7 @@
  * una lección global, así que su reincidencia se promueve a ficheros globales de reglas.
  */
 
+import { readdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { GLOBAL_SCOPE } from './project.mjs';
@@ -78,6 +79,30 @@ export const areaLedgerFile = (home, area) => path.join(home, '.claude', 'rules'
 
 /** The path-scoped file holding the rule text of an area's promoted lessons. @es El fichero con alcance de ruta que guarda el texto de regla de las lecciones promovidas de un área. */
 export const areaRulesFile = (home, area) => path.join(home, '.claude', 'rules', `promoted-${area}.md`);
+
+/**
+ * The rules files the harness does NOT load, that `~/.claude/rules/promoted-rules.md` names with the situation in which
+ * to read them: `~/.claude/lessons/on-demand/*.md`, sorted by name; none when the directory cannot be read. They
+ * hold the text of promoted rules that apply to an ACTION (delegating, landing, recording) rather than to a path, so
+ * no `paths:` frontmatter can scope them; the rule text of a promoted key lives in one of them or in a rules file.
+ * @es Los ficheros de reglas que el harness NO carga y que `~/.claude/rules/promoted-rules.md` nombra con la situación
+ * en que leerlos: `~/.claude/lessons/on-demand/*.md`, por nombre; ninguno si no se puede leer el directorio. Guardan el
+ * texto de reglas promovidas que valen para una ACCIÓN (delegar, aterrizar, registrar) y no para una ruta, así que
+ * ningún frontmatter `paths:` puede acotarlos; el texto de la regla de una clave promovida vive en uno de ellos o en
+ * un fichero de reglas.
+ */
+export function onDemandRulesFiles(home) {
+  const directory = path.join(home, '.claude', 'lessons', 'on-demand');
+
+  try {
+    return readdirSync(directory)
+      .filter((name) => name.endsWith('.md'))
+      .sort()
+      .map((name) => path.join(directory, name));
+  } catch {
+    return [];
+  }
+}
 
 /** The frontmatter the harness reads to scope a rule to paths. @es El frontmatter que lee el harness para dar a una regla alcance de ruta. */
 const frontmatterOf = (area) => ['---', 'paths:', ...AREAS[area].paths.map((glob) => `  - "${glob}"`), '---'].join('\n');

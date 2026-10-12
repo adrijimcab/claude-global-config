@@ -40,6 +40,8 @@ const MUTANTS = [
   ['a locked ledger is not reported', COMMAND, "if (!outcome.held) {\n    speaker.complain('route.locked');", "if (false) {\n    speaker.complain('route.locked');"],
   ['route with several things to route does them all', COMMAND, 'if ([stubs, headers, lesson].filter(Boolean).length !== 1) {', 'if ([stubs, headers, lesson].filter(Boolean).length === 0) {'],
   ['a project ledger is given the home header', COMMAND, 'scopes.includes(ledger.scope) && ledger.lines !== undefined', 'ledger.lines !== undefined'],
+  ['the text of a promoted rule is never looked for in the on-demand files', COMMAND, 'const rulesFamily = () => [ORCHESTRATOR_RULES, ...areaScopes().map((area) => areaRulesFile(homedir(), area)), ...onDemandRulesFiles(homedir())];', 'const rulesFamily = () => [ORCHESTRATOR_RULES, ...areaScopes().map((area) => areaRulesFile(homedir(), area))];'],
+  ['the on-demand files are read from the evidence directory', ROUTES, "path.join(home, '.claude', 'lessons', 'on-demand')", "path.join(home, '.claude', 'lessons', 'evidence')"],
   ['route is not a command that reads the project', COMMAND, "'status', 'route']);", "'status']);"],
 ];
 
@@ -57,10 +59,10 @@ const AREA_MUTANTS = [
   ['only the global scope is reserved', ROUTES, 'export const isReservedScope = (scope) => isGlobalFamily(scope);', "export const isReservedScope = (scope) => scope === 'global';"],
   ['a recurrence cannot see the area ledgers', COMMAND, 'Object.hasOwn(homeLedgerFiles(homedir()), entry.scope) ? home : undefined', 'entry.scope === GLOBAL_SCOPE ? home : undefined'],
   ['the rules file of an area lesson is the global one', COMMAND, 'if (isAreaScope(found?.ledger.scope)) return [areaRulesFile(homedir(), found.ledger.scope)];\n', ''],
-  ['the text of a promoted area lesson is looked for only in the global file', COMMAND, '[ORCHESTRATOR_RULES, ...areaScopes().map((area) => areaRulesFile(homedir(), area))].filter', '[ORCHESTRATOR_RULES].filter'],
+  ['the text of a promoted area lesson is looked for only in the global file', COMMAND, 'const rulesFamily = () => [ORCHESTRATOR_RULES, ...areaScopes().map((area) => areaRulesFile(homedir(), area)), ...onDemandRulesFiles(homedir())];', 'const rulesFamily = () => [ORCHESTRATOR_RULES, ...onDemandRulesFiles(homedir())];'],
   ['the instructions never name the area file', COMMAND, "speaker.line('instructions.global', { file: globalRulesOf(key)[0], key })", "speaker.line('instructions.global', { file: ORCHESTRATOR_RULES, key })"],
   ['a promoted lesson is routed as a ledger line', COMMAND, 'if (found?.ledger.scope === PROMOTED_SCOPE && isAreaScope(args.to)) return blockRoute(args.key, args.to);', ''],
-  ['the rule text is looked for only in the global rules file', COMMAND, 'const family = [ORCHESTRATOR_RULES, ...areaScopes().map((one) => areaRulesFile(homedir(), one))];', 'const family = [ORCHESTRATOR_RULES];'],
+  ['the rule text is looked for only in the global rules file', COMMAND, 'const family = rulesFamily();', 'const family = [ORCHESTRATOR_RULES];'],
   ['a rule text held by two files is moved from the first', COMMAND, 'if (holding.length > 1)', 'if (false)'],
   ['a rule text already in the area is moved again', COMMAND, 'if (holding[0] === target) return { nothing: true };', ''],
 ];
