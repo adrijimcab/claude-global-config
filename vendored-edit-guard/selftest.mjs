@@ -239,7 +239,12 @@ const manifestListing = (name) => JSON.parse(readFileSync(path.join(manifestsDir
 const manifestsOf = (command) => (typeof command === 'string' ? command.split('"').filter((word) => word.endsWith('.json') && word.includes('/hook-dispatch/manifests/')).map((word) => path.basename(word)) : []);
 const routedTo = (tool) => (settings.hooks?.PreToolUse ?? []).filter((entry) => alternativesOf(entry.matcher).includes(tool)).flatMap((entry) => entry.hooks.flatMap((hook) => manifestsOf(hook.command)));
 
-expect('the registration names exactly the tools the decision covers', () => registration.registrations.length === 1 && registration.registrations[0].event === 'PreToolUse' && JSON.stringify([...alternativesOf(registration.registrations[0].matcher)].sort()) === JSON.stringify(COVERED_TOOLS));
+// One registration per settings.json group the guard rides (shell, authoring, notebook): every one is
+// PreToolUse, no tool is declared twice, and together they name exactly the tools the decision covers.
+// @es Un registro por grupo de settings.json por el que pasa la guardia: todos PreToolUse, ninguna herramienta
+// declarada dos veces, y juntos nombran exactamente las herramientas que decide.
+const declaredTools = registration.registrations.flatMap((entry) => [...alternativesOf(entry.matcher)]);
+expect('the registration names exactly the tools the decision covers', () => registration.registrations.every((entry) => entry.event === 'PreToolUse') && new Set(declaredTools).size === declaredTools.length && JSON.stringify([...declaredTools].sort()) === JSON.stringify(COVERED_TOOLS));
 expect('the shell manifest lists this guard', () => manifestListing('pretooluse-shell.json'));
 expect('the authoring manifest lists this guard', () => manifestListing('pretooluse-authoring.json'));
 expect('the registration explains itself', () => typeof registration.why === 'string' && registration.why.length > 40);
