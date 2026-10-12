@@ -191,6 +191,16 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   already fired. Add the incident as a labelled fail fixture, and its measured counterpart as a pass fixture,
   to the premise judge's calibration set, re-measured over 5 runs. Pending, reason (4): the calibration set is
   its own unit with the rest of the judge's measured precision work.
+- Brief preflight face: derived gates (contract delivered 2026-10-12 by session b100-am-ui-f8; measured the same
+  day by running `node .claude/gate-scope/gates-for.mjs src/lib/components/b100-dashboard/b100-dashboard.component.ts`
+  in b100: exit 0, 19 gates, 64 unscoped). The deriver prints `{ gates, reasons, unscoped }` on stdout with exit 0,
+  and exit 2 on misuse; it also accepts `--diff <base>` and `--root <dir>`. Design: a brief for a project that
+  declares a deriver carries a `PATHS:` line (what the unit will touch) and a `GATES:` line; the face in
+  `~/.claude/brief-feasibility` runs the project's deriver on `PATHS:`, refuses a brief whose `GATES:` omits
+  any entry of `gates`, and reports `unscoped` as a warning, never a refusal (b100's request: 64 unscoped
+  today would make every brief list them all). A deriver that exits 2 refuses with its message; a project
+  that declares none is not checked. Pending, reason (1): Agent launches in Discovery are refused until
+  feature/meet lands f14.
 - Judge re-stop loops: a model does not apply rule 1 reliably (measured 2026-10-12). The stop-input recorder
   showed that b100-am-ui-f8's re-stops at 01:12:31Z, 01:12:44Z and 01:12:48Z carried stop_hook_active true and
   the CURRENT rewrite as last_assistant_message, so the harness input was right. Driving the live v4 rubric with
