@@ -212,6 +212,12 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   choosing, and measure each judge's latency and cost either way. Pending, reason (4): open design. Agent launches
   in Discovery are also refused until feature/meet lands f14. Supersedes the "voice judge re-stop input" item:
   the input is right and the gate is the defect.
+  Second defect of the same gate, measured 2026-10-12 in the orchestrator session: the VOICE judge (feedback
+  labelled "voice-judge rubric v4") blocked a stop with the reason "insufficient evidence in transcript". That is
+  not a verdict its rubric allows. So a judge answer that is not the rubric's JSON can still block, and the
+  same text b100 saw at 01:12:48Z came from the voice judge, not the premise judge (that guess, sent to b100, is
+  withdrawn). The command-hook gate must also turn any answer that is not a valid verdict into a pass, recorded
+  as a malfunction, never into a block.
 - Voice judge v3 over-applies rule 8 (measured 2026-10-11 in the orchestrator session): it rejected four
   consecutive replies written entirely as prose paragraphs, with no bullets, tables or lists, citing "datos de
   estado" (names, counts, references inside sentences). Rule 8 fails only ENUMERATIONS that carry a status
