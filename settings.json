@@ -1,4 +1,5 @@
 {
+  "agentPushNotifEnabled": true,
   "autoMode": {
     "environment": [
       "### Org-wide",
