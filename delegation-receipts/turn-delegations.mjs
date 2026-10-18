@@ -198,13 +198,34 @@ function attemptsOf(turn) {
   const byId = new Map();
 
   for (const entry of turn) {
+    // Only the two record types that ARE the conversation. MEASURED on the b100 transcript of 2026-10-18:
+    // `api-request-blob` records hold a COPY of every request message, tool calls and results included,
+    // so reading them counted each refusal twice and left five retried resumes owed.
+    // @es Solo los dos tipos de registro que SON la conversación. MEDIDO en el transcript de b100: los
+    // `api-request-blob` guardan una COPIA de cada mensaje, y leerlos contó cada rechazo dos veces.
+    if (entry?.type !== 'assistant' && entry?.type !== 'user') continue;
+
     const content = entry?.message?.content;
 
     if (!Array.isArray(content)) continue;
 
     for (const block of content) {
       if (block?.type === 'tool_use' && DELEGATION_TOOLS.has(block.name)) {
-        const attempt = { tool: block.name, id: block.id, label: labelOf(block.name, block.input), at: entry.timestamp, outcome: 'unknown', reason: undefined };
+        // One call is one attempt, however many records repeat it. @es Una llamada es un intento, aunque varios registros la repitan.
+        if (byId.has(block.id)) continue;
+
+        const attempt = {
+          tool: block.name,
+          id: block.id,
+          label: labelOf(block.name, block.input),
+          at: entry.timestamp,
+          // The agent a SendMessage addresses and the model message the call came in: together they say
+          // which calls were issued side by side to the same agent. @es A quién va un SendMessage y en qué mensaje del modelo vino.
+          target: typeof block.input?.to === 'string' ? block.input.to : undefined,
+          batch: entry.message?.id,
+          outcome: 'unknown',
+          reason: undefined
+        };
 
         attempts.push(attempt);
         byId.set(block.id, attempt);

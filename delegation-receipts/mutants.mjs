@@ -57,6 +57,19 @@ const MUTANTS = [
   // selftest would have gone red without ever exercising the decision.
   // @es Sustituyen la SENTENCIA en vez de borrarla: borrar una rama deja un `else` colgando, y un
   // mutante matado por un error de sintaxis es rojo por el motivo equivocado.
+  // --- THE b100 INCIDENT (2026-10-18): copies of the conversation, and calls issued side by side.
+  // @es EL INCIDENTE DE b100: copias de la conversación y llamadas emitidas en paralelo.
+  ['request-blob copies of the conversation are read as the conversation', 'delegation-receipts/turn-delegations.mjs', "if (entry?.type !== 'assistant' && entry?.type !== 'user') continue;", ''],
+  ['only assistant records are read, so every tool result is lost', 'delegation-receipts/turn-delegations.mjs', "if (entry?.type !== 'assistant' && entry?.type !== 'user') continue;", "if (entry?.type !== 'assistant') continue;"],
+  ['a call repeated in two records is counted as two attempts', 'delegation-receipts/turn-delegations.mjs', 'if (byId.has(block.id)) continue;', ''],
+  ['the addressee of a SendMessage is no longer recorded', 'delegation-receipts/turn-delegations.mjs', "target: typeof block.input?.to === 'string' ? block.input.to : undefined,", 'target: undefined,'],
+  ['the model message of a call is no longer recorded, so no batch is ever known', 'delegation-receipts/turn-delegations.mjs', 'batch: entry.message?.id,', 'batch: undefined,'],
+  ['a batch partner already paired is paired again', 'delegation-receipts/unlaunched.mjs', '!paired.has(candidate) && ', ''],
+  ['a pair settled inside its batch is still run through the ledger', 'delegation-receipts/unlaunched.mjs', 'if (paired.has(attempt)) continue;', ''],
+  ['a success in ANOTHER batch settles a refusal', 'delegation-receipts/unlaunched.mjs', 'candidate.batch === refused.batch && ', ''],
+  ['a success to ANOTHER agent settles a refusal', 'delegation-receipts/unlaunched.mjs', ' && candidate.target === refused.target)', ')'],
+  ['calls with no addressee are paired with each other', 'delegation-receipts/unlaunched.mjs', 'refused.target === undefined || ', ''],
+  ['calls with no batch are paired with each other', 'delegation-receipts/unlaunched.mjs', ' || refused.batch === undefined', ''],
   ['a refusal never opens a debt', 'delegation-receipts/unlaunched.mjs', 'owed.push(attempt);', 'undefined;'],
   ['a launch no longer pays a debt, so every retried turn is refused', 'delegation-receipts/unlaunched.mjs', "else if (attempt.outcome === 'launched') owed.pop();", 'else undefined;'],
   ['an attempt with no result PAYS a debt', 'delegation-receipts/unlaunched.mjs', "if (attempt.outcome === 'launched') owed.pop();", "if (attempt.outcome !== 'refused') owed.pop();"],
