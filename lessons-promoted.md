@@ -13,7 +13,7 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-09-22 — provisioning-bound-to-delegation-not-worktree-creation: mechanism .claude/fleet-env/worktree-created.mjs <!--fc:provisioning-bound-to-delegation-not-worktree-creation#2-->
 - [promoted] 2026-10-04 — worker-claim-about-unreachable-file-committed-as-fact: no mechanism <!--fc:worker-claim-about-unreachable-file-committed-as-fact#15-->
 - [promoted] 2026-09-29 — guard-that-cannot-go-red: mechanism .claude/entry-point-check/check.mjs <!--fc:guard-that-cannot-go-red#14-->
-- [promoted] 2026-09-22 — promotion-to-contract-read-as-prevention: mechanism .claude/failure-capture/capture.mjs <!--fc:promotion-to-contract-read-as-prevention#2-->
+- [promoted] 2026-09-22 — promotion-to-contract-read-as-prevention: mechanism .claude/failure-capture/capture.mjs <!--fc:promotion-to-contract-read-as-prevention#3-->
 - [promoted] 2026-10-01 — contract-doc-names-a-mechanism-nobody-verifies: mechanism ~/.claude/contract-path-check/check.mjs <!--fc:contract-doc-names-a-mechanism-nobody-verifies#3-->
 - [promoted] 2026-09-16 — gitignored-deliverable-destroyed-by-worktree-autoclean: mechanism .claude/worktree-work/worktree-work.mjs <!--fc:gitignored-deliverable-destroyed-by-worktree-autoclean#1-->
 - [promoted] 2026-09-22 — collision-fixed-by-deleting-unread-side: mechanism .claude/collision-guard/guard.mjs <!--fc:collision-fixed-by-deleting-unread-side#4-->
