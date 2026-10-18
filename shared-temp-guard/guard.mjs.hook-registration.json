@@ -1,0 +1,13 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    },
+    {
+      "event": "PreToolUse",
+      "matcher": "Edit|Write|MultiEdit"
+    }
+  ],
+  "why": "Two measured collisions in the shared TEMP root: on 2026-10-12 one worker read another session's edit6.mjs and another committed with an m1.txt message file a different session had overwritten; on 2026-10-18 a worker's mutant-campaign output written to /tmp was overwritten by a peer's reaper campaign. A delegated agent's write there is refused; its worktree and its <tmp>/claude/ scratchpad are the places that belong to it."
+}

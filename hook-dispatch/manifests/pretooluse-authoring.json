@@ -3,6 +3,7 @@
   "guards": [
     "../../type-assertion-guard/guard.mjs",
     "../../vendored-edit-guard/guard.mjs",
-    "../../useless-escape-guard/guard.mjs"
+    "../../useless-escape-guard/guard.mjs",
+    "../../shared-temp-guard/guard.mjs"
   ]
 }
