@@ -6,9 +6,10 @@
  * @es Hook `PreToolUse` sobre `SubagentHandback`. El diario de negativas es también el contador del límite.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
+import { lastRecords } from '../../hook-state/jsonl-tail.mjs';
 import { deny, evaluator, hookMain, journal, runWhenMain } from '../lib/hook-io.mjs';
 import { kitStateRoot } from '../lib/state.mjs';
 import { handbackRefusal, MAXIMUM_REFUSALS } from './decision.mjs';
@@ -16,16 +17,18 @@ import { handbackRefusal, MAXIMUM_REFUSALS } from './decision.mjs';
 const GUARD = 'handback';
 const REFUSALS = 'refusals.jsonl';
 
-/** How many times `agentId` was already refused. @es Cuántas veces se rechazó ya a `agentId`. */
+/**
+ * How many times `agentId` was already refused. The journal is read through the tolerant reader, which skips
+ * a blank or torn line instead of throwing: one line cut mid-write must not turn the guard off for everyone.
+ * @es Cuántas veces se rechazó ya a `agentId`. El journal se lee con el lector tolerante, que omite una línea
+ * vacía o rota en vez de lanzar: una línea cortada a mitad de escritura no debe apagar la guardia para todos.
+ */
 export function refusalsSoFar(agentId) {
   const file = path.join(kitStateRoot(), GUARD, REFUSALS);
 
   if (!existsSync(file)) return 0;
 
-  return readFileSync(file, 'utf8')
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .filter((line) => JSON.parse(line).agentId === agentId).length;
+  return lastRecords(file, Number.POSITIVE_INFINITY).filter((record) => record?.agentId === agentId).length;
 }
 
 const HEADLINES = {

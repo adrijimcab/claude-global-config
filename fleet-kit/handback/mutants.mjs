@@ -13,5 +13,7 @@ runCampaign('handback/selftest.mjs', [
   ['an ungradable result reads as uncovered', D, "kind: coverage.exitCode === 1 ? 'uncovered' : 'ungradable'", "kind: 'uncovered'"],
   ['a covered branch is refused', D, 'return coverage.exitCode === 0 ? undefined :', 'return false ? undefined :'],
   ['any agent is read as this worker', D, '`agent-${agentId}.meta.json`', '`agent-w1.meta.json`'],
-  ['another worker\'s refusals spend this worker\'s budget', G, '.filter((line) => JSON.parse(line).agentId === agentId).length', '.length']
+  ['another worker\'s refusals spend this worker\'s budget', G, '.filter((record) => record?.agentId === agentId).length', '.length'],
+  ['the journal is read with a bare JSON.parse again', G, 'return lastRecords(file, Number.POSITIVE_INFINITY).filter(', "return process.getBuiltinModule('node:fs').readFileSync(file, 'utf8').split('\\n').filter((line) => line !== '').map((line) => JSON.parse(line)).filter("],
+  ['the reader keeps only the last record', G, 'lastRecords(file, Number.POSITIVE_INFINITY)', 'lastRecords(file, 1)']
 ]);
