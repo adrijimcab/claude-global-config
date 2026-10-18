@@ -22,10 +22,12 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { isolateState } from '../hook-state/locations.mjs';
+import { digestInput } from '../hook-state/journal.mjs';
+import { isolateState, stateDir } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
 // session reads, and never a line a previous run left behind.
@@ -287,6 +289,26 @@ for (const [expected, input, label, fragment] of cases) {
   if (!ok) failures += 1;
 
   console.log(`${ok ? 'PASS' : 'FAIL'}  expected=${expected} actual=${actual} exit=${result.status}  ${label}`);
+}
+
+// --- The denial journal holds a digest of the command, never its text (the block-journal policy).
+// @es El diario de rechazos guarda un digest del comando, nunca su texto (política del block-journal).
+{
+  const secretCommand = String.raw`node -e "console.log('\\b') // journal-secret-marker-7731"`;
+
+  fs.rmSync(path.join(stateDir('eval-guard'), 'denials.jsonl'), { force: true });
+  run(payload(secretCommand));
+
+  const raw = fs.readFileSync(path.join(stateDir('eval-guard'), 'denials.jsonl'), 'utf8');
+  const entry = JSON.parse(raw.trim().split('\n').at(-1));
+  const holdsDigest = entry.commandDigest === digestInput(secretCommand);
+  const holdsNoText = entry.command === undefined && !raw.includes('journal-secret-marker-7731');
+
+  for (const [ok, label] of [[holdsDigest, 'the denial record carries the sha256 of the command'], [holdsNoText, 'the denial record never carries the command text']]) {
+    if (!ok) failures += 1;
+
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  }
 }
 
 console.log(`\n${cases.length - failures}/${cases.length} passed`);

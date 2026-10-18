@@ -39,6 +39,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { digestInput } from '../hook-state/journal.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { inspectCommand } from './detect.mjs';
 
@@ -207,7 +208,9 @@ function decideFor(payload) {
     tool: typeof payload?.tool_name === 'string' ? payload.tool_name : undefined,
     flag: refusal.flag,
     findings: refusal.findings.slice(0, MAX_REPORTED_FINDINGS),
-    command,
+    // The command text is never journaled, only its sha256 (the block-journal policy).
+    // @es El texto del comando nunca se registra, solo su sha256 (la política del block-journal).
+    commandDigest: digestInput(command),
   });
 
   return {

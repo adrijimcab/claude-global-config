@@ -58,6 +58,10 @@ const MUTANTS = [
   ['a comment glued to & is not a comment', DETECT, "'\\n', ';', '|', '&']", "'\\n', ';', '|']"],
   ['a comment after a blank is not a comment', DETECT, '...BLANK_CHARACTERS, ', ''],
   ['a comment stops at a quote instead of the end of the line', DETECT, "      const lineEnd = command.indexOf('\\n', index);\n", "      const lineEnd = command.indexOf(\"'\", index);\n"],
+  // --- the denial journal: a digest, never the text ---
+  ['the denial journal stores the command text again (the pre-fix behaviour)', GUARD, '    commandDigest: digestInput(command),', '    command,'],
+  ['the denial journal stores the digest of something else', GUARD, '    commandDigest: digestInput(command),', "    commandDigest: digestInput(''),"],
+  ['the denial journal stores the text next to its digest', GUARD, '    commandDigest: digestInput(command),', '    commandDigest: digestInput(command),\n    command,'],
   // --- heredocs: the body is data, the scan resumes after the terminator ---
   ['the heredoc body is not skipped, so its lines are inspected as commands', DETECT, '        for (const heredoc of pendingHeredocs) index = skipHeredocBody(command, index, heredoc);\n', ''],
   ['the scan does not resume after the terminator, so a later dangerous command hides', DETECT, "if (line === heredoc.delimiter) return lineEnd === -1 ? command.length : lineEnd + 1;", 'if (line === heredoc.delimiter) return command.length;'],
