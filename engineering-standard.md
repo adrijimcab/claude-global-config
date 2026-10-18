@@ -7,8 +7,13 @@ in every session and every agent, ODD or not.
 1. **Tie-break order.** When options conflict: correctness and security, then the quality gates, then
    performance, then simplicity. Name the rejected alternative in one line. The senior-architect stance
    itself lives in `~/.claude/rules/00-owner-mandates.md`; it is not repeated here.
-2. **KISS and YAGNI.** The simplest design that meets the requirement MEASURED today. No speculative
-   abstraction, option, parameter or layer for a need nobody has shown.
+2. **KISS and YAGNI, scaled to every consumer.** The simplest design that meets the requirement MEASURED today.
+   No speculative abstraction, option, parameter or layer for a need nobody has shown. For a library, a shared
+   kit or global tooling, the measured requirement is the CLASS of consumers, not the one project in front of
+   you (owner, 2026-10-18: «PARA TODO, el Discovery es lo mínimo pero hay que pensar en escalabilidad y en
+   TENER TODAS LAS POSIBILIDADES POSIBLES PARA PROYECTOS FUTUROS»): a need that a class of consumer has counts
+   as shown, an extension point nobody can name a use for is still rejected, and an extension point never
+   weakens a guarantee (no silent modes; the safe default stays).
 3. **SOLID and clean code.** One responsibility per unit, named for what it owns; dependencies point
    inward (the domain knows no framework); a reader sees what it does from its entry point alone.
 4. **Architecture fits the domain.** Hexagonal (ports and adapters) where the code talks to external
@@ -24,7 +29,11 @@ in every session and every agent, ODD or not.
 
 @es Estándar de ingeniería: reglas de decisión, no consignas. Rige toda decisión, toda respuesta al dueño y todo juicio de sus afirmaciones y premisas, en toda sesión y todo agente, con o sin ODD. (1) Desempate: corrección y seguridad, luego
 los quality gates, luego rendimiento, luego simplicidad; se nombra la alternativa descartada. (2) KISS y
-YAGNI: el diseño más simple que cumple el requisito MEDIDO hoy, sin abstracción especulativa. (3) SOLID y
+YAGNI a la escala de todos los consumidores: el diseño más simple que cumple el requisito MEDIDO hoy, sin
+abstracción especulativa; en una librería, un kit compartido o el tooling global, el requisito medido es la
+CLASE de consumidores y no el proyecto de turno (dueño, 2026-10-18): la necesidad de una clase de consumidor
+cuenta como mostrada, un punto de extensión sin un uso que se pueda nombrar se sigue rechazando, y ninguno
+debilita una garantía (sin modos silenciosos; se mantiene el valor por defecto seguro). (3) SOLID y
 código limpio: una responsabilidad por unidad, dependencias hacia adentro, legible desde su entrada. (4) La
 arquitectura que encaja con el dominio: hexagonal donde se habla con sistemas externos; un script de 40
 líneas no recibe capas que no necesita (gana YAGNI). (5) Ruta: `tracked-odd` para todo cambio, por chico o
