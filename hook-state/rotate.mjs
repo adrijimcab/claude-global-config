@@ -120,6 +120,7 @@ export const KINDS = Object.freeze([
   ['stop-input-recorder', 'stops.jsonl', ARCHIVE, 'what each Stop hook received'],
   ['stash-watch', 'noticed.json', KEEP, 'the stash sets each session was shown'],
   ['type-assertion-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],
+  ['useless-escape-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],
   ['worker-delegation-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   [ANY, 'journal.jsonl', JOURNAL, 'hook journal'],
   [ANY, 'fires.json', ARCHIVE, 'fires counter, reset with the journal whose rate it gives']
