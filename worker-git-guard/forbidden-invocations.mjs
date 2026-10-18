@@ -12,8 +12,10 @@
  *   restore       any form that touches the working tree.      Allowed: `--staged` without `--worktree`/`-W`.
  *   clean         any force flag (`-f`, `--force`, `-fd`, ...).  Allowed: `-n` / `--dry-run` alone.
  *   commitNoVerify `commit --no-verify` or `-n`, also in a short cluster (`-nm`, `-anm`).
+ *   commitNoPaths `commit` with `-a`/`--all` or with no path after `--`.  Allowed: `commit -m <msg> -- <path>...`,
+ *                 and `commit --dry-run` (it commits and stages nothing).
  *   pushNoVerify  `push --no-verify`, to any remote.
- *   readTree      `read-tree` with `-u` or `--reset`.          Allowed: bare `read-tree <tree>` (index only).
+ *   readTree     `read-tree` with `-u` or `--reset`.          Allowed: bare `read-tree <tree>` (index only).
  *   checkoutIndex `checkout-index` with `-f`/`--force` or `-a`/`--all`. Allowed: `checkout-index <file>`.
  *   updateIndex   `update-index --force-remove`.               Allowed: `--refresh`, `--add`, `--cacheinfo`.
  *   updateRef     every `update-ref` write: `-d`, `<ref> <sha>`, `--stdin`.  Allowed: `update-ref -h`; read refs with `rev-parse`.
@@ -24,6 +26,11 @@
  * `GIT_INDEX_FILE`, because the line does not prove the variable; read the tree there without `--reset`.
  * `symbolic-ref` is the `checkout`/`switch` reasoning: a worker's branch is fixed by its TENANCY, and
  * repointing HEAD sends the next commit to another branch.
+ *
+ * WHY COMMIT NAMES ITS PATHS (Discovery -11 report: commitlint rejected a worker's commit twice, f615bf9b on
+ * 2026-10-18 and d417d169 on 2026-10-19; the files it had staged stayed in the index and the next commit swept
+ * them in under the wrong message, and history rewriting is denied). `git commit -- <paths>` commits only the
+ * named paths even when others are staged. The rule is lexical, with no git call.
  *
  * HOW OPTIONS ARE READ. Words after a bare `--` are paths, never options. A short cluster (`-anm`) is walked
  * character by character and STOPS at the first option that takes a value, because the rest of the cluster
@@ -45,7 +52,9 @@
  * `restore` y `checkout` (informe del worker de integración de b100, 2026-10); leer (`read-tree <árbol>`, `--refresh`, `symbolic-ref HEAD`) sigue
  * permitido (las referencias se leen con `rev-parse`; `update-ref -h` también). `update-index --index-info`
  * se permite a propósito: escribe solo entradas del índice, nunca ficheros del árbol. `update-ref --stdin` se
- * rechaza porque sus comandos llegan sin verse.
+ * rechaza porque sus comandos llegan sin verse. Un `commit` debe nombrar sus rutas tras `--` (informe de
+ * Discovery -11: un commit rechazado por commitlint dejó archivos en el índice y el siguiente commit los
+ * arrastró bajo otro mensaje, dos veces); se rechaza `commit` sin rutas y `-a`/`--all`; `--dry-run` se permite.
  */
 
 import { gitInvocations } from '../shell-command/git-invocations.mjs';
@@ -85,20 +94,23 @@ const LONG_WITH_VALUE = {
  * The options an invocation really carries, with option values and paths already removed.
  * @param {string} subcommand A key of `SHORT_WITH_VALUE`.
  * @param {string[]} args The words after the subcommand.
- * @returns {{ longs: string[], shorts: string[], positionals: string[] }} Long options (`--x`, without any
- *   `=value`), short flags, and the words that are neither (names, paths), including every word after `--`.
+ * @returns {{ longs: string[], shorts: string[], positionals: string[], afterDashes: string[] }} Long options
+ *   (`--x`, without any `=value`), short flags, the words that are neither (names, paths), including every
+ *   word after `--`, and those words after `--` alone.
  * @es Las opciones que la invocación lleva de verdad, sin valores de opción; y las palabras que no son opción.
  */
 function optionsOf(subcommand, args) {
   const longs = [];
   const shorts = [];
   const positionals = [];
+  let afterDashes = [];
 
   for (let index = 0; index < args.length; index += 1) {
     const word = args[index];
 
     if (word === '--') {
-      positionals.push(...args.slice(index + 1));
+      afterDashes = args.slice(index + 1);
+      positionals.push(...afterDashes);
       break;
     }
 
@@ -122,7 +134,7 @@ function optionsOf(subcommand, args) {
     }
   }
 
-  return { longs, shorts, positionals };
+  return { longs, shorts, positionals, afterDashes };
 }
 
 /** Whether a long option is `--no-verify` or an unambiguous abbreviation. @es Si es `--no-verify` o una abreviatura. */
@@ -134,6 +146,22 @@ const isNoVerify = (name) => name.length >= NO_VERIFY_MIN_LENGTH && NO_VERIFY.st
  * @es Si `name` es `full` o una abreviatura que git resuelve a ella; `minLength` es el prefijo único más corto.
  */
 const isOption = (name, full, minLength) => name.length >= minLength && full.startsWith(name);
+
+/**
+ * The family of a `commit`: `--no-verify`/`-n` first; then a commit that can sweep in what is already staged,
+ * which is one with `-a`/`--all` or with no path after `--`. A `--dry-run` writes no commit and stages nothing,
+ * so it is allowed.
+ * @es La familia de un `commit`: primero `--no-verify`/`-n`; luego el que puede arrastrar lo que ya está en el
+ * índice (`-a`/`--all`, o sin rutas tras `--`). `--dry-run` no commitea ni agrega al índice: se permite.
+ */
+function commitFamily(args) {
+  const { longs, shorts, afterDashes } = optionsOf('commit', args);
+
+  if (longs.some(isNoVerify) || shorts.includes('n')) return 'commitNoVerify';
+  if (longs.some((name) => isOption(name, '--dry-run', '--dr'.length))) return undefined;
+
+  return shorts.includes('a') || longs.includes('--all') || afterDashes.length === 0 ? 'commitNoPaths' : undefined;
+}
 
 /** `read-tree` that writes the working tree (`-u`) or discards the index (`--reset`). @es `read-tree` que escribe el árbol o descarta el índice. */
 function readTreeDiscards(args) {
@@ -194,11 +222,8 @@ function familyOf({ subcommand, args }) {
 
       return longs.includes('--force') || shorts.includes('f') ? 'clean' : undefined;
     }
-    case 'commit': {
-      const { longs, shorts } = optionsOf('commit', args);
-
-      return longs.some(isNoVerify) || shorts.includes('n') ? 'commitNoVerify' : undefined;
-    }
+    case 'commit':
+      return commitFamily(args);
     case 'push':
       return optionsOf('push', args).longs.some(isNoVerify) ? 'pushNoVerify' : undefined;
     case 'read-tree':

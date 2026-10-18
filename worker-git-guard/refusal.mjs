@@ -108,6 +108,29 @@ export const MESSAGES = {
       'un commit de trabajo a medias también tiene que pasar los hooks.'
     ]
   },
+  commitNoPaths: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: a delegated worker must name its paths in `git commit` ({command}).',
+      '',
+      'WHY. A commit without `-- <paths>` takes everything already staged, and `-a`/`--all` stages every tracked',
+      'change. After a commit rejected by commitlint the files stay staged, so the next commit swept them in under',
+      'the wrong message (twice), and history rewriting is denied, so it could not be split.',
+      '',
+      'USE INSTEAD: `git commit -m "<msg>" -- <path> <path>` commits only the named paths. After a rejected commit,',
+      'run `git status --porcelain` before the next one.'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado debe nombrar sus rutas en `git commit` ({command}).',
+      '',
+      'POR QUÉ. Un commit sin `-- <rutas>` toma todo lo que ya está en el índice, y `-a`/`--all` agrega cada cambio',
+      'rastreado. Tras un commit rechazado por commitlint los ficheros siguen en el índice, así que el commit',
+      'siguiente los arrastró bajo otro mensaje (dos veces), y reescribir historia está denegado, por lo que no',
+      'se pudo separar.',
+      '',
+      'USAR EN SU LUGAR: `git commit -m "<msg>" -- <ruta> <ruta>` commitea solo las rutas nombradas. Tras un commit',
+      'rechazado, ejecutá `git status --porcelain` antes del siguiente.'
+    ]
+  },
   pushNoVerify: {
     en: [
       'WORKER-GIT GUARD REFUSED this command: a delegated worker may not skip the push hooks ({command}).',

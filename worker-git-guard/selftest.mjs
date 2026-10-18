@@ -97,7 +97,27 @@ for (const form of ['git clean -n', 'git clean --dry-run', 'git clean -nd', 'git
 
 // --- FAMILY 5: commit --no-verify / -n ----------------------------------------------------------
 for (const form of ['git commit --no-verify -m x', 'git commit -n -m x', 'git commit -nm x', 'git commit -anm x', 'git commit -q --no-verify -m "wip: x"', 'git commit -m x --no-verify', 'git commit -m x -n', 'git commit --no-verif -m x', 'git commit --no-v -m x']) denied(form);
-for (const form of ['git commit -m "no-verify words"', 'git commit -m"no"', 'git commit -m -n', 'git commit -am x', 'git commit --amend -m x', 'git commit -m x -- a.txt', 'git commit -m x -- a.txt -n', 'git commit -F msg.txt', 'git commit -Fn', 'git commit -C HEAD', 'git commit --message --no-verify', 'git commit --no-edit', 'git commit --no- -m x', 'git commit -m "-n"']) allowed(form);
+for (const form of ['git commit -m "no-verify words" -- p.txt', 'git commit -m"no" -- p.txt', 'git commit -m -n -- p.txt', 'git commit --amend -m x -- p.txt', 'git commit -m x -- a.txt', 'git commit -m x -- a.txt -n', 'git commit -F msg.txt -- p.txt', 'git commit -Fn -- p.txt', 'git commit -C HEAD -- p.txt', 'git commit --message --no-verify -- p.txt', 'git commit --no-edit -- p.txt', 'git commit --no- -m x -- p.txt', 'git commit -m "-n" -- p.txt']) allowed(form);
+
+// --- FAMILY 12: commit must name its paths after -- (Discovery -11 report: a rejected commit left files staged,
+// the next commit swept them in under the wrong message, twice) -----------------------------------
+for (const form of ['git add a b && git commit -m x', 'git commit -m x', 'git commit -am x', 'git commit -a -m x', 'git commit --all -m x', 'git commit -m x --all', 'git commit -F msg.txt', 'git commit --amend --no-edit', 'git commit -m x --', 'git commit -m x a.txt', 'git commit -m x -o a.txt', 'git commit -qam x', 'git commit -aF msg.txt -- a.txt', 'git commit -m "-a"', 'git commit --d -m x', 'git commit --all -m x -- a', 'git commit -a -m x -- a', 'git commit --no-verify -m x -- a', 'git commit -n -m x -- a']) denied(form);
+for (const form of ['git commit -m "<msg>" -- a b', 'git commit -m x -- a.txt', 'git commit -F msg.txt -- a.txt b.txt', 'git commit -q -m x -- a', 'git commit -m x -- --all', 'git commit -m x --only -- a', 'git commit --allow-empty -m x -- a','git commit --dry-run', 'git commit -m x --dry-run', 'git commit --dry-run -a', 'git commit --dr -m x', 'git commit -m "-a" -- p.txt', 'git commit -m x -- a.txt -a', 'git commit -m x -- a.txt --all']) allowed(form);
+expect('deny', asSubagent('PowerShell', 'git add a; git commit -m x'), 'PowerShell, commit without paths');
+expect('deny', asSubagent('PowerShell', 'git.exe commit -am "x"'), 'PowerShell, -am');
+expect('allow', asSubagent('PowerShell', 'git commit -m "x" -- a b'), 'PowerShell, commit with paths');
+expect('allow', asMain('Bash', 'git commit -am x'), 'main session, commit -am');
+expect('allow', asMain('PowerShell', 'git commit -m x'), 'main session, commit without paths');
+denied('git -C C:/some/worktree commit -m x');
+denied('GIT_AUTHOR_NAME=x git commit -m x');
+denied('env X=1 git commit -am x');
+denied('bash -c "git commit -m x"');
+denied('echo $(git commit -am x)');
+denied('(cd sub && git commit -m x)');
+denied('git status | cat; git commit -m x');
+allowed('git -C C:/some/worktree commit -m x -- a');
+allowed('bash -c "git commit -m x -- a"');
+allowed('echo git commit -am x');
 
 // --- FAMILY 6: push --no-verify -----------------------------------------------------------------
 for (const form of ['git push --no-verify', 'git push origin main --no-verify', 'git push --no-verify https://example.invalid/r.git', 'git push --no-verif']) denied(form);
@@ -144,7 +164,7 @@ expect('allow', asMain('Bash', 'git read-tree --reset -u HEAD'), 'main session, 
 denied('git read-tree "--reset" -u HEAD');
 denied("git read-tree '--reset' -u HEAD");
 allowed('echo git read-tree --reset -u HEAD');
-allowed('git commit -m "git read-tree --reset -u HEAD"');
+allowed('git commit -m "git read-tree --reset -u HEAD" -- p.txt');
 
 // --- OUT OF SCOPE (measured incidents only) -----------------------------------------------------
 for (const form of ['git stash', 'git rebase main', 'git cherry-pick abc', 'git log', 'git add -A', 'git fetch --all', 'git branch -D x', 'git worktree list']) allowed(form);
@@ -168,8 +188,8 @@ expect('allow', asSubagent('PowerShell', 'git restore --staged x'), 'PowerShell,
 
 // --- DATA, NOT COMMANDS -------------------------------------------------------------------------
 allowed('echo git reset --hard');
-allowed('git commit -m "never git reset or git checkout -- x or --no-verify"');
-allowed("git commit -m 'git clean -fd'");
+allowed('git commit -m "never git reset or git checkout -- x or --no-verify" -- p.txt');
+allowed("git commit -m 'git clean -fd' -- p.txt");
 allowed('cat <<EOF\ngit reset --hard\ngit commit --no-verify\nEOF');
 allowed('git status # git checkout main');
 expect('allow', asSubagent('PowerShell', 'Write-Output "git reset --hard"'), 'PowerShell string');
@@ -198,9 +218,16 @@ check('update-index refusal names the safe route', reasonOf('git update-index --
 check('update-ref refusal says to commit or ask the orchestrator, and names rev-parse for reads', reasonOf('git update-ref -d refs/heads/x').includes('ask the orchestrator') && reasonOf('git update-ref -d refs/heads/x').includes('git rev-parse <ref>') && reasonOf('git update-ref -d refs/heads/x').includes('pedile al orquestador'));
 check('symbolic-ref refusal names the allowed read', reasonOf('git symbolic-ref HEAD refs/heads/x').includes('--short HEAD') && reasonOf('git symbolic-ref HEAD refs/heads/x').includes('orchestrator creates the branches'));
 
-const headlines = ['git reset', 'git checkout main', 'git restore x', 'git clean -f', 'git commit -n', 'git push --no-verify', 'git read-tree -u HEAD', 'git checkout-index -f a', 'git update-index --force-remove a', 'git update-ref -d r', 'git symbolic-ref HEAD r'].map((command) => reasonOf(command).split('\n')[2]);
+const noPathsReason = reasonOf('git add a b && git commit -m x');
 
-check('each family has its own text', new Set(headlines).size === 11, headlines.join(' | '));
+check('commit-without-paths refusal shows the safe form in both halves', noPathsReason.includes('git commit -m "<msg>" -- <path> <path>') && noPathsReason.includes('git commit -m "<msg>" -- <ruta> <ruta>'));
+check('commit-without-paths refusal says to run git status --porcelain after a rejected commit, in both halves', noPathsReason.split('git status --porcelain').length === 3);
+check('commit-without-paths refusal names the staged sweep and -a', noPathsReason.includes('staged') && noPathsReason.includes('-a'));
+check('the no-verify refusal still wins over the paths rule', reasonOf('git commit -nm x').includes('commitlint'));
+
+const headlines = ['git reset', 'git checkout main', 'git restore x', 'git clean -f', 'git commit -n', 'git push --no-verify', 'git read-tree -u HEAD', 'git checkout-index -f a', 'git update-index --force-remove a', 'git update-ref -d r', 'git symbolic-ref HEAD r', 'git commit -m x'].map((command) => reasonOf(command).split('\n')[2]);
+
+check('each family has its own text', new Set(headlines).size === 12, headlines.join(' | '));
 check('the first offending invocation is the one named', reasonOf('git reset -q && git clean -fd').includes('git reset -q') && !reasonOf('git reset -q && git clean -fd').split('\n')[0].includes('git clean'));
 
 /** The verdict when the decision throws; a throw that escapes is a failed check. @es El veredicto cuando la decisión lanza. */
