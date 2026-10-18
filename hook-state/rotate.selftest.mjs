@@ -147,6 +147,7 @@ try {
   check('a lock is a lock', classify('failure-capture', 'ledger.lock').kind, LOCK);
   check('the hook journal of any mechanism is a journal', [classify('guard-anything', 'journal.jsonl').kind, classify('collision-guard', 'journal.jsonl').kind], [JOURNAL, JOURNAL]);
   check('the fires counter of any mechanism is archived', classify('guard-anything', 'fires.json').kind, ARCHIVE);
+  check('the lock of a fires counter increment is a lock, so it refuses an apply', classify('guard-anything', 'fires.json.lock').kind, LOCK);
   check('a mechanism-specific rule wins over a general one', [classify('fleet-kit', 'handback/refusals.jsonl').kind, classify('fleet-kit', 'landing-guard/refusals.jsonl').kind], [KEEP, ARCHIVE]);
   check('* is exactly one segment', [classify('fleet-kit', 'repos/k/verdicts/t.json').kind, classify('fleet-kit', 'repos/k/verdicts/deeper/t.json').kind], [KEEP, UNKNOWN]);
   check('** is one or more segments', [classify('fleet-kit', 'repos/k/diff-coverage/run-1/summary.json').kind, classify('failure-capture', 'condense/run/ledger.md').kind, classify('failure-capture', 'condense').kind], [ARCHIVE, ARCHIVE, UNKNOWN]);

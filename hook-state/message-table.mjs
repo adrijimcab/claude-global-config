@@ -28,6 +28,10 @@ export const MESSAGE_TABLE = {
     en: 'The fires counter {file} is not a valid counter and was left untouched.',
     es: 'El contador de disparos {file} no es un contador válido y se dejó intacto.'
   },
+  'fires-busy': {
+    en: 'The fires counter {file} stayed locked by another process; this fire was not counted.',
+    es: 'Otro proceso mantuvo bloqueado el contador de disparos {file}; este disparo no se contó.'
+  },
   dismissed: {
     en: 'Block {blockId} of {mechanism} dismissed; it is lifted.',
     es: 'Bloqueo {blockId} de {mechanism} descartado; queda levantado.'

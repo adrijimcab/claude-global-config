@@ -16,11 +16,23 @@
  * en uno / corrupto, y un incremento que no debe tocar el journal.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { KINDS, appendRecord, createIdGenerator, digestInput, firesPath, incrementFires, journalPath } from './journal.mjs';
+
+// Child mode of the concurrency proof: this same file, run with the flag, increments one counter N times.
+// @es Modo hijo de la prueba de concurrencia: este mismo fichero, con la bandera, incrementa un contador N veces.
+const INCREMENT_FLAG = '--increment';
+
+if (process.argv[2] === INCREMENT_FLAG) {
+  for (let turn = 0; turn < Number(process.argv[4]); turn += 1) incrementFires(process.argv[3]);
+
+  process.exit(0);
+}
 
 const saved = { HOOK_STATE_DIR: process.env.HOOK_STATE_DIR, HOOK_CLAUDE_HOME: process.env.HOOK_CLAUDE_HOME };
 const scratch = mkdtempSync(path.join(tmpdir(), 'journal-selftest-'));
@@ -142,6 +154,43 @@ try {
   check('an append leaves the counter of that mechanism as it was', (() => { appendRecord('guard-g', { kind: 'decision', ...GOOD }); return JSON.parse(readFileSync(firesPath('guard-g'), 'utf8')).count; })(), 1);
   check('counters of two mechanisms are independent', [incrementFires('guard-h'), incrementFires('guard-i')], [1, 1]);
   check('no temp file is left beside the counter', existsSync(`${firesPath('guard-f')}.tmp`), false);
+
+  // --- concurrent increments: real child processes, one shared counter ---
+  // @es Incrementos concurrentes: procesos hijos reales sobre un mismo contador.
+  const CHILDREN = 6;
+  const PER_CHILD = 40;
+  const exits = await Promise.all(Array.from({ length: CHILDREN }, () => new Promise((resolve) => {
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), INCREMENT_FLAG, 'guard-race', String(PER_CHILD)], { stdio: 'ignore' });
+
+    child.on('close', resolve);
+  })));
+
+  check('every concurrent child finished cleanly', exits, Array(CHILDREN).fill(0));
+  check('no concurrent increment was lost', JSON.parse(readFileSync(firesPath('guard-race'), 'utf8')).count, CHILDREN * PER_CHILD);
+  check('nothing but the counter is left beside it (no temp, no lock)', readdirSync(path.dirname(firesPath('guard-race'))), ['fires.json']);
+
+  // A fixed temp name is a collision waiting to happen: a leftover under that name must not block an increment.
+  // @es Un nombre temporal fijo es una colisión esperando: un resto con ese nombre no debe bloquear un incremento.
+  mkdirSync(`${firesPath('guard-t')}.tmp`, { recursive: true });
+  check('a leftover at the old fixed temp name does not block the increment', incrementFires('guard-t'), 1);
+
+  // A failed publish must not leave its temp behind (the rename fails over a non-empty directory).
+  // @es Una publicación fallida no deja su temporal (el renombrado falla sobre un directorio no vacío).
+  const blocked = firesPath('guard-u');
+  mkdirSync(path.join(blocked, 'inside'), { recursive: true });
+  check('a rename that fails is reported', typeof thrown(() => incrementFires('guard-u', { readFile: () => '{"count":1}' })), 'string');
+  check('and leaves no temp and no lock behind', readdirSync(path.dirname(blocked)).sort(), ['fires.json']);
+
+  // A lock that stays held: the fire is not counted, the call says so in both languages, the holder's lock stays.
+  // @es Un lock que sigue ocupado: la corrida no se cuenta, la llamada lo dice en ambos idiomas, el lock ajeno queda.
+  mkdirSync(path.dirname(firesPath('guard-v')), { recursive: true });
+  writeFileSync(`${firesPath('guard-v')}.lock`, '');
+  let busyWaits = 0;
+  const busy = thrown(() => incrementFires('guard-v', { lock: { attempts: 2, wait: () => { busyWaits += 1; } } }));
+
+  check('the lock options of the caller are honoured (two attempts, two waits)', busyWaits, 2);
+  check('a counter locked by another process is refused, bilingual', [/fires\.json/.test(busy ?? ''), /@es /.test(busy ?? '')], [true, true]);
+  check('and nothing was counted, the other lock stays', [existsSync(firesPath('guard-v')), existsSync(`${firesPath('guard-v')}.lock`)], [false, true]);
 
   mkdirSync(path.dirname(firesPath('guard-x')), { recursive: true });
   writeFileSync(firesPath('guard-x'), '{not json');

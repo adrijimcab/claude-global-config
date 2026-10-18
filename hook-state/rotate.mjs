@@ -124,7 +124,8 @@ export const KINDS = Object.freeze([
   ['worker-delegation-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['worktree-landing', 'red-logs/*', ARCHIVE, 'whole output of past red verifications, one file per refused landing'],
   [ANY, 'journal.jsonl', JOURNAL, 'hook journal'],
-  [ANY, 'fires.json', ARCHIVE, 'fires counter, reset with the journal whose rate it gives']
+  [ANY, 'fires.json', ARCHIVE, 'fires counter, reset with the journal whose rate it gives'],
+  [ANY, 'fires.json.lock', LOCK, 'a fires counter increment in flight']
 ]);
 
 /** Whether one path segment matches one pattern segment. @es Si un segmento de ruta casa con uno de patrón. */

@@ -40,6 +40,7 @@ const EXPECTED = {
   'bad-field': [{ field: 'f', expected: 'e' }, 'Journal record field "f" is missing or has the wrong type (e). @es El campo «f» del registro de journal falta o tiene un tipo erróneo (e).'],
   'bad-mechanism': [{ value: '"v"' }, 'A mechanism name must be a plain name (letters, digits, "-" and "_"), got "v". @es El nombre de un mecanismo debe ser un nombre simple (letras, dígitos, «-» y «_»), se recibió "v".'],
   'fires-corrupt': [{ file: 'F' }, 'The fires counter F is not a valid counter and was left untouched. @es El contador de disparos F no es un contador válido y se dejó intacto.'],
+  'fires-busy': [{ file: 'F' }, 'The fires counter F stayed locked by another process; this fire was not counted. @es Otro proceso mantuvo bloqueado el contador de disparos F; este disparo no se contó.'],
   dismissed: [{ blockId: 'B', mechanism: 'm' }, 'Block B of m dismissed; it is lifted. @es Bloqueo B de m descartado; queda levantado.'],
   'false-positive-recorded': [{ blockId: 'B', mechanism: 'm' }, 'False positive reported for block B of m; the block stays in force. @es Falso positivo informado para el bloqueo B de m; el bloqueo sigue vigente.'],
   'missing-argument': [{ option: '--block' }, 'Option --block is required and needs a non-empty value. @es La opción --block es obligatoria y necesita un valor no vacío.'],

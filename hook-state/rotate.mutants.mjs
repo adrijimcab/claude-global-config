@@ -34,6 +34,7 @@ const MUTANTS = [
   ['the session markers are archived', R, "['backlog-guard', '*.json', KEEP, \"a session's transcript offset\"]", "['backlog-guard', '*.json', ARCHIVE, \"a session's transcript offset\"]"],
   ['the handback refusal count is archived', R, "['fleet-kit', 'handback/refusals.jsonl', KEEP, 'the refusal count that bounds the handback loop'],\n", ''],
   ['the hook journal is archived whole, its dismissals lost', R, "[ANY, 'journal.jsonl', JOURNAL, 'hook journal']", "[ANY, 'journal.jsonl', ARCHIVE, 'hook journal']"],
+  ['the fires counter lock is archived', R, "[ANY, 'fires.json.lock', LOCK,", "[ANY, 'fires.json.lock', ARCHIVE,"],
   ['the fires counter is kept', R, "[ANY, 'fires.json', ARCHIVE,", "[ANY, 'fires.json', KEEP,"],
   ['a refusal journal is kept', R, "['collision-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal']", "['collision-guard', 'refusals.jsonl', KEEP, 'refusal journal']"],
 
