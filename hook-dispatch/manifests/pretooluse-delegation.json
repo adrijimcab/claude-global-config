@@ -11,6 +11,7 @@
     "../../resume-before-fresh/guard.mjs",
     "../../brief-tenancy/guard.mjs",
     "../../agent-contract-parity/guard.mjs",
-    "../../brief-route/guard.mjs"
+    "../../brief-route/guard.mjs",
+    "../../agent-model-guard/guard.mjs"
   ]
 }

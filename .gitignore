@@ -129,6 +129,8 @@
 !/worker-git-guard/
 !/worker-git-guard/**
 /worker-git-guard/state/
+!/agent-model-guard/
+!/agent-model-guard/**
 !/shared-resource-guard/
 !/shared-resource-guard/**
 /shared-resource-guard/state/
