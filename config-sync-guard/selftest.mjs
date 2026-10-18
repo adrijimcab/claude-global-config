@@ -30,6 +30,7 @@ import { measureFingerprint } from './fingerprint.mjs';
 import { evaluate as evaluateGuard } from './guard.mjs';
 import { recordUnexplained } from './pending-ledger.mjs';
 import { CLOCK_TOLERANCE_MS, shellCallsIn, shellWindowsIn, withinWindow } from './shell-windows.mjs';
+import { declaredRepos } from './repos.mjs';
 import { parseStatusPorcelain } from './status.mjs';
 import { parseAheadLog } from './unpushed-commits.mjs';
 import { writtenPathsIn as writtenPathsOf } from './transcript-writes.mjs';
@@ -107,7 +108,7 @@ function check(name, actual, expected) {
 }
 
 /** A fake repo for `decide()`. `worktree` defaults to `HERE` (a real, existing directory), so "exists" is true unless a test overrides it to a nonexistent path. @es Un repo falso para `decide()`. */
-function fakeRepo(name, { statusOk = true, statusText = '## master...origin/master\n', logOk = true, logText = '', worktree = HERE } = {}) {
+function fakeRepo(name, { statusOk = true, statusText = '## master...origin/master\n', logOk = true, logText = '', worktree = HERE, deliveryRoute = 'commit' } = {}) {
   const answer = (ok, stdout) => ({ ok, stdout, stderr: ok ? '' : 'simulated git failure' });
 
   return {
@@ -115,6 +116,7 @@ function fakeRepo(name, { statusOk = true, statusText = '## master...origin/mast
     worktree,
     run: (args) => (args.includes('log') ? answer(logOk, logText) : answer(statusOk, statusText)),
     gitPrefix: `git-${name}`,
+    deliveryRoute,
     pushCommand: `push-${name}`
   };
 }
@@ -627,6 +629,27 @@ check('empty stdin -> evaluate() allows (undefined)', evaluate(''), undefined);
 
   check('evaluate() with a path no live session made notes it and does not block', orphan?.decision === undefined && orphan?.systemMessage?.includes('foo.txt'), true);
   check('evaluate() records that path in the ledger under this session', slurp(ledger).includes(`"session":"${session}"`) && slurp(ledger).includes('foo.txt'), true);
+}
+
+// DELIVERY ROUTE: a repo whose master is reached only through a landing is told to LAND, never to commit.
+// @es RUTA DE ENTREGA: a un repo cuyo master solo se alcanza por un aterrizaje se le dice ATERRIZAR, nunca commitear.
+{
+  const dirtyStatus = '## master...origin/master\n M foo.txt\n';
+  const adviceFor = (repos) => evaluate(JSON.stringify(STOP_PAYLOAD()), { repos, liveAgents: madeHere(here('foo.txt')) })?.hookSpecificOutput?.additionalContext ?? '';
+  const landing = adviceFor([fakeRepo('landing-repo', { statusText: dirtyStatus, deliveryRoute: 'landing' })]);
+  const commit = adviceFor([fakeRepo('commit-repo', { statusText: dirtyStatus })]);
+  const both = adviceFor([fakeRepo('landing-repo', { statusText: dirtyStatus, deliveryRoute: 'landing' }), fakeRepo('commit-repo', { statusText: dirtyStatus })]);
+
+  check('a dirty landing repo prints a LAND line naming land.mjs, its path, the checkpoint worktree and the orchestrating session', landing.includes('LAND: ') && landing.includes('node ' + HERE.replaceAll('\\', '/') + '/worktree-landing/land.mjs --worktree <land/checkpoint-N worktree> --main ' + HERE.replaceAll('\\', '/') + ' ') && landing.includes('"foo.txt"') && landing.includes('land/checkpoint-N') && landing.includes('--branch master --remote origin') && landing.includes('orchestrates'), true);
+  check('a dirty landing repo prints no commit command', landing.includes(' commit -m') || landing.includes('COMMIT:'), false);
+  check('a dirty commit repo still prints the pathspec COMMIT line and no LAND line', commit.includes('COMMIT: git-commit-repo add -- "foo.txt" && git-commit-repo commit -m "type(scope): description" -- "foo.txt"') && !commit.includes('LAND:'), true);
+  check('option A names both routes, commit and land, in one sentence', both.includes('A) COMMIT (commit repo) OR LAND (landing repo) WHAT IS YOURS'), true);
+  check('option B (dismiss) is unchanged by the route', both.includes('B) DISMISS IT, with a reason that gets written down'), true);
+
+  const aheadLanding = adviceFor([fakeRepo('landing-repo', { statusText: '## master...origin/master [ahead 1]\n', logText: logOf(['abc1234', 'feat: x', 'foo.txt']), deliveryRoute: 'landing' })]);
+
+  check('the declared repos carry their route as data: ~/.claude lands, the project tooling backup commits', Object.fromEntries(declaredRepos().map((repo) => [repo.name, repo.deliveryRoute])), { '~/.claude': 'landing', 'b100-am-ui/.claude': 'commit' });
+  check('a landing repo ahead of its remote is told to land, never to push master directly', aheadLanding.includes('abc1234 feat: x') && !aheadLanding.includes('PUSH only') && !aheadLanding.includes('push-landing-repo'), true);
 }
 
 // ---------------------------------------------------------------------------------------------

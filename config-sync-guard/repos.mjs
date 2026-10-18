@@ -31,6 +31,8 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import { LANDING_ROUTE } from './land-advice.mjs';
+
 /** The project whose own `.claude/` tooling backup this mechanism also watches. @es El proyecto cuyo respaldo de tooling `.claude/` también vigila este mecanismo. */
 const B100_PROJECT_ROOT = 'C:\\Users\\adrian.jimenez\\Desktop\\Projects\\b100-am-ui';
 
@@ -67,6 +69,10 @@ function runCommand(command, args, cwd) {
 /**
  * The two declared backup repos, as `{ name, worktree, gitDir, run, gitPrefix, pushCommand }`.
  * `run(args)` is the ONE seam a selftest replaces for status/log/commit/push-shaped commands;
+ * `deliveryRoute` is how its master is reached, declared here and nowhere else: `commit` (a direct
+ * pathspec commit, the project tooling backups) or `landing` (only through `worktree-landing/land.mjs`,
+ * which is `~/.claude`). @es `deliveryRoute` es cómo se alcanza su master, declarado solo aquí: `commit`
+ * (commit directo con pathspec) o `landing` (solo por `worktree-landing/land.mjs`, que es `~/.claude`).
  * `gitPrefix` (the repo's own git invocation, which `commit-advice.mjs` builds the pathspec commit on) and
  * `pushCommand` are the copy-pasteable commands a block message names; `gitDir`
  * is the explicit `--git-dir` `fingerprint.mjs` qualifies its own git calls with (never `run`, and never
@@ -85,6 +91,7 @@ export function declaredRepos() {
       gitDir: path.join(globalClaude, '.git'),
       run: (args) => runCommand('git', ['-C', globalClaude, ...args], globalClaude),
       gitPrefix: 'git -C ~/.claude',
+      deliveryRoute: LANDING_ROUTE,
       pushCommand: 'git -C ~/.claude push origin master'
     },
     {
@@ -93,6 +100,7 @@ export function declaredRepos() {
       gitDir: B100_BACKUP_GIT_DIR,
       run: (args) => runCommand(process.execPath, [path.join(b100Claude, 'backup-repo.mjs'), ...args], b100Claude),
       gitPrefix: 'node .claude/backup-repo.mjs',
+      deliveryRoute: 'commit',
       pushCommand: 'node .claude/backup-repo.mjs push origin master'
     }
   ];

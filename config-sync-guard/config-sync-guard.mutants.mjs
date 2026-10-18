@@ -111,6 +111,12 @@ const MUTANTS = [
   ['the block stops naming the unowned commits, so the session cannot tell whose they are', 'guard.mjs', 'for (const commit of unownedCommits) lines.push(', 'for (const commit of []) lines.push('],
   ['the commit advice stages everything again, so the shared index is swept', 'commit-advice.mjs', '${gitPrefix} add -- ${pathspec}', '${gitPrefix} add -A'],
   ['the commit advice commits without a pathspec, so it commits the whole shared index', 'commit-advice.mjs', 'commit -m "type(scope): description" -- ${pathspec}`', 'commit -m "type(scope): description"`'],
+  ['the landing route falls back to the commit line, so a landing repo is told to commit on its shared master', 'guard.mjs', 'lines.push(isLandingRepo(repo) ? `      ${landAdvice(', 'lines.push(false ? `      ${landAdvice('],
+  ['the route field is ignored, so no repo is ever a landing repo', 'land-advice.mjs', 'repo.deliveryRoute === LANDING_ROUTE', 'false'],
+  ['the ~/.claude entry stops declaring the landing route, so its master is advised as a commit repo', 'repos.mjs', 'deliveryRoute: LANDING_ROUTE,', "deliveryRoute: 'commit',"],
+  ['a landing repo ahead of its remote falls back to the direct push line', 'guard.mjs', 'lines.push(isLandingRepo(repo) ? `      ${landAheadAdvice(repo)}`', 'lines.push(false ? `      ${landAheadAdvice(repo)}`'],
+  ['the LAND line stops naming the landing script', 'land-advice.mjs', "'worktree-landing', 'land.mjs')", "'worktree-landing')"],
+  ['option A stops naming the landing route', 'guard.mjs', 'OR LAND (landing repo)', 'OR PUSH (landing repo)'],
   ['the advised pathspec keeps Windows backslashes, so it no longer matches what git reports', 'guard.mjs', ".replaceAll('\\\\', '/')", ''],
   ['repoExists always reports true, so a genuinely missing repo is measured as present instead', 'repos.mjs', 'return existsSync(repo.worktree);', 'return true;'],
   ['the shim stops blocking a decided finding, so the harness lets the turn end anyway', 'guard.mjs', 'if (verdict === undefined) return undefined;', 'if (verdict !== undefined) return undefined;'],
@@ -144,7 +150,7 @@ const survivors = runMutants({
   // The tree above the guard, so the sandbox also holds the state-location module the guard imports.
   // @es El árbol por encima del guard, para que el sandbox tenga también el módulo de ubicaciones que importa.
   fleetRoot: path.dirname(HERE),
-  paths: [...['decide.mjs', 'guard.mjs', 'status.mjs', 'attribution.mjs', 'transcript-writes.mjs', 'shell-windows.mjs', 'path-ownership.mjs', 'authored-writes.mjs', 'touched-paths.mjs', 'path-mtime.mjs', 'pending-ledger.mjs', 'unpushed-commits.mjs', 'commit-advice.mjs', 'repos.mjs', 'dismiss.mjs', 'fingerprint.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'].map((file) => `${SELF}/${file}`), 'hook-state', 'bilingual-output'],
+  paths: [...['decide.mjs', 'guard.mjs', 'status.mjs', 'attribution.mjs', 'transcript-writes.mjs', 'shell-windows.mjs', 'path-ownership.mjs', 'authored-writes.mjs', 'touched-paths.mjs', 'path-mtime.mjs', 'pending-ledger.mjs', 'unpushed-commits.mjs', 'commit-advice.mjs', 'land-advice.mjs', 'repos.mjs', 'dismiss.mjs', 'fingerprint.mjs', 'selftest.mjs', 'guard.mjs.hook-registration.json'].map((file) => `${SELF}/${file}`), 'hook-state', 'bilingual-output'],
   selftest: `${SELF}/selftest.mjs`,
   mutants: MUTANTS.map(([label, file, original, replacement]) => [label, `${SELF}/${file}`, original, replacement]),
   crashKills: 'fail'

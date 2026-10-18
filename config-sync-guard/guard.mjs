@@ -32,6 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { stateDir } from '../hook-state/locations.mjs';
 import { pathspecCommitCommand } from './commit-advice.mjs';
 import { decide } from './decide.mjs';
+import { isLandingRepo, landAdvice, landAheadAdvice } from './land-advice.mjs';
 import { recordUnexplained } from './pending-ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -60,7 +61,7 @@ function repoFindingText({ repo, unownedAhead, unownedCommits, ownPaths, workerO
   if (unownedAhead > 0) {
     lines.push(`    - ${String(unownedAhead)} commit(s) ahead of its remote, none owned by a live agent of another session:`);
     for (const commit of unownedCommits) lines.push(`        ${commit.hash} ${commit.subject}${commit.writers.length > 0 ? `  (paths also written by live agent(s): ${commit.writers.join(', ')})` : ''}`);
-    lines.push(`      PUSH only commits you authored and verified: ${repo.pushCommand} — never another actor's.`);
+    lines.push(isLandingRepo(repo) ? `      ${landAheadAdvice(repo)}` : `      PUSH only commits you authored and verified: ${repo.pushCommand} — never another actor's.`);
   }
 
   if (ownPaths.length > 0) {
@@ -68,7 +69,9 @@ function repoFindingText({ repo, unownedAhead, unownedCommits, ownPaths, workerO
     for (const absolutePath of ownPaths.slice(0, 20)) lines.push(`        ${absolutePath}`);
     if (ownPaths.length > 20) lines.push(`        … and ${String(ownPaths.length - 20)} more`);
     for (const output of workerOutput) lines.push(`      ${relativeTo(repo, output.path)} is the output of your finished worker ${output.workers.join(', ')}: review it, then commit it with a pathspec or discard it deliberately.`);
-    lines.push(`      COMMIT: ${pathspecCommitCommand(repo.gitPrefix, ownPaths.map((absolutePath) => relativeTo(repo, absolutePath)))}`);
+    const ownRelativePaths = ownPaths.map((absolutePath) => relativeTo(repo, absolutePath));
+
+    lines.push(isLandingRepo(repo) ? `      ${landAdvice(repo, ownRelativePaths)}` : `      COMMIT: ${pathspecCommitCommand(repo.gitPrefix, ownRelativePaths)}`);
   }
 
   return lines.join('\n');
@@ -89,8 +92,9 @@ function blockOutput(dirtyRepos, sessionId) {
     'that its finished workers wrote (path-ownership.mjs). Other sessions\' work never blocks you. A path attributed here by timing may',
     'still be a coincidence — verify it before committing. Do exactly ONE of these, then stop again:',
     '',
-    '  A) COMMIT AND PUSH WHAT IS YOURS (default) — the exact commands are listed above per repo; the',
-    '     commit command names the listed paths explicitly and never sweeps the shared index.',
+    '  A) COMMIT (commit repo) OR LAND (landing repo) WHAT IS YOURS (default) — the exact route is listed above per',
+    '     repo: a commit repo gets a commit-and-push command that names the listed paths explicitly and never',
+    '     sweeps the shared index; a landing repo gets a land.mjs route and never a direct commit.',
     '',
     '  B) DISMISS IT, with a reason that gets written down (not a silent escape). The dismissal is',
     '     scoped to the EXACT state measured right now (ahead count + a content hash of the whole',
