@@ -102,6 +102,9 @@ function buildFleet() {
   mkdirSync(path.join(root, 'thing'));
   writeFileSync(path.join(root, 'thing', 'target.mjs'), FLEET_TARGET);
   writeFileSync(path.join(root, 'thing', 'selftest.mjs'), FLEET_SELFTEST);
+  // The fixture is a fleet of its own, so its campaign derives the fleet from it and never from the caller's environment.
+  mkdirSync(path.join(root, 'selftest-runner'));
+  writeFileSync(path.join(root, 'selftest-runner', 'run.mjs'), '// the fixture runner marks this tree as a fleet\n');
 
   return root;
 }

@@ -73,7 +73,6 @@
 
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import path from 'node:path';
 
 import { copiedPaths, importClosure } from './import-closure.mjs';
@@ -133,10 +132,11 @@ function measure({ fleetRoot, paths = [], selftest, mutants, timeoutMs = 900_000
   if (!CRASH_POLICIES.has(crashKills)) throw new NotMeasured(`crashKills must be 'report' or 'fail', got ${JSON.stringify(crashKills)}; no policy is picked on the caller's behalf`);
   if (mutants.length === 0) throw new NotMeasured('the campaign holds no mutant, and 0/0 killed is not a proof');
 
+  const fleet = fleetOf(fleetRoot);
   const copied = copiedPathsOf(fleetRoot, paths, selftest, mutants);
   const sandboxRoot = sandboxRootOf(fleetRoot, copied);
   const snapshot = mkdtempSync(path.join(sandboxRoot, 'snapshot-'));
-  const sandboxes = { root: sandboxRoot, snapshot, copied };
+  const sandboxes = { root: sandboxRoot, snapshot, copied, fleet };
 
   try {
     for (const needed of copied) cpSync(path.join(fleetRoot, needed), path.join(snapshot, needed), { recursive: true, filter: (source) => !RUN_OUTPUT.has(path.basename(source)) });
@@ -261,7 +261,7 @@ function requireParseableOriginals(plans, snapshot) {
 }
 
 function requireGreenBaseline(sandboxes, selftest, timeoutMs) {
-  const run = inSandbox(sandboxes, () => undefined, (sandbox) => selftestIn(sandbox, selftest, timeoutMs));
+  const run = inSandbox(sandboxes, () => undefined, (sandbox) => selftestIn(sandbox, selftest, timeoutMs, sandboxes.fleet));
 
   if (run.status !== 0 || run.signal !== null) throw new NotMeasured(`the UNMUTATED selftest is not green (${outcomeOf(run)}), so every mutant would read as killed`);
 
@@ -299,7 +299,7 @@ function runMutant({ label, file, original, replacement }, sandboxes, selftest, 
     (sandbox) => {
       const syntaxError = syntaxErrorOf(path.join(sandbox, file));
 
-      return syntaxError === undefined ? { run: selftestIn(sandbox, selftest, timeoutMs) } : { syntaxError };
+      return syntaxError === undefined ? { run: selftestIn(sandbox, selftest, timeoutMs, sandboxes.fleet) } : { syntaxError };
     }
   );
 
@@ -350,19 +350,33 @@ function inSandbox({ root, snapshot, copied }, prepare, measureIn) {
 }
 
 /**
- * The environment a mutant's selftest runs in. A selftest that imports a module of the shared fleet reads the fleet
- * from `SELFTEST_FLEET` (the selftest runner sets it for each selftest); a campaign is not run by that runner, so it
- * names the fleet the same way the runner derives it, `~/.claude`, unless the caller already set one.
- * @es El entorno de los selftests de los mutantes. Un selftest que importa un módulo de la flota compartida la lee de
- * `SELFTEST_FLEET`; la fija el runner de selftests, pero una campaña no pasa por él, así que se nombra la flota como la
- * deriva el runner, `~/.claude`, salvo que quien llama ya haya fijado una.
+ * The fleet a mutant's selftest imports shared modules from, named in `SELFTEST_FLEET`. The caller's value wins.
+ * Otherwise it is derived the way the selftest runner derives it, as the tree that holds the runner: the first
+ * directory, from `fleetRoot` upwards, holding `selftest-runner/run.mjs`. So a campaign run in a worktree of the
+ * fleet measures that worktree, never the live fleet. A tree with no runner above it (a project whose campaigns
+ * import the shared fleet) stops the run: the home is never guessed.
+ * @es La flota de la que el selftest de un mutante importa módulos compartidos, nombrada en `SELFTEST_FLEET`. Gana
+ * el valor de quien llama. Si no hay, se deriva como la deriva el runner de selftests, el árbol que contiene el
+ * runner: el primer directorio, desde `fleetRoot` hacia arriba, que tiene `selftest-runner/run.mjs`. Así una campaña
+ * corrida en un worktree de la flota mide ese worktree, nunca la flota viva. Un árbol sin runner encima (un proyecto
+ * cuyas campañas importan la flota compartida) detiene la corrida: el home nunca se adivina.
  */
-function selftestEnvironment() {
-  return { ...process.env, SELFTEST_FLEET: process.env.SELFTEST_FLEET ?? path.join(homedir(), '.claude') };
+function fleetOf(fleetRoot) {
+  if (process.env.SELFTEST_FLEET !== undefined) return process.env.SELFTEST_FLEET;
+
+  for (let directory = path.resolve(fleetRoot); ; directory = path.dirname(directory)) {
+    if (existsSync(path.join(directory, 'selftest-runner', 'run.mjs'))) return directory;
+    if (path.dirname(directory) === directory) break;
+  }
+
+  throw new NotMeasured(
+    `no directory from ${fleetRoot} upwards holds selftest-runner/run.mjs, so the fleet a selftest imports shared modules from is unknown; set SELFTEST_FLEET to that fleet. ` +
+      `@es ningún directorio desde ${fleetRoot} hacia arriba contiene selftest-runner/run.mjs, así que la flota de la que un selftest importa módulos compartidos es desconocida; hay que fijar SELFTEST_FLEET con esa flota.`
+  );
 }
 
-function selftestIn(sandbox, selftest, timeoutMs) {
-  return spawnSync(process.execPath, [path.join(sandbox, selftest)], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 256 * 1024 * 1024, env: selftestEnvironment() });
+function selftestIn(sandbox, selftest, timeoutMs, fleet) {
+  return spawnSync(process.execPath, [path.join(sandbox, selftest)], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 256 * 1024 * 1024, env: { ...process.env, SELFTEST_FLEET: fleet } });
 }
 
 /**

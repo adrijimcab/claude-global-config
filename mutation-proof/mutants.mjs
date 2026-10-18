@@ -33,8 +33,12 @@ const MUTANTS = [
   ['overlapping occurrences are not counted, so "aa" in "aaa" reads as exactly once', RUNNER, 'text.indexOf(needle, at + 1)', 'text.indexOf(needle, at + needle.length)'],
 
   // ── the fleet a mutant's selftest imports shared modules from ───────────────────────────────────────
-  ['a mutant selftest gets no fleet, so every selftest that imports a shared module is NOT MEASURED', RUNNER, "SELFTEST_FLEET: process.env.SELFTEST_FLEET ?? path.join(homedir(), '.claude') }", "SELFTEST_FLEET: undefined }"],
-  ['a fleet the caller named is overwritten by the home one', RUNNER, 'process.env.SELFTEST_FLEET ?? path.join', 'path.join(homedir(), \'.claude\') ?? path.join'],
+  ["the fleet defaults to the home one, so a campaign in a worktree of the fleet measures the live fleet", RUNNER, "if (process.env.SELFTEST_FLEET !== undefined) return process.env.SELFTEST_FLEET;", "return process.env.SELFTEST_FLEET ?? path.join(process.getBuiltinModule('node:os').homedir(), '.claude');"],
+  ["a fleet the caller named is overwritten by the derived one", RUNNER, "if (process.env.SELFTEST_FLEET !== undefined) return process.env.SELFTEST_FLEET;", ""],
+  ["only the fleet root is looked at, never a tree above it", RUNNER, "if (path.dirname(directory) === directory) break;", "break;"],
+  ["a tree with no runner above it hands the selftest no fleet instead of stopping", RUNNER, "  throw new NotMeasured(\n    `no directory from", "  return undefined;\n  throw new NotMeasured(\n    `no directory from"],
+  ["the stop drops its Spanish half", RUNNER, "`@es ningún directorio", "`ningún directorio"],
+  ["the derived fleet never reaches the selftest", RUNNER, "env: { ...process.env, SELFTEST_FLEET: fleet } }", "env: process.env }"],
 
   // ── what is copied: derived from the import closure, plus the explicit paths ────────────────────────
   ['nothing is derived, so the selftest runs without what it imports', RUNNER, 'entries: [selftest, ...mutated] });', 'entries: [] });'],

@@ -86,7 +86,7 @@ const cases = [];
 const check = (name, holds) => cases.push({ name, holds });
 
 /** Builds a fixture fleet, runs one campaign over it, and reports what the runner said and did. */
-function campaign({ assertions = GREEN_ASSERTIONS, prelude = '', extraFiles = {}, paths, mutants, environment = {} }) {
+function campaign({ assertions = GREEN_ASSERTIONS, prelude = '', extraFiles = {}, paths, mutants, environment = {}, runnerIn = 'fleet' }) {
   // The fleet sits inside a parent of its own, so a file BESIDE the fleet exists for a mutant to name.
   const parent = mkdtempSync(path.join(os.tmpdir(), 'mutation-proof-fixture-'));
   const fleet = path.join(parent, 'fleet');
@@ -107,6 +107,14 @@ function campaign({ assertions = GREEN_ASSERTIONS, prelude = '', extraFiles = {}
     writeFileSync(runLog, '');
 
     for (const [file, content] of Object.entries(extraFiles)) writeFileSync(path.join(fleet, file), content);
+
+    // The selftest runner a campaign derives its fleet from: in the fleet itself, in a tree above it, or nowhere.
+    const runnerTree = { fleet, parent, none: undefined }[runnerIn];
+
+    if (runnerTree !== undefined) {
+      mkdirSync(path.join(runnerTree, 'selftest-runner'), { recursive: true });
+      writeFileSync(path.join(runnerTree, 'selftest-runner', 'run.mjs'), '// the fixture runner marks this tree as a fleet\n');
+    }
 
     const script = path.join(fleet, 'campaign.mjs');
 
@@ -235,13 +243,33 @@ check('an empty campaign refuses to measure: 0/0 killed proves nothing', empty.s
 const FLEET_ASSERTIONS = (expected) => GREEN_ASSERTIONS.replace(']', `, process.env.SELFTEST_FLEET === ${JSON.stringify(expected)}]`);
 const KILL_MUTANT = [[LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18']];
 
-const derivedFleet = campaign({ assertions: FLEET_ASSERTIONS(path.join(os.homedir(), '.claude')), mutants: KILL_MUTANT });
+// The fixture's parent holds the run log, so a selftest reads the parent, and the fleet inside it, from that path.
+const IMPORTS_PATH = "import path from 'node:path';\n";
+const PARENT = 'path.dirname(process.env.MUTATION_PROOF_RUN_LOG)';
+const fleetItself = campaign({ prelude: IMPORTS_PATH, assertions: GREEN_ASSERTIONS.replace(']', `, process.env.SELFTEST_FLEET === path.join(${PARENT}, 'fleet')]`), mutants: KILL_MUTANT });
 
-check('a campaign names the fleet as ~/.claude for a selftest that imports a shared module, when the caller set none', derivedFleet.status === 0 && derivedFleet.verdictOf(LABELS.kill) === 'KILLED');
+check('a fleet root that holds the selftest runner is the fleet its selftests import from', fleetItself.status === 0 && fleetItself.verdictOf(LABELS.kill) === 'KILLED');
+
+const fleetAbove = campaign({ prelude: IMPORTS_PATH, assertions: GREEN_ASSERTIONS.replace(']', `, process.env.SELFTEST_FLEET === ${PARENT}]`), runnerIn: 'parent', mutants: KILL_MUTANT });
+
+check('a tree above the fleet root that holds the selftest runner is the fleet, the way the runner derives it', fleetAbove.status === 0 && fleetAbove.verdictOf(LABELS.kill) === 'KILLED');
+
+const HOME_FLEET = path.join(os.homedir(), '.claude');
+const noFleet = campaign({ assertions: FLEET_ASSERTIONS(HOME_FLEET), runnerIn: 'none', mutants: KILL_MUTANT });
+
+check(
+  'a tree with no selftest runner above it refuses to measure, telling the caller to set SELFTEST_FLEET in both languages',
+  noFleet.status === EXIT_NOT_MEASURED && noFleet.output.includes('set SELFTEST_FLEET') && noFleet.output.includes('@es') && noFleet.output.includes('fijar SELFTEST_FLEET')
+);
+check('a tree with no selftest runner never hands the home fleet to a selftest: nothing runs', noFleet.runs === 0 && noFleet.verdictOf(LABELS.kill) === undefined);
 
 const callerFleet = campaign({ assertions: FLEET_ASSERTIONS('the-callers-fleet'), environment: { SELFTEST_FLEET: 'the-callers-fleet' }, mutants: KILL_MUTANT });
 
-check('a fleet the caller already named reaches the selftest unchanged', callerFleet.status === 0 && callerFleet.verdictOf(LABELS.kill) === 'KILLED');
+check('a fleet the caller already named reaches the selftest unchanged, over the runner the tree holds', callerFleet.status === 0 && callerFleet.verdictOf(LABELS.kill) === 'KILLED');
+
+const callerFleetNoRunner = campaign({ assertions: FLEET_ASSERTIONS('the-callers-fleet'), environment: { SELFTEST_FLEET: 'the-callers-fleet' }, runnerIn: 'none', mutants: KILL_MUTANT });
+
+check('a fleet the caller named is used even where no tree holds a runner', callerFleetNoRunner.status === 0 && callerFleetNoRunner.verdictOf(LABELS.kill) === 'KILLED');
 
 // ── verdict ─────────────────────────────────────────────────────────────────────────────────────────
 const failed = cases.filter(({ holds }) => !holds);

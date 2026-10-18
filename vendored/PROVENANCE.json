@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-18T13:15:02.531Z",
+  "syncedAt": "2026-10-18T13:43:44.875Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -52,7 +52,7 @@
     },
     {
       "path": "mutation-proof/run-mutants.mjs",
-      "sha256": "25403337107a34d06feb2673cf43305fba7200780d3f338b9865c427cbe92148"
+      "sha256": "0054c86ea2d5aa7c6c862bde5e9a69c7603b8adea1c12df8db575c2f1fdd7dc7"
     },
     {
       "path": "mutation-proof/kill-kind.mjs",
@@ -60,15 +60,15 @@
     },
     {
       "path": "mutation-proof/selftest.mjs",
-      "sha256": "45a026cce062ceb99475d4cddfc155ec6e3c16626d5c41a67786eb80a46b2ee8"
+      "sha256": "5d2450b5328174f65ebc59301a53b5c5eeb48c331277e8464ebd7de60f3db2f6"
     },
     {
       "path": "mutation-proof/mutants.mjs",
-      "sha256": "84bdda12538a6a9b2c6dfd6b6ae244111b27fbd71a361d5f452a50632b87dff8"
+      "sha256": "cf418b829ae51826a877e4a3d9a03246d417dfeb0500d30b030ab00e2ca47f24"
     },
     {
       "path": "mutation-proof/kill-kind.selftest.mjs",
-      "sha256": "0b57df698f38b3396b8fd607ee11ca2cda454f07e86d7082ee0872edd1300518"
+      "sha256": "97fff8d657905a4f330df88c0bd100b7826eaa0dce65e40931d4a74a7a606131"
     },
     {
       "path": "mutation-proof/kill-kind.mutants.mjs",
