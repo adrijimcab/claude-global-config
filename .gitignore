@@ -126,6 +126,9 @@
 !/worker-stash-guard/
 !/worker-stash-guard/**
 /worker-stash-guard/state/
+!/worker-git-guard/
+!/worker-git-guard/**
+/worker-git-guard/state/
 !/shared-resource-guard/
 !/shared-resource-guard/**
 /shared-resource-guard/state/

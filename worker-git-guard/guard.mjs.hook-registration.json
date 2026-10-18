@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "Delegated workers ran git commands that discard work or skip hooks despite denying briefs: `checkout -- <path>` and `reset --soft <sha>` twice (incident 25), `reset -q` to unstage (25b), and `commit --no-verify` that skipped commitlint and pre-commit (31); prefix lists drift per shell, so the invocation is parsed."
+}
