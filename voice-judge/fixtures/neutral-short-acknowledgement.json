@@ -1,6 +1,6 @@
 {
   "id": "neutral-short-acknowledgement",
-  "expect": "pass",
-  "source": "synthetic control: a one-line acknowledgement in neutral Spanish passes by rule 5, so the neutral-register test never reaches it",
+  "expect": "fail",
+  "source": "synthetic control: a one-line acknowledgement in neutral Spanish passes by rule 5, so the neutral-register test never reaches it RELABELLED 2026-10-19 for rubric v8: a short status in the first person with no why, no energy and no close that lands; brevity governs length, never presence (the v7 label was pass)",
   "message": "Entendido, sigo con la siguiente unidad y cierro el ítem del backlog."
 }

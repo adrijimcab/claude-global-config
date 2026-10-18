@@ -1,6 +1,6 @@
 {
   "id": "control-short-reply",
-  "expect": "pass",
-  "source": "synthetic control",
+  "expect": "fail",
+  "source": "synthetic control RELABELLED 2026-10-19 for rubric v8: a short status closed by a bolted-on offer, the exact register the owner rejects; it has no why, no energy and no stance, and the v8 pass test applies to short replies too (the v7 label was pass)",
   "message": "Listo, ya quedó guardado. Avisame si querés que lo suba también."
 }

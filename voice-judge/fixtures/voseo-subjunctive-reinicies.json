@@ -1,6 +1,6 @@
 {
   "id": "voseo-subjunctive-reinicies",
-  "expect": "pass",
-  "source": "real refusal 2026-10-12 (sentence \"justo antes de que reinicies\"): present-subjunctive tú-form after voseo was judged as tuteo",
+  "expect": "borderline",
+  "source": "real refusal 2026-10-12 (sentence \"justo antes de que reinicies\"): present-subjunctive tú-form after voseo was judged as tuteo RELABELLED 2026-10-19 for rubric v8: written to pin that a present-subjunctive form is never a tuteo failure, which the selftest still pins and which v8 respects (its block reason does not cite tuteo); the mentor test blocks it on energy and close",
   "message": "Cambié el guard y lo dejé commiteado en mi rama. Lo hice así para que no se pierda ninguna escritura en curso, y por eso el cambio entra de a pasos.\n\nHacé el ajuste justo antes de que reinicies la sesión, así el hook nuevo se carga limpio. Cuando puedas, avisame si querés que lo integre, y cuando vengas de revisar lo cierro."
 }

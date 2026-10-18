@@ -1,6 +1,6 @@
 {
   "id": "b100-chart-swap-closing-next-step",
-  "expect": "pass",
-  "source": "session b100-am-ui-f8 2026-10-12, verbatim: the fifth rewrite the live v3 refused in one turn, three prose paragraphs with the why and a closing next step",
+  "expect": "borderline",
+  "source": "session b100-am-ui-f8 2026-10-12, verbatim: the fifth rewrite the live v3 refused in one turn, three prose paragraphs with the why and a closing next step RELABELLED 2026-10-19 for rubric v8: labelled pass at the v7 floor, where a closing next step inside prose was content; v8 asks the close to land, not re-adjudicated by the owner",
   "message": "Cambiar el componente de charts para que dibuje con el motor nuevo es lo más delicado de esta tanda, porque toca lo que ya usa cualquiera que tenga un gráfico en pantalla. Un error acá no lo descubre un test, lo descubre un usuario.\n\nPor eso el golden de la configuración de Chart.js tiene que quedar idéntico, byte por byte. Es la foto exacta de lo que el componente le entrega a Chart.js. Si no cambió, el gráfico que ve el consumidor tampoco, aunque por dentro todo vaya por otro camino.\n\nCuando el agente me traiga esa comparación y las historias pintadas en el navegador, cierro la unidad y paso a los colores, que es lo que va a poner en verde la historia de barras."
 }

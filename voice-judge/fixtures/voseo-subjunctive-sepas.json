@@ -1,6 +1,6 @@
 {
   "id": "voseo-subjunctive-sepas",
-  "expect": "pass",
-  "source": "real refusal 2026-10-12 (sentence \"conviene que sepas\"): present-subjunctive tú-form after voseo was judged as tuteo",
+  "expect": "borderline",
+  "source": "real refusal 2026-10-12 (sentence \"conviene que sepas\"): present-subjunctive tú-form after voseo was judged as tuteo RELABELLED 2026-10-19 for rubric v8: written to pin that a present-subjunctive form is never a tuteo failure, which the selftest still pins and which v8 respects (its block reason does not cite tuteo); it ends in an offer and has no energy, so the mentor test blocks it for another reason",
   "message": "Medí el guard y me dejó tranquilo: lo rompí una vez, se puso rojo, lo restauré y volvió a verde.\n\nConviene que sepas que no toqué nada fuera de mi rama. Antes de que lo integres, fijate que tengas la sesión limpia, y si hace falta que lo revisemos juntos, decime."
 }
