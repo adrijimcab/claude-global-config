@@ -8,7 +8,7 @@
  * medir el costo y la latencia por turno y la tasa de fallos en lugar de suponerlos.
  */
 
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { stateDir } from '../hook-state/locations.mjs';
@@ -23,11 +23,54 @@ export const outcomesPath = () => path.join(stateDir(MECHANISM), 'outcomes.jsonl
  * Appends one outcome line and returns the record.
  * @es Añade una línea de desenlace y devuelve el registro.
  */
-export function recordOutcome(judge, session, { outcome, costUsd, durationMs, reason, why }) {
-  const record = { ts: new Date().toISOString(), judge, session, outcome, costUsd, durationMs, ...(reason === undefined ? {} : { reason }), ...(why === undefined ? {} : { why }) };
+export function recordOutcome(judge, session, { outcome, costUsd, durationMs, reason, why, continued }) {
+  const record = { ts: new Date().toISOString(), judge, session, outcome, costUsd, durationMs, ...(reason === undefined ? {} : { reason }), ...(why === undefined ? {} : { why }), ...(continued === true ? { continued: true } : {}) };
 
   mkdirSync(stateDir(MECHANISM), { recursive: true });
   appendFileSync(outcomesPath(), `${JSON.stringify(record)}\n`);
 
   return record;
+}
+
+/**
+ * Whether a logged Stop was a continued one. Older lines carry no `continued` field but name it in the outcome.
+ * @es Si una parada registrada fue continuada. Las líneas antiguas no traen `continued` pero lo dicen en el desenlace.
+ */
+const wasContinued = (record) => record.continued === true || (typeof record.outcome === 'string' && record.outcome.startsWith('pass-continued'));
+
+/**
+ * How many times `judge` blocked `session` in its current turn: the blocks logged since the last Stop that was not
+ * a continued one (that Stop opens the turn and is counted). Unreadable lines are skipped; a missing log is zero;
+ * any other read failure, or a call with no session, throws so the caller can fail open.
+ * @es Cuántas veces `judge` bloqueó a `session` en su turno actual: los bloqueos registrados desde la última
+ * parada no continuada (esa parada abre el turno y se cuenta). Las líneas ilegibles se saltan; sin registro es
+ * cero; cualquier otro fallo de lectura, o una llamada sin sesión, lanza para que quien llama deje pasar.
+ */
+export function blocksThisTurn(judge, session) {
+  if (typeof session !== 'string' || session === '') throw new Error('no session id to count the turn by @es no hay id de sesión para contar el turno');
+
+  let text;
+
+  try {
+    text = readFileSync(outcomesPath(), 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return 0;
+    throw error;
+  }
+
+  const records = [];
+
+  for (const line of text.split('\n')) {
+    try {
+      const record = JSON.parse(line);
+
+      if (record !== null && typeof record === 'object' && record.judge === judge && record.session === session) records.push(record);
+    } catch {
+      // A blank or torn line is not a record. @es Una línea vacía o rota no es un registro.
+    }
+  }
+
+  const turnStart = records.findLastIndex((record) => !wasContinued(record));
+
+  return records.slice(Math.max(turnStart, 0)).filter((record) => record.outcome === 'block').length;
 }

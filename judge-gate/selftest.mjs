@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,9 +40,18 @@ process.on('exit', () => {
 
 const { readVerdict } = await import('./verdict.mjs');
 const { JUDGES, hookCommand } = await import('./judges.mjs');
-const { decide, NESTED_VARIABLE } = await import('./gate.mjs');
+const { decide, MAX_BLOCKS_PER_TURN, NESTED_VARIABLE } = await import('./gate.mjs');
 const { askModel, modelArguments } = await import('./model.mjs');
-const { outcomesPath, recordOutcome } = await import('./outcome-log.mjs');
+const { blocksThisTurn: readTurnCount, outcomesPath, recordOutcome } = await import('./outcome-log.mjs');
+
+// The count as a value even when it throws, so a broken reader fails a check instead of crashing the run. @es El conteo como valor aun si lanza.
+const blocksThisTurn = (judge, session) => {
+  try {
+    return readTurnCount(judge, session);
+  } catch (error) {
+    return `threw: ${error.message}`;
+  }
+};
 const { isNested } = await import('./nesting.mjs');
 const { run } = await import('./run.mjs');
 
@@ -98,13 +107,42 @@ const failing = async () => {
 };
 const message = 'Listo. Hecho.';
 const payload = (extra = {}) => JSON.stringify({ hook_event_name: 'Stop', session_id: 's1', stop_hook_active: false, last_assistant_message: message, ...extra });
-const gate = (raw, ask, judge = voice, nested = false) => decide({ judge, raw, ask, nested });
+const gate = (raw, ask, judge = voice, nested = false, blocks = () => 0) => decide({ judge, raw, ask, nested, blocksThisTurn: blocks });
 
-const continued = await gate(payload({ stop_hook_active: true }), answering('{"ok": false, "reason": "VOICE-JUDGE: x"}'));
+// --- CONTINUED STOPS. @es PARADAS CONTINUADAS.
+const blockingAnswer = answering(JSON.stringify({ ok: false, reason: goodBlock }));
+const afterBlocks = (count, judge = voice) => gate(payload({ stop_hook_active: true }), blockingAnswer, judge, false, () => count);
 
-check('gate: a continued stop passes in code', continued.outcome, 'pass-continued');
-check('gate: a continued stop never asks the model', asked.length, 0);
-check('gate: a continued stop costs nothing', [continued.costUsd, continued.reason], [0, undefined]);
+asked.length = 0;
+check('gate: a first stop is judged', [(await gate(payload(), blockingAnswer)).outcome, asked.length], ['block', 1]);
+check('gate: the turn is never counted for a first stop', (await gate(payload(), blockingAnswer, voice, false, () => { throw new Error('must not be read'); })).outcome, 'block');
+check('gate: the cap is two blocks per turn', MAX_BLOCKS_PER_TURN, 2);
+
+asked.length = 0;
+const continuedFirst = await afterBlocks(1);
+
+check('gate: a continued stop after 1 block is judged', [continuedFirst.outcome, continuedFirst.reason, asked.length], ['block', goodBlock, 1]);
+check('gate: a judged continued stop is marked continued', continuedFirst.continued, true);
+check('gate: a judged continued stop that passes is marked continued', (await gate(payload({ stop_hook_active: true }), answering('{"ok": true}'), voice, false, () => 1)).continued, true);
+check('gate: a continued stop after 0 blocks is judged', (await afterBlocks(0)).outcome, 'block');
+
+asked.length = 0;
+const capped = await afterBlocks(2);
+
+check('gate: a continued stop after 2 blocks passes as pass-continued-capped', capped.outcome, 'pass-continued-capped');
+check('gate: a capped stop never asks the model', asked.length, 0);
+check('gate: a capped stop costs nothing, has no reason and is marked continued', [capped.costUsd, capped.reason, capped.continued], [0, undefined, true]);
+check('gate: more than 2 blocks stay capped', (await afterBlocks(5)).outcome, 'pass-continued-capped');
+check('gate: the premise judge is capped the same way', (await afterBlocks(2, premise)).outcome, 'pass-continued-capped');
+check('gate: the premise judge is judged after 1 block', (await gate(payload({ stop_hook_active: true }), answering(JSON.stringify({ ok: false, reason: `${premise.marker} x` })), premise, false, () => 1)).outcome, 'block');
+
+const countFailed = await gate(payload({ stop_hook_active: true }), blockingAnswer, voice, false, () => { throw new Error('log unreadable'); }).catch((error) => ({ outcome: 'threw', why: error.message }));
+
+check('gate: a failure reading the count passes as a malfunction', [countFailed.outcome, countFailed.why?.includes('log unreadable'), countFailed.reason], ['malfunction', true, undefined]);
+check('gate: a failure reading the count is marked continued', countFailed.continued, true);
+asked.length = 0;
+check('gate: a continued stop with no message passes without asking', [(await gate(payload({ stop_hook_active: true, last_assistant_message: '' }), blockingAnswer, voice, false, () => 0)).outcome, asked.length], ['pass-no-message', 0]);
+asked.length = 0;
 
 const nested = await gate(payload(), answering('{"ok": false, "reason": "VOICE-JUDGE: x"}'), voice, true);
 
@@ -149,6 +187,7 @@ check('gate: a failed model call has no reason to block with', down.reason, unde
 check('gate: a malfunction keeps the cost and latency of the answer', [stray.costUsd, stray.durationMs], [0.0002, 900]);
 
 // --- OUTCOME LOG. @es REGISTRO DE DESENLACES.
+check('turn: no log yet means no blocks, not an error', blocksThisTurn('voice', 's1'), 0);
 recordOutcome('voice', 's1', { outcome: 'block', costUsd: 0.0002, durationMs: 900, reason: goodBlock });
 recordOutcome('premise', 's1', { outcome: 'malfunction', costUsd: 0, durationMs: 4, why: 'nope' });
 
@@ -169,6 +208,42 @@ check('log: the reason is kept for a block', lines[0]?.reason, goodBlock);
 check('log: the file lives under the judge-gate state directory', outcomesPath().startsWith(path.resolve(process.env.HOOK_STATE_DIR)) && path.basename(path.dirname(outcomesPath())) === 'judge-gate', true);
 recordOutcome('voice', 's2', { outcome: 'pass', costUsd: 0, durationMs: 1 });
 check('log: a second outcome is appended, the first is kept', readLog().split('\n').filter((line) => line !== '').length, 3);
+
+// --- TURN COUNT. @es CUENTA DEL TURNO.
+const log = (judge, session, outcome, continued) => recordOutcome(judge, session, { outcome, costUsd: 0, durationMs: 1, continued });
+
+check('turn: a session with no records has no blocks', blocksThisTurn('voice', 'turn-none'), 0);
+log('voice', 'turn-a', 'block');
+check('turn: the block of a first stop counts', blocksThisTurn('voice', 'turn-a'), 1);
+log('voice', 'turn-a', 'block', true);
+check('turn: the block of a continued stop counts', blocksThisTurn('voice', 'turn-a'), 2);
+log('voice', 'turn-a', 'pass');
+check('turn: a new first stop resets the count', blocksThisTurn('voice', 'turn-a'), 0);
+log('voice', 'turn-a', 'block');
+log('voice', 'turn-a', 'pass-continued-capped', true);
+check('turn: a continued stop does not open a turn', blocksThisTurn('voice', 'turn-a'), 1);
+log('voice', 'turn-b', 'block');
+log('voice', 'turn-b', 'pass-continued');
+log('voice', 'turn-b', 'block', true);
+check('turn: a legacy pass-continued line is read as continued', blocksThisTurn('voice', 'turn-b'), 2);
+log('premise', 'turn-b', 'block');
+check('turn: another judge\'s blocks are not counted', blocksThisTurn('voice', 'turn-b'), 2);
+log('voice', 'turn-c', 'block');
+check('turn: another session\'s blocks are not counted', blocksThisTurn('voice', 'turn-none'), 0);
+check('turn: a session that only has continued records counts all its blocks', (log('voice', 'turn-d', 'block', true), blocksThisTurn('voice', 'turn-d')), 1);
+
+const thrownMessage = (action) => {
+  try {
+    action();
+  } catch (error) {
+    return error.message;
+  }
+
+  return '';
+};
+
+check('turn: no session id throws a bilingual error', thrownMessage(() => readTurnCount('voice', '')).includes('@es'), true);
+check('turn: a session that is not text throws', thrownMessage(() => readTurnCount('voice', undefined)).includes('@es'), true);
 
 // --- MODEL COMMAND LINE. @es LÍNEA DE COMANDOS DEL MODELO.
 const args = modelArguments('haiku');
@@ -248,6 +323,16 @@ check('run: the model call gets the judge\'s timeout', seen.at(-1), { timeoutMs:
 check('run: the outcome is logged with the session', readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'run-1' && line.outcome === 'block' && line.judge === 'voice'), true);
 check('run: a pass prints nothing', await run('voice', payload(), { model: async () => ({ answer: '{"ok": true}', costUsd: 0, durationMs: 1 }) }), '');
 
+// A continued stop is counted for its own judge and session, through the real log. @es Se cuenta por juez y sesión.
+for (const judgeName of ['voice', 'premise']) for (let n = 0; n < MAX_BLOCKS_PER_TURN; n++) log(judgeName, `run-capped-${judgeName}`, 'block', n > 0);
+seen.length = 0;
+
+check('run: a continued stop after the cap prints nothing and never asks the model (premise)', [await run('premise', payload({ stop_hook_active: true, session_id: 'run-capped-premise' }), { model: blockingModel }), seen.length], ['', 0]);
+check('run: a continued stop after the cap prints nothing and never asks the model (voice)', [await run('voice', payload({ stop_hook_active: true, session_id: 'run-capped-voice' }), { model: blockingModel }), seen.length], ['', 0]);
+const underCap = await run('voice', payload({ stop_hook_active: true, session_id: 'run-1' }), { model: blockingModel });
+
+check('run: a continued stop under the cap is judged and its block printed', [underCap.includes(goodBlock), seen.length], [true, 1]);
+
 process.env[NESTED_VARIABLE] = '1';
 seen.length = 0;
 check('run: a nested process prints nothing and never asks the model', [await run('voice', payload(), { model: blockingModel }), seen.length], ['', 0]);
@@ -256,10 +341,17 @@ delete process.env[NESTED_VARIABLE];
 // --- CLI. @es CLI.
 const RUN = path.join(HERE, 'run.mjs');
 const runCli = (cliArgs, input, env = {}) => spawnSync(process.execPath, [RUN, ...cliArgs], { input, encoding: 'utf8', env: { ...process.env, ...env, HOOK_STATE_DIR: process.env.HOOK_STATE_DIR } });
-const continuedRun = runCli(['voice'], payload({ stop_hook_active: true }));
+for (const blockedAt of [1, 2]) recordOutcome('voice', 'cli-capped', { outcome: 'block', costUsd: 0, durationMs: 1, reason: goodBlock, continued: blockedAt === 2 });
 
-check('cli: a continued stop exits 0 and prints nothing', [continuedRun.status, continuedRun.stdout, continuedRun.stderr], [0, '', '']);
-check('cli: the continued stop was logged', readLog().includes('"pass-continued"'), true);
+const continuedRun = runCli(['voice'], payload({ stop_hook_active: true, session_id: 'cli-capped' }));
+
+check('cli: a continued stop after 2 blocks exits 0 and prints nothing', [continuedRun.status, continuedRun.stdout, continuedRun.stderr], [0, '', '']);
+check('cli: the capped continued stop was logged as capped and continued', readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'cli-capped' && line.outcome === 'pass-continued-capped' && line.continued === true), true);
+
+const noSessionRun = runCli(['voice'], JSON.stringify({ stop_hook_active: true, last_assistant_message: message }));
+
+check('cli: a continued stop with no session passes as a malfunction without asking the model', [noSessionRun.status, noSessionRun.stdout], [0, '']);
+check('cli: that malfunction was logged', readLog().includes('no session id to count the turn by'), true);
 
 const nestedRun = runCli(['premise'], payload(), { [NESTED_VARIABLE]: '1' });
 
@@ -298,6 +390,10 @@ for (const judge of Object.values(JUDGES)) {
   check(`rubric: the ${judge.name} rubric no longer asks the model to test stop_hook_active`, judge.prompt.includes('If the input field stop_hook_active is true'), false);
   check(`rubric: the ${judge.name} rubric tells the model the gate passes continued stops in code`, judge.prompt.includes('The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.'), true);
 }
+
+// A torn line is appended last: the readers above parse every line of the log. @es La línea rota va al final.
+appendFileSync(outcomesPath(), '{"torn\n\nnot json\n');
+check('turn: a torn or blank line is skipped, never an error', blocksThisTurn('voice', 'turn-d'), 1);
 
 for (const failure of failures) console.log(`FAIL ${failure}`);
 console.log(`${passed}/${passed + failures.length} passed`);

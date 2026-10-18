@@ -25,7 +25,7 @@ import { decide } from './gate.mjs';
 import { JUDGES } from './judges.mjs';
 import { askModel } from './model.mjs';
 import { isNested } from './nesting.mjs';
-import { recordOutcome } from './outcome-log.mjs';
+import { blocksThisTurn, recordOutcome } from './outcome-log.mjs';
 
 /** The session id of a raw hook input, '' when it has none. @es El id de sesión de una entrada, '' si no lo trae. */
 function sessionOf(raw) {
@@ -51,7 +51,7 @@ export async function run(judgeName, raw, { model = askModel } = {}) {
     return '';
   }
 
-  const outcome = await decide({ judge, raw, nested: isNested(), ask: (prompt) => model(prompt, { timeoutMs: judge.askTimeoutMs }) });
+  const outcome = await decide({ judge, raw, nested: isNested(), blocksThisTurn: () => blocksThisTurn(judgeName, sessionOf(raw)), ask: (prompt) => model(prompt, { timeoutMs: judge.askTimeoutMs }) });
 
   try {
     recordOutcome(judgeName, sessionOf(raw), outcome);
