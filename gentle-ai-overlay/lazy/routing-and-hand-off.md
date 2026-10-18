@@ -1,7 +1,7 @@
 #### Cost and Context Balance
 
 - Use exploration sub-agents to compress broad repo reading into a short handoff.
-- Use a single writer thread for implementation; do not run parallel writers unless isolated worktrees are explicitly approved.
+- Delegate a writer only for a named reason; parallel writers follow the **Parallel writers** rule under `## Implementation Routing`.
 - Let native review select its bounded checking plan; delivery remains human-owned under ordinary repository policy.
 - Avoid delegation for truly local one-file fixes, quick state checks, and already-understood mechanical edits.
 
@@ -11,32 +11,34 @@ Route ODD work through the smallest harness that is safe. "Smallest" means minim
 
 #### 1. Inline Direct
 
-Use inline execution when the task is small, mechanical, and the parent already has enough context: a typo, rename, one-file mechanical edit, a small known bug, focused verification within the inline evidence budget, or bash for state. Keep the ODD path proportionate. Do not use this exception to avoid delegation after the task stops being small.
+Use inline execution when the task is small by the Task Size section of the routing block: read, edit (one understood change may span files), run its focused test and suite once each, or bash for state. Keep the ODD path proportionate. When a mechanism's own trigger fires, turn on only that mechanism, then re-evaluate.
 
-Inline evidence uses one parallel batch, at most 3 calls and approximately 10k tokens. Use bounded search/line ranges rather than whole large files. These are evidence limits, not file-count routing rules; preparation for writing and broad research still delegate.
+Inline evidence uses one parallel batch, at most 3 calls and approximately 10k tokens. Use bounded search/line ranges rather than whole large files. These are evidence limits, not file-count routing rules; preparation for a delegated write and broad research still delegate, and an inline write reads inline.
 
 #### 2. Simple Delegation
 
-Delegate when work would inflate parent context or requires focused exploration, validation, or multi-file implementation, within the ODD workflow. Examples include understanding an unfamiliar module, gathering evidence beyond the inline batch budget, investigating a failing test, implementing a bounded multi-file change, or running focused tests/builds.
+Delegate when a mechanism's own trigger fires, within the ODD workflow: understanding an unfamiliar module beyond the inline batch budget (explore), implementing a unit with a writer reason (writer), or checking a change that names a high-risk item (independent verifier). A writer reason is parallel units launched together (independent units of behavior, each with its code, tests, and docs and several minutes of work) or the context backstop, never size, a large task alone, file count, or a price ratio; without one, the parent writes inline, following its logbook.
 
-Route exploration to a read-only exploration worker, bounded implementation to one writer, and command-running verification to a verification worker, all through the runtime's subagent/delegation mechanism. The delegation trigger stays mandatory; a missing named worker changes the runtime used, not the requirement to delegate. If no delegation mechanism is available, follow this runtime's documented degradation path, or stop and explain the blocker instead of silently continuing inline.
+Route exploration to a read-only exploration worker, each unit with a writer reason to one bounded writer, and verification of a named high-risk item to a verification worker, all through the runtime's subagent/delegation mechanism. The delegation trigger stays mandatory; a missing named worker changes the runtime used, not the requirement to delegate. If no delegation mechanism is available, follow this runtime's documented degradation path, or stop and explain the blocker instead of silently continuing inline.
 
-Larger evidence, more than approximately 5 sequential lookups, or long-session mapping require one read-only explorer. Return at most approximately 2k tokens with path:line evidence and one parent spot check. Do not reread the entire mapped evidence.
+Understanding that needs more evidence or more than approximately 5 sequential lookups requires one read-only explorer; with its handoff, re-evaluate task size. Return at most approximately 2k tokens with path:line evidence and one parent spot check. Do not reread the entire mapped evidence.
 
-Keep parent bash output bounded to counts, --stat, tail, or summaries. Delegate full suites and builds; return concise observed results, including failures. The approximately 150k parent-context backstop is advisory guidance, not mechanically observed or enforced; pause and delegate the next bounded unit without claiming runtime telemetry or enforcement.
+Keep parent bash output bounded to counts, --stat, tail, or summaries. On a large task, delegate long suites and builds; return concise observed results, including failures. The approximately 150k parent-context backstop is advisory guidance, not mechanically observed or enforced; pause and delegate the next bounded unit without claiming runtime telemetry or enforcement.
 
-Default balanced pattern for bounded implementation:
+Default pattern for authorized implementation:
 
 ```text
-parent clarifies and checks git → one worker writes when authorized → focused verification → parent reports
+parent clarifies and checks git → parent writes inline following the logbook → focused test and suite inline → parent reports
 ```
+
+With a writer reason, one bounded worker per unit writes instead, followed by one seam check when units ran in parallel.
 
 ### Canonical Lightweight Workflows
 
 Bugfix with unfamiliar flow:
 
 ```text
-parent git/status + clarify → exploration worker maps flow/files → writer implements authorized fixes + tests → focused verification → parent reports
+parent git/status + clarify → exploration worker maps flow/files the parent needs to decide → parent implements authorized fixes + tests inline (a writer only for a named reason) → focused verification → parent reports
 ```
 
 Conflict or dependency-marker cleanup:
@@ -55,7 +57,7 @@ stop writes → parent captures git status → diagnose affected repositories/wo
 
 A bounded writer refuses to write outside the exact allowed edit surfaces and stops for interaction when they are missing. The parent owns that input. Deriving it is part of planning the delegation, not something the writer or the human can be left to supply.
 
-Before launching a bounded writer through the runtime's delegation mechanism, derive the allowed edit surface from the task being delegated — the files the planned change must touch, plus the directories where the task authorizes new files — and pass it in the delegated prompt under an `## Allowed edit surfaces` heading, in the same exact-path form as `## Skills to load before work`:
+Before launching a bounded writer through the runtime's delegation mechanism, derive the allowed edit surface from the task being delegated — the files the planned change must touch, plus the directories where the task authorizes new files — and pass it in the delegated prompt under an `## Allowed edit surfaces` heading:
 
 - exact repository-relative paths or narrow globs, one per line; never `.`, a bare repository root, or an absolute path; paths containing whitespace require whole-entry backticks;
 - the section ends at the next Markdown heading; every non-empty line before it must be a valid surface entry, so put explanatory prose under a following heading;

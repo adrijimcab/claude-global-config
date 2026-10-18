@@ -107,17 +107,8 @@ For background work, launch the bounded action and end the turn when no independ
 
 ### Mental Model
 
-Gentle AI is an ecosystem configurator and harness layer. After installation, the user should not memorize workflows or manually wire agents. The harness should get out of the way:
-
-- Small request: do it directly.
-- Substantial authorized work: use ODD; track feature progress automatically.
-- The parent session orchestrates and writes inline; a bounded worker takes a unit only for a named reason.
-
-Delegation follows named reasons, never size or complexity alone. A Delegation Trigger holds only when its condition truly holds; none holds by default, and when in doubt work inline. Once one holds, delegation is not optional: use the smallest useful delegated workflow instead of continuing past it inline.
-
-### Organic Driven Development Is The Default Workflow (MANDATORY)
-
-Organic Driven Development (ODD) is this orchestrator's predefined workflow for every request. Its ordered protocol is installed for this agent under `## Implementation Routing` (`### ODD protocol`) and runs first, on every request, without the user asking about workflow, planning, or task tracking.
+<!-- owner-overlay:lazy-orchestrator-mental-model v1 sha256=3d756c1033888bb195a30836b611967fe357254a2e8f783efb6b308228705a46 -->
+Mental Model, restating `## Implementation Routing`: `~/.claude/gentle-ai-overlay/lazy/orchestrator-mental-model.md`. READ IT IN FULL when unsure whether to coordinate or execute.
 
 ### Lossless Blocking Prompts (MANDATORY)
 
@@ -126,73 +117,8 @@ Blocking-prompt contracts (lossless relay of a prompt, menu or choice envelope f
 
 ### Language Domain Contract
 
-- The active persona controls direct user/orchestrator conversation only. Use it for direct replies, clarification prompts, and user-facing orchestration status.
-- Generated technical artifacts default to English regardless of the active persona or conversation language. This includes tasks, code comments, UI copy, tests, fixtures, and delegated outputs.
-- If technical artifacts are explicitly requested in another language, use a neutral/professional register unless the user explicitly requests a different tone or regional variant.
-- Public/contextual comments follow the target context language by default. Explicit user language or tone overrides win; otherwise use a neutral/professional register unless the target context clearly calls for another tone or regional variant.
-- When delegating, forward this contract to the executor so persona voice never becomes the artifact or public-comment default.
-
-### Delegation Rules
-
-These rules select execution topology, not the implementation method. Implementation runs as **direct inline** or **delegated direct** under ODD; the Task Size section in the routing block selects the topology, and file count never does.
-
-Core principle: **does this inflate the parent context without need?** If yes, use one bounded worker. If no, do it inline.
-
-| Action | Direct inline | Delegated direct worker |
-|--------|---------------|-------------------------|
-| Decide/verify within the inline evidence budget | ✅ one bounded batch | — |
-| Understanding beyond the inline evidence budget, or long sequential exploration | — | ✅ one read-only explorer, then re-evaluate task size |
-| Read as preparation for a delegated write | — | ✅ together with the write |
-| Write a small task (one understood change, any number of files) | ✅ | — |
-| Write a large (tracked) task with no Write rule reason | ✅ following its logbook | — |
-| Write a unit with a Write rule reason | — | ✅ one bounded writer per unit |
-| Bash for state (`git`, `gh`) | ✅ | — |
-| Focused test and suite of the change being made | ✅ once each | — |
-| High-risk change, or long suites, builds, installs, or native review actions of a large task | — | ✅ independent verifier or fresh per-action worker |
-
-Use Claude Code's native Agent/Task mechanism for delegated-direct work. Summarize any needed handoff explicitly.
-
-Pass the authorized edit surfaces, acceptance criteria, the applicable test-first policy and runner from `## Implementation Routing`, applicable verification commands, and relevant prior context explicitly to bounded implementation workers. Workers preserve unrelated working-tree changes and return observed outcomes and checks.
-
-Keep each delegated writer bounded, with a short synthesized handoff. Delegation is mandatory only when a mechanism's own trigger fires.
-
-#### Delegation Triggers
-
-These are parent-orchestrator routing boundaries. Each trigger holds only when its condition truly holds, and only then is it mandatory; no trigger holds by default, and when in doubt work inline. Use the smallest useful topology and keep the safety machinery behind the outcome-first interaction. Do not pass these rules to child agents as permission to orchestrate.
-
-1. **Evidence budget rule**: decide or verify inline with one parallel batch, at most 3 calls and approximately 10k tokens. Use bounded search/line ranges, not whole large files.
-2. **Mapping rule**: understanding that needs more evidence or more than approximately 5 sequential lookups requires one read-only explorer; with its handoff, re-evaluate task size. Return at most approximately 2k tokens with path:line evidence and one parent spot check. Do not reread the entire mapped evidence.
-   - Keep parent bash output bounded to counts, --stat, tail, or summaries. On a large task, delegate long suites and builds; return concise observed results, including failures.
-   - The approximately 150k parent-context backstop is advisory guidance, not mechanically observed or enforced. Pause and delegate the next bounded unit; do not claim runtime telemetry or enforcement.
-3. **Write rule**: a small task's writes stay inline, even across files; delegate a writer only for a named reason: parallel units launched together (two or more independent units of behavior with disjoint edit surfaces, each needing several minutes of work: several files or roughly 100+ changed lines, because a subagent spends one to two minutes reading before it writes) or the context backstop. A unit is one independent piece of behavior with its code, tests, and docs together: never split one behavior into test, docs, and code writers, and a delivery that depends on another is not independent; several small independent changes run inline, one after another. Never for size, a large task alone, file count, or a price ratio; without a reason the parent writes inline, following its logbook. File count never fires this rule.
-4. **Context rule**: when the Write rule delegates a write, delegate reading that prepares a write together with it, plus broad research/context compression; an inline write reads inline, and never explore files you will read anyway before writing inline.
-5. **Per-action rule**: tests, builds, installs, and native review actors may use fresh workers without changing the implementation route.
-6. **Verification rule**: only a change that names a Task Size high-risk item gets an independent verifier after the change's own checks, as rarely as possible; a native tier, an unclear or failed assessment, and the writer's model or effort never add one by themselves; otherwise the change's own focused test and suite run inline.
-
-#### Delegated Verification Gate (MANDATORY)
-
-Verification of a delegated writer's work follows the same rule whether receipt-driven development (RDD) is on or off. After the writer returns, the parent runs `gentle-ai review assess --cwd <repo> --agent claude-code --json` (`gentle-ai.review-assessment/v1`, `risk` one of `passive`, `medium`, `high`) over the writer's diff. The independent verifier is for concrete occasions only: it runs when, and only when, the change touches a Task Size high-risk item that the parent names by adding `--escalate-item <1-6> --escalate-reason "<one line>"` to that assessment; never for size, a native tier alone, a failed assessment, or the model or effort that wrote the change.
-
-- **Risk tier**: passive: structural readback only; medium: writer self-verification stands, with no separate verifier, whatever model wrote the change; high through a named high-risk item: writer self-verification plus one independent verifier; a native `high` without a named item, an unknown or failed assessment, or an unrecognized verb informs only: writer self-verification stands, and the parent names the item when one applies. The bounded writer runs the parent-authorized `## Verification` commands in the foreground and reports `<command>: <observed result>`.
-- **RDD on**: the native review is an additional outside view of the change, from the lenses pertinent to what was touched; it never replaces or skips the tier's verification, and the tier's verifier runs before review. A runtime that renders an RDD status line reads it from there; otherwise read `gentle-ai review mode status` (read-only) and treat a failure as `unknown`. A declined consent, a disabled clone, or a refused START or STATUS changes nothing about verification.
-- The parent spot check — re-running one reported command before delivery — stays in every tier.
-- **Verification timing**: when several deliveries of one feature were written inline, run one independent verifier at the feature's end instead of one per delivery; verify per unit only when that unit names a high-risk item (its Risk line or the escalation over its actual diff), never because of the model or effort that wrote the code.
-- **Correction bounds**: verifier blockers get one correction batch that fixes every reported blocker, then one recheck limited to those blockers, never a new full sweep. A second correction runs only when the recheck shows the same blocker still failing; a new finding never earns one. Blockers still open after that become one **Needs your decision** result. A writer's self-review follows the same bound, then reports `partial`.
-- **Verify handoff**: give the verifier the whole feature document (every `S#`, never one task), the baseline commit, and the probe command forms. On its first launch the verifier runs probes in a fresh scratch copy created with `mktemp -d` under the system temp dir, never inside the workspace, and leaves no new file in the workspace. Probes derive from the specs, plus invariants: the data hash is unchanged after a rejected command, and prior commands' output is identical to the baseline. Severity: a blocker is a change-caused defect or unmet spec item that reproduces with realistic input and did not already reproduce at the baseline; defects already present at the baseline and out-of-domain values are advisories; silently ignoring an explicit option with success, or changing existing output nobody asked to change, is always a blocker. The writer commits the probes as regression tests.
-- The writer receives `## Verification` naming the exact commands to run, and may receive `## Known environmental failures` naming exact test names or command lines already failing on the base as evidence; any other failing required command still forces `partial`.
-- Exploration stays a separate delegation only when the parent needs the map to decide or route; reading that prepares a write belongs to whoever makes that write, and the parent never explores files it will read anyway before writing inline.
-
-#### Native Checking Contract
-
-- Final source-mutating normalization happens before functional verification and candidate freeze.
-- **Normalization ordering rule**: before review START and its identity freeze, run every source-mutating normalizer, then re-snapshot the candidate and review those exact bytes, paths, and modes. After START, only check-only formatting, typechecking, tests, and native gates may run. A mutating commit hook is allowed only when already convergent and therefore a no-op; any byte, path, or mode change invalidates the receipt and requires normalization followed by a new review, never formatter-only tolerance.
-- Native RAR owns verification applicability, risk, the bounded zero/one/four-lens plan, correction impact, and terminal receipt. The orchestrator and adapters never select lenses or author PASS.
-- A passive ordinary document or image needs structural readback, not an artificial semantic-verification subagent. Active, mixed, operational, executable, mode-changing, or unknown content fails closed into the applicable native plan.
-- For a trivial passive documentation-only edit, structural readback is the complete proportional check; do not open a separate semantic-verification or heavy review ceremony.
-- If an applicable verifier is unavailable, preserve the typed unavailable result; never invent PASS, retry indefinitely, or escalate into extra ceremony.
-- An applicable quick check runs once. Long or very-long work gets one cost/side-effect forecast before launch. Unavailable, partial, declined, or exhausted proof becomes one actionable **Needs your decision** result.
-- Functional proof and adversarial review both project as **Checking**. One immutable candidate permits at most one scoped correction; there is no loop-until-clean behavior.
-- Commit, push, PR, direct-main, emergency, and release gates are informational and unmanaged; ordinary repository policy decides delivery and they never reopen review for unchanged content.
+<!-- owner-overlay:lazy-delegation-and-verification v1 sha256=e5998c35a451c062e3f2b56aee08a0226ff953c092cdae8f30b6a1df0efb58cb -->
+Language Domain Contract, Delegation Rules and its triggers (restated, always loaded, under `## Implementation Routing`), Delegated Verification Gate, Native Checking Contract: `~/.claude/gentle-ai-overlay/lazy/delegation-and-verification.md`. READ IT IN FULL, and follow it as if written here, before launching a delegated worker, when a delegated writer returns work, and before deciding what verification a finished change needs.
 
 #### Review Execution Contract
 
@@ -312,105 +238,8 @@ Each launch runs only its own provider-issued `review.capture-result` argument t
 
 #### Cost and Context Balance
 
-- Use exploration sub-agents to compress broad repo reading into a short handoff.
-- Delegate a writer only for a named reason; parallel writers follow the **Parallel writers** rule under `## Implementation Routing`.
-- Let native review select its bounded checking plan; delivery remains human-owned under ordinary repository policy.
-- Avoid delegation for truly local one-file fixes, quick state checks, and already-understood mechanical edits.
-
-### Work Routing Ladder
-
-Route ODD work through the smallest harness that is safe. "Smallest" means minimal safe coordination, not zero delegation by default. The ODD protocol and its test-first policy live under `## Implementation Routing`; this ladder only picks the harness.
-
-#### 1. Inline Direct
-
-Use inline execution when the task is small by the Task Size section of the routing block: read, edit (one understood change may span files), run its focused test and suite once each, or bash for state. Keep the ODD path proportionate. When a mechanism's own trigger fires, turn on only that mechanism, then re-evaluate.
-
-Inline evidence uses one parallel batch, at most 3 calls and approximately 10k tokens. Use bounded search/line ranges rather than whole large files. These are evidence limits, not file-count routing rules; preparation for a delegated write and broad research still delegate, and an inline write reads inline.
-
-#### 2. Simple Delegation
-
-Delegate when a mechanism's own trigger fires, within the ODD workflow: understanding an unfamiliar module beyond the inline batch budget (explore), implementing a unit with a writer reason (writer), or checking a change that names a high-risk item (independent verifier). A writer reason is parallel units launched together (independent units of behavior, each with its code, tests, and docs and several minutes of work) or the context backstop, never size, a large task alone, file count, or a price ratio; without one, the parent writes inline, following its logbook.
-
-Route exploration to a read-only exploration worker, each unit with a writer reason to one bounded writer, and verification of a named high-risk item to a verification worker, all through the runtime's subagent/delegation mechanism. The delegation trigger stays mandatory; a missing named worker changes the runtime used, not the requirement to delegate. If no delegation mechanism is available, follow this runtime's documented degradation path, or stop and explain the blocker instead of silently continuing inline.
-
-Understanding that needs more evidence or more than approximately 5 sequential lookups requires one read-only explorer; with its handoff, re-evaluate task size. Return at most approximately 2k tokens with path:line evidence and one parent spot check. Do not reread the entire mapped evidence.
-
-Keep parent bash output bounded to counts, --stat, tail, or summaries. On a large task, delegate long suites and builds; return concise observed results, including failures. The approximately 150k parent-context backstop is advisory guidance, not mechanically observed or enforced; pause and delegate the next bounded unit without claiming runtime telemetry or enforcement.
-
-Default pattern for authorized implementation:
-
-```text
-parent clarifies and checks git → parent writes inline following the logbook → focused test and suite inline → parent reports
-```
-
-With a writer reason, one bounded worker per unit writes instead, followed by one seam check when units ran in parallel.
-
-### Canonical Lightweight Workflows
-
-Bugfix with unfamiliar flow:
-
-```text
-parent git/status + clarify → exploration worker maps flow/files the parent needs to decide → parent implements authorized fixes + tests inline (a writer only for a named reason) → focused verification → parent reports
-```
-
-Conflict or dependency-marker cleanup:
-
-```text
-parent reproduces/checks conflict → parent or writer resolves inside the active scope → verify markers, package/lock consistency, and repository cleanliness → parent reports
-```
-
-After tooling/worktree incident:
-
-```text
-stop writes → parent captures git status → diagnose affected repositories/worktrees with no edits → parent applies only confirmed recovery steps
-```
-
-### Allowed edit surfaces (MANDATORY)
-
-A bounded writer refuses to write outside the exact allowed edit surfaces and stops for interaction when they are missing. The parent owns that input. Deriving it is part of planning the delegation, not something the writer or the human can be left to supply.
-
-Before launching a bounded writer through the runtime's delegation mechanism, derive the allowed edit surface from the task being delegated — the files the planned change must touch, plus the directories where the task authorizes new files — and pass it in the delegated prompt under an `## Allowed edit surfaces` heading:
-
-- exact repository-relative paths or narrow globs, one per line; never `.`, a bare repository root, or an absolute path; paths containing whitespace require whole-entry backticks;
-- the section ends at the next Markdown heading; every non-empty line before it must be a valid surface entry, so put explanatory prose under a following heading;
-- pre-existing untracked targets the writer may write, listed explicitly;
-- the directories where new files are authorized, when the task requires new files;
-- nothing beyond the delegated task — a surface wider than the task is the same defect as no surface at all.
-
-If the surface genuinely cannot be derived, do not launch the writer, and do not ask the human to author paths. Derive a candidate set first — the exact paths this task would touch — and present that enumerated list as an approve/decline choice under the Lossless Blocking Prompts rules. A free-text question asking which paths or globs to authorize is never a valid escalation.
-
-Relay a writer's interaction request about edit surfaces the same way: present its derived candidate paths as the choice, and add or drop paths only on the human's explicit instruction.
-
-### Key Learnings closing block
-
-When delegating to a generic exploration, writer, or verification worker, include the same `## Key Learnings` closing instruction in the delegated prompt: after the worker returns its normal result envelope or handoff, it closes its final response text with a `## Key Learnings` block of 1–5 numbered items, each a standalone factual sentence of at least 20 characters and at least 4 words, omitting the block when there is genuinely no reusable learning. The block layers on after the structured return contract and does not alter its fields. This applies to final response text only — not intermediate tool output. The Engram memory provider extracts and persists these items as passive capture; the worker does not parse the block or invoke passive-capture tools itself. This is separate from explicit `mem_save` persistence. Agents that must return strict JSON never receive this closing instruction; their required output shape remains unchanged.
-
-### Delivery strategy
-
-Use the ODD delivery strategy and work-unit boundaries under `## Implementation Routing`. Push, PR creation, and merge remain human decisions.
-
-### Intent-Driven Skill Discovery
-
-For skill-shaped requests, do not treat the injected skill list as complete. Use the skill registry and filesystem only as a discovery aid; do not let a trigger table override the user's concrete request or turn a small request into a larger workflow.
-
-Discovery order:
-
-1. Read `.atl/skill-registry.md` when present.
-2. If the registry suggests a specific skill, load the indexed `SKILL.md` path before acting.
-3. If the expected skill is absent from the registry but the request clearly names a known workflow, search common project/user skill directories such as `./skills`, `.agents/skills`, `~/.config/opencode/skills`, `~/.claude/skills`, and other configured skill roots.
-4. Prefer the most specific project skill over a global skill with the same intent.
-5. If no matching skill exists, continue with the smallest safe fallback and say which expected skill was unavailable.
-
-Common intent hints, not hard routing:
-
-| User intent                | Skill to check                         |
-| -------------------------- | -------------------------------------- |
-| PR review / GitHub PR URL  | project review skill, then `pr-review` |
-| Post-ready review comments | `comment-writer`                       |
-| Create/open/prepare PR     | `branch-pr`                            |
-| Split/stack/large PR       | `chained-pr`                           |
-
-Keep this lightweight: loading a skill should improve the immediate task, not force extra ceremony.
+<!-- owner-overlay:lazy-routing-and-hand-off v1 sha256=3485d67b00816f07e6e7f9be7f1cb81f1a9f13e4392c8eb68691ed631a0df220 -->
+Cost and Context Balance, Work Routing Ladder, Canonical Lightweight Workflows, Allowed edit surfaces (MANDATORY for every writer), Key Learnings closing block, Delivery strategy and Intent-Driven Skill Discovery: `~/.claude/gentle-ai-overlay/lazy/routing-and-hand-off.md`. READ IT IN FULL before launching a delegated worker, before recovering from a tooling or worktree incident, and when a request implies a skill the injected list does not show.
 
 ### Safety
 
@@ -421,24 +250,9 @@ Keep this lightweight: loading a skill should improve the immediate task, not fo
 
 ### Skill Registry Protocol
 
-The parent resolves skills once per session or before first delegation:
+<!-- owner-overlay:lazy-skill-registry-protocol v1 sha256=ebf2f9a9acde4cd8bfe37bfbe4e47fdfdb926ba4a7c8d35a54a916fa24a22536 -->
+Skill Registry Protocol (`.atl/skill-registry.md`, exact `SKILL.md` paths for workers): `~/.claude/gentle-ai-overlay/lazy/skill-registry-protocol.md`. READ IT IN FULL before the first delegation of a session and when a worker reports `skill_resolution`.
 
-1. Read `.atl/skill-registry.md` if present.
-2. Match task context and target files against the `Trigger / description` column.
-3. Pass only matching `Path` values to subagents under `## Skills to load before work`.
-4. Tell subagents to read those exact `SKILL.md` files before reading, writing, reviewing, testing, or creating artifacts.
-5. If the registry is absent, continue but mention that project-specific skill paths were unavailable.
-
-Subagents receive exact indexed paths and do not rediscover the registry or additional project/user `SKILL.md` files during normal runtime.
-
-If a subagent reports `skill_resolution`, interpret it as project/user skill resolution:
-
-- `paths-injected`: the parent supplied `## Skills to load before work` with exact `SKILL.md` paths.
-- `fallback-registry`: the subagent self-loaded skill paths from the registry because parent paths were missing; degraded but auditable.
-- `fallback-path`: the subagent loaded explicit skill paths because parent paths were missing; degraded but auditable.
-- `none`: no project/user skills were loaded.
-
-If any subagent reports a fallback instead of `paths-injected`, treat it as an orchestration gap and correct future delegations by passing exact indexed paths directly.
 <!-- /gentle-ai:orchestrator -->
 
 
@@ -504,47 +318,19 @@ Each trigger holds only when its condition truly holds, and only then is it mand
 
 ### Organic Driven Development
 
-Use this flow for direct and delegated work. Explore the existing code and requirements first, proportionately to the request; the mutation-authorization guard above still applies.
-
-This section is the reference detail for the protocol above.
-
-- Recommend optional research only for a named uncertainty. If declined, continue within authorized scope only where safe without the missing evidence; disclose unresolved uncertainty and pause affected unsafe decisions. Offer a concise proposal only when a real scope or product decision needs it. Neither research nor a proposal is mandatory.
-- Establish the problem, intended outcome, constraints, and current evidence; inspect relevant code. Adapt depth to uncertainty and consequence, not a fixed questionnaire or mandatory rounds. The parent owns product decisions: ask one focused user question only for a real unresolved product decision, then stop and wait. Workers return gaps to the parent rather than assuming choices.
-- When the question needs external evidence, use available authorized documentation/web tools and prefer primary sources. Attribute material claims to source URLs or code locations; distinguish verified facts, assumptions, contradictions, freshness, and gaps. If tools are unavailable, disclose limitations without inventing access or evidence; pause only unsafe decisions dependent on missing evidence.
-- Return concise findings, recommendation, tradeoffs, open questions, and implementation implications. When delegating research, forward these research instructions to a fresh general exploration/research worker through existing delegation; do not create a specialized research agent. Keep research read-only; its findings do not authorize implementation or require new persistence or readiness machinery.
-- Use at most one scoped independent read-only assumption challenge for a high-consequence unproven premise, even in a small security-critical change. Name the premise, evidence, and consequence; do not start a debate loop. Deterministic failures need fixes, not model debate. The native RDD refuter owns native review claims; never duplicate or bypass it.
-- Validate consequential premises against available evidence before building; reuse relevant sibling investigation instead of repeating it. Run focused checks during iteration and all applicable full checks at task closure. Keep spend proportional without a hard spend or line gate; preserve the applicable test-first policy, native RDD, safety, and consent requirements.
-- Size every task by the Task Size section; small work creates no durable task artifacts, and counts of files, commands, tests, fixes, or lines never make it large. For large authorized implementation, automatically create the feature document after exploration, without a task or storage permission prompt.
-- Use about 400 authored changed lines per ODD task only as a planning heuristic, counting additions plus deletions; prefer the smallest coherent behavior with its tests and docs. This is not a task acceptance criterion, hard cap, counter-trigger, automatic stop, forced split, or RDD trigger. If the correct, clear solution naturally exceeds it, briefly explain why and continue without size-only rework loops. Never delete spaces, blank lines, or comments for cosmetic line savings; never omit tests, minify, add gratuitous abstractions, or split artificially to fit the heuristic. Forward this same advisory-only instruction when delegating tasks to subagents. The delivery budget below reads the accumulated branch, not this per-task heuristic. Existing PR size gates remain unchanged; continue under existing repository policy.
-- Keep `odd/tasks/<feature-name>.md` and an Engram recovery copy under topic `odd/<feature-name>/tasks`, scoped to the current project. Use a descriptive filename-safe feature name. Reuse the same feature identity; never overwrite another feature. Keep one feature document, not a separate plan file or topic. It is the specification subagents read by reference, so keep this fixed order, stable content first and the growing log last: a header of two or three lines with the objective, branch, delivery strategy, and test runner; `## Specs` with numbered `S1`..`Sn` requirements and their authorized scope, acceptance criteria, and applicable checks, quoting the user's exact strings, error messages, commands, and examples verbatim in the user's language (number and order them, but never summarize or reword those fragments; Do not add requirements the user never asked for, and mark assumptions as assumptions); `## Tasks` with one line per task, using stable task IDs, with its linked `S#`, route (inline or delegated), status, and commit identity or RED/GREEN evidence; `## Log` as the logbook, where `L1` holds the user's original request verbatim, later user corrections are logged verbatim with their date, and problem analysis, rationale for meaningful accepted changes, verification evidence, progress, and next step are appended. Routine corrections stay brief; no exhaustive decision journal. Mirror the full current document and repository-relative file locator, not just a summary or completion notice.
-- Accepted user, review, or verification changes automatically update affected intent and TODOs, unlike a process that regenerates every artifact: a requirement change appends its verbatim `## Log` entry, rewrites only the affected `S#`, and reopens only its linked task; preserve valid completed and unrelated work; add genuinely new tasks or reopen invalidated items with a reason, and revise their checks. Findings alone never authorize scope expansion or automatic acceptance. Business scope changes still require user authorization. Check off only observed outcomes with applicable proof; record failed, unavailable, skipped, or pending checks honestly. Checkboxes grant no approval or receipt.
-- Read back both writes; they are not atomic. If Engram is unavailable, preserve local progress and explicitly mark the mirror pending; do not claim success or block unrelated safe work. Resynchronize when available. If a file write is unsafe or unavailable, preserve existing state and report the limitation. Preserve both versions on irreconcilable edits and ask only about the real conflict.
-- On resume, use `mem_context`, then `mem_search` scoped to the current project and feature, and `mem_get_observation` for the full saved document; read the actual task file. Do not infer active work from the newest global memory. Reconcile current requirements, code, and proof before resuming the next unfinished task; preserve pending mirrors and conflicting edits.
-- Before implementation or resume, the parent reads both the actual file and full observation, reconciles them, and passes the locator, task IDs, and linked `S#`; workers read the document until `## Log` before edits and report which `S#` they covered. Small work without a document still receives its authorized scope and checks.
-- Apply one default test-first policy to ODD behavior changes: when a relevant runnable deterministic test and clear expected outcome exist, observe RED before implementation, implement GREEN, then refactor while tests stay green. Write one RED test per requested rule. For every existing command or option the change touches, add one test proving its previous behavior still holds; add no other cases. An existing behavior counts as touched when it shares the code you changed (options, parsers, helpers, validation). Before finishing, run a differential check: for each existing command that shares the code you changed, run it with the new or changed input (for example a new option passed to a sibling subcommand) against the previous code (a copy of the base commit in a `mktemp -d` scratch directory, never committed as a test; committed tests never read git history or a fixed commit) and against your change, and compare stdout, stderr, and exit code; any difference nobody asked for is a regression to fix and pin with a test. Tests or frameworks being present alone do not establish applicability. For passive documentation, unavailable runners, or no meaningful runnable RED, explain the exception and run proportionate functional or structural checks. Keep test scratch state (temporary directories, `HOME`, `TMPDIR`, tool caches) outside the worktree in a `mktemp -d` directory; when it must live inside the worktree, use a path git excludes and remove it before finishing, so no tool cache or scratch path remains in the change. Subagents never delete scratch: they report its exact paths, and the parent removes outside scratch after use, including the paths a worker or verifier reports. Forward the applicable runner, this test discipline, and the evidence or exception to workers; never invent RED/GREEN evidence or a runner.
-- Preserve existing native risk selection and applicable functional verification. Run applicable functional checks per task, not a review cycle per TODO checkbox. The native review candidate is a work-unit commit or a PR slice, never a TODO checkbox and never the accumulated feature branch. After each work-unit commit, when RDD is enabled, run `gentle-ai review assess --cwd <repo> --agent claude-code --base-ref <last reviewed boundary> --committed-only --json` on that commit and read `review_due` and `review_due_reason`. When `review_due` is true (`high_risk`), or when the user explicitly asks for a review, execute the returned `next_transition.command` verbatim with your `--lenses`/`--lenses-reason` selection appended: it is the exact preflight STATUS for the same `--base-ref`/`--committed-only` selectors; follow the transitions it returns, and the reviewed boundary advances to this commit once that review is acknowledged. When `review_due` is false, record `review_due_reason` and continue: `passive` needs no review and the boundary advances; `under_budget` stays pending in the slice until a later commit reaches the budget; `already_reviewed` means this exact range is already covered by terminal authority. When a high-risk unit follows pending `under_budget` commits, close the open slice first, assessing and reviewing it as the slice, so the high-risk commit is then reviewed alone against the new boundary. The first boundary is the branch point, and every reviewed boundary becomes the next base. Record per commit the assessed tier and outcome: granted, declined, passive, under budget, already reviewed, or unavailable. An unavailable or failed assessment never lowers the tier: treat the commit as due and run the preflight STATUS with `--base-ref <last reviewed boundary> --committed-only`. Never infer low risk from a failed assessment, and keep existing risk, consent, and authority unchanged. Never skip an existing delivery gate. A task list or assumption challenge never enables RDD, replaces its roles or candidate consent, or adds an execution harness.
-- Delivery follows work units. At feature-document creation, forecast authored changed lines (additions plus deletions, generated files excluded) from the task list, and keep a running count from work-unit commits. Choose one delivery strategy per feature: `ask-on-risk` (default), `auto-chain`, `single-pr`, or `exception-ok`. When the forecast or the running count exceeds about 400 authored changed lines, apply the chosen strategy before the next commit: `ask-on-risk` asks once for the chain strategy, `stacked-to-main` or `feature-branch-chain`; `auto-chain` asks only for a missing chain strategy and slices automatically. Cache both choices, and record slice boundaries, which commits each pull request holds, in the feature document. Resolve the `work-unit-commits` and `chained-pr` skills by registry name before planning or creating any pull request, never hardcode their paths.
-- When RDD is enabled, first use the existing native candidate risk assessment (`gentle-ai review assess --cwd <repo> --agent claude-code --json`). Passive/low uses silent structural checks with no reviewer or consent ceremony. Medium/high relays the existing candidate consent and follows the native plan: native review runs only on grant; a decline continues under ordinary policy. Do not substitute model judgment, task size, or defect severity to lower prospective candidate risk; never infer low risk from a failed assessment. You may raise a candidate you know is high risk with `--escalate-item <1-6> --escalate-reason "<one line>"` on that same assessment command, citing the high-risk list; never lower it. Follow native continuations and authority without bypassing gates. When RDD is disabled, do not start or prompt for RDD; ordinary checks remain.
+<!-- owner-overlay:lazy-odd-reference v1 sha256=f255b096d99f49f1aba9f0c38c969ceda7bba1c3af9c488d07b139b71cccf677 -->
+ODD reference detail (research, the feature document `odd/tasks/<feature>.md` and its engram mirror, resume, test-first policy, per-commit review assessment, delivery strategy): `~/.claude/gentle-ai-overlay/lazy/odd-reference.md`. READ IT IN FULL before creating, resuming or updating a feature document, before the first write of substantial authorized work, and before any work-unit commit or pull request.
 
 ### Receipt-driven development is user-owned
 
-The user controls receipt-driven development with a switch: `gentle-ai review mode enable|disable|status`.
-
-- It is **on by default and opt-out**. An unset preference permits review without recording a user decision; explicit global or clone-local OFF still wins. Candidate consent remains separate from the mode default.
-- `status` is read-only. It reports the deciding source and the effective mode, and changes nothing. A `default` deciding source means nobody has chosen, so the effective mode is on.
-- When the user asks to stop using receipt-driven development, run `disable`. Do not argue, do not work around it, and do not propose alternatives first.
-- While it is disabled, keep implementing organically through direct inline or delegated direct: do not start reviews, do not retry, do not reactivate it, and do not fall back to any retired path.
-- Delivery under a disabled switch follows ordinary repository policy and reports `disabled/unmanaged`, never a fabricated approval.
-- Never toggle the mode automatically or persist a preference just because the default is on. Never enable receipt-driven development on the user's behalf unless the user explicitly asks for it.
+<!-- owner-overlay:lazy-rdd-user-owned v1 sha256=5af24b4bb51a16efc016fe4701030b3774c4528585be5f13fcea4ebf5b2de435 -->
+Receipt-driven development switch rules (opt-in, off by default, never enabled on the user's behalf): `~/.claude/gentle-ai-overlay/lazy/receipt-driven-development-switch.md`. READ IT IN FULL when the user mentions receipt-driven development, review mode or `gentle-ai review`, and before running `gentle-ai review mode enable|disable`.
 
 <!-- gentle-ai:remote-authorization -->
 ## Remote operation authorization
 
-Permission to develop locally does not authorize remote execution or file transfer. Before remote work, require explicit user authorization for the destination, operation, and credential/session to use. If any part is missing or ambiguous, ask and remain local; do not probe the destination to resolve the ambiguity.
+<!-- owner-overlay:lazy-remote-authorization v1 sha256=9c2fde4551cb25e5dddd39188553be3ed545714997796e453281f8a3290e9b81 -->
+Remote execution, file transfer, and inspecting or using SSH agents, credentials or authenticated sessions need the user's explicit authorization of destination, operation and credential; local-development permission is not it. Full rules: `~/.claude/gentle-ai-overlay/lazy/remote-operation-authorization.md`. READ IT IN FULL before any such step.
 
-- Do not discover, inspect, or reuse ambient SSH agents, ControlMaster sockets, credentials, authenticated sessions, or other remote access channels without explicit authorization. Their availability is not permission to use them.
-- Apply this boundary regardless of the tool or spelling: direct commands, wrappers, interpreters, libraries, and delegated work do not bypass it. Pass the authorized scope to delegates; delegation cannot expand it.
-- Explicitly authorized remote work is allowed within that scope. Preserve stricter user instructions and runtime restrictions; do not weaken them or change approval settings to proceed.
-- Native ask rules are an additional runtime mechanism, not authorization inferred from local-development access. Automation modes and remembered approvals may suppress prompts. This behavioral contract is not a sandbox and does not guarantee a fresh human prompt for every execution.
 <!-- /gentle-ai:remote-authorization -->
 <!-- /gentle-ai:agent-routing -->
