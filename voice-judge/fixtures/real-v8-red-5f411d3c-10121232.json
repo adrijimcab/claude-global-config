@@ -1,0 +1,6 @@
+{
+  "id": "real-v8-red-5f411d3c-10121232",
+  "expect": "fail",
+  "source": "5f411d3c 2026-10-12T12:32:23.175Z (tuning set of rubric v8; real final reply to the owner that the owner rejects, the v8 pass test fails: two-paragraph checkpoint log; one \"Te aviso\" token; no why as reasoning, no stance)",
+  "message": "El checkpoint-19 ya aterrizó en `master` (`289f799`): 133 selftests de 133 en verde y confirmado en origin. Cerré su worktree y su rama.\n\nAhora mismo está aterrizando el checkpoint-20, con la compuerta de la voz y el arreglo del `--git-dir` juntos. Las seis piezas entraron limpias sobre el `master` nuevo, y los mutantes del arreglo siguen corriendo a la par. Te aviso cuando los dos terminen."
+}

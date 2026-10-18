@@ -5,7 +5,7 @@
  * the pass/fail matrix is printed with the cost and latency of the runs. The judge is a model call, so the
  * selftest can only pin its text; this script is the measurement of what the text DOES. It is a tool, not a
  * gate: it calls a model (cost, latency, nondeterminism), so no selftest runs it. Usage:
- * `node voice-judge/measure.mjs [--runs N] [--model haiku] [--only id,id]`. Exit 1 when a fixture with an
+ * `node voice-judge/measure.mjs [--runs N] [--model haiku] [--only id,id] [--rubric path/to/prompt.mjs]`. Exit 1 when a fixture with an
  * expectation (`pass` or `fail`) did not get it in every run. A `?` is an answer that is no rubric verdict: the
  * gate would pass it as a malfunction.
  *
@@ -19,7 +19,7 @@
 
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { askModel } from '../judge-gate/model.mjs';
 import { readVerdict } from '../judge-gate/verdict.mjs';
@@ -28,7 +28,14 @@ import { MARKER, PROMPT } from './prompt.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 /** The rubric with the hook input a Stop payload would carry. @es La rúbrica con la entrada que llevaría un payload de Stop. */
-export const promptFor = (message) => PROMPT.replace('$ARGUMENTS', () => JSON.stringify({ hook_event_name: 'Stop', session_id: 'measure', stop_hook_active: false, last_assistant_message: message }));
+export const promptFor = (message, rubric = PROMPT) => rubric.replace('$ARGUMENTS', () => JSON.stringify({ hook_event_name: 'Stop', session_id: 'measure', stop_hook_active: false, last_assistant_message: message }));
+
+/**
+ * The rubric the runs use: the current one, or the `PROMPT` export of the module `--rubric <path>` names, so two
+ * rubric versions are measured on the same fixtures by the same code. @es La rúbrica de las corridas: la actual, o
+ * el export `PROMPT` del módulo que nombra `--rubric <path>`, para medir dos versiones sobre los mismos fixtures.
+ */
+let activeRubric = PROMPT;
 
 /** The verdict in the model's answer: `true` pass, `false` block, `null` no rubric verdict. @es El veredicto: `true` pasa, `false` bloquea, `null` no es veredicto de rúbrica. */
 export function verdictOf(answer) {
@@ -40,7 +47,7 @@ export function verdictOf(answer) {
 /** One judged run; the cost and latency of the call travel with the verdict. @es Una corrida juzgada; costo y latencia viajan con el veredicto. */
 async function judge(message, model) {
   try {
-    const { answer, costUsd, durationMs } = await askModel(promptFor(message), { timeoutMs: 120000, model });
+    const { answer, costUsd, durationMs } = await askModel(promptFor(message, activeRubric), { timeoutMs: 120000, model });
 
     const verdict = verdictOf(answer);
 
@@ -119,6 +126,8 @@ async function main(argv) {
   const only = option('--only', '')?.split(',').filter(Boolean);
   const fixtures = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json')).map((name) => JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8'))).filter((fixture) => only.length === 0 || only.includes(fixture.id));
   const prefix = option('--prefix', 'real-');
+
+  if (argv.includes('--rubric')) activeRubric = (await import(pathToFileURL(path.resolve(option('--rubric', ''))).href)).PROMPT;
 
   if (argv.includes('--rates')) return rates(argv.includes('--prefix') ? fixtures.filter((fixture) => fixture.id.startsWith(prefix)) : fixtures, runs, model, Number(option('--parallel', '6')), prefix);
 
