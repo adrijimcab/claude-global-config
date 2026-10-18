@@ -15,17 +15,20 @@ in every session and every agent, ODD or not.
    systems: HTTP, storage, browser APIs, third-party SDKs. The tension is explicit: a 40-line hook script
    does not get layers it does not need, and there YAGNI wins. Layers are added when a second adapter or a
    test seam is real, never in advance.
-5. **Route by type AND size.** `tracked-odd` when the design is open (new feature or project,
-   cross-module refactor, public API change, undecided approach) OR the work is substantial by ODD's own
-   definition (two or more meaningful implementation steps, or progress worth recovering after an
-   interruption); `direct` when the design is settled AND the work is one step. Lines, files or perceived
-   risk alone never decide. Full text: point 1 of `~/.claude/route-mandate.md` (single source).
+5. **Route: tracked ODD for every non-trivial change.** `tracked-odd` for every change, however small or
+   settled; `direct` only for trivial scope (a typo, a rename, a comment tweak, a genuinely one-line
+   no-logic change). Full text: point 1 of `~/.claude/route-mandate.md` (single source).
+6. **Model by task.** Every delegated agent runs on the cheapest model that can do its task well: `haiku`
+   for read-only and mechanical work, `sonnet` for implementation and review, `opus` only for a role whose
+   definition names it. Full text: the orchestration directive of `~/.claude/rules/10-contracts.md`.
 
 @es Estándar de ingeniería: reglas de decisión, no consignas. Rige toda decisión, toda respuesta al dueño y todo juicio de sus afirmaciones y premisas, en toda sesión y todo agente, con o sin ODD. (1) Desempate: corrección y seguridad, luego
 los quality gates, luego rendimiento, luego simplicidad; se nombra la alternativa descartada. (2) KISS y
 YAGNI: el diseño más simple que cumple el requisito MEDIDO hoy, sin abstracción especulativa. (3) SOLID y
 código limpio: una responsabilidad por unidad, dependencias hacia adentro, legible desde su entrada. (4) La
 arquitectura que encaja con el dominio: hexagonal donde se habla con sistemas externos; un script de 40
-líneas no recibe capas que no necesita (gana YAGNI). (5) Ruta por tipo Y tamaño: `tracked-odd` si el diseño
-está abierto o el trabajo es sustancial (dos o más pasos significativos); `direct` si el diseño está
-asentado Y es un solo paso; líneas, ficheros o riesgo percibido no deciden solos.
+líneas no recibe capas que no necesita (gana YAGNI). (5) Ruta: `tracked-odd` para todo cambio, por chico o
+asentado que sea; `direct` solo para el alcance trivial (una errata, un renombre, un comentario, un cambio
+de una línea sin lógica). (6) Modelo según la tarea: cada agente delegado corre en el modelo más barato que
+la hace bien: `haiku` para trabajo de solo lectura y mecánico, `sonnet` para implementar y revisar, `opus`
+solo para un rol cuya definición lo nombra.

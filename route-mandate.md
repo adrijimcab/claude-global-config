@@ -1,13 +1,13 @@
 # Route + full-contract mandate — binding, every session, every project
 
-Every change runs through ODD (gentle-ai v4) on one of two routes, chosen by its TYPE and its SIZE
-together: how settled the DESIGN is and how many meaningful steps the work has — never by lines, files,
-risk or urgency alone. Points 2 and 3 bind on both.
+Every change runs through ODD (gentle-ai v4). Owner order of 2026-10-18 («TODO LO QUE TENGA O PUEDA PASAR
+POR ODD QUE PASE»): every change that is not of trivial scope (defined at the end of this file) is TRACKED,
+however small or settled; only trivial scope goes direct. Points 2 and 3 bind on both. This is stricter than
+gentle-ai's own small path (no feature document for small work), and the owner's order prevails.
 
-1. **Tracked ODD where the design is open OR the work is substantial.** A new feature, a new project, a
-   refactor that crosses a module boundary or changes a public API, any change whose approach is undecided
-   when the work starts, and any work that is substantial by ODD's own definition: two or more meaningful
-   implementation steps, or progress worth recovering after an interruption. Explore, resolve the open decisions, and TRACK before the first write: `odd/tasks/<feature>.md`
+1. **Tracked ODD for every non-trivial change.** A new feature, a project, a refactor, a fix whose root
+   cause is measured and whose shape is evident, a guard, a rule text, a config change: all of them.
+   Explore, resolve the open decisions, and TRACK before the first write: `odd/tasks/<feature>.md`
    and its engram mirror `odd/<feature>/tasks` carry the decided design and why, the tasks and their
    checks. The document is a working copy that no git repository versions (company clone, tooling backup
    and this config alike: `/odd/` excluded or ignored in each); its durable copy is the engram mirror, written
@@ -18,10 +18,8 @@ risk or urgency alone. Points 2 and 3 bind on both.
    outside view BEFORE it lands: the native `review-*` lenses when `gentle-ai review assess` marks it
    `high_risk`, and a `judgment-day` (two blind judges on the frozen base..head) when it is medium, since
    gentle-ai 4.2.0 reviews only high risk (its `CLAUDE.md` entry rule). Low and passive units need none.
-   **Direct (inline or delegated) where the design is settled AND the work is one step.** A fix whose
-   root cause has been measured and whose solution has one evident shape, or a contained change inside
-   one module, goes direct: root cause first, then the change, then the gates. When a direct change turns out to need a
-   design decision nobody has made, stop and track it as above rather than deciding it in the diff.
+   A one-step change is a feature document with one task: the tracking costs a few lines, and in exchange
+   the decision, its evidence and its commit survive an interruption or a compaction.
 
 2. **Bind the FULL agent contract.** Every delegated agent must receive the project's complete contract
    (`.claude/AGENT-LEDGER.md` for Claude Code — injected by the `Task|Agent` PreToolUse hook — and its
