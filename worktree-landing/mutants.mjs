@@ -70,7 +70,7 @@ const MUTANTS = [
   ['a repeated failure line is shown every time', RED_REPORT, ' && lines.indexOf(line) === index', ''],
   ['a stack line already shown as a failure is shown again', RED_REPORT, '.filter((line) => !failing.includes(line))', ''],
   ['no failure line is shown', RED_REPORT, '.slice(0, MAX_FAILURE_LINES)', '.slice(0, 0)'],
-  ['the first error stack is not shown', RED_REPORT, '...firstStackIn(lines)]', ']'],
+  ['the first error stack is not shown', RED_REPORT, '...stack]', ']'],
   ['the error message above the stack is dropped', RED_REPORT, 'frame - start < 2', 'frame - start < 0'],
   ['the stack frames are dropped', RED_REPORT, 'end - frame < MAX_STACK_FRAMES', 'end - frame < 0'],
   ['colour codes are kept', RED_REPORT, ".replace(COLOUR_CODES, '')", ''],

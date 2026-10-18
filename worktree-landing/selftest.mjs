@@ -494,13 +494,15 @@ try {
   const KARMA_FAILED_LINE = "console.log('Chrome Headless 1.0 (Windows 10) CheckoutForm submits KARMA-SPEC-MARK FAILED');";
   const KARMA_SUITE = [
     KARMA_FAILED_LINE,
+    "console.log('    Message: the order total is wrong.');",
     "console.log('    Expected 1 to be 2.');",
     "console.log('    at UserContext.<anonymous> (src/app/checkout.spec.ts:12:5)');",
     "console.log('    at <Jasmine>');",
     "console.log('Chrome Headless 1.0 (Windows 10): Executed 3 of 10 (1 FAILED) (0.1 secs / 0.05 secs)');",
     FILLER('coverage', 100),
     KARMA_FAILED_LINE,
-    "console.log('TOTAL: 1 FAILED, 9 SUCCESS');",
+    "console.log('TOTAL: 1 FAILED');",
+    "console.log('TOTAL: 9 SUCCESS');",
     FILLER('library build', 60),
     'process.exit(1);',
   ].join('\n');
@@ -509,6 +511,7 @@ try {
     FILLER('trace', 100),
     "console.log('  1) [chromium] › e2e/net.spec.ts:10:3 › PW-SPEC-MARK shows the totals ──');",
     "console.log('    Error: expect(received).toBe(expected)');",
+    "console.log('    Expected: 2, Received: 1');",
     "console.log('    at e2e/net.spec.ts:14:5');",
     FILLER('report', 100),
     "console.log('\u001b[31m  1 failed\u001b[39m');",
@@ -525,7 +528,7 @@ try {
   const logsBeforeKarma = redLogs().length;
   const karmaReport = expectRefused('a red Karma-like suite', suiteFixture(KARMA_SUITE), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'KARMA-SPEC-MARK FAILED' });
   check(karmaReport.split('KARMA-SPEC-MARK FAILED').length === 2, `a red Karma-like suite: a failure line printed twice by the run is shown once: ${karmaReport}`);
-  check(karmaReport.includes('TOTAL: 1 FAILED, 9 SUCCESS'),`a red Karma-like suite: the TOTAL line reaches the refusal: ${karmaReport}`);
+  check(karmaReport.includes('TOTAL: 1 FAILED') && karmaReport.includes('TOTAL: 9 SUCCESS'),`a red Karma-like suite: the TOTAL line reaches the refusal: ${karmaReport}`);
   check(karmaReport.includes('Expected 1 to be 2.') && karmaReport.includes('checkout.spec.ts:12:5'), `a red Karma-like suite: the first error and its stack reach the refusal: ${karmaReport}`);
   check(!karmaReport.includes('Executed 3 of 10') && !karmaReport.includes('coverage filler 50'), `a red Karma-like suite: the progress counter and the filler stay out of the refusal: ${karmaReport}`);
   const karmaLog = namedLog(karmaReport);
