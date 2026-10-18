@@ -11,6 +11,7 @@
 import { spawnSync } from 'node:child_process';
 
 import { EXIT_REFUSED, EXIT_VERIFICATION_RED, Refusal } from './outcome.mjs';
+import { failureLinesOf, writeRedLog } from './red-report.mjs';
 import { testCommandOf } from './test-command.mjs';
 
 /** Bound on one verification run. @es Límite de una corrida de verificación. */
@@ -38,6 +39,28 @@ function suiteTailOf(output) {
     .map((line) => `    ${line}`);
 }
 
+/** Where the whole output went, as a report line; a log that cannot be written says so instead of hiding it. @es Dónde fue la salida completa; un log que no se puede escribir lo dice. */
+function savedOutputLine(output) {
+  try {
+    const file = writeRedLog(output);
+    return `    Full output: ${file}. @es Salida completa: ${file}.`;
+  } catch (error) {
+    return `    The full output could not be saved (${error.message}). @es No se pudo guardar la salida completa (${error.message}).`;
+  }
+}
+
+/**
+ * The report of a run that is not green: the file that holds its whole output, then the lines that explain it.
+ * A declared suite shows the lines its output names as failures plus the first error stack, its tail when it names none.
+ * @es El informe de una corrida que no está en verde: el fichero con su salida completa y las líneas que la explican.
+ */
+function redReportOf(output, isDeclaredSuite) {
+  const saved = savedOutputLine(output);
+  if (!isDeclaredSuite) return [saved, ...runnerRedLinesOf(output)];
+  const named = failureLinesOf(output);
+  return [saved, ...(named.length > 0 ? named : suiteTailOf(output))];
+}
+
 /**
  * @param {string} worktree
  * @param {{ main: string, timeoutMs?: number }} options
@@ -54,7 +77,6 @@ export function verifyWorktree(worktree, { main, timeoutMs = VERIFICATION_TIMEOU
     maxBuffer: 256 * 1024 * 1024,
   });
   const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
-  const redLines = test.anyNonZeroIsRed ? suiteTailOf(output) : runnerRedLinesOf(output);
   if (run.error?.code === 'ETIMEDOUT') {
     const seconds = Math.round(timeoutMs / 1000);
     throw new Refusal('verification-timed-out', [
@@ -62,6 +84,7 @@ export function verifyWorktree(worktree, { main, timeoutMs = VERIFICATION_TIMEOU
     ]);
   }
   if (run.status === 0) return `${test.label}: ${output.trimEnd().split('\n').at(-1) ?? ''}`;
+  const redLines = redReportOf(output, test.anyNonZeroIsRed);
   if (run.status === EXIT_VERIFICATION_RED || (test.anyNonZeroIsRed && run.status !== null)) {
     throw new Refusal(
       'verification-red',

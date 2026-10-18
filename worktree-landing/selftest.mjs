@@ -35,7 +35,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { isolateState } from '../hook-state/locations.mjs';
+import { isolateState, stateDir } from '../hook-state/locations.mjs';
 import { requireIntegrationBranch } from './integration-branch.mjs';
 import { land } from './land.mjs';
 import { mayPublishTo } from './remote-policy.mjs';
@@ -483,6 +483,90 @@ try {
   const fleetWithoutSuite = layout({ work: { 'b.txt': 'b\n' } });
   declare(fleetWithoutSuite, '.claude/fleet-kit.json', JSON.stringify({ landingGuard: { mode: 'enforce' } }));
   expectLanded('near miss: a fleet-kit.json without unitSuite falls back to the selftest runner', fleetWithoutSuite);
+
+  // ── What a RED run shows and keeps: the failure lines picked by CONTENT (the tail of a real suite holds only its
+  // coverage and build output) and the whole output in a named file; a green run writes nothing.
+  // @es Lo que muestra y guarda una corrida en ROJO: las líneas de fallo elegidas por CONTENIDO y la salida completa
+  // en un fichero con nombre; una corrida en verde no escribe nada. ──
+  const redLogDirectory = path.join(stateDir('worktree-landing'), 'red-logs');
+  const redLogs = () => (existsSync(redLogDirectory) ? readdirSync(redLogDirectory).sort() : []);
+  const FILLER = (label, count) => `for (let i = 0; i < ${count}; i += 1) console.log('${label} filler ' + i);`;
+  const KARMA_FAILED_LINE = "console.log('Chrome Headless 1.0 (Windows 10) CheckoutForm submits KARMA-SPEC-MARK FAILED');";
+  const KARMA_SUITE = [
+    KARMA_FAILED_LINE,
+    "console.log('    Expected 1 to be 2.');",
+    "console.log('    at UserContext.<anonymous> (src/app/checkout.spec.ts:12:5)');",
+    "console.log('    at <Jasmine>');",
+    "console.log('Chrome Headless 1.0 (Windows 10): Executed 3 of 10 (1 FAILED) (0.1 secs / 0.05 secs)');",
+    FILLER('coverage', 100),
+    KARMA_FAILED_LINE,
+    "console.log('TOTAL: 1 FAILED, 9 SUCCESS');",
+    FILLER('library build', 60),
+    'process.exit(1);',
+  ].join('\n');
+  const PLAYWRIGHT_SUITE = [
+    "console.log('  ✘  1 [chromium] › e2e/net.spec.ts:10:3 › PW-SPEC-MARK shows the totals (1.2s)');",
+    FILLER('trace', 100),
+    "console.log('  1) [chromium] › e2e/net.spec.ts:10:3 › PW-SPEC-MARK shows the totals ──');",
+    "console.log('    Error: expect(received).toBe(expected)');",
+    "console.log('    at e2e/net.spec.ts:14:5');",
+    FILLER('report', 100),
+    "console.log('\u001b[31m  1 failed\u001b[39m');",
+    "console.log('  9 passed (4.1s)');",
+    FILLER('teardown', 60),
+    'process.exit(1);',
+  ].join('\n');
+  const suiteFixture = (source) => {
+    const fixture = layout({ work: { 'app/package.json': SUITE_PACKAGE, 'app/suite.mjs': `${source}\n` }, removed: ['selftest-runner/run.mjs'] });
+    declare(fixture, '.claude/fleet-kit.json', JSON.stringify({ unitSuite: { npmScript: 'test:all', cwd: 'app' } }));
+    return fixture;
+  };
+  const namedLog = (report) => /Full output: (.+?)\. @es/.exec(report)?.[1];
+  const logsBeforeKarma = redLogs().length;
+  const karmaReport = expectRefused('a red Karma-like suite', suiteFixture(KARMA_SUITE), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'KARMA-SPEC-MARK FAILED' });
+  check(karmaReport.split('KARMA-SPEC-MARK FAILED').length === 2, `a red Karma-like suite: a failure line printed twice by the run is shown once: ${karmaReport}`);
+  check(karmaReport.includes('TOTAL: 1 FAILED, 9 SUCCESS'),`a red Karma-like suite: the TOTAL line reaches the refusal: ${karmaReport}`);
+  check(karmaReport.includes('Expected 1 to be 2.') && karmaReport.includes('checkout.spec.ts:12:5'), `a red Karma-like suite: the first error and its stack reach the refusal: ${karmaReport}`);
+  check(!karmaReport.includes('Executed 3 of 10') && !karmaReport.includes('coverage filler 50'), `a red Karma-like suite: the progress counter and the filler stay out of the refusal: ${karmaReport}`);
+  const karmaLog = namedLog(karmaReport);
+  check(karmaLog !== undefined && karmaLog.startsWith(redLogDirectory) && redLogs().length === logsBeforeKarma + 1, `a red Karma-like suite: the refusal names a new file under the state directory: ${karmaReport}`);
+  const karmaLogText = karmaLog === undefined ? undefined : read(path.dirname(karmaLog), path.basename(karmaLog));
+  check(karmaLogText?.includes('KARMA-SPEC-MARK FAILED') && karmaLogText.includes('coverage filler 99') && karmaLogText.includes('library build filler 59') && karmaLogText.includes('Executed 3 of 10'), 'a red Karma-like suite: the named file holds the whole output');
+
+  const playwrightReport = expectRefused('a red Playwright-like suite', suiteFixture(PLAYWRIGHT_SUITE), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'PW-SPEC-MARK shows the totals' });
+  check(playwrightReport.includes('1) [chromium]') && playwrightReport.includes('✘') && playwrightReport.includes('  1 failed'), `a red Playwright-like suite: the failed-test lines and the summary reach the refusal: ${playwrightReport}`);
+  check(playwrightReport.includes('Error: expect(received).toBe(expected)') && playwrightReport.includes('e2e/net.spec.ts:14:5'), `a red Playwright-like suite: the first error and its stack reach the refusal: ${playwrightReport}`);
+  check(!playwrightReport.includes(String.fromCharCode(27)), `a red Playwright-like suite: the colour codes are removed: ${playwrightReport}`);
+  check(!playwrightReport.includes('9 passed') &&!playwrightReport.includes('report filler 50'), `a red Playwright-like suite: passing and filler lines stay out: ${playwrightReport}`);
+  const playwrightLog = namedLog(playwrightReport);
+  check(playwrightLog !== undefined && read(path.dirname(playwrightLog), path.basename(playwrightLog))?.includes('teardown filler 59'), 'a red Playwright-like suite: the named file holds the whole output');
+
+  const runnerRedReport = expectRefused('a selftest-runner red keeps its lines', layout({ work: { verdict: '1\n' } }), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'RED    fake/selftest.mjs (exit 1)' });
+  const runnerLog = namedLog(runnerRedReport);
+  check(runnerRedReport.includes('BOOM-MARK') && !runnerRedReport.includes('GREEN  other/selftest.mjs'), `a selftest-runner red: its red lines are shown and its green ones are not: ${runnerRedReport}`);
+  check(runnerLog !== undefined && read(path.dirname(runnerLog), path.basename(runnerLog))?.includes('GREEN  other/selftest.mjs'), 'a selftest-runner red: the named file holds the green lines too');
+
+  const noFailureNamed = expectRefused('a red suite that names no failure keeps its tail', suiteFixture("console.log('HEAD-ONLY-MARK');\nconsole.log('x'.repeat(5));\nprocess.exit(1);"), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'HEAD-ONLY-MARK' });
+  check(noFailureNamed.includes('Full output:'), `a red suite that names no failure: the file is still named: ${noFailureNamed}`);
+
+  // A state directory that cannot be created is reported in the refusal, which still carries the failure lines.
+  // @es Un directorio de estado que no se puede crear se informa en el rechazo, que sigue llevando las líneas de fallo.
+  const brokenStateRoot = path.join(scratchRoot, 'state-root-is-a-file');
+  writeFileSync(brokenStateRoot, 'x');
+  const realStateRoot = process.env.HOOK_STATE_DIR;
+  process.env.HOOK_STATE_DIR = brokenStateRoot;
+  let unsavedReport;
+  try {
+    unsavedReport = expectRefused('a red suite whose log cannot be saved', suiteFixture(KARMA_SUITE), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'KARMA-SPEC-MARK FAILED' });
+  } finally {
+    process.env.HOOK_STATE_DIR = realStateRoot;
+  }
+  check(unsavedReport.includes('could not be saved') && unsavedReport.includes('No se pudo guardar') && !unsavedReport.includes('Full output:'), `a red suite whose log cannot be saved: the refusal says so: ${unsavedReport}`);
+
+  const logsBeforeGreen = redLogs();
+  expectLanded('a green declared suite', suiteLayout(0));
+  expectLanded('a green selftest runner', layout({ work: { 'b.txt': 'b\n' } }));
+  check(JSON.stringify(redLogs()) === JSON.stringify(logsBeforeGreen), 'a green run writes no file');
 
   // ── The publication ───────────────────────────────────────────────────────────────────────────
   const rejected = layout({ work: { 'b.txt': 'b\n' } });

@@ -122,6 +122,7 @@ export const KINDS = Object.freeze([
   ['type-assertion-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],
   ['useless-escape-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],
   ['worker-delegation-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
+  ['worktree-landing', 'red-logs/*', ARCHIVE, 'whole output of past red verifications, one file per refused landing'],
   [ANY, 'journal.jsonl', JOURNAL, 'hook journal'],
   [ANY, 'fires.json', ARCHIVE, 'fires counter, reset with the journal whose rate it gives']
 ]);

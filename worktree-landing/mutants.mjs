@@ -20,6 +20,7 @@ const INTEGRATION = 'worktree-landing/integration-branch.mjs';
 const LAND = 'worktree-landing/land.mjs';
 const PRECONDITIONS = 'worktree-landing/preconditions.mjs';
 const PUBLICATION = 'worktree-landing/publication.mjs';
+const RED_REPORT = 'worktree-landing/red-report.mjs';
 const REMOTE_POLICY = 'worktree-landing/remote-policy.mjs';
 const TEST_COMMAND = 'worktree-landing/test-command.mjs';
 const VERIFICATION = 'worktree-landing/verification.mjs';
@@ -51,7 +52,30 @@ const MUTANTS = [
   ['a not-measured verification exits like a red one', VERIFICATION, '    EXIT_REFUSED,\n  );', '    EXIT_VERIFICATION_RED,\n  );'],
   ['the red lines are not printed', VERIFICATION, '...redLines],\n      EXIT_VERIFICATION_RED,', '],\n      EXIT_VERIFICATION_RED,'],
   ['the green lines are printed as red', VERIFICATION, "line !== '' && !line.startsWith('GREEN ')", "line !== ''"],
-  ['the runner output is read like a declared suite', VERIFICATION, 'test.anyNonZeroIsRed ? suiteTailOf(output) : runnerRedLinesOf(output)', 'suiteTailOf(output)'],
+  ['the runner output is read like a declared suite', VERIFICATION, 'if (!isDeclaredSuite) return [saved, ...runnerRedLinesOf(output)];\n', ''],
+  ['a declared suite is read like the runner', VERIFICATION, 'redReportOf(output, test.anyNonZeroIsRed)', 'redReportOf(output, false)'],
+  ['a declared suite that names no failure shows nothing', VERIFICATION, 'named.length > 0 ? named : suiteTailOf(output)', 'named'],
+  ['a declared suite always shows its tail instead of its failures', VERIFICATION, 'named.length > 0 ? named : suiteTailOf(output)', 'suiteTailOf(output)'],
+  ['the whole output is not saved on a red run', VERIFICATION, 'const saved = savedOutputLine(output);', "const saved = '';"],
+  ['the saved file holds only the failure lines', VERIFICATION, 'const file = writeRedLog(output);', 'const file = writeRedLog(failureLinesOf(output).join(\'\\n\'));'],
+  ['a failed save is not reported', VERIFICATION, 'catch (error) {\n    return `    The full output', 'catch (error) {\n    throw error;\n    return `    The full output'],
+  ['a green run saves its output', VERIFICATION, 'if (run.status === 0) return `${test.label}: ${', 'if (run.status === 0) return `${test.label}${savedOutputLine(output)}: ${'],
+  // What a red run names / Lo que nombra una corrida en rojo
+  ['Karma FAILED lines are not picked', RED_REPORT, '\\bFAILED\\b|^\\s*TOTAL:', '^\\s*TOTAL:'],
+  ['Karma TOTAL lines are not picked', RED_REPORT, '|^\\s*TOTAL:', ''],
+  ['Playwright numbered failures are not picked', RED_REPORT, '|^\\s*\\d+\\) \\[', ''],
+  ['Playwright failure marks are not picked', RED_REPORT, '|^\\s*✘', ''],
+  ['the Playwright failed summary is not picked', RED_REPORT, '|^\\s*\\d+ (?:failed|flaky)\\b', ''],
+  ['the progress counter is shown as a failure', RED_REPORT, ' && !PROGRESS_LINE.test(line)', ''],
+  ['a repeated failure line is shown every time', RED_REPORT, ' && lines.indexOf(line) === index', ''],
+  ['a stack line already shown as a failure is shown again', RED_REPORT, '.filter((line) => !failing.includes(line))', ''],
+  ['no failure line is shown', RED_REPORT, '.slice(0, MAX_FAILURE_LINES)', '.slice(0, 0)'],
+  ['the first error stack is not shown', RED_REPORT, '...firstStackIn(lines)]', ']'],
+  ['the error message above the stack is dropped', RED_REPORT, 'frame - start < 2', 'frame - start < 0'],
+  ['the stack frames are dropped', RED_REPORT, 'end - frame < MAX_STACK_FRAMES', 'end - frame < 0'],
+  ['colour codes are kept', RED_REPORT, ".replace(COLOUR_CODES, '')", ''],
+  ['the full output goes to another folder', RED_REPORT, "RED_LOGS_FOLDER = 'red-logs'", "RED_LOGS_FOLDER = 'logs'"],
+  ['the full output goes to another mechanism', RED_REPORT, "stateDir('worktree-landing')", "stateDir('worktree-landing-logs')"],
   ['a declared suite failing with an exit other than 1 is not red', VERIFICATION, '(test.anyNonZeroIsRed && run.status !== null)', 'false'],
   ['the green summary does not name the test command', VERIFICATION, 'return `${test.label}: ${', 'return `${'],
   ['a missing test command is not refused', TEST_COMMAND, 'if (existsSync(runner)) {', 'if (true) {'],
