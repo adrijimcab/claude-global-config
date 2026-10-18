@@ -54,6 +54,8 @@ const MUTANTS = [
   ['the rubric blocks when unsure about tuteo and enumerations', PROMPT, 'When unsure whether rule 4 or rule 8 applies, answer {"ok": true}.', 'When unsure whether rule 4 or rule 8 applies, answer ok false.'],
   ['the mentor test needs only one trait', PROMPT, 'which means all four of these traits are observable in it', 'which means one of these traits is observable in it'],
   ['a reply missing a trait passes', PROMPT, 'Answer {"ok": false} when any of the four is absent.', 'Answer {"ok": true} when any of the four is absent.'],
+  ['any closing question counts as a close that lands', PROMPT, ', and a closing question that asks him to decide lands only when the sentences just before it state a stance or a recommendation of the reply itself', ''],
+  ['das, ves and vas fail as tuteo', PROMPT, ' Forms that tú and vos share (das, ves, vas) are voseo too and never a tuteo failure.', ''],
   ['a voseo token at the start or the end counts as speaking to him', PROMPT, ', and not one token bolted onto the opening or the closing line', ''],
   ['a third-person log with a voseo token passes', PROMPT, ' A reply that narrates workers, judges or sessions in the third person, a log of who did what and what is running, fails even when its first or last sentence carries a voseo token, because a token there is not speaking to him.', ''],
   ['a log of what was done counts as the why', PROMPT, ', in sentences that connect a cause to a choice, and not as a log of what was done', ''],
