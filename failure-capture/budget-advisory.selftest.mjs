@@ -156,9 +156,19 @@ function advise(steps) {
   const printed = [];
   const calls = [];
 
-  adviseOnBudget({ measure: steps.measure, condense: () => { calls.push('condense'); return steps.condense(); }, print: (line) => printed.push(line) });
+  // `escaped` is what got out of the advisory: the proof asserts on it, so a step that is NOT swallowed fails a
+  // check instead of crashing the selftest where no check decides it.
+  // @es `escaped` es lo que salió del aviso: la prueba lo afirma, así que un paso que NO se traga falla un check
+  // en vez de hacer caer el selftest donde ningún check decide.
+  let escaped;
 
-  return { printed, calls };
+  try {
+    adviseOnBudget({ measure: steps.measure, condense: () => { calls.push('condense'); return steps.condense(); }, print: (line) => printed.push(line) });
+  } catch (error) {
+    escaped = error instanceof Error ? error.message : String(error);
+  }
+
+  return { printed, calls, escaped };
 }
 
 const condensed = advise({ measure: () => WITHIN_VERDICT, condense: () => ['never'] });
@@ -176,6 +186,8 @@ check('a throwing condense is printed after the advisory and swallowed', [conden
 const notAnError = advise({ measure: () => { throw 'plain text'; }, condense: () => [] });
 
 check('a thrown value that is not an Error is reported by its text', notAnError.printed, ['budget advisory FAILED (the capture itself is unaffected): plain text. @es el aviso de presupuesto FALLÓ (la captura no se ve afectada): plain text.']);
+
+check('no failing step escapes the advisory: a thrown measure, condense or plain value is swallowed', [measuringFails.escaped, condenseFails.escaped, notAnError.escaped], [undefined, undefined, undefined]);
 
 const five = ['a', 'b', 'c', 'd', 'e'].map((name, index) => ({ path: name, raw: 50 - index, counted: 50 - index }));
 const listed = advise({ measure: () => ({ ...OVER_VERDICT, files: five }), condense: () => ['did it'] });
