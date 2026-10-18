@@ -86,7 +86,7 @@ const cases = [];
 const check = (name, holds) => cases.push({ name, holds });
 
 /** Builds a fixture fleet, runs one campaign over it, and reports what the runner said and did. */
-function campaign({ assertions = GREEN_ASSERTIONS, prelude = '', extraFiles = {}, paths, mutants }) {
+function campaign({ assertions = GREEN_ASSERTIONS, prelude = '', extraFiles = {}, paths, mutants, environment = {} }) {
   // The fleet sits inside a parent of its own, so a file BESIDE the fleet exists for a mutant to name.
   const parent = mkdtempSync(path.join(os.tmpdir(), 'mutation-proof-fixture-'));
   const fleet = path.join(parent, 'fleet');
@@ -118,7 +118,7 @@ process.exit(survivors === 0 ? 0 : 1);
 `
     );
 
-    const run = spawnSync(process.execPath, [script], { encoding: 'utf8', env: { ...process.env, MUTATION_PROOF_RUN_LOG: runLog }, timeout: 120_000 });
+    const run = spawnSync(process.execPath, [script], { encoding: 'utf8', env: { ...process.env, SELFTEST_FLEET: undefined, ...environment, MUTATION_PROOF_RUN_LOG: runLog }, timeout: 120_000 });
     const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
 
     return {
@@ -230,6 +230,18 @@ check("a selftest importing a file that does not exist refuses to measure, namin
 const empty = campaign({ mutants: [] });
 
 check('an empty campaign refuses to measure: 0/0 killed proves nothing', empty.status === EXIT_NOT_MEASURED && empty.runs === 0);
+
+// ── the fleet a selftest imports shared modules from ───────────────────────────────────────────────
+const FLEET_ASSERTIONS = (expected) => GREEN_ASSERTIONS.replace(']', `, process.env.SELFTEST_FLEET === ${JSON.stringify(expected)}]`);
+const KILL_MUTANT = [[LABELS.kill, 'mech/decide.mjs', 'age >= 18', 'age > 18']];
+
+const derivedFleet = campaign({ assertions: FLEET_ASSERTIONS(path.join(os.homedir(), '.claude')), mutants: KILL_MUTANT });
+
+check('a campaign names the fleet as ~/.claude for a selftest that imports a shared module, when the caller set none', derivedFleet.status === 0 && derivedFleet.verdictOf(LABELS.kill) === 'KILLED');
+
+const callerFleet = campaign({ assertions: FLEET_ASSERTIONS('the-callers-fleet'), environment: { SELFTEST_FLEET: 'the-callers-fleet' }, mutants: KILL_MUTANT });
+
+check('a fleet the caller already named reaches the selftest unchanged', callerFleet.status === 0 && callerFleet.verdictOf(LABELS.kill) === 'KILLED');
 
 // ── verdict ─────────────────────────────────────────────────────────────────────────────────────────
 const failed = cases.filter(({ holds }) => !holds);

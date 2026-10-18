@@ -73,6 +73,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 
 import { copiedPaths, importClosure } from './import-closure.mjs';
@@ -348,8 +349,20 @@ function inSandbox({ root, snapshot, copied }, prepare, measureIn) {
   }
 }
 
+/**
+ * The environment a mutant's selftest runs in. A selftest that imports a module of the shared fleet reads the fleet
+ * from `SELFTEST_FLEET` (the selftest runner sets it for each selftest); a campaign is not run by that runner, so it
+ * names the fleet the same way the runner derives it, `~/.claude`, unless the caller already set one.
+ * @es El entorno de los selftests de los mutantes. Un selftest que importa un módulo de la flota compartida la lee de
+ * `SELFTEST_FLEET`; la fija el runner de selftests, pero una campaña no pasa por él, así que se nombra la flota como la
+ * deriva el runner, `~/.claude`, salvo que quien llama ya haya fijado una.
+ */
+function selftestEnvironment() {
+  return { ...process.env, SELFTEST_FLEET: process.env.SELFTEST_FLEET ?? path.join(homedir(), '.claude') };
+}
+
 function selftestIn(sandbox, selftest, timeoutMs) {
-  return spawnSync(process.execPath, [path.join(sandbox, selftest)], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 256 * 1024 * 1024 });
+  return spawnSync(process.execPath, [path.join(sandbox, selftest)], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 256 * 1024 * 1024, env: selftestEnvironment() });
 }
 
 /**

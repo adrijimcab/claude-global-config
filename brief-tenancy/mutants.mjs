@@ -29,7 +29,7 @@ const MUTANTS = [
   // --- FAILING TOWARDS "SAFE": the hazard stops being seen.
   ['a foreign-tenanted checkout is never counted', 'brief-tenancy/decision.mjs', 'if (!FOREIGN.has(tenancy.state)) continue;', 'continue;'],
   ['a LINKED checkout (node_modules itself a junction) is not foreign', 'brief-tenancy/decision.mjs', 'const FOREIGN = new Set([TENANCY.FARM, TENANCY.LINKED]);', 'const FOREIGN = new Set([TENANCY.FARM]);'],
-  ['any TENANCY line with a colon counts, whatever checkout it names', 'brief-tenancy/tenancy-declaration.mjs', 'if (said.includes(wanted) || said.includes(name)) return \'present\';', "return 'present';"],
+  ['any TENANCY line with a colon counts, whatever checkout it names', 'brief-tenancy/tenancy-declaration.mjs', 'if (declares(rest.slice(colon + 1), name)) return \'present\';', "return 'present';"],
   ['a marker buried in a sentence counts as a declaration', 'brief-tenancy/tenancy-declaration.mjs', 'if (!line.startsWith(TENANCY_WORD)) continue;', 'if (!line.includes(TENANCY_WORD)) continue;'],
   ['the prefix-word test is dropped, so TENANCYWISE: declares', 'brief-tenancy/tenancy-declaration.mjs', 'if (rest.length > 0 && LETTERS.includes(rest.charAt(0))) continue;', ''],
   ['whole lines are no longer offered, only suffixes', 'brief-tenancy/mentioned-mutations.mjs', '    candidates.add(line);\n', '\n'],

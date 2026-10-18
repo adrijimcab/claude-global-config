@@ -61,6 +61,8 @@ export const VENDORED = Object.freeze([
   'toolchain-guard/tree-tenancy.mjs',
   'toolchain-guard/package-manager-mutations.mjs',
   'brief-tenancy/tenancy-declaration.mjs',
+  'brief-tenancy/tenancy-declaration.selftest.mjs',
+  'brief-tenancy/tenancy-declaration.mutants.mjs',
   'diff-coverage/lib/diff-parse.mjs',
   'diff-coverage/lib/lcov-parse.mjs',
   'diff-coverage/lib/grade.mjs',

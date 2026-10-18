@@ -32,6 +32,10 @@ const MUTANTS = [
   ['an empty campaign reports 0/0 killed and exits clean', RUNNER, "if (mutants.length === 0) throw new NotMeasured(", "if (false) throw new NotMeasured("],
   ['overlapping occurrences are not counted, so "aa" in "aaa" reads as exactly once', RUNNER, 'text.indexOf(needle, at + 1)', 'text.indexOf(needle, at + needle.length)'],
 
+  // ── the fleet a mutant's selftest imports shared modules from ───────────────────────────────────────
+  ['a mutant selftest gets no fleet, so every selftest that imports a shared module is NOT MEASURED', RUNNER, "SELFTEST_FLEET: process.env.SELFTEST_FLEET ?? path.join(homedir(), '.claude') }", "SELFTEST_FLEET: undefined }"],
+  ['a fleet the caller named is overwritten by the home one', RUNNER, 'process.env.SELFTEST_FLEET ?? path.join', 'path.join(homedir(), \'.claude\') ?? path.join'],
+
   // ── what is copied: derived from the import closure, plus the explicit paths ────────────────────────
   ['nothing is derived, so the selftest runs without what it imports', RUNNER, 'entries: [selftest, ...mutated] });', 'entries: [] });'],
   ['a mutated file is not walked, so a file only the campaign names is refused', RUNNER, 'entries: [selftest, ...mutated] });', 'entries: [selftest] });'],
