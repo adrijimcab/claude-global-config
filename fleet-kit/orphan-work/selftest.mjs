@@ -132,7 +132,7 @@ try {
 
     if (specific === undefined) return 'allow';
 
-    return specific.permissionDecision === 'deny' ? 'deny' : specific.additionalContext.includes('agent-committed') ? 'note' : 'note-without-the-worktree';
+    return specific.permissionDecision === 'deny' ? 'deny' : (specific.additionalContext ?? '').includes('agent-committed') ? 'note' : 'note-without-the-worktree';
   };
 
   check('Explore (built-in, no file) passes with the parked-work note', await launch('Explore'), 'note');
@@ -153,7 +153,7 @@ try {
   check('the install\'s read-only judge (jd-judge-a) passes with the note', await launch('jd-judge-a'), 'note');
   check('the install\'s writing fixer (jd-fix-agent) is refused', await launch('jd-fix-agent'), 'deny');
   check('the install\'s `tools: []` reviewer (review-risk) is refused', await launch('review-risk'), 'deny');
-  check('the note says it is information only', (await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { subagent_type: 'Explore' } })))?.hookSpecificOutput.additionalContext.includes('information only'), true);
+  check('the note says it is information only', (await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { subagent_type: 'Explore' } })))?.hookSpecificOutput.additionalContext?.includes('information only'), true);
 
   defineRole('claude-code-guide', 'tools: Read, Write');
   check('a role file overrides the built-in of the same name: a writing definition is refused', await launch('claude-code-guide'), 'deny');
