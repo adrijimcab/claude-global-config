@@ -241,6 +241,20 @@ const REVIEW_STOP_HOOK = {
 };
 const REVIEW_STOP_HOOK_EVENTS = ['SessionStart', 'Stop'];
 
+// The precedence between the brevity rules and the voice, inserted right below the last brevity rule in the two files
+// gentle-ai renders them in: the output style and the persona region of CLAUDE.md. Upstream says "be brief" and never
+// that brevity is about LENGTH only, so a short reply drifted into plain status prose. Owner mandate 2026-10-18; the
+// same precedence is written in rules/00-owner-mandates.md. @es La precedencia entre las reglas de brevedad y la voz,
+// insertada justo bajo la última regla de brevedad en los dos ficheros donde gentle-ai las genera: el output style y la
+// región persona de CLAUDE.md. Upstream dice «sé breve» y nunca que la brevedad es solo de LARGO, así que una respuesta
+// corta derivaba en prosa de estado plana. Mandato del dueño 2026-10-18; la misma precedencia está en
+// rules/00-owner-mandates.md.
+const VOICE_PRECEDENCE_LINE = '- Brevity governs length, never the voice: a short reply is still the Gentleman mentor, warm Rioplatense voseo that speaks to the person, with the why and a closing that lands.';
+const VOICE_PRECEDENCE_PLACES = [
+  { name: 'output-style', file: '.claude/output-styles/gentleman.md', after: '- If unsure whether to be brief or detailed, be brief.' },
+  { name: 'claude-md-persona', file: '.claude/CLAUDE.md', after: '- If unsure about length or detail, choose the shorter response.' },
+];
+
 export const CUSTOMIZATIONS = [
   {
     id: 'claude-md-owner-sections-outside-managed-regions',
@@ -277,7 +291,15 @@ export const CUSTOMIZATIONS = [
     kind: 'persona-region-matches-upstream',
     file: '.claude/CLAUDE.md',
     region: 'persona',
+    ownedLines: [VOICE_PRECEDENCE_LINE],
   },
+  ...VOICE_PRECEDENCE_PLACES.map((place) => ({
+    id: `brevity-never-governs-the-voice-in-${place.name}`,
+    kind: 'anchored-line-insertion',
+    file: place.file,
+    after: place.after,
+    line: VOICE_PRECEDENCE_LINE,
+  })),
   ...LAZY_SECTIONS.map((section) => ({ id: `lazy-${section.name}`, kind: 'lazy-section', file: '.claude/CLAUDE.md', ...section })),
   ...REVIEW_STOP_HOOK_EVENTS.map((event) => ({
     id: `review-stop-hook-runs-only-in-a-linked-worktree-on-${event}`,

@@ -6,6 +6,7 @@
 import { agentToolForbidden, agentToolRequired } from './kinds/agent-tool.mjs';
 import { lazySection } from './kinds/lazy-section.mjs';
 import { hookCommandReplacement } from './kinds/hook-command-replacement.mjs';
+import { anchoredLineInsertion } from './kinds/line-insertion.mjs';
 import { anchoredLineReplacement } from './kinds/line-replacement.mjs';
 import { ownerSectionsOutsideManagedRegions } from './kinds/owner-sections.mjs';
 import { personaRegionMatchesUpstream } from './kinds/persona-region.mjs';
@@ -20,6 +21,7 @@ export const KINDS = {
   'telemetry-disabled': telemetryDisabled,
   'lazy-section': lazySection,
   'anchored-line-replacement': anchoredLineReplacement,
+  'anchored-line-insertion': anchoredLineInsertion,
   'hook-command-replacement': hookCommandReplacement,
   'pruned-text-stays-pruned': prunedTextStaysPruned,
 };

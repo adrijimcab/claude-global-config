@@ -21,6 +21,7 @@ import { inspectSection, reconcileSection } from './lazy-section.mjs';
 import { registerLazySectionCases } from './lazy-section-cases.mjs';
 import { fullOrchestratorMd, lazyEntries } from './lazy-section-fixtures.mjs';
 import { driftAdvisory } from './report.mjs';
+import { holdEveryInsertion, registerLineInsertionCases } from './line-insertion-cases.mjs';
 import { registerLineReplacementCases } from './line-replacement-cases.mjs';
 import { registerPrunedTextCases } from './pruned-text-cases.mjs';
 import { registerReapplyCases } from './reapply-cases.mjs';
@@ -28,7 +29,7 @@ import { registerSyncWrapperCases } from './sync-wrapper-cases.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '2.99.0';
-const PERSONA = ['## Rules', '', '- A persona rule — con acentos: ñandú, 日本.', '', '## Persona Voice', '', 'Voice text.'].join('\n');
+const PERSONA = ['## Rules', '', '- A persona rule — con acentos: ñandú, 日本.', '- If unsure about length or detail, choose the shorter response.', '','## Persona Voice', '', 'Voice text.'].join('\n');
 const MCP = 'mcp__engram__mem_search, mcp__engram__mem_save';
 
 // ---------------------------------------------------------------- fixture construction
@@ -245,6 +246,11 @@ test('forbidden: tools line without Bash -> held; with Bash -> broken and not re
 
 registerLineReplacementCases({ test, expect, newRoot, put, read });
 
+// ---------------------------------------------------------------- anchored line insertion
+// @es Inserción de una línea tras un ancla: los casos viven en line-insertion-cases.mjs.
+
+registerLineInsertionCases({ test, expect, newRoot, put, read });
+
 // ---------------------------------------------------------------- hook command replacement
 // @es Reemplazo de un comando de hook: los casos viven en hook-command-cases.mjs.
 
@@ -433,6 +439,7 @@ function completeHome({ telemetryEnabled = false } = {}) {
     const owner = entry.anchors.map((anchor) => `${anchor} text\n`).join('\n');
     put(context.home, entry.file, entry.file === '.claude/CLAUDE.md' ? claudeMd({ owner, eol: '\r\n' }) : owner);
   }
+  holdEveryInsertion({ home: context.home, put, read });
   put(context.home, '.claude/settings.json', settingsHoldingTheReplacements());
   return context;
 }
@@ -499,12 +506,12 @@ test('apply.mjs --dry-run: every loaded span would move, nothing is written, exi
   expect(read(context.home, '.claude/CLAUDE.md'), moved, 'CLAUDE.md after apply');
 });
 
-test('check.mjs --json: the lazy sections and the hook command replacements report syncSafe, every other kind does not', () => {
+test('check.mjs --json: the lazy sections, the line insertions and the hook command replacements report syncSafe, every other kind does not', () => {
   const report = JSON.parse(run('check.mjs', [...flags(completeHome()), '--json']).stdout);
   const safe = report.results.filter((entry) => entry.syncSafe === true).map((entry) => entry.id);
   expect(
     safe.join(','),
-    'lazy-blocking-prompts,lazy-review-contract,lazy-orchestrator-mental-model,lazy-delegation-and-verification,lazy-routing-and-hand-off,lazy-skill-registry-protocol,lazy-odd-reference,lazy-rdd-user-owned,lazy-remote-authorization,review-stop-hook-runs-only-in-a-linked-worktree-on-SessionStart,review-stop-hook-runs-only-in-a-linked-worktree-on-Stop',
+    'brevity-never-governs-the-voice-in-output-style,brevity-never-governs-the-voice-in-claude-md-persona,lazy-blocking-prompts,lazy-review-contract,lazy-orchestrator-mental-model,lazy-delegation-and-verification,lazy-routing-and-hand-off,lazy-skill-registry-protocol,lazy-odd-reference,lazy-rdd-user-owned,lazy-remote-authorization,review-stop-hook-runs-only-in-a-linked-worktree-on-SessionStart,review-stop-hook-runs-only-in-a-linked-worktree-on-Stop',
     'sync-safe ids',
   );
 });

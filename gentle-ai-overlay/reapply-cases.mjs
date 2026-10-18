@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CUSTOMIZATIONS } from './customizations.mjs';
 import { applyAll, evaluateAll } from './invariants.mjs';
+import { holdEveryInsertion } from './line-insertion-cases.mjs';
 import { fullOrchestratorMd, lazyEntries, lazyEntryNamed, orchestratorMd } from './lazy-section-fixtures.mjs';
 import { inspectSection, reconcileSection } from './lazy-section.mjs';
 import { settingsHoldingTheReplacements } from './hook-command-cases.mjs';
@@ -71,6 +72,7 @@ export function registerReapplyCases({ test, expect, newRoot, put, read, install
   function loadedHome(cliState = { reviewGlobal: '' }, text = fullOrchestratorMd({ eol: '\r\n' })) {
     const context = installFakeCli(newRoot(), { enabled: false, ...cliState });
     put(context.home, review.file, text);
+    holdEveryInsertion({ home: context.home, put, read });
     put(context.home, '.claude/settings.json', settingsHoldingTheReplacements());
     return context;
   }
