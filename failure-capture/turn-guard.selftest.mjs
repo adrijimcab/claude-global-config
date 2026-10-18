@@ -12,13 +12,14 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { CLAUDE_HOME_VARIABLE, STATE_ROOT_VARIABLE, isolateState } from '../hook-state/locations.mjs';
 import { provisionLoop } from './fixture-loop.mjs';
+import { cooldownFile, stampFile, writeJson } from './session-state.mjs';
 
 isolateState('turn-guard');
 
@@ -34,7 +35,7 @@ const check = (name, condition, detail = '') => {
 /** Una copia nueva de la guardia, en su propio home de Claude, con su propio `state/`. */
 function world(name) {
   const dir = path.join(scratch, name, 'failure-capture');
-  provisionLoop(dir, (file) => ['turn-guard.mjs', 'markers.mjs', 'project.mjs'].includes(file));
+  provisionLoop(dir, (file) => ['turn-guard.mjs', 'markers.mjs', 'project.mjs', 'session-state.mjs'].includes(file));
   return dir;
 }
 
@@ -88,16 +89,13 @@ try {
   await both('«corrección mía» bloquea', payload('Corrección mía: le había dicho al agente que sus ficheros estaban en el checkout principal.'), true);
   await both('stop_hook_active', payload(MARKED, { stop_hook_active: true }), false);
   await both('dentro del cooldown', payload(MARKED), false, (dir) => {
-    mkdirSync(path.join(dir, 'state'), { recursive: true });
-    writeFileSync(path.join(dir, 'state', 'guard-state.json'), JSON.stringify({ 'sesion-a|orchestrator': { blockedAt: Date.now(), seenAt: Date.now() } }));
+    writeJson(cooldownFile(path.join(dir, 'state'), 'sesion-a|orchestrator'), { blockedAt: Date.now(), seenAt: Date.now() });
   });
   await both('captura ya sellada para la sesión', payload(MARKED), false, (dir) => {
-    mkdirSync(path.join(dir, 'state'), { recursive: true });
-    writeFileSync(path.join(dir, 'state', 'last-capture.json'), JSON.stringify({ session: 'sesion-a', kind: 'capture', at: Date.now() }));
+    writeJson(stampFile(path.join(dir, 'state'), 'sesion-a'), { session: 'sesion-a', kind: 'capture', at: Date.now() });
   });
   await both('sellada para OTRA sesión no cuenta', payload(MARKED), true, (dir) => {
-    mkdirSync(path.join(dir, 'state'), { recursive: true });
-    writeFileSync(path.join(dir, 'state', 'last-capture.json'), JSON.stringify({ session: 'otra', kind: 'capture', at: Date.now() }));
+    writeJson(stampFile(path.join(dir, 'state'), 'otra'), { session: 'otra', kind: 'capture', at: Date.now() });
   });
 
   const garbage = world('ilegible');

@@ -145,6 +145,7 @@ try {
   check('*.json does not match a .jsonl file', classify('engram-persistence', 'notes.jsonl').kind, UNKNOWN);
   check('*.json does not match a file named only .json', classify('engram-persistence', '.json').kind, UNKNOWN);
   check('a lock is a lock', classify('failure-capture', 'ledger.lock').kind, LOCK);
+  check('the file of a writer breaking a stale lock is a lock too, and the per-session files are kept', [classify('failure-capture', 'ledger.lock.breaker').kind, classify('failure-capture', 'stamps/sesion-a.json').kind, classify('failure-capture', 'guard-state/sesion-a.json').kind], [LOCK, KEEP, KEEP]);
   check('the hook journal of any mechanism is a journal', [classify('guard-anything', 'journal.jsonl').kind, classify('collision-guard', 'journal.jsonl').kind], [JOURNAL, JOURNAL]);
   check('the fires counter of any mechanism is archived', classify('guard-anything', 'fires.json').kind, ARCHIVE);
   check('a mechanism-specific rule wins over a general one', [classify('fleet-kit', 'handback/refusals.jsonl').kind, classify('fleet-kit', 'landing-guard/refusals.jsonl').kind], [KEEP, ARCHIVE]);
