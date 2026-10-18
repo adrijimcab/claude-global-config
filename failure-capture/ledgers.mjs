@@ -17,12 +17,12 @@
  * clave es ÚNICA entre los ledgers visibles: una recurrencia se suma donde ya está.
  */
 
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
 import { PROMOTED_SCOPE, STUBS_HEADER, areaLedgerFile, areaLedgerHeader, areaScopes, stubsLedgerFile } from './ledger-routes.mjs';
-import { GLOBAL_SCOPE } from './project.mjs';
+import { GLOBAL_SCOPE, projectAreaFile } from './project.mjs';
 
 /** The header of a new ledger; it says what loads it, so nobody injects it per prompt again. @es El encabezado de un ledger nuevo. */
 export const HEADER = (scope, loader) =>
@@ -54,10 +54,21 @@ export const homeLedgerFiles = (home = homedir()) => ({
 export function ledgerFiles({ project, home = homedir() }) {
   const files = homeLedgerFiles(home);
 
-  if (project !== undefined) files[project.scope] = { file: project.ledgerFile, header: HEADER(project.scope, PROJECT_LOADER) };
+  if (project !== undefined) {
+    files[project.scope] = { file: project.ledgerFile, header: HEADER(project.scope, PROJECT_LOADER) };
+    Object.assign(files, projectAreaLedgerFiles(project));
+  }
 
   return files;
 }
+
+/**
+ * The path-scoped ledger of each area a project declares (`project-areas.mjs`), keyed by area name.
+ * @param project `{ root, areas }` from `project.mjs`.
+ * @es El ledger con alcance de ruta de cada área que declara un proyecto, por nombre de área.
+ */
+export const projectAreaLedgerFiles = ({ root, areas = {} }) =>
+  Object.fromEntries(Object.entries(areas).map(([area, definition]) => [area, { file: projectAreaFile(root, area), header: areaLedgerHeader(area, definition) }]));
 
 /** The lines of each ledger that exists, in a stable order (global first). @es Las líneas de cada ledger existente. */
 export function readLedgers(files) {
@@ -105,6 +116,10 @@ export function writeLedger(ledger) {
   while (lines.length > 1 && lines[lines.length - 1] === '' && lines[lines.length - 2] === '') lines.pop();
 
   const temp = `${ledger.file}.${String(process.pid)}.tmp`;
+
+  // A project's area ledger sits in `.claude/rules/`, which the project may not have yet.
+  // @es El ledger de un área de proyecto está en `.claude/rules/`, que el proyecto puede no tener aún.
+  mkdirSync(path.dirname(ledger.file), { recursive: true });
 
   try {
     writeFileSync(temp, lines.join('\n'), 'utf8');

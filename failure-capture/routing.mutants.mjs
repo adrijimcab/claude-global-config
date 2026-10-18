@@ -51,8 +51,8 @@ const AREA_MUTANTS = [
   // --- areas
   ['no scope is accepted but global and the project\'s', 'failure-capture/loop-context.mjs', '...areaScopes(), ', ''],
   ['the home ledgers leave out the areas', LEDGERS, '...Object.fromEntries(areaScopes().map(', '...Object.fromEntries([].map('],
-  ['an area ledger is written with no frontmatter', ROUTES, '`${frontmatterOf(area)}\\n# Lessons Ledger — ${area} (path-scoped)', '`# Lessons Ledger — ${area} (path-scoped)'],
-  ['the frontmatter names no paths', ROUTES, "['---', 'paths:', ...AREAS[area].paths.map((glob) => `  - \"${glob}\"`), '---']", "['---', 'paths:', '---']"],
+  ['an area ledger is written with no frontmatter', ROUTES, '`${frontmatterOf(definition.paths)}\\n# Lessons Ledger — ${area} (path-scoped)', '`# Lessons Ledger — ${area} (path-scoped)'],
+  ['the frontmatter names no paths', ROUTES, "['---', 'paths:', ...paths.map((glob) => `  - \"${glob}\"`), '---']", "['---', 'paths:', '---']"],
   ['the evidence of an area lesson goes under rules/, where the harness loads it', 'failure-capture/evidence.mjs', "return path.basename(directory) === 'rules' ? path.dirname(directory) : directory;", 'return directory;'],
   ['an area lesson is promoted into a project contract', ROUTES, 'scope === PROMOTED_SCOPE || isAreaScope(scope);', 'scope === PROMOTED_SCOPE;'],
   ['a project may take the name of an area', 'failure-capture/loop-context.mjs', 'if (project !== undefined && isReservedScope(project.scope))', 'if (false)'],
@@ -109,15 +109,16 @@ const PURE_MUTANTS = [
 
   // --- a lesson to an area
   ['a lesson is moved without being retagged', PLAN, '`${ENTRY_PREFIX}${area}] ${found.line.slice(prefix.length)}`', 'found.line'],
-  ['a lesson of another scope is moved to an area', PLAN, 'found.ledger.scope !== GLOBAL_SCOPE || !found.line.startsWith(prefix)', '!found.line.startsWith(prefix)'],
-  ['a stub is moved as if it were a lesson line', PLAN, 'found.ledger.scope !== GLOBAL_SCOPE || !found.line.startsWith(prefix)', 'false'],
-  ['an unknown area is accepted', PLAN, 'if (!isAreaScope(area))', 'if (false)'],
+  ['a lesson of another scope is moved to an area', PLAN, 'found.ledger.scope !== sourceScope || !found.line.startsWith(prefix)', '!found.line.startsWith(prefix)'],
+  ['a stub is moved as if it were a lesson line', PLAN, 'found.ledger.scope !== sourceScope || !found.line.startsWith(prefix)', 'false'],
+  ['an unknown area is accepted', PLAN, 'if (!isAreaScope(area) && !ofProject)', 'if (false)'],
   ['a key the destination already holds is moved again', PLAN, "if ((destination ?? []).some((line) => isEntry(line) && keyOfLine(line) === key))", 'if (false)'],
   ['a lesson already in the area is moved again', PLAN, 'if (found.ledger.scope === area) return', 'if (false) return'],
   ['a line with no marker is never found', PLAN, 'return split?.ok ? evidenceKeyOf(split.rule) : undefined;', 'return undefined;'],
   ['the first line of any key is found', PLAN, 'isEntry(line) && keyOfLine(line) === key);\n\n    if (index !== -1) return { ledger', 'isEntry(line));\n\n    if (index !== -1) return { ledger'],
   ['the proof forgets which lines were renamed', PLAN, 'entries(before).map((line) => renamed.get(line) ?? line)', 'entries(before)'],
-  ['the commit forgets which lines were renamed', PLAN, 'renamed: plan.renamed', 'renamed: undefined'],
+  ['the commit forgets which lines were renamed', PLAN, 'after: io.readBack(), renamed: plan.renamed', 'after: io.readBack(), renamed: undefined'],
+  ['the proof before the write forgets which lines were renamed', PLAN, 'after: { source: plan.source, destination: plan.destination }, renamed: plan.renamed', 'after: { source: plan.source, destination: plan.destination }, renamed: undefined'],
 
   // --- the proof
   ['the proof does not notice a lost line', PLAN, '...lost.map((line) =>', '...[].map((line) =>'],

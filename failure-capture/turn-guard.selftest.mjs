@@ -35,7 +35,7 @@ const check = (name, condition, detail = '') => {
 /** Una copia nueva de la guardia, en su propio home de Claude, con su propio `state/`. */
 function world(name) {
   const dir = path.join(scratch, name, 'failure-capture');
-  provisionLoop(dir, (file) => ['turn-guard.mjs', 'markers.mjs', 'project.mjs', 'session-state.mjs'].includes(file));
+  provisionLoop(dir, (file) => ['turn-guard.mjs', 'markers.mjs', 'project.mjs', 'project-areas.mjs', 'ledger-line.mjs', 'session-state.mjs'].includes(file));
   return dir;
 }
 

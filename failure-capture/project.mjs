@@ -14,8 +14,12 @@
  * because `.claude/` is excluded from git and exists only there. No project found means global-only.
  *
  * PER-PROJECT CONFIG, optional: `<project>/.claude/failure-capture.json`
- *   { "scope": "<label>", "workerContracts": ["<relative>", …], "loadedSetCeiling": <characters> }
+ *   { "scope": "<label>", "workerContracts": ["<relative>", …], "loadedSetCeiling": <characters>,
+ *     "areas": { "<name>": { "about": "<text>", "paths": ["<glob>", …] } } }
  * `loadedSetCeiling` is a stricter ceiling on the loaded instruction set for this project (@es un techo más estricto para este proyecto).
+ * `areas` are the project's own path-scoped lesson areas (`project-areas.mjs`); `capture.mjs route --key K --to <area>`
+ * moves a lesson of the project ledger into `.claude/rules/lessons-<area>.md` of the SAME project
+ * (@es las áreas de lecciones con alcance de ruta propias del proyecto; `route` mueve ahí una lección del ledger del MISMO proyecto).
  * Without it: the scope is the project folder's name, the worker contract is `.claude/CLAUDE.md` (the file
  * every subagent of the project loads). Contract parity is not configured here: a project declares it in
  * `.claude/agent-contract/anchors.json`, read by the shared engine (`../agent-contract-parity/`).
@@ -34,13 +38,21 @@ import path from 'node:path';
 
 import { realpathOf, sameFolder } from '../agent-contract-parity/real-path.mjs';
 import { userHomes } from '../agent-contract-parity/user-home.mjs';
+import { areaProblems } from './project-areas.mjs';
 
 export const PROJECT_MARKER = path.join('.claude', 'CLAUDE.md');
 export const CONFIG_FILE = path.join('.claude', 'failure-capture.json');
 export const LEDGER_FILE = path.join('.claude', 'lessons-ledger.md');
 export const GLOBAL_SCOPE = 'global';
 
-const CONFIG_KEYS = ['scope', 'workerContracts', 'loadedSetCeiling'];
+const CONFIG_KEYS = ['scope', 'workerContracts', 'loadedSetCeiling', 'areas'];
+
+/**
+ * The path-scoped ledger of a project's area: `<project>/.claude/rules/lessons-<area>.md`, the place Claude Code
+ * loads only when a file matching the area's globs is read.
+ * @es El ledger con alcance de ruta de un área de proyecto, que Claude Code carga solo al leer un fichero que coincide con los globs del área.
+ */
+export const projectAreaFile = (root, area) => path.join(root, '.claude', 'rules', `lessons-${area}.md`);
 
 function git(directory, ...args) {
   const answer = spawnSync('git', ['-C', directory, ...args], { encoding: 'utf8', windowsHide: true });
@@ -96,12 +108,26 @@ export function readProjectConfig(root) {
     ...unknown.map((key) => `unknown key "${key}"`),
     ...(config.scope === undefined || (typeof config.scope === 'string' && config.scope.length > 0 && config.scope !== GLOBAL_SCOPE) ? [] : ['"scope" must be a non-empty string other than "global"']),
     ...(config.workerContracts === undefined || (Array.isArray(config.workerContracts) && config.workerContracts.length > 0 && config.workerContracts.every((entry) => typeof entry === 'string')) ? [] : ['"workerContracts" must be a non-empty list of relative paths']),
-    ...(config.loadedSetCeiling === undefined || (Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0) ? [] : ['"loadedSetCeiling" must be a positive integer (characters). @es "loadedSetCeiling" debe ser un entero positivo (caracteres)'])
+    ...(config.loadedSetCeiling === undefined || (Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0) ? [] : ['"loadedSetCeiling" must be a positive integer (characters). @es "loadedSetCeiling" debe ser un entero positivo (caracteres)']),
+    ...areaProblems(config.areas)
   ];
 
   if (problems.length > 0) throw new Error(`${file} is invalid: ${problems.join('; ')}`);
 
   return config;
+}
+
+/**
+ * The areas declared by the project whose ledger is `ledgerFile` (`<root>/.claude/lessons-ledger.md`), read from
+ * its config; `undefined` when that config is invalid, so the caller leaves the work for the project itself.
+ * @es Las áreas que declara el proyecto cuyo ledger es `ledgerFile`, leídas de su config; `undefined` si esa config es inválida, para que quien llama deje el trabajo al proyecto mismo.
+ */
+export function areasOfLedger(ledgerFile) {
+  try {
+    return readProjectConfig(path.dirname(path.dirname(ledgerFile))).areas ?? {};
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -122,6 +148,7 @@ export function projectOf(directory, { homes } = {}) {
     scope: config.scope ?? path.basename(root),
     ledgerFile: path.join(root, LEDGER_FILE),
     workerContracts: (config.workerContracts ?? ['.claude/CLAUDE.md']).map((relative) => path.join(root, ...relative.split('/'))),
-    loadedSetCeiling: config.loadedSetCeiling
+    loadedSetCeiling: config.loadedSetCeiling,
+    areas: config.areas ?? {}
   };
 }
