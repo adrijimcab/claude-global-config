@@ -36,9 +36,9 @@ const MUTANTS = [
   ['a payload with no session id stops counting a main claim as this session\'s', 'path-ownership.mjs', "typeof sessionId !== 'string' || ", ''],
   ['a subagent claim counts as the session\'s own, so a parent session commits its worker\'s working state', 'path-ownership.mjs', '!claim.subagent && ofThisSession(claim)', 'ofThisSession(claim)'],
   ['a path nobody claims counts as someone else\'s, so it is never surfaced', 'path-ownership.mjs', "claims.length === 0 ? 'unexplained' : 'theirs'", "'theirs'"],
-  ['written paths stop counting as claims, so a path an actor wrote is never attributed', 'path-ownership.mjs', 'writers.length > 0 ? writers : runners', 'runners'],
-  ['shell windows stop counting as claims, so a shell write is never attributed', 'path-ownership.mjs', 'writers.length > 0 ? writers : runners', 'writers'],
-  ['windows outrank writes again, so a session that merely ran a command during a worker\'s write is blamed for it', 'path-ownership.mjs', 'writers.length > 0 ? writers : runners', '[...writers, ...runners]'],
+  ['written paths stop counting as claims, so a path an actor wrote is never attributed', 'path-ownership.mjs', 'const writers = writersOf(dirtyPath, liveAgents);', 'const writers = [];'],
+  ['shell windows stop counting as claims, so a shell write is never attributed', 'path-ownership.mjs', ': runners.map(claimOf);', ': [];'],
+  ['windows outrank writes again, so a session that merely ran a command during a worker\'s write is blamed for it', 'path-ownership.mjs', 'if (writers.length > 0) return writers.map(claimOf);', ''],
   ['the writer\'s kind is lost, so a worker\'s write reads as its parent session\'s own', 'attribution.mjs', 'subagent: agent.subagent, live: agent.live }', 'live: agent.live }'],
   ['a writer\'s liveness is lost, so a live worker\'s write reads as a finished worker\'s', 'attribution.mjs', 'subagent: agent.subagent, live: agent.live }', 'subagent: agent.subagent }'],
   ['a live transcript\'s shell windows are not read, so no shell write is ever attributed', 'attribution.mjs', 'windows: shellCallsIn(text, live ? now : now - age) }', 'windows: [] }'],
@@ -156,8 +156,8 @@ const MUTANTS = [
   ['a call whose result is an error is not told from one that succeeded', 'shell-windows.mjs', 'failed: block.is_error === true', 'failed: false'],
   ['every call with a result is failed', 'shell-windows.mjs', 'failed: block.is_error === true', 'failed: true'],
   ['the window list leaks the call fields', 'shell-windows.mjs', '.map(({ start, end }) => ({ start, end }))', '.map((call) => call)'],
-  ['a call loses its command', 'shell-windows.mjs', "command: String(block.input?.command ?? '') }", "command: '' }"],
-  ['an interrupted or running call is read as failed', 'shell-windows.mjs', 'command, failed: false, end:', 'command, failed: true, end:']
+  ['a call loses its command', 'shell-windows.mjs', "command: String(block.input?.command ?? ''), cwd:", "command: '', cwd:"],
+  ['an interrupted or running call is read as failed', 'shell-windows.mjs', 'command, cwd, failed: false, end:', 'command, cwd, failed: true, end:']
 ];
 
 const survivors = runMutants({

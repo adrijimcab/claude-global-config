@@ -89,9 +89,9 @@ function writeAgent(session, id, transcript) {
 
 writeAgent(OTHER_SESSION, 'agent-worker', toolCall('Write', { file_path: 'C:\\wt\\config\\foo\\a.mjs' }));
 
-/** A session's own main transcript holding one shell call from `start` to `end` (epoch ms), as the harness records it. @es El transcript principal de una sesión con un shell de `start` a `end`. */
+/** A session's own main transcript holding one shell call from `start` to `end` (epoch ms), as the harness records it, run from inside the fixture repository (the record's `cwd`: a window claims a path only when its call could have written that repository). @es El transcript principal de una sesión con un shell de `start` a `end`, corrido desde dentro del repo de prueba (el `cwd` del registro: una ventana reclama una ruta solo si su llamada pudo escribir ese repo). */
 function writeMain(session, start, end) {
-  const record = (at, content) => `${JSON.stringify({ timestamp: new Date(at).toISOString(), type: 'assistant', message: { content: [content] } })}\n`;
+  const record = (at, content) => `${JSON.stringify({ timestamp: new Date(at).toISOString(), cwd: worktree, type: 'assistant', message: { content: [content] } })}\n`;
   const lines = record(start, { type: 'tool_use', id: `call-${session}`, name: 'Bash', input: { command: 'node scripts/build.mjs' } }) + record(end, { type: 'tool_result', tool_use_id: `call-${session}` });
 
   writeFileSync(path.join(projects, 'some-project', `${session}.jsonl`), lines, 'utf8');

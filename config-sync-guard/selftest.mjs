@@ -331,6 +331,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   check('a window whose cwd is inside the repo claims and stays maker -> block', kindOf(agents({ m: running('s-1', false, 'node run.mjs', path.join(HERE, 'sub')) })), 'block');
   check('a window whose cwd IS the repo root claims -> block', kindOf(agents({ m: running('s-1', false, 'node run.mjs', HERE) })), 'block');
   check('a cwd that only shares the repo root as a name prefix is another directory: no claim', kindOf(agents({ m: running('s-1', false, 'node run.mjs', `${HERE}-other`) })), 'note');
+  check('a command that names a longer directory starting with the root does not claim', kindOf(agents({ m: running('s-1', false, `node ${HERE}-other/tool.mjs`, OUTSIDE) })), 'note');
   check('a command that names the repo root claims -> block', kindOf(agents({ m: running('s-1', false, `node ${path.join(HERE, 'tool.mjs')}`, OUTSIDE) })), 'block');
   check('the root is recognised with forward slashes -> block', kindOf(agents({ m: running('s-1', false, `node ${slashes(HERE)}/tool.mjs`, OUTSIDE) })), 'block');
   check('the root is recognised in another letter case -> block', kindOf(agents({ m: running('s-1', false, `node ${HERE.toUpperCase()}/tool.mjs`, OUTSIDE) })), 'block');
