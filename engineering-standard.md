@@ -7,15 +7,17 @@ in every session and every agent, ODD or not.
 1. **Tie-break order.** When options conflict: correctness and security, then the quality gates, then
    performance, then simplicity. Name the rejected alternative in one line. The senior-architect stance
    itself lives in `~/.claude/rules/00-owner-mandates.md`; it is not repeated here.
-2. **KISS and YAGNI, scaled to every consumer.** The simplest design that meets the requirement MEASURED today.
-   No speculative abstraction, option, parameter or layer for a need nobody has shown. For a library, a shared
-   kit or global tooling, the measured requirement is the CLASS of consumers, not the one project in front of
-   you (owner, 2026-10-18: «PARA TODO, el Discovery es lo mínimo pero hay que pensar en escalabilidad y en
-   TENER TODAS LAS POSIBILIDADES POSIBLES PARA PROYECTOS FUTUROS»): a need that a class of consumer has counts
-   as shown, an extension point nobody can name a use for is still rejected, and an extension point never
-   weakens a guarantee (no silent modes; the safe default stays).
+2. **KISS and YAGNI.** The simplest design that meets the requirement MEASURED today. No speculative
+   abstraction, option, parameter or layer for a need nobody has shown.
 3. **SOLID and clean code.** One responsibility per unit, named for what it owns; dependencies point
-   inward (the domain knows no framework); a reader sees what it does from its entry point alone.
+   inward (the domain knows no framework); a reader sees what it does from its entry point alone. SOLID is
+   how a library, a shared kit or global tooling serves future projects without breaking YAGNI (owner,
+   2026-10-18: «PARA TODO, el Discovery es lo mínimo pero hay que pensar en escalabilidad y en TENER TODAS
+   LAS POSIBILIDADES POSIBLES PARA PROYECTOS FUTUROS»; and «Los principios son SOLID, KISS Y YAGNI»): it is
+   open for extension and closed for modification, behind stable seams (ports, configuration, injected
+   dependencies) that a new project extends without editing the kit. The seams are designed in; the features
+   behind them are built only when a consumer needs them, and no seam weakens a guarantee (no silent modes;
+   the safe default stays).
 4. **Architecture fits the domain.** Hexagonal (ports and adapters) where the code talks to external
    systems: HTTP, storage, browser APIs, third-party SDKs. The tension is explicit: a 40-line hook script
    does not get layers it does not need, and there YAGNI wins. Layers are added when a second adapter or a
@@ -29,12 +31,14 @@ in every session and every agent, ODD or not.
 
 @es Estándar de ingeniería: reglas de decisión, no consignas. Rige toda decisión, toda respuesta al dueño y todo juicio de sus afirmaciones y premisas, en toda sesión y todo agente, con o sin ODD. (1) Desempate: corrección y seguridad, luego
 los quality gates, luego rendimiento, luego simplicidad; se nombra la alternativa descartada. (2) KISS y
-YAGNI a la escala de todos los consumidores: el diseño más simple que cumple el requisito MEDIDO hoy, sin
-abstracción especulativa; en una librería, un kit compartido o el tooling global, el requisito medido es la
-CLASE de consumidores y no el proyecto de turno (dueño, 2026-10-18): la necesidad de una clase de consumidor
-cuenta como mostrada, un punto de extensión sin un uso que se pueda nombrar se sigue rechazando, y ninguno
-debilita una garantía (sin modos silenciosos; se mantiene el valor por defecto seguro). (3) SOLID y
-código limpio: una responsabilidad por unidad, dependencias hacia adentro, legible desde su entrada. (4) La
+YAGNI: el diseño más simple que cumple el requisito MEDIDO hoy, sin abstracción especulativa. (3) SOLID y
+código limpio: una responsabilidad por unidad, dependencias hacia adentro, legible desde su entrada. SOLID es
+cómo una librería, un kit compartido o el tooling global sirve a proyectos futuros sin romper YAGNI (dueño,
+2026-10-18: «Los principios son SOLID, KISS Y YAGNI»): abierto a la extensión y cerrado a la modificación,
+detrás de costuras estables (puertos, configuración, dependencias inyectadas) que un proyecto nuevo extiende
+sin editar el kit; las costuras se diseñan, las funciones detrás se construyen cuando un consumidor las
+necesita, y ninguna costura debilita una garantía (sin modos silenciosos; se mantiene el valor por defecto
+seguro). (4) La
 arquitectura que encaja con el dominio: hexagonal donde se habla con sistemas externos; un script de 40
 líneas no recibe capas que no necesita (gana YAGNI). (5) Ruta: `tracked-odd` para todo cambio, por chico o
 asentado que sea; `direct` solo para el alcance trivial (una errata, un renombre, un comentario, un cambio
