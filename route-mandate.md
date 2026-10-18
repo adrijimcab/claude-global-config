@@ -14,8 +14,10 @@ risk or urgency alone. Points 2 and 3 bind on both.
    by the orchestrator and kept current after every task.
    Each task closes with a work-unit commit recorded in the document. Every step that measures
    a unit (the document, its commit, `gentle-ai review assess --cwd --base-ref`) runs in the unit's own
-   worktree with its own base, never the integration checkout. Use `judgment-day` for
-   adversarial review and the `review-*` lenses where the risk tier calls for them.
+   worktree with its own base, never the integration checkout. Every unit of medium or high risk gets an
+   outside view BEFORE it lands: the native `review-*` lenses when `gentle-ai review assess` marks it
+   `high_risk`, and a `judgment-day` (two blind judges on the frozen base..head) when it is medium, since
+   gentle-ai 4.2.0 reviews only high risk (its `CLAUDE.md` entry rule). Low and passive units need none.
    **Direct (inline or delegated) where the design is settled AND the work is one step.** A fix whose
    root cause has been measured and whose solution has one evident shape, or a contained change inside
    one module, goes direct: root cause first, then the change, then the gates. When a direct change turns out to need a
