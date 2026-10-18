@@ -20,7 +20,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -155,6 +155,35 @@ check('a name that occurs twice is matched on its bounded occurrence', killedOf(
 check('a trailing slash on the worktree still matches', killedOf({ worktree: `${WT}/` }, { rows: [row(700, 1, `sh watch.sh ${WT}`)] }), [700]);
 check('a child with a lower pid than its matched parent is not a second root', killedOf({ worktree: WT }, { rows: [row(810, 1, `bash ${WT}/a.sh`), row(805, 810, `bash ${WT}/b.sh`)], self: 1 }), [810]);
 
+// Every spelling of one worktree path on a command line (S2). The home is injected, so `~`, `$HOME`, `${HOME}` and
+// `%USERPROFILE%` expand to a known directory. @es Cada forma de escribir la ruta de un worktree en una línea de
+// comandos (S2). El home se inyecta, así que `~`, `$HOME`, `${HOME}` y `%USERPROFILE%` se expanden a un directorio conocido.
+const HOME = 'C:\\Users\\dev';
+const SPELLED = 'C:/Users/dev/.claude-wt/wt-s';
+const SPELLINGS = [
+  ['tilde', '~/.claude-wt/wt-s'],
+  ['tilde with a backslash', '~\\.claude-wt\\wt-s'],
+  ['$HOME', '$HOME/.claude-wt/wt-s'],
+  ['${HOME}', '${HOME}/.claude-wt/wt-s'],
+  ['%USERPROFILE%', '%USERPROFILE%\\.claude-wt\\wt-s'],
+  ['Git Bash drive path', '/c/Users/dev/.claude-wt/wt-s'],
+  ['backslashes', 'C:\\Users\\dev\\.claude-wt\\wt-s'],
+  ['another case', 'c:/USERS/Dev/.CLAUDE-wt/WT-S']
+];
+const spelledRun = (worktree, spelling, home = HOME) => killedOf({ worktree }, { rows: [row(910, 1, `sh -c until [ -f ${spelling}/reports/x.json ]; do sleep 15; done`)], self: 1, home, after: () => [] });
+for (const [name, spelling] of SPELLINGS) {
+  check(`the ${name} spelling on a command line matches the absolute worktree`, spelledRun(SPELLED, spelling), [910]);
+  check(`the ${name} spelling given as the worktree matches an absolute command line`, spelledRun(spelling, SPELLED), [910]);
+  check(`the ${name} spelling does not claim a sibling that only starts the same`, spelledRun(SPELLED, `${spelling}-2`), []);
+}
+check('a tilde inside quotes on a command line matches', killedOf({ worktree: SPELLED }, { rows: [row(911, 1, 'node -e "x" "~/.claude-wt/wt-s/a.mjs"')], self: 1, home: HOME, after: () => [] }), [911]);
+check('a sibling extended with letters is not matched through the tilde', spelledRun(SPELLED, '~/.claude-wt/wt-s2'), []);
+check('a sibling extended with a dot is not matched through $HOME', spelledRun(SPELLED, '$HOME/.claude-wt/wt-s.bak'), []);
+check('a tilde that is not a home spelling is not expanded', spelledRun(SPELLED, 'x~/.claude-wt/wt-s'), []);
+check('a tilde followed by a name is another home, not this one', spelledRun('C:/Users/devfoo', '~foo'), []);
+check('$HOME followed by name characters is another variable, not this home', spelledRun('C:/Users/devwork', '$HOMEwork'), []);
+check('the tilde expands to the injected home only', spelledRun(SPELLED, '~/.claude-wt/wt-s', 'C:/Users/other'), []);
+
 const afterNothingDies = () => world;
 const stubborn = reaperRun({ worktree: WT }, { after: afterNothingDies }).outcome;
 check('a process still alive after the kill is a survivor', stubborn.survivors.map((entry) => entry.pid).sort((a, b) => a - b), [100, 101, 102, 103]);
@@ -174,6 +203,7 @@ check('a main checkout is refused', mainRun.outcome.refused, 'not-a-linked-workt
 check('a refused main checkout kills nothing', mainRun.killed, []);
 const plain = sandbox.plainDir('plain-directory');
 check('a directory that is no git checkout at all is refused', reaperRun({ worktree: plain }, { rows: [row(601, 1, `node ${forward(plain)}/x.mjs`)] }).outcome.refused, 'not-a-linked-worktree');
+check('a tilde that reads as a main checkout is refused, not reaped as a missing path', reaperRun({ worktree: '~' }, { home: mainCheckout, rows: [row(603, 1, `node ${forward(mainCheckout)}/x.mjs`)] }).outcome.refused, 'not-a-linked-worktree');
 const gone = path.join(fixtureRoot, 'removed-worktree');
 check('a worktree already removed is reaped by name', killedOf({ worktree: gone }, { rows: [row(602, 1, `sh ${forward(gone)}/watch-branches.sh`)], after: () => [] }), [602]);
 check('a refused worktree refuses even when an id is also given', reaperRun({ worktree: mainCheckout, agentId: AGENT }).outcome.refused, 'not-a-linked-worktree');
@@ -189,6 +219,16 @@ const realList = () => listProcesses(privateEnv);
 const target = linkedWorktree('target');
 const siblingOther = linkedWorktree('other');
 const siblingPrefix = linkedWorktree('target-two');
+const tildeTarget = linkedWorktree('tilde-wt');
+const tildeSibling = linkedWorktree('tilde-wt-two');
+const shortTarget = linkedWorktree('short-wt');
+const shortReverse = linkedWorktree('short-reverse');
+// The same fixture seen through os.tmpdir(), which is an 8.3 short name on this machine (ADRIAN~1.JIM) while the
+// fixture root is its real path. @es La misma fixture vista por os.tmpdir(), que aquí es un nombre corto 8.3.
+const junctionTarget = linkedWorktree('junction-wt');
+const junction = path.join(fixtureRoot, 'via-junction');
+symlinkSync(junctionTarget, junction, 'junction');
+const asTmpdirSpells =(directory) => path.join(os.tmpdir(), path.relative(path.dirname(fixtureRoot), directory));
 const spawned = [];
 const launch = (command, args) => {
   const child = spawn(command, args, { stdio: 'ignore', windowsHide: true });
@@ -202,6 +242,13 @@ try {
   const holder = launch(process.execPath, ['-e', GRANDCHILD_PARENT, target]);
   const other = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', siblingOther]);
   const prefix = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', siblingPrefix]);
+
+  const tilde = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '~/tilde-wt/x.mjs']);
+  const tildeOther = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '~/tilde-wt-two/x.mjs']);
+  const shortNamed = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', asTmpdirSpells(shortTarget)]);
+  const shortGiven = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', shortReverse]);
+
+  const viaLink = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', junctionTarget]);
 
   await wait(2500);
   const before = realList();
@@ -233,6 +280,40 @@ try {
   check('the sibling with a different worktree survives', present(other.pid), true);
   check('the sibling whose worktree name only starts the same survives', present(prefix.pid), true);
   check('the real reap reported the loop and the node process', [loop.pid, holder.pid].every((pid) => real.killed.some((entry) => entry.pid === pid)), true);
+
+  // A real process whose command line names the worktree through `~` (S1/S2). @es Un proceso real cuya línea nombra el worktree con `~`.
+  let viaTilde = CRASHED;
+  try {
+    viaTilde = reapAgentProcesses({ worktree: tildeTarget }, { list: realList, home: fixtureRoot });
+  } catch {
+    /* stays CRASHED @es queda CRASHED */
+  }
+  await wait(1000);
+  const afterTilde = realList();
+  const alive = (pid) => afterTilde.some((entry) => entry.pid === pid);
+  check('the process that names the worktree through ~ is matched', viaTilde.matched.some((entry) => entry.pid === tilde.pid), true);
+  check('the process that names the worktree through ~ is dead', alive(tilde.pid), false);
+  check('the process that names a sibling through ~ survives', alive(tildeOther.pid), true);
+  check('the processes of the other worktrees survive the tilde reap', [other, prefix].every((child) => alive(child.pid)), true);
+
+  // 8.3 short names: the command line spells the worktree through os.tmpdir(), and in the reverse case the worktree
+  // is given that way. @es Nombres cortos 8.3: la línea de comandos nombra el worktree por os.tmpdir(), y al revés.
+  const viaShortLine = reapAgentProcesses({ worktree: shortTarget }, { list: realList });
+  const viaShortGiven = reapAgentProcesses({ worktree: asTmpdirSpells(shortReverse) }, { list: realList });
+  await wait(1000);
+  const afterShort = realList();
+  const aliveShort = (pid) => afterShort.some((entry) => entry.pid === pid);
+  check('a command line in 8.3 short spelling matches the real worktree path', viaShortLine.matched.some((entry) => entry.pid === shortNamed.pid), true);
+  check('a command line in 8.3 short spelling is dead', aliveShort(shortNamed.pid), false);
+  check('a worktree given in 8.3 short spelling matches a real-path command line', viaShortGiven.matched.some((entry) => entry.pid === shortGiven.pid), true);
+  check('a command line in the real spelling is dead for a short-spelled worktree', aliveShort(shortGiven.pid), false);
+  // A worktree given through a link is the same directory as the real path a command line names. @es Un worktree dado por un enlace es el mismo directorio que la ruta real que nombra la línea de comandos.
+  const viaJunction = reapAgentProcesses({ worktree: junction }, { list: realList });
+  await wait(1000);
+  const afterJunction = realList();
+  check('a worktree given through a junction matches a command line naming its real path', viaJunction.matched.some((entry) => entry.pid === viaLink.pid), true);
+  check('the process naming the real path of the junction is dead', afterJunction.some((entry) => entry.pid === viaLink.pid), false);
+  check('the short-name reaps left the sibling processes alone', [other, prefix, tildeOther].every((child) => aliveShort(child.pid)), true);
 } finally {
   for (const child of spawned) {
     try {
@@ -242,6 +323,7 @@ try {
     }
   }
   await wait(300);
+  rmSync(junction, { force: true }); // the link itself, never what it points at @es el enlace mismo, nunca lo que señala
   rmSync(fixtureRoot, { recursive: true, force: true });
 }
 

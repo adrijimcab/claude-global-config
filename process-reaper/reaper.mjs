@@ -36,11 +36,14 @@
  * parar mataría trabajo vivo. Cerrar es la decisión del orquestador de que la unidad terminó.
  */
 
+import os from 'node:os';
+
 import { listProcesses } from '../worker-status/processes.mjs';
 import { killTree } from '../process-control/kill-tree.mjs';
 import { isReapableWorktree } from './linked-worktree.mjs';
 import { speaker } from './messages.mjs';
 import { markersOf, namesAny } from './ownership.mjs';
+import { withHomeExpanded } from './path-spellings.mjs';
 import { descendantsOf, lineageOf, rootsOf } from './process-tree.mjs';
 
 /** How much of a command line a report line shows. @es Cuánto de una línea de comandos muestra una línea del informe. */
@@ -59,18 +62,19 @@ const killWithSharedKiller = (pid) => killTree(pid);
  * @returns {{ refused?: string, matched: object[], protected: object[], killed: object[], survivors: object[], lines: string[] }}
  * @es Devuelve lo hallado, lo protegido, lo muerto, los supervivientes y las líneas bilingües del informe.
  */
-export function reapAgentProcesses({ worktree, agentId, scratch } = {}, { list = listProcesses, kill = killWithSharedKiller, selfPid = process.pid } = {}) {
+export function reapAgentProcesses({ worktree, agentId, scratch } = {}, { list = listProcesses, kill = killWithSharedKiller, selfPid = process.pid, home = os.homedir() } = {}) {
   const empty = { matched: [], protected: [], killed: [], survivors: [] };
-  const markers = markersOf({ worktree, agentId, scratch });
+  const markers = markersOf({ worktree, agentId, scratch }, home);
 
   if (markers.length === 0) return { ...empty, refused: 'no-markers', lines: [speaker.line('no-markers')] };
-  if (typeof worktree === 'string' && worktree.trim() !== '' && !isReapableWorktree(worktree)) {
+  // The worktree is judged by the path it names once `~` and `$HOME` are read, so `~` alone (the home directory, never a linked worktree) is refused. @es El worktree se juzga por la ruta que nombra ya leídos `~` y `$HOME`, así que `~` a secas (el directorio home, nunca un worktree enlazado) se rechaza.
+  if (typeof worktree === 'string' && worktree.trim() !== '' && !isReapableWorktree(withHomeExpanded(worktree.trim(), home))) {
     return { ...empty, refused: 'not-a-linked-worktree', lines: [speaker.line('not-a-linked-worktree', { path: worktree })] };
   }
 
   const rows = list();
   const own = lineageOf(rows, selfPid);
-  const named = rows.filter((entry) => namesAny(markers, entry.commandLine));
+  const named = rows.filter((entry) => namesAny(markers, entry.commandLine, home));
   const left = named.filter((entry) => own.has(entry.pid));
   const matched = named.filter((entry) => !own.has(entry.pid));
   const roots = rootsOf(rows, matched);

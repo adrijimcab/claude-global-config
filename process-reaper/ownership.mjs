@@ -16,20 +16,24 @@
 /** An agent id shorter than this is not an identity (real ones are 17 hex digits). @es Un id más corto no es una identidad. */
 export const MINIMUM_ID_LENGTH = 8;
 
+import os from 'node:os';
+
+import { canonicalPaths, canonicalText } from './path-spellings.mjs';
+
 const AGENT_PREFIX = 'agent-';
 const PATH_NAME_CHARACTER = /[a-z0-9_.-]/;
 const ID_CHARACTER = /[a-z0-9]/;
 
-/** The text compared: lower case, one slash spelling. @es El texto comparado: minúsculas, una sola forma de barra. */
-const normalized = (text) => text.split('\\').join('/').toLowerCase();
+/**
+ * A path as markers, one per canonical spelling (`path-spellings.mjs`), none when it is blank.
+ * @es Una ruta como marcadores, uno por forma canónica (`path-spellings.mjs`), ninguno si está en blanco.
+ */
+function pathMarkers(value, home) {
+  if (typeof value !== 'string') return [];
 
-/** A path as a marker, without its trailing slashes, or `undefined` when it is blank. @es Una ruta como marcador. */
-function pathMarker(value) {
-  if (typeof value !== 'string') return undefined;
-
-  const text = normalized(value.trim()).replace(/\/+$/, '');
-
-  return text === '' ? undefined : { text, continues: (character) => PATH_NAME_CHARACTER.test(character) };
+  return canonicalPaths(value, home)
+    .filter((text) => text !== '')
+    .map((text) => ({ text, continues: (character) => PATH_NAME_CHARACTER.test(character) }));
 }
 
 /** An agent id as a marker, or `undefined` when it is blank or too short to be one. @es Un id como marcador. */
@@ -43,11 +47,11 @@ function idMarker(value) {
 }
 
 /**
- * The markers of an agent: `{ worktree, agentId, scratch }`, each optional.
- * @es Los marcadores de un agente: `{ worktree, agentId, scratch }`, cada uno opcional.
+ * The markers of an agent: `{ worktree, agentId, scratch }`, each optional. `home` is what `~` and `$HOME` mean.
+ * @es Los marcadores de un agente: `{ worktree, agentId, scratch }`, cada uno opcional. `home` es lo que significan `~` y `$HOME`.
  */
-export function markersOf({ worktree, agentId, scratch } = {}) {
-  return [pathMarker(worktree), idMarker(agentId), pathMarker(scratch)].filter((marker) => marker !== undefined);
+export function markersOf({ worktree, agentId, scratch } = {}, home = os.homedir()) {
+  return [...pathMarkers(worktree, home), idMarker(agentId), ...pathMarkers(scratch, home)].filter((marker) => marker !== undefined);
 }
 
 /** Whether `marker` occurs in `line` with a boundary on both sides. @es Si el marcador aparece con límite a ambos lados. */
@@ -65,8 +69,8 @@ function occursIn(marker, line) {
 }
 
 /** Whether the command line names any of the markers. @es Si la línea de comandos nombra alguno de los marcadores. */
-export function namesAny(markers, commandLine) {
-  const line = normalized(commandLine);
+export function namesAny(markers, commandLine, home = os.homedir()) {
+  const line = canonicalText(commandLine, home);
 
   return markers.some((marker) => occursIn(marker, line));
 }

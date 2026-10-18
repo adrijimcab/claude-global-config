@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url';
 const RUNNER = path.resolve(import.meta.dirname, '..', 'mutation-proof', 'run-mutants.mjs');
 const R = 'process-reaper/reaper.mjs';
 const O = 'process-reaper/ownership.mjs';
+const P = 'process-reaper/path-spellings.mjs';
 const T = 'process-reaper/process-tree.mjs';
 const L = 'process-reaper/linked-worktree.mjs';
 
@@ -37,7 +38,7 @@ const MUTANTS = [
   ['survivors are also reported killed', R, 'const killed = [...tracked.values()].filter((entry) => !stillAlive(entry)).sort(byPid);', 'const killed = [...tracked.values()].sort(byPid);'],
 
   // ownership.mjs
-  ['a blank path is a marker', O, "return text === '' ? undefined :", 'return false ? undefined :'],
+  ['a blank path is a marker', O, ".filter((text) => text !== '')", '.filter(() => true)'],
   ['an id too short is an identity', O, 'id.length < MINIMUM_ID_LENGTH ||', 'id.length < 1 ||'],
   ['a seven-character id is an identity', O, 'id.length < MINIMUM_ID_LENGTH ||', 'id.length < MINIMUM_ID_LENGTH - 1 ||'],
   ['an eight-character id is not an identity', O, 'id.length < MINIMUM_ID_LENGTH ||', 'id.length <= MINIMUM_ID_LENGTH ||'],
@@ -46,12 +47,30 @@ const MUTANTS = [
   ['the left boundary is not checked', O, "(before === '' || !marker.continues(before)) &&", 'true &&'],
   ['the right boundary is not checked', O, "&& (after === '' || !marker.continues(after))", '&& true'],
   ['only the first occurrence of a name is tried', O, 'at = line.indexOf(marker.text, at + 1)', 'at = -1'],
-  ['the comparison is case sensitive', O, 'text.split(\'\\\\\').join(\'/\').toLowerCase()', 'text.split(\'\\\\\').join(\'/\')'],
-  ['backslash paths are not folded to slashes', O, 'text.split(\'\\\\\').join(\'/\')', 'text'],
-  ['a trailing slash stays in the marker', O, ".replace(/\\/+$/, '')", ''],
+  ['the command line is compared as written', O, 'const line = canonicalText(commandLine, home);', 'const line = commandLine.toLowerCase();'],
   ['an unset marker is not dropped', O, '.filter((marker) => marker !== undefined)', '.filter(() => true)'],
   ['a command line must name every marker', O, 'return markers.some((marker) => occursIn(marker, line));', 'return markers.every((marker) => occursIn(marker, line));'],
   ['a path name continues only with letters', O, 'const PATH_NAME_CHARACTER = /[a-z0-9_.-]/;', 'const PATH_NAME_CHARACTER = /[a-z]/;'],
+
+  // reaper.mjs, home
+  ['a tilde worktree is judged by its literal text', R, 'isReapableWorktree(withHomeExpanded(worktree.trim(), home))', 'isReapableWorktree(worktree)'],
+  ['the command lines are read without the home', R, 'namesAny(markers, entry.commandLine, home)', 'namesAny(markers, entry.commandLine)'],
+  ['the worktree is read without the home', R, 'markersOf({ worktree, agentId, scratch }, home)', 'markersOf({ worktree, agentId, scratch })'],
+
+  // path-spellings.mjs
+  ['the comparison is case sensitive', P, 'text.split(\'\\\\\').join(\'/\').toLowerCase()', 'text.split(\'\\\\\').join(\'/\')'],
+  ['backslash paths are not folded to slashes', P, 'text.split(\'\\\\\').join(\'/\')', 'text'],
+  ['a trailing slash stays in the marker', P, ".replace(/\\/+$/, '')", ''],
+  ['a tilde is not expanded', P, '(_match, lead) => `${lead}${home}`)', '(match) => match)'],
+  ['a tilde followed by a name is expanded', P, '~(?=[\\\\/]|$|[\\s"\'])', '~(?=)'],
+  ['${HOME} is not expanded', P, '    .replace(/\\$\\{HOME\\}/gi, () => home)\n', ''],
+  ['$HOME is not expanded', P, '    .replace(/\\$HOME(?![A-Za-z0-9_])/gi, () => home)\n', ''],
+  ['$HOME is expanded inside a longer name', P, '\\$HOME(?![A-Za-z0-9_])', '\\$HOME'],
+  ['%USERPROFILE% is not expanded', P, '    .replace(/%USERPROFILE%/gi, () => home);', '    ;'],
+  ['a Git Bash drive path is not read', P, '(_match, lead, drive) => `${lead}${drive}:/`', '(match) => match'],
+  ['8.3 short names are not resolved', P, '      return folded(realpathSync.native(match));', '      return match;'],
+  ['the command line keeps its 8.3 short names', P, 'return withLongNames(withDriveLetter(folded(withHomeExpanded(text, home))));', 'return withDriveLetter(folded(withHomeExpanded(text, home)));'],
+  ['the worktree is not resolved through its links', P, 'real = withoutTrailingSlashes(folded(realpathSync.native(withHomeExpanded(path.trim(), home))));', 'real = written;'],
 
   // process-tree.mjs
   ['the lineage walk stops at the first step', T, 'step <= rows.length', 'step <= 0'],
