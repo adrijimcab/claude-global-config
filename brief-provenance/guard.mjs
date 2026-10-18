@@ -53,6 +53,9 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { stateDir } from '../hook-state/locations.mjs';
+import { unsourcedDependencyClaims } from './dependency-claim.mjs';
+import { dependencyNamesOf, projectDirectories } from './dependency-names.mjs';
+import { dependencyReason } from './dependency-refusal.mjs';
 import { briefOf, inspectBrief } from './provenance.mjs';
 
 /** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
@@ -129,6 +132,40 @@ function reason(refusal) {
 }
 
 /**
+ * The second face: a brief that DOES declare its provenance must still cite its source when a MEASURED
+ * line makes a claim about an installed dependency (`guard-built-on-an-unmeasured-premise`, recorded 3
+ * times). The decision is `dependency-claim.mjs`, the project's dependency names come from
+ * `dependency-names.mjs`. When the project or its `package.json` cannot be read the face does not decide:
+ * it journals why (`dependency-claim-undecided`) and allows, never failing closed and never silent.
+ * @es La segunda cara: un brief que SÍ declara su procedencia debe citar la fuente cuando una línea
+ * MEASURED afirma algo sobre una dependencia instalada. Si no se puede leer el proyecto o su
+ * `package.json`, la cara no decide: registra por qué y permite, sin fallar cerrada ni callar.
+ */
+function dependencyClaimOutput(brief, payload) {
+  const entry = { at: new Date().toISOString(), session: payload?.session_id, tool: brief.toolName };
+  const directories = projectDirectories(brief.text, payload);
+  const { names, undecided } = dependencyNamesOf(directories);
+
+  if (directories.length === 0) undecided.push({ file: null, reason: 'no project directory: the brief has no TENANCY path and the payload has no cwd' });
+
+  if (undecided.length > 0) journal({ ...entry, kind: 'dependency-claim-undecided', undecided });
+
+  const claims = unsourcedDependencyClaims(brief.text, names);
+
+  if (claims.length === 0) return undefined;
+
+  journal({ ...entry, kind: 'dependency-claim', packages: claims.flatMap((claim) => claim.packages) });
+
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: dependencyReason({ claims, surface: brief.surface, toolName: brief.toolName })
+    }
+  };
+}
+
+/**
  * La salida de hook para un payload crudo (deny cuando el brief no declara MEASURED/HYPOTHESIS), o
  * `undefined`. Exportada para que `~/.claude/hook-dispatch/dispatch.mjs` la corra en su propio proceso.
  */
@@ -151,7 +188,7 @@ export function evaluate(raw) {
 
   const refusal = inspectBrief(brief);
 
-  if (refusal === undefined) return undefined;
+  if (refusal === undefined) return dependencyClaimOutput(brief, payload);
 
   // The journal records the STATE of each failure and the surface it happened on. A run of `buried`
   // says the form is being misunderstood, a run of `absent` says the section is being skipped, and a

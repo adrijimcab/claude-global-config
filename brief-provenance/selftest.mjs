@@ -34,12 +34,12 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { payloadFor, recordedPayload } from '../hook-payloads/payloads.mjs';
-import { isolateState } from '../hook-state/locations.mjs';
+import { isolateState, stateDir } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
 // session reads, and never a line a previous run left behind.
@@ -68,6 +68,43 @@ const resume = (text) => JSON.stringify(payloadFor('SendMessage', text, { sessio
 const MEASURED_LINE = 'MEASURED: 24 symbols (etc/*.api.md)';
 const HYPOTHESIS_LINE = 'HYPOTHESIS: none';
 const BOTH_GLUED = `${MEASURED_LINE}\n${HYPOTHESIS_LINE}`;
+
+// ---------------------------------------------------------------------------------------------
+// THE DEPENDENCY-CLAIM FACE's constructed projects, built inside this directory (never the shared temp
+// root) and removed at the end. `project` declares dependencies in all three sections plus workspaces.
+// @es Los proyectos construidos de la cara de dependencias, dentro de este directorio y borrados al final.
+// ---------------------------------------------------------------------------------------------
+const FIXTURES = mkdtempSync(join(HERE, '.dep-fixture-'));
+const fixtureDir = (name) => join(FIXTURES, name).split('\\').join('/');
+const write = (directory, file, content) => {
+  mkdirSync(join(FIXTURES, directory), { recursive: true });
+  writeFileSync(join(FIXTURES, directory, file), content);
+};
+
+write('project', 'package.json', JSON.stringify({
+  dependencies: { 'left-pad': '1.0.0' },
+  devDependencies: { playwright: '1.58.0', '@playwright/test': '1.58.0' },
+  peerDependencies: { 'peer-thing': '1.0.0' },
+  workspaces: ['packages/*', 'tools', 'ghost', 'missing/*']
+}));
+write('plain', 'package.json', JSON.stringify({ dependencies: { 'plain-dep': '1.0.0' } }));
+write('object-ws', 'package.json', JSON.stringify({ workspaces: { packages: [7, 'tools'] } }));
+write('object-ws/tools', 'package.json', JSON.stringify({ devDependencies: { 'obj-ws-dep': '1.0.0' } }));
+write('null-deps', 'package.json', JSON.stringify({ dependencies: null, devDependencies: { 'nd-dev': '1.0.0' } }));
+write('string-deps', 'package.json', JSON.stringify({ dependencies: 'abc' }));
+write('self-ws', 'package.json', JSON.stringify({ dependencies: { 'self-dep': '1.0.0' }, workspaces: ['.'] }));
+write('null-manifest', 'package.json', 'null');
+write('string-manifest', 'package.json', '"text"');
+write('project/packages/a', 'package.json', JSON.stringify({ dependencies: { 'ws-glob-dep': '1.0.0' } }));
+write('project/tools', 'package.json', JSON.stringify({ devDependencies: { 'ws-plain-dep': '1.0.0' } }));
+write('broken', 'package.json', '{ not json');
+mkdirSync(join(FIXTURES, 'empty'), { recursive: true });
+
+const PROJECT = fixtureDir('project');
+const tenancy = (directory) => `TENANCY: ${directory}`;
+/** A brief that declares a project and a MEASURED line, with a HYPOTHESIS line. @es Un brief con proyecto, línea MEASURED y HYPOTHESIS. */
+const claim = (measured, directory = PROJECT) => agent(`${tenancy(directory)}\n${measured}\n${HYPOTHESIS_LINE}`);
+const SOURCE = 'node_modules/playwright/lib/runner/sigIntWatcher.js:12';
 
 const cases = [
   // ---------------------------------------------------------------------------------------------
@@ -149,6 +186,85 @@ const cases = [
   ['allow', resume(long(BOTH_GLUED)), 'the brief is read from the full message, never from its 50-character preview'],
   ['deny', resume(`Resume.\n${'y'.repeat(60)}`), 'a resume refused on its full text, not on a preview that happens to look empty', 'no MEASURED line at all'],
   ['allow', resume(''), 'a pure idle subscription carries message "" (the schema default) — nothing to declare'],
+
+  // ---------------------------------------------------------------------------------------------
+  // THE DEPENDENCY-CLAIM FACE (guard-built-on-an-unmeasured-premise, 3x). A MEASURED line naming an
+  // installed dependency must cite where it was read. The first case is the incident's own shape.
+  // @es LA CARA DE AFIRMACIONES SOBRE DEPENDENCIAS. El primer caso es la forma del incidente.
+  // ---------------------------------------------------------------------------------------------
+  ['deny', claim('MEASURED: playwright closes its detached children on SIGTERM'), 'REAL INCIDENT: a MEASURED claim about an installed dependency with no citation', 'playwright'],
+  ['deny', claim('MEASURED: playwright closes its detached children on SIGTERM'), 'the refusal is bilingual', '@es Una afirmación sobre cómo se comporta'],
+  ['deny', claim('MEASURED: playwright closes its detached children on SIGTERM'), 'the refusal names the HYPOTHESIS way out', '2. Move the claim to a HYPOTHESIS: line'],
+  ['deny', claim('MEASURED: playwright closes its detached children on SIGTERM'), 'the refusal names the citation way out', 'path:line or a path under node_modules/'],
+  ['deny', claim('MEASURED: playwright closes its detached children on SIGTERM'), 'the refusal shows the offending line', 'UNSOURCED — MEASURED: playwright closes'],
+  ['deny', claim('MEASURED: playwright closes its detached children on SIGTERM'), 'the refusal says the proof runs against the real tool', 'against the real tool'],
+  // Every character that separates a package name from its prose, one case each; the lists are written out
+  // here, not imported, so a mutant that drops a character cannot also drop its case.
+  // @es Cada carácter que separa un nombre de paquete de su prosa, un caso por carácter; las listas se
+  // escriben aquí y no se importan, para que un mutante que quite un carácter no quite también su caso.
+  ...[' ', '\t', '\r', ':', ',', ';', '(', ')', '[', ']', '{', '}', '<', '>', '|', '"', "'", '`', '=', '!', '?'].map((separator) => [
+    'deny',
+    claim(`MEASURED: a${separator}playwright${separator}b`),
+    `${JSON.stringify(separator)} separates a package name from the prose around it`,
+    'playwright'
+  ]),
+  ...[' ', '\t', '\r', ',', ';', '(', ')', '[', ']', '{', '}', '<', '>', '|', '"', "'", '`'].map((separator) => [
+    'allow',
+    claim(`MEASURED: playwright ${separator}x/y.js:12${separator}`),
+    `${JSON.stringify(separator)} wraps a citation without breaking it`
+  ]),
+  ['allow', claim('MEASURED: playwright, see x/y.js:1234567890'), 'every digit is a line number digit'],
+  ['allow', claim(`MEASURED: playwright stops only on SIGINT (${SOURCE})`), 'the same claim citing node_modules/<pkg>/<file>:<line> passes'],
+  ['allow', claim('MEASURED: playwright stops only on SIGINT, see runner/sigIntWatcher.js:12'), 'a bare path:line citation passes'],
+  ['allow', claim('MEASURED: playwright stops only on SIGINT, see runner/sigIntWatcher.js:12-14.'), 'a path:line-range citation passes, the sentence period notwithstanding'],
+  ['allow', claim('MEASURED: playwright stops only on SIGINT, see sigIntWatcher.js:12'), 'a path:line citation with an extension and no slash passes'],
+  ['allow', claim('MEASURED: playwright stops only on SIGINT, read under node_modules/playwright'), 'a path under node_modules/ passes'],
+  ['allow', claim('MEASURED: playwright stops only on SIGINT, read under node_modules\\playwright'), 'a Windows path under node_modules\\ passes'],
+  ['deny', claim('MEASURED: playwright 1.58:2 closes its children'), 'a version-like 1.58:2 is not a path:line citation', 'playwright'],
+  ['deny', claim('MEASURED: playwright closes its children at lib/x.js:abc'), 'a colon followed by a non-number is not a citation', 'playwright'],
+  ['deny', claim('MEASURED: playwright closes its children at lib/x.js:'), 'a colon followed by nothing is not a citation', 'playwright'],
+  ['deny', claim('MEASURED: playwright closes its children at :12'), 'a line number with no path is not a citation', 'playwright'],
+  ['deny', claim('MEASURED: playwright closes its children at lib/x.js:1-2-3'), 'a three-part range is not a citation', 'playwright'],
+  ['deny', claim('MEASURED: playwright closes its children at lib/x.js:-3'), 'a range with an empty part is not a citation', 'playwright'],
+  ['allow', agent(`${tenancy(PROJECT)}\n${MEASURED_LINE}\nHYPOTHESIS: playwright closes its detached children on SIGTERM`), 'a HYPOTHESIS line naming the package passes'],
+  ['allow', claim('MEASURED: lodash is not a dependency here and closes nothing'), 'a package that is not a dependency passes'],
+  ['deny', claim('MEASURED: @playwright/test retries on SIGTERM'), 'a scoped dependency name is matched whole', '@playwright/test'],
+  ['allow', claim('MEASURED: the playwrightish helper retries on SIGTERM'), 'a substring that is not a whole token passes'],
+  ['allow', claim('MEASURED: the helper at C:/x/playwright retries'), 'a path segment that is not the whole token passes'],
+  ['deny', claim('MEASURED: left-pad pads on the left'), 'a dependencies entry is matched', 'left-pad'],
+  ['deny', claim('MEASURED: peer-thing peers'), 'a peerDependencies entry is matched', 'peer-thing'],
+  ['deny', claim('MEASURED: ws-glob-dep behaves'), 'a dir/* workspace manifest is read', 'ws-glob-dep'],
+  ['deny', claim('MEASURED: ws-plain-dep behaves'), 'a plain workspace manifest is read', 'ws-plain-dep'],
+  ['deny', claim('MEASURED: "playwright", then more'), 'a quoted name is matched', 'playwright'],
+  ['deny', claim('MEASURED: it is playwright.'), 'a name ending the sentence is matched', 'playwright'],
+  ['deny', claim('MEASURED: playwright: closes'), 'a name followed by a colon is matched', 'playwright'],
+  ['deny', claim('- MEASURED: playwright closes its children'), 'a bulleted MEASURED line is read too', 'playwright'],
+  ['deny', claim('MEASURED: left-pad and playwright both close'), 'both packages are named', 'left-pad, playwright'],
+  ['deny', claim('MEASURED: playwright closes\nMEASURED: lodash ok'), 'one unsourced line among several is enough', 'playwright'],
+  ['allow', claim('MEASURED: lodash ok\nMEASURED: playwright closes (node_modules/playwright/lib/x.js:1)'), 'every dependency line cited passes'],
+  ['allow', agent(`${tenancy(PROJECT)}\n${MEASURED_LINE}\n${HYPOTHESIS_LINE}\nplaywright closes its children, said the old brief`), 'a package named outside a MEASURED line is not this face\'s business'],
+  ['allow', agent(`${tenancy(PROJECT)}\n${MEASURED_LINE}\nMEASUREDLY: playwright closes\n${HYPOTHESIS_LINE}`), 'a longer word is not a MEASURED line'],
+  ['deny', JSON.stringify({ ...payloadFor('Agent', `MEASURED: playwright closes\n${HYPOTHESIS_LINE}`, { sessionId: SESSION }), cwd: PROJECT }), 'with no TENANCY line the hook payload cwd names the project', 'playwright'],
+  ['allow', JSON.stringify({ ...payloadFor('Agent', `${tenancy(fixtureDir('empty'))}\nMEASURED: playwright closes\n${HYPOTHESIS_LINE}`, { sessionId: SESSION }), cwd: PROJECT }), 'a TENANCY line wins over cwd, and its project declares nothing'],
+  ['deny', resume(`${tenancy(PROJECT)}\nMEASURED: playwright closes\n${HYPOTHESIS_LINE}`), 'the resume surface is covered too', 'this message (SendMessage)'],
+  ['deny', task(`${tenancy(PROJECT)}\nMEASURED: playwright closes\n${HYPOTHESIS_LINE}`), 'the Task alias is covered too', 'this delegation (Task)'],
+  ['allow', claim('MEASURED: playwright closes', fixtureDir('empty')), 'no package.json: the face does not decide'],
+  ['allow', claim('MEASURED: playwright closes', fixtureDir('broken')), 'an unreadable package.json: the face does not decide'],
+  ['allow', agent(`MEASURED: playwright closes\n${HYPOTHESIS_LINE}`), 'no project at all: the face does not decide'],
+  ['deny', claim('MEASURED: plain-dep closes', fixtureDir('plain')), 'a manifest with no workspaces is read', 'plain-dep'],
+  ['deny', claim('MEASURED: obj-ws-dep closes', fixtureDir('object-ws')), 'the object form of workspaces is read, a non-string entry skipped', 'obj-ws-dep'],
+  ['deny', claim('MEASURED: nd-dev closes', fixtureDir('null-deps')), 'a null dependency section does not hide the others', 'nd-dev'],
+  ['allow', claim('MEASURED: count 0 of 3', fixtureDir('string-deps')), 'a string dependency section contributes no names'],
+  ['deny', claim('MEASURED: self-dep closes', fixtureDir('self-ws')), 'a workspace entry pointing at the root does not recurse', 'self-dep'],
+  ['allow', claim('MEASURED: playwright closes', fixtureDir('null-manifest')), 'a null manifest: the face does not decide'],
+  ['allow', claim('MEASURED: playwright closes', fixtureDir('string-manifest')), 'a string manifest: the face does not decide'],
+  ['deny', agent(`${tenancy(PROJECT)}\r\nMEASURED: it is playwright\r\n${HYPOTHESIS_LINE}`), 'a CRLF brief: the name ending its line is matched', 'playwright'],
+  ['allow', agent(`${tenancy(PROJECT)}\r\nMEASURED: playwright, see x/y.js:12\r\n${HYPOTHESIS_LINE}`), 'a CRLF brief: the citation ending its line counts'],
+  ['deny', claim('MEASURED: playwright closes, see line:12'), 'a bare word and a number is not a citation', 'playwright'],
+  ['allow', claim('MEASURED: playwright closes, see .npmrc:2'), 'a hidden file path:line is a citation'],
+  ['allow', claim('MEASURED: playwright closes, see src/runner:12'), 'a slashed path with no extension is a citation'],
+  ['deny', claim('MEASURED: left-pad a\nMEASURED: left-pad b'), 'a package named by two lines is listed once', '(left-pad)'],
+  ['allow', agent(`${tenancy(PROJECT)}\n${MEASURED_LINE}\n${HYPOTHESIS_LINE}\nthe old brief said MEASURED: playwright closes`), 'a MEASURED word buried in prose is not a MEASURED line'],
 
   // ---------------------------------------------------------------------------------------------
   // OUTSIDE THE DECISION — not a claim-bearing tool, or nothing to read.
@@ -247,6 +363,30 @@ if (carriers !== undefined && declared !== undefined) {
     report(recorded.payload.tool_input[carriers[tool].field] === recorded.text, `${tool} reads tool_input.${carriers[tool].field}, the field its recording carries IN FULL`);
   }
 }
+
+// ---------------------------------------------------------------------------------------------
+// THE DEPENDENCY-CLAIM FACE SAYS SO WHEN IT CANNOT DECIDE: the cases above allowed a brief with no
+// package.json, an unreadable one and no project at all; each left a journal line with its reason.
+// @es LA CARA DICE QUE NO PUEDE DECIDIR: cada caso permitido sin manifiesto dejó una línea con su motivo.
+// ---------------------------------------------------------------------------------------------
+{
+  const lines = readFileSync(join(stateDir('brief-provenance'), 'refusals.jsonl'), 'utf8')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line));
+  const undecided = lines.filter((entry) => entry.kind === 'dependency-claim-undecided');
+  const reasons = undecided.flatMap((entry) => entry.undecided.map(({ file, reason }) => `${file ?? ''} ${reason}`));
+
+  report(reasons.some((reason) => reason.includes('empty/package.json')), 'a project without package.json is journaled as undecided, with the file');
+  report(reasons.some((reason) => reason.includes('broken/package.json')), 'an unreadable package.json is journaled as undecided, with the file');
+  report(reasons.some((reason) => reason.includes('no project directory')), 'a brief with no project is journaled as undecided');
+  report(reasons.filter((reason) => reason.includes('manifest/package.json') && reason.includes('not a JSON object')).length === 2, 'a null and a string manifest are journaled as not a JSON object');
+  report(!reasons.some((reason) => reason.includes('ghost')), 'a workspace entry without a manifest is routine and is not journaled');
+  report(undecided.length > 0 && undecided.every((entry) => typeof entry.tool === 'string' && entry.tool.length > 0), 'an undecided entry names its tool');
+  report(lines.some((entry) => entry.kind === 'dependency-claim' && entry.packages.includes('playwright')), 'a refusal is journaled with its packages');
+}
+
+rmSync(FIXTURES, { recursive: true, force: true });
 
 console.log(`\n${total - failures}/${total} passed`);
 process.exit(failures === 0 ? 0 : 1);

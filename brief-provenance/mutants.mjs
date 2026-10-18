@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url';
 
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
+import { DEPENDENCY_MUTANTS } from './dependency-mutants.mjs';
+
 const PROVENANCE = 'brief-provenance/provenance.mjs';
 const GUARD = 'brief-provenance/guard.mjs';
 const LETTERS = "const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';";
@@ -54,6 +56,8 @@ const MUTANTS = [
   ['a buried marker is diagnosed as absent', GUARD, "if (state === 'buried')", "if (state === 'xburied')"],
   ['a colonless marker is diagnosed as absent', GUARD, "if (state === 'no-colon')", "if (state === 'xno-colon')"],
   ['a payload written with a byte-order mark is not judged', GUARD, "raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw", 'raw'],
+  // The dependency-claim face / La cara de afirmaciones sobre dependencias
+  ...DEPENDENCY_MUTANTS,
 ];
 
 const survivors = runMutants({

@@ -27,7 +27,7 @@ export const HYPOTHESIS_WORD = 'HYPOTHESIS';
  * @es Rechaza un marcador que solo es PREFIJO de otra palabra. Pertenencia literal a un conjunto de
  * caracteres, no un límite de palabra de regex (M5).
  */
-const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+export const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 /**
  * Leading characters that are LAYOUT rather than content: indentation, list bullets, headings,
