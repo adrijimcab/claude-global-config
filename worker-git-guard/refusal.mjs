@@ -188,22 +188,22 @@ export const MESSAGES = {
   },
   updateRef: {
     en: [
-      'WORKER-GIT GUARD REFUSED this command: a delegated worker may not delete a ref with `git update-ref -d` ({command}).',
+      'WORKER-GIT GUARD REFUSED this command: a delegated worker may not write refs with `git update-ref` ({command}).',
       '',
-      'WHY. Deleting a branch or tag ref can leave commits that are the only record of the work with no name, the',
-      'same risk as `git reset` moving HEAD.',
+      'WHY. `update-ref` moves or deletes a branch or tag (and `--stdin` hides which), which can leave commits that',
+      'are the only record of the work with no name: the same risk as `git reset` moving HEAD.',
       '',
-      'USE INSTEAD: leave refs as they are and report the commits on your branch; the orchestrator removes branches',
-      'once their content is integrated.'
+      'USE INSTEAD: commit on your own branch, or ask the orchestrator; it removes branches once their content is',
+      'integrated. To read a ref, use `git rev-parse <ref>`.'
     ],
     es: [
-      'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede borrar una referencia con `git update-ref -d` ({command}).',
+      'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede escribir referencias con `git update-ref` ({command}).',
       '',
-      'POR QUÉ. Borrar la referencia de una rama o etiqueta puede dejar sin nombre commits que son el único',
-      'registro del trabajo, el mismo riesgo que `git reset` moviendo HEAD.',
+      'POR QUÉ. `update-ref` mueve o borra una rama o etiqueta (y `--stdin` oculta cuál), lo que puede dejar sin',
+      'nombre commits que son el único registro del trabajo: el mismo riesgo que `git reset` moviendo HEAD.',
       '',
-      'USAR EN SU LUGAR: dejá las referencias como están e informá los commits de tu rama; el orquestador borra las',
-      'ramas cuando su contenido ya está integrado.'
+      'USAR EN SU LUGAR: commiteá en tu propia rama, o pedile al orquestador; él borra las ramas cuando su contenido',
+      'ya está integrado. Para leer una referencia, usá `git rev-parse <ref>`.'
     ]
   },
   symbolicRef: {

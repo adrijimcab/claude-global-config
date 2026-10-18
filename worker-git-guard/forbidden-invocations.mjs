@@ -16,7 +16,7 @@
  *   readTree      `read-tree` with `-u` or `--reset`.          Allowed: bare `read-tree <tree>` (index only).
  *   checkoutIndex `checkout-index` with `-f`/`--force` or `-a`/`--all`. Allowed: `checkout-index <file>`.
  *   updateIndex   `update-index --force-remove`.               Allowed: `--refresh`, `--add`, `--cacheinfo`.
- *   updateRef     `update-ref -d`, which deletes a ref.        Allowed: `update-ref <ref> <sha>`.
+ *   updateRef     every `update-ref` write: `-d`, `<ref> <sha>`, `--stdin`.  Allowed: `update-ref -h`; read refs with `rev-parse`.
  *   symbolicRef   `symbolic-ref <name> <ref>` or `-d`.         Allowed: reading, `symbolic-ref [--short] HEAD`.
  * The plumbing families do what `reset`/`restore`/`checkout` do (b100 integration worker's report, 2026-10:
  * `git read-tree --reset -u HEAD`
@@ -31,8 +31,9 @@
  * `--no-verify` is also matched by git's unambiguous abbreviations (`--no-verif`), since git accepts them.
  *
  * LEFT OUT, stated: `stash` (worker-stash-guard owns it), `commit --amend`, `rebase` and every other
- * subcommand; git aliases, which the line does not show; `update-ref <ref> <sha>` (moves a ref, not named by
- * any incident); `update-ref --stdin` and `update-index --index-info`, whose commands arrive on stdin.
+ * subcommand; git aliases, which the line does not show; `update-index --index-info`, allowed on purpose: it
+ * writes index entries only, never working files. `update-ref --stdin` is refused because its commands arrive
+ * unseen.
  *
  * @es Qué comandos de git EJECUTA una línea que un worker delegado no puede ejecutar: los que mueven HEAD,
  * descartan trabajo u omiten los hooks de commit y push. Una MENCIÓN (echo, mensaje, heredoc, comentario) es
@@ -40,9 +41,11 @@
  * (`-anm`) se recorre carácter a carácter y PARA en la primera opción con valor: `-m"no"` es el mensaje `no`,
  * no `-n`. Tras un `--` suelto todo son rutas. Quedan fuera `stash` (lo cubre worker-stash-guard), `--amend`,
  * `rebase` y los demás subcomandos. Las familias de plomería (`read-tree -u/--reset`, `checkout-index -f/-a`,
- * `update-index --force-remove`, `update-ref -d`, `symbolic-ref` de escritura) hacen lo que `reset`,
+ * `update-index --force-remove`, toda escritura de `update-ref`, `symbolic-ref` de escritura) hacen lo que `reset`,
  * `restore` y `checkout` (informe del worker de integración de b100, 2026-10); leer (`read-tree <árbol>`, `--refresh`, `symbolic-ref HEAD`) sigue
- * permitido. `update-ref <ref> <sha>`, `update-ref --stdin` y `update-index --index-info` quedan fuera.
+ * permitido (las referencias se leen con `rev-parse`; `update-ref -h` también). `update-index --index-info`
+ * se permite a propósito: escribe solo entradas del índice, nunca ficheros del árbol. `update-ref --stdin` se
+ * rechaza porque sus comandos llegan sin verse.
  */
 
 import { gitInvocations } from '../shell-command/git-invocations.mjs';
@@ -149,8 +152,17 @@ function checkoutIndexOverwrites(args) {
 /** `update-index --force-remove`, which drops a path from the index even when the file exists. @es `update-index --force-remove`. */
 const updateIndexForceRemoves = (args) => optionsOf('update-index', args).longs.some((name) => isOption(name, '--force-remove', '--force-r'.length));
 
-/** `update-ref -d`, which deletes a ref. @es `update-ref -d`, que borra una referencia. */
-const updateRefDeletes = (args) => optionsOf('update-ref', args).shorts.includes('d');
+/**
+ * Every `update-ref` that WRITES: `-d` (delete), `<ref> <sha>` (two names, moves a ref) or `--stdin` (its
+ * commands are unseen, so they are refused, not trusted). `update-ref -h` and a bare one only print usage.
+ * @es Todo `update-ref` que ESCRIBE: `-d`, `<ref> <sha>` (dos nombres) o `--stdin` (comandos que la línea no
+ * muestra, por eso se rechaza). `-h` y el comando solo imprimen el uso.
+ */
+function updateRefWrites(args) {
+  const { longs, shorts, positionals } = optionsOf('update-ref', args);
+
+  return shorts.includes('d') || positionals.length >= 2 || longs.some((name) => isOption(name, '--stdin', '--s'.length));
+}
 
 /**
  * `symbolic-ref` that WRITES (`<name> <ref>`, two names) or deletes (`-d`/`--delete`); one name only reads.
@@ -196,7 +208,7 @@ function familyOf({ subcommand, args }) {
     case 'update-index':
       return updateIndexForceRemoves(args) ? 'updateIndex' : undefined;
     case 'update-ref':
-      return updateRefDeletes(args) ? 'updateRef' : undefined;
+      return updateRefWrites(args) ? 'updateRef' : undefined;
     case 'symbolic-ref':
       return symbolicRefWrites(args) ? 'symbolicRef' : undefined;
     default:
