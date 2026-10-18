@@ -131,11 +131,13 @@
 /worker-git-guard/state/
 !/shared-temp-guard/
 !/shared-temp-guard/**
+/shared-temp-guard/state/
 !/useless-escape-guard/
 !/useless-escape-guard/**
 /useless-escape-guard/state/
 !/agent-model-guard/
 !/agent-model-guard/**
+/agent-model-guard/state/
 !/shared-resource-guard/
 !/shared-resource-guard/**
 /shared-resource-guard/state/
