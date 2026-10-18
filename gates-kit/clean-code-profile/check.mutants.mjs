@@ -28,6 +28,7 @@ const CHECK = `${D}check.mjs`;
 const CONFIGS = `${D}tool-configs.mjs`;
 const FACTS = `${D}eslint-facts.mjs`;
 const PROBE = `${D}layering-probe.mjs`;
+const KNIP = `${D}knip-facts.mjs`;
 
 const MUTANTS = [
   ['a semicolon stops separating commands', SHELL, "const SEPARATORS = ['&&', '||', ';', '|', ", "const SEPARATORS = ['&&', '||', '|', "],
@@ -101,6 +102,26 @@ const MUTANTS = [
   ['an unreadable input is reported with an absolute path', `${D}collect-facts.mjs`, "path.relative(resolved, error.file).split(path.sep).join('/')", 'error.file'],
   ['an unreadable input still runs the tools', `${D}collect-facts.mjs`, 'if (unreadable !== undefined) return {', 'if (false) return {'],
   ['an unreadable jscpd file is read as no settings', CONFIGS, "if (read.state === 'invalid') return { file, error:", "if (read.state === 'invalid') return undefined; if (false) return { file, error:"],
+  ['knip colour codes are not stripped', KNIP, "String(text).replace(ANSI, '')", 'String(text)'],
+  ['entries are read without hiding the strings first', KNIP, ".replace(QUOTED, 'S')", ''],
+  ['a parsed config knip cut short is counted', KNIP, 'if (/\\[(?:Object|Array)\\]/.test(code)) return { error: NOT_MEASURED.cut };', ''],
+  ['output with no parsed config is zero entries', KNIP, 'if (block === undefined) return { error: NOT_MEASURED.noBlock };', 'if (block === undefined) return { ignoreEntries: 0 };'],
+  ['entries hidden by "more items" are not counted', KNIP, 'ignoreEntries: listed + hidden', 'ignoreEntries: listed'],
+  ['an entry that is not a string is miscounted instead of refused', KNIP, "if (lists.some((body) => body.replace(MORE_ITEMS, '').replace(/\\bS\\b/g, '').replace(/[,\\s]/g, '') !== '')) return { error: NOT_MEASURED.entry };", ''],
+  ['an empty parsed config is read to the next block', KNIP, 'if (PARSED_CONFIG_OPEN.exec(lines[start])[1] !== undefined) return [];', ''],
+  ['the parsed config ends at any closing brace', KNIP, 'const BLOCK_CLOSE = /^ {2}\\},?$/;', 'const BLOCK_CLOSE = /^ *\\},?$/;'],
+  ['knip is run without --debug', KNIP, "[bin, '--debug', '--no-progress'", "[bin, '--no-progress'"],
+  ['knip is run with colour', KNIP, "NO_COLOR: '1', FORCE_COLOR: '0'", "NO_COLOR: '0', FORCE_COLOR: '1'"],
+  ['knip is not told which config to load', KNIP, "'--no-config-hints', '-c', file]", "'--no-config-hints']"],
+  ['a knip that finds issues is a failure', KNIP, 'return parseKnipDebug(result.stdout);', "return result.status === 0 ? parseKnipDebug(result.stdout) : { error: 'x' };"],
+  ['a missing knip is run anyway', KNIP, 'if (!existsSync(bin)) return { error: NOT_MEASURED.notInstalled };', ''],
+  ['a knip that times out is read as an empty answer', KNIP, 'if (result.error !== undefined) return {', 'if (false) return {'],
+  ['a knip.ts is parsed as JSON', CONFIGS, "if (!file.endsWith('.json')) return debtOf(askKnip(root, file));", 'if (false) return debtOf(askKnip(root, file));'],
+  ['a knip.json that is not JSON is zero entries', CONFIGS, "{ ignoreEntries: undefined, reason: 'cannot be read", "{ ignoreEntries: 0, reason: 'cannot be read"],
+  ['a knip that cannot answer loses its reason', CONFIGS, '{ ignoreEntries: undefined, reason: answer.error }', '{ ignoreEntries: undefined }'],
+  ['a knip that cannot answer is zero entries', CONFIGS, '{ ignoreEntries: undefined, reason: answer.error }', '{ ignoreEntries: 0, reason: answer.error }'],
+  ['an ignore debt knip could not report is not stated', TOOLS, 'if (config !== undefined && config.ignoreEntries === undefined) evidence.push(', 'if (false) evidence.push('],
+  ['the injected knip is not handed to the config reader', `${D}collect-facts.mjs`, 'knipConfig(resolved, askKnip)', 'knipConfig(resolved)'],
   ['an unreadable jscpd file is graded as read', TOOLS, 'if (facts.jscpd?.error !== undefined) return unmeasured(', 'if (false) return unmeasured('],
   ['a warning rule forbids a dependency', PROBE, "rule.severity === 'error' && sideMatches(rule.from, probe.from)", 'sideMatches(rule.from, probe.from)'],
   ['a pathNot does not exempt', PROBE, '&& !negative.some((pattern) => pattern.test(target))', ''],

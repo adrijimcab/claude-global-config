@@ -16,6 +16,7 @@
 import path from 'node:path';
 
 import { measureEslint, runInstalledEslint } from './eslint-facts.mjs';
+import { runInstalledKnip } from './knip-facts.mjs';
 import { readJson, readLanding, UnreadableJsonError } from './landing-path.mjs';
 import { depcruiseConfig, detectStack, eslintConfig, jscpdConfig, knipConfig } from './tool-configs.mjs';
 import { runInstalledTsc } from './tsc-facts.mjs';
@@ -44,7 +45,7 @@ function readInputs(resolved, forcedStack) {
 }
 
 /** The facts of the project at `root`. @es Los hechos del proyecto en `root`. */
-export async function collectFacts(root, { stack: forcedStack, printConfig = runInstalledEslint, showConfig = runInstalledTsc } = {}) {
+export async function collectFacts(root, { stack: forcedStack, printConfig = runInstalledEslint, showConfig = runInstalledTsc, askKnip = runInstalledKnip } = {}) {
   const resolved = path.resolve(root);
   const { stack, dependencies, landing, unreadable } = readInputs(resolved, forcedStack);
   const config = eslintConfig(resolved);
@@ -61,6 +62,6 @@ export async function collectFacts(root, { stack: forcedStack, printConfig = run
     tsc: stack === 'angular' ? showConfig(resolved) : { missing: true },
     depcruise: await depcruiseConfig(resolved),
     jscpd: jscpdConfig(resolved),
-    knip: knipConfig(resolved),
+    knip: knipConfig(resolved, askKnip),
   };
 }

@@ -32,7 +32,9 @@ import { main, parseArguments, rootsSummary } from './check.mjs';
 import { collectFacts } from './collect-facts.mjs';
 import { limitOf, severityOf } from './eslint-verdicts.mjs';
 import { scriptSample, templateSample } from './eslint-facts.mjs';
+import * as knipFacts from './knip-facts.mjs';
 import * as landingPath from './landing-path.mjs';
+import * as tool from './tool-configs.mjs';
 import { forbids, forbidsCycles } from './layering-probe.mjs';
 import { MESSAGES } from './messages.mjs';
 import { GATES, SECURITY_RULES, gatesOf } from './profile.mjs';
@@ -286,6 +288,94 @@ check('the unreadable-input evidence is bilingual', ['input-unreadable', 'jscpd-
 
   check('the command exits 2 when the measuring really crashes (a directory where the CI file is expected)', cli.status === 2);
   check('the crashed command prints a bilingual reason on its error stream', cli.stderr.includes(' @es ') && !cli.stderr.includes('    at '));
+}
+
+// --- knip: a .ts / .js / .jsonc config is asked to knip itself, never parsed as JSON -------------------------------
+// The sample below is the real `knip --debug` output (knip 5.88.1, NO_COLOR=1) for a `knip.ts` holding two `ignore`
+// entries, one `ignoreDependencies` entry and one `ignoreBinaries` entry in a workspace, trimmed to the lines around
+// the block the parser reads. @es La muestra de abajo es la salida real de `knip --debug` (knip 5.88.1, NO_COLOR=1)
+// para un `knip.ts` con dos entradas `ignore`, una `ignoreDependencies` y una `ignoreBinaries` en un workspace,
+// recortada a las líneas que rodean el bloque que lee el parser.
+const KNIP_DEBUG_SAMPLE = `[*] Unresolved configuration
+{
+  cacheLocation: '/work/node_modules/.cache/knip',
+  config: undefined,
+  configFilePath: '/work/knip.ts',
+  isWatch: false,
+  maxShowIssues: undefined,
+  parsedConfig: {
+    ignore: [ 'a.ts', 'b.ts' ],
+    ignoreDependencies: [ 'x' ],
+    syncCompilers: {},
+    asyncCompilers: {},
+    workspaces: { '.': { ignoreBinaries: [ 'q' ] } }
+  },
+  rules: {
+    files: 'error'
+  }
+}
+`;
+const sampleWith = (block) => KNIP_DEBUG_SAMPLE.replace(/ {2}parsedConfig: \{[\s\S]*?\n {2}\},\n/, block);
+const knipEntries = (text) => knipFacts.parseKnipDebug?.(text);
+
+check('knip --debug output: the entries of every ignore list of the parsed config are counted', knipEntries(KNIP_DEBUG_SAMPLE)?.ignoreEntries === 4);
+check('knip --debug output in colour is read like the plain one', knipEntries(KNIP_DEBUG_SAMPLE.replaceAll("'a.ts'", "\u001B[32m'a.ts'\u001B[39m").replace('parsedConfig', '\u001B[1mparsedConfig\u001B[22m'))?.ignoreEntries === 4);
+check('a multi-line list, a quote and a bracket inside entries are counted once each', knipEntries(sampleWith("  parsedConfig: {\n    ignore: [\n      'a]b.ts',\n      \"it's.ts\",\n      'c.ts'\n    ],\n    ignoreMembers: [ 'ignoreFoo: [ x ]' ]\n  },\n"))?.ignoreEntries === 4);
+check('a list cut by "N more items" counts the hidden entries too', knipEntries(sampleWith("  parsedConfig: {\n    ignore: [\n      'a.ts',\n      'b.ts',\n      ... 98 more items\n    ]\n  },\n"))?.ignoreEntries === 100);
+check('an empty parsed config is measured as zero entries, whatever follows it', knipEntries(sampleWith('  parsedConfig: {},\n  other: { nested: { ignore: [ "z" ] } },\n'))?.ignoreEntries === 0);
+check('a nested multi-line block does not end the parsed config early', knipEntries(sampleWith("  parsedConfig: {\n    workspaces: {\n      '.': {\n        ignoreBinaries: [ 'q' ]\n      }\n    },\n    ignore: [ 'z' ]\n  },\n"))?.ignoreEntries === 2);
+check('a parsed config with no ignore list is measured as zero entries', knipEntries(sampleWith("  parsedConfig: {\n    entry: [ 'src/main.ts' ]\n  },\n"))?.ignoreEntries === 0);
+check('ignoreIssues (an object) and boolean ignore settings are not lists', knipEntries(sampleWith("  parsedConfig: {\n    ignoreIssues: { 'a.ts': [ 'exports' ] },\n    ignoreExportsUsedInFile: true\n  },\n"))?.ignoreEntries === 0);
+check('an ignore list holding a regular expression is NOT measured rather than miscounted', (() => { const answer = knipEntries(sampleWith("  parsedConfig: {\n    ignoreDependencies: [ 'x', /^@scope\\/[a-z]+$/ ]\n  },\n")); return answer?.ignoreEntries === undefined && answer?.error?.includes(' @es ') === true; })());
+check('output without a parsed config is NOT measured, never zero', (() => { const answer = knipEntries('some other output\n'); return answer?.ignoreEntries === undefined && typeof answer?.error === 'string'; })());
+check('a parsed config that knip cut with [Object] is NOT measured', (() => { const answer = knipEntries(sampleWith("  parsedConfig: {\n    workspaces: { '.': [Object] }\n  },\n")); return answer?.ignoreEntries === undefined && typeof answer?.error === 'string'; })());
+check('every knip failure reason is bilingual', ['nothing here', ''].every((text) => knipEntries(text)?.error?.includes(' @es ')));
+
+{
+  const bin = (body) => ({ 'package.json': '{}', 'node_modules/knip/bin/knip.js': body });
+  const reply = (text, code = 0) => `process.stdout.write(${JSON.stringify(text)});\nprocess.exit(${code});\n`;
+  const asked = (files) => { const root = generated(files); return knipFacts.runInstalledKnip?.(root, path.join(root, 'knip.ts')); };
+  const echoing = "const argv = process.argv.slice(2);\nif (!argv.includes('--debug') || !argv[argv.indexOf('-c') + 1].endsWith('knip.ts') || process.env.NO_COLOR !== '1') process.exit(3);\n";
+
+  check('the installed knip is asked with --debug and the config file, without colour', asked(bin(`${echoing}${reply(KNIP_DEBUG_SAMPLE)}`))?.ignoreEntries === 4);
+  check('a knip that reports issues (exit 1) still answers with its config', asked(bin(reply(KNIP_DEBUG_SAMPLE, 1)))?.ignoreEntries === 4);
+  check('a project with no installed knip is NOT measured, with a bilingual reason that says so', (() => { const answer = asked({ 'package.json': '{}' }); return answer?.ignoreEntries === undefined && answer?.error?.includes(' @es ') === true && answer.error.includes('not installed'); })());
+  check('a knip that runs past its time is NOT measured, with a bilingual reason', (() => { const root = generated(bin('setTimeout(() => {}, 30000);\n')); const answer = knipFacts.runInstalledKnip?.(root, path.join(root, 'knip.ts'), 300); return answer?.ignoreEntries === undefined && answer?.error?.includes('could not run') === true && answer.error.includes(' @es '); })());
+  check('a knip that prints no config is NOT measured', (() => { const answer = asked(bin(reply('nothing useful'))); return answer?.ignoreEntries === undefined && typeof answer?.error === 'string'; })());
+  check('a knip that cannot start the run is NOT measured', asked(bin('process.exit(2);\n'))?.ignoreEntries === undefined);
+}
+
+{
+  const asks = [];
+  const ask = (answer) => (root, file) => { asks.push(path.basename(file)); return answer; };
+  const knipOf = (files, answer = { ignoreEntries: 5 }) => { asks.length = 0; return tool.knipConfig?.(generated(files), ask(answer)); };
+  const jsonConfig = '{ "ignore": ["a.ts"], "workspaces": { "w": { "ignoreDependencies": ["x", "y"] } } }';
+  const typed = 'export default { ignore: ["a.ts"] } satisfies KnipConfig;\n';
+
+  check('a knip.json is counted directly, without asking knip', knipOf({ 'package.json': '{}', 'knip.json': jsonConfig })?.ignoreEntries === 3 && asks.length === 0);
+  check('a knip.ts is asked to knip, not parsed as JSON', knipOf({ 'package.json': '{}', 'knip.ts': typed })?.ignoreEntries === 5 && asks.join() === 'knip.ts');
+  check('a knip.js, a knip.config.ts and a .jsonc are asked to knip too', ['knip.js', 'knip.config.ts', 'knip.jsonc'].every((name) => knipOf({ 'package.json': '{}', [name]: typed })?.ignoreEntries === 5 && asks.join() === name));
+  check('the knip answer names the file it came from', knipOf({ 'package.json': '{}', 'knip.ts': typed })?.file.endsWith('knip.ts'));
+  check('a knip that cannot answer leaves the ignore debt NOT measured, with its reason', (() => { const config = knipOf({ 'package.json': '{}', 'knip.ts': typed }, { error: 'knip said no @es knip dijo que no' }); return config?.ignoreEntries === undefined && config?.reason === 'knip said no @es knip dijo que no'; })());
+  check('a knip.json that is not JSON leaves the ignore debt NOT measured', (() => { const config = knipOf({ 'package.json': '{}', 'knip.json': '{ "ignore": ' }); return config?.ignoreEntries === undefined && typeof config?.reason === 'string' && asks.length === 0; })());
+  check('the knip config inside package.json is counted directly', knipOf({ 'package.json': '{ "knip": { "ignore": ["a", "b"] } }' })?.ignoreEntries === 2 && asks.length === 0);
+  check('no knip config at all is no knip config', knipOf({ 'package.json': '{}' }) === undefined);
+
+  const graded = async (files, answer) => {
+    const facts = await collectFacts(generated({ 'package.json': '{ "scripts": { "ci": "knip" } }', ...files }), { printConfig: answering({}), showConfig: strictTsc, askKnip: () => answer });
+
+    return gradeProject(facts).find((verdict) => verdict.id === 'dead-code');
+  };
+  const ids = (verdict) => verdict.evidence.map((entry) => entry.id);
+  const debt = await graded({ 'knip.ts': typed }, { ignoreEntries: 3 });
+  const clean = await graded({ 'knip.ts': typed }, { ignoreEntries: 0 });
+  const unmeasured = await graded({ 'knip.ts': typed }, { error: 'knip said no @es knip dijo que no' });
+
+  check('collectFacts hands the injected knip to the config reader (debt reported)', ids(debt).includes('knip-ignore-debt') && debt.evidence.find((entry) => entry.id === 'knip-ignore-debt').params.count === 3);
+  check('a measured zero reports neither debt nor "not measured"', !ids(clean).includes('knip-ignore-debt') && !ids(clean).includes('knip-ignore-unmeasured'));
+  check('an ignore debt knip could not report is stated as NOT measured with its reason, never as zero', ids(unmeasured).includes('knip-ignore-unmeasured') && !ids(unmeasured).includes('knip-ignore-debt') && unmeasured.evidence.find((entry) => entry.id === 'knip-ignore-unmeasured').params.reason?.includes('knip said no') === true);
+  check('a project without any knip config states no ignore debt either way', !ids(await graded({}, undefined)).some((id) => id.startsWith('knip-ignore')));
+  check('the knip "not measured" line is bilingual', MESSAGES['knip-ignore-unmeasured']?.en.length > 10 && MESSAGES['knip-ignore-unmeasured']?.es.length > 10);
 }
 
 // --- the profile itself ---------------------------------------------------------------------------------------

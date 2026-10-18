@@ -54,6 +54,7 @@ export const MESSAGES = {
   'knip-script': { en: 'a package script runs knip', es: 'un script de package ejecuta knip' },
   'no-knip': { en: 'no knip config and no script that runs knip', es: 'ninguna config de knip ni script que ejecute knip' },
   'knip-ignore-debt': { en: 'DEBT: {count} ignore entries in {file}; the target is zero', es: 'DEUDA: {count} entradas ignore en {file}; el objetivo es cero' },
+  'knip-ignore-unmeasured': { en: 'NOT MEASURED: the ignore entries of {file} could not be counted ({reason})', es: 'NO MEDIDO: no se pudieron contar las entradas ignore de {file} ({reason})' },
   'audit-in-scripts': { en: 'a package script runs npm audit, but not from any landing root', es: 'un script de package ejecuta npm audit, pero no desde ninguna raíz de aterrizaje' },
   'no-audit': { en: 'no npm audit command anywhere', es: 'ningún comando npm audit en ningún sitio' },
   'audit-level-ok': { en: 'npm audit levels seen: {levels}; a blocking one meets {needed}', es: 'niveles de npm audit vistos: {levels}; uno bloqueante cumple {needed}' },

@@ -139,6 +139,7 @@ export function deadCode(gate, facts) {
   else if (configured) evidence.push(ev('knip-script', {}));
   else evidence.push(ev('no-knip', {}));
 
+  if (config !== undefined && config.ignoreEntries === undefined) evidence.push(ev('knip-ignore-unmeasured', { file: relative(facts, config.file), reason: config.reason }));
   if (config?.ignoreEntries > 0) evidence.push(ev('knip-ignore-debt', { count: config.ignoreEntries, file: relative(facts, config.file) }));
 
   return settle({ gate, meets: configured, present: configured, found, evidence: [...evidence, ...landingEvidence(found, 'knip', facts.landing, facts.root)] });
