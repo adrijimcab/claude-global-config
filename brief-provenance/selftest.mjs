@@ -96,7 +96,8 @@ write('self-ws', 'package.json', JSON.stringify({ dependencies: { 'self-dep': '1
 write('null-manifest', 'package.json', 'null');
 write('string-manifest', 'package.json', '"text"');
 write('project/packages/a', 'package.json', JSON.stringify({ dependencies: { 'ws-glob-dep': '1.0.0' } }));
-write('project/tools', 'package.json', JSON.stringify({ devDependencies: { 'ws-plain-dep': '1.0.0' } }));
+write('project/tools', 'package.json', JSON.stringify({ devDependencies: { 'ws-plain-dep': '1.0.0' }, workspaces: ['sub'] }));
+write('project/tools/sub', 'package.json', JSON.stringify({ dependencies: { 'nested-dep': '1.0.0' } }));
 write('broken', 'package.json', '{ not json');
 mkdirSync(join(FIXTURES, 'empty'), { recursive: true });
 
@@ -235,6 +236,7 @@ const cases = [
   ['deny', claim('MEASURED: peer-thing peers'), 'a peerDependencies entry is matched', 'peer-thing'],
   ['deny', claim('MEASURED: ws-glob-dep behaves'), 'a dir/* workspace manifest is read', 'ws-glob-dep'],
   ['deny', claim('MEASURED: ws-plain-dep behaves'), 'a plain workspace manifest is read', 'ws-plain-dep'],
+  ['allow', claim('MEASURED: nested-dep behaves'), 'the workspaces of a workspace are not followed (npm does not nest them)'],
   ['deny', claim('MEASURED: "playwright", then more'), 'a quoted name is matched', 'playwright'],
   ['deny', claim('MEASURED: it is playwright.'), 'a name ending the sentence is matched', 'playwright'],
   ['deny', claim('MEASURED: playwright: closes'), 'a name followed by a colon is matched', 'playwright'],
@@ -264,7 +266,7 @@ const cases = [
   ['allow', claim('MEASURED: playwright closes, see .npmrc:2'), 'a hidden file path:line is a citation'],
   ['allow', claim('MEASURED: playwright closes, see src/runner:12'), 'a slashed path with no extension is a citation'],
   ['deny', claim('MEASURED: left-pad a\nMEASURED: left-pad b'), 'a package named by two lines is listed once', '(left-pad)'],
-  ['allow', agent(`${tenancy(PROJECT)}\n${MEASURED_LINE}\n${HYPOTHESIS_LINE}\nthe old brief said MEASURED: playwright closes`), 'a MEASURED word buried in prose is not a MEASURED line'],
+  ['allow', agent(`${tenancy(PROJECT)}\n${MEASURED_LINE}\n${HYPOTHESIS_LINE}\nXxxxxxx. see MEASURED: playwright closes`), 'a MEASURED word buried in prose is not a MEASURED line (a blank sits just past the word\'s length)'],
 
   // ---------------------------------------------------------------------------------------------
   // OUTSIDE THE DECISION — not a claim-bearing tool, or nothing to read.
