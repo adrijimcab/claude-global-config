@@ -24,7 +24,7 @@ const MUTANTS = [
   // reaper.mjs
   ['an ancestor of the reaper that names the agent is killed', R, 'const matched = named.filter((entry) => !own.has(entry.pid));', 'const matched = named;'],
   ['nothing to match is not refused', R, "if (markers.length === 0) return { ...empty, refused: 'no-markers'", "if (false) return { ...empty, refused: 'no-markers'"],
-  ['a main checkout is reaped', R, '!isReapableWorktree(worktree)', 'false'],
+  ['a main checkout is reaped', R, '!isReapableWorktree(withHomeExpanded(worktree.trim(), home))', 'false'],
   ['every matched process is killed, not only the roots', R, 'const roots = rootsOf(rows, matched);', 'const roots = matched;'],
   ['a reused pid counts as a survivor', R, 'candidate.commandLine === entry.commandLine', 'true'],
   ['the second listing is skipped, so nothing survives', R, 'const after = list();', 'const after = [];'],
@@ -48,7 +48,6 @@ const MUTANTS = [
   ['the right boundary is not checked', O, "&& (after === '' || !marker.continues(after))", '&& true'],
   ['only the first occurrence of a name is tried', O, 'at = line.indexOf(marker.text, at + 1)', 'at = -1'],
   ['the command line is compared as written', O, 'const line = canonicalText(commandLine, home);', 'const line = commandLine.toLowerCase();'],
-  ['an unset marker is not dropped', O, '.filter((marker) => marker !== undefined)', '.filter(() => true)'],
   ['a command line must name every marker', O, 'return markers.some((marker) => occursIn(marker, line));', 'return markers.every((marker) => occursIn(marker, line));'],
   ['a path name continues only with letters', O, 'const PATH_NAME_CHARACTER = /[a-z0-9_.-]/;', 'const PATH_NAME_CHARACTER = /[a-z]/;'],
 

@@ -36,14 +36,14 @@ function pathMarkers(value, home) {
     .map((text) => ({ text, continues: (character) => PATH_NAME_CHARACTER.test(character) }));
 }
 
-/** An agent id as a marker, or `undefined` when it is blank or too short to be one. @es Un id como marcador. */
-function idMarker(value) {
-  if (typeof value !== 'string') return undefined;
+/** An agent id as a marker, or none when it is blank or too short to be one. @es Un id como marcador, o ninguno. */
+function idMarkers(value) {
+  if (typeof value !== 'string') return [];
 
   const lowered = value.trim().toLowerCase();
   const id = lowered.startsWith(AGENT_PREFIX) ? lowered.slice(AGENT_PREFIX.length) : lowered;
 
-  return id.length < MINIMUM_ID_LENGTH || !/^[a-z0-9]+$/.test(id) ? undefined : { text: id, continues: (character) => ID_CHARACTER.test(character) };
+  return id.length < MINIMUM_ID_LENGTH || !/^[a-z0-9]+$/.test(id) ? [] : [{ text: id, continues: (character) => ID_CHARACTER.test(character) }];
 }
 
 /**
@@ -51,7 +51,7 @@ function idMarker(value) {
  * @es Los marcadores de un agente: `{ worktree, agentId, scratch }`, cada uno opcional. `home` es lo que significan `~` y `$HOME`.
  */
 export function markersOf({ worktree, agentId, scratch } = {}, home = os.homedir()) {
-  return [...pathMarkers(worktree, home), idMarker(agentId), ...pathMarkers(scratch, home)].filter((marker) => marker !== undefined);
+  return [...pathMarkers(worktree, home), ...idMarkers(agentId), ...pathMarkers(scratch, home)];
 }
 
 /** Whether `marker` occurs in `line` with a boundary on both sides. @es Si el marcador aparece con límite a ambos lados. */
