@@ -108,8 +108,18 @@ function evidenceLines(refusal) {
  * come el escape, la edición no casa con nada y el programa sale con 0; solo un recuento posterior lo
  * delata. El remedio es la herramienta Edit o un fichero `.mjs`.
  */
+/**
+ * Where the refusal tells the caller to write its scaffold: under `<tmp>/claude/`, the only part of the shared TEMP
+ * root a delegated agent may write (shared-temp-guard), with a name unique to this moment and process so two sessions
+ * never collide on it.
+ * @es Dónde la negativa le dice al llamador que escriba su andamio: bajo `<tmp>/claude/`, la única parte de la raíz
+ * TEMP compartida que un agente delegado puede escribir (shared-temp-guard), con un nombre único por momento y proceso
+ * para que dos sesiones nunca choquen en él.
+ */
+const scaffoldPath = (kind) => path.join(os.tmpdir(), 'claude', 'eval-guard', `${kind}-${Date.now()}-${process.pid}.mjs`);
+
 function textEditReason(refusal) {
-  const scaffold = path.join(os.tmpdir(), 'claude-eval-guard', `edit-${Date.now()}.mjs`);
+  const scaffold = scaffoldPath('edit');
 
   return [
     `EVAL-GUARD REFUSED this command: it runs \`${refusal.flag}\` with a pattern or script this harness was MEASURED to mangle.`,
@@ -146,7 +156,7 @@ function reason(refusal) {
   if (refusal.kind === 'msys-switch') return switchReason(refusal);
   if (refusal.kind === 'text-edit') return textEditReason(refusal);
 
-  const scaffold = path.join(os.tmpdir(), 'claude-eval-guard', `eval-${Date.now()}.mjs`);
+  const scaffold = scaffoldPath('eval');
   const evidence = refusal.findings
     .slice(0, MAX_REPORTED_FINDINGS)
     .map((finding) => `  - ${finding.kind} at offset ${finding.offset} (U+${finding.code.toString(16).toUpperCase().padStart(4, '0')})`)
