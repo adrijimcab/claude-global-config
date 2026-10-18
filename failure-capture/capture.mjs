@@ -63,6 +63,7 @@ import { placeStub } from './stub-placement.mjs';
 import { PROMOTED_SCOPE, areaRulesFile, areaRulesHeader, areaScopes, isAreaScope, onDemandRulesFiles, stubScopeOf } from './ledger-routes.mjs';
 import { commitBlockRoute, findBlock, planBlockRoute } from './rule-block.mjs';
 import { withLock } from './ledger-lock.mjs';
+import { stampFile, writeJson } from './session-state.mjs';
 import { resolveLoopContext } from './loop-context.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
 import { captureTextProblems, newLessonLine } from './tiered-capture.mjs';
@@ -87,7 +88,6 @@ const spoolDir = () => path.join(stateDirectory(), 'spool');
 const lockFile = () => path.join(stateDirectory(), 'ledger.lock');
 const incidentsFile = () => path.join(stateDirectory(), 'incidents.jsonl');
 const dismissalsFile = () => path.join(stateDirectory(), 'dismissals.jsonl');
-const lastCaptureFile = () => path.join(stateDirectory(), 'last-capture.json');
 // Read-only since `ledger-tiering-budget`: the record of promotions made by the OLD tool (`status` honours it).
 // @es Solo lectura desde `ledger-tiering-budget`: el registro de promociones de la herramienta ANTIGUA.
 const promotedFile = () => path.join(stateDirectory(), 'promoted.md');
@@ -333,10 +333,16 @@ function reconcile() {
   return outcome.held ? { folded: outcome.value, deferred: 0 } : { folded: [], deferred: pending.length };
 }
 
-/** Stamps that this session recorded something, so the turn guard can see it deterministically. @es Sella que esta sesión registró algo, para que el guard lo vea de forma determinista. */
+/**
+ * Stamps that this session recorded something, so the turn guard can see it deterministically. The stamp is the
+ * session's own file: another session's stamp never overwrites it.
+ * @es Sella que esta sesión registró algo, para que el guard lo vea de forma determinista. El sello es el fichero
+ * propio de la sesión: el sello de otra sesión nunca lo pisa.
+ */
 function stamp(sessionId, kind) {
-  ensureDirs();
-  writeFileSync(lastCaptureFile(), JSON.stringify({ session: sessionId ?? 'unknown', kind, at: Date.now() }), 'utf8');
+  const session = sessionId ?? 'unknown';
+
+  writeJson(stampFile(stateDirectory(), session), { session, kind, at: Date.now() });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -375,7 +381,10 @@ function commandCapture(args) {
   if (status === 0) {
     adviseOnBudget({
       measure: () => measureLoadedSet({ project: PROJECT, directory: process.cwd(), ceiling: args.ceiling }).verdict,
-      condense: () => describeOutcome(condenseLedgers({ keyMap: [], write: true })),
+      // A capture into a project's scope tidies that scope's ledger only, never the global one; a global capture
+      // tidies every ledger, as it always did. @es Una captura al alcance de un proyecto ordena solo el ledger de
+      // ese alcance, nunca el global; una captura global ordena todos los ledgers, como siempre.
+      condense: () => describeOutcome(condenseLedgers({ keyMap: [], write: true, scope: args.scope === GLOBAL_SCOPE ? undefined : args.scope })),
       print: (line) => speaker.data(line)
     });
   }
@@ -1060,7 +1069,11 @@ function commandInit() {
 const loadLedgers = () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined);
 
 /** Runs the condense over this project's ledgers, reading them under the ledger lock. @es Ejecuta el condense sobre los ledgers de este proyecto, leyéndolos bajo el lock del ledger. */
-const condenseLedgers = ({ keyMap, write }) => runCondense({ load: loadLedgers, keyMap, write, date: today(), runId: newRunId(), lockFile: lockFile(), preImageRoot: path.join(stateDirectory(), 'condense') });
+/**
+ * With a `scope`, only the ledger of that scope is condensed; without one, every ledger of the project is.
+ * @es Con un `scope`, solo se condensa el ledger de ese alcance; sin él, todos los ledgers del proyecto.
+ */
+const condenseLedgers = ({ keyMap, write, scope }) => runCondense({ load: () => loadLedgers().filter((ledger) => scope === undefined || ledger.scope === scope), keyMap, write, date: today(), runId: newRunId(), lockFile: lockFile(), preImageRoot: path.join(stateDirectory(), 'condense') });
 
 function commandCondense(args) {
   let keyMap = [];
