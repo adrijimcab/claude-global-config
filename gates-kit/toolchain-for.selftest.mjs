@@ -106,7 +106,37 @@ check('Node-vitest on Node 22.13.0 is refused by its toolchain', pick({ framewor
 check('Node-vitest on Node 22.18.0 is accepted', pick({ framework: 'node', testRunner: 'vitest' }, '22.18.0') === 'node-vitest/vitest');
 check('an unreadable host Node is refused', pick(angular(21, 'vitest'), '22') === 'unreadable-node:22');
 check('an absent host Node is refused', toolchainFor(angular(21, 'vitest'), undefined).reason === 'unreadable-node');
-check('a framework refusal names its range', toolchainFor(angular(22, 'vitest'), '22.22.0').range === TOOLCHAINS['angular-22'].node.framework);
+// A range the kit's OWN table holds that cannot be read is a defect of the kit, never blamed on the host Node.
+// @es Un rango ilegible de la tabla PROPIA del kit es un defecto del kit, nunca se achaca al Node anfitrión.
+/** The refusal of `toolchainFor` while `TOOLCHAINS[id].node[field]` holds `range`; the table is restored. @es El rechazo con un rango dañado; la tabla se restaura. */
+function withBrokenRange(id, field, range, host = NODE) {
+  const node = TOOLCHAINS[id].node;
+  const original = node[field];
+
+  node[field] = range;
+
+  try {
+    return toolchainFor(angular(Number(id.slice(-2)), 'vitest'), host);
+  } finally {
+    node[field] = original;
+  }
+}
+
+{
+  const broken = withBrokenRange('angular-21', 'toolchain', 'banana');
+  const brokenFramework = withBrokenRange('angular-21', 'framework', '>=banana');
+
+  check('a bad toolchain range in the kit table is a kit defect, not an unreadable host Node', broken.ok === false && broken.reason === 'invalid-kit-range');
+  check('a kit defect names the toolchain, the field and the bad range', broken.toolchain === 'angular-21' && broken.range === 'banana' && broken.field === 'toolchain' && broken.detail === 'banana');
+  check('a bad framework range in the kit table is a kit defect too', brokenFramework.reason === 'invalid-kit-range' && brokenFramework.field === 'framework' && brokenFramework.range === '>=banana');
+  check('an unreadable host Node is still unreadable beside a bad kit range', withBrokenRange('angular-21', 'toolchain', 'banana', '22').reason === 'unreadable-node');
+  check('a kit defect from the framework range names its toolchain', brokenFramework.toolchain === 'angular-21');
+  check('a kit defect line is bilingual and names the range', (() => { try { const line = describeRefusal(broken); return line.includes(' @es ') && line.includes('banana') && line.includes('angular-21'); } catch { return false; } })());
+  check('the table is restored after the broken-range probes', pick(angular(21, 'vitest')) === 'angular-21/vitest');
+  check('every range of the kit table is readable', Object.values(TOOLCHAINS).every(({ node }) => [node.framework, node.toolchain].filter((range) => range !== undefined).every((range) => { try { satisfies(NODE, range); return true; } catch { return false; } })));
+}
+
+check('a framework refusal names its range',toolchainFor(angular(22, 'vitest'), '22.22.0').range === TOOLCHAINS['angular-22'].node.framework);
 check('a toolchain refusal names its range', toolchainFor(angular(21, 'vitest'), '25.0.0').range === TOOLCHAINS['angular-21'].node.toolchain);
 check('a refusal carries no toolchain to run', toolchainFor(angular(23, 'vitest'), NODE).ok === false && !('testRunner' in toolchainFor(angular(23, 'vitest'), NODE)));
 
