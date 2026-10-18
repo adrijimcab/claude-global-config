@@ -24,7 +24,7 @@ import { fullOrchestratorMd, lazyEntries, lazyEntryNamed, orchestratorMd } from 
 import { inspectSection, reconcileSection } from './lazy-section.mjs';
 import { settingsHoldingTheReplacements } from './hook-command-cases.mjs';
 import { reapplyTrigger } from './reapply-triggers.mjs';
-import { reapplySyncSafe } from './reapply-hook-output.mjs';
+import { hookOutput, reapplySyncSafe } from './reapply-hook-output.mjs';
 import { readTextOrNull } from './text-file.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -77,11 +77,7 @@ export function registerReapplyCases({ test, expect, newRoot, put, read, install
     return context;
   }
   /** What the overlay makes of `text` with every section moved, computed with the pure logic only. @es Lo que el overlay hace del texto con toda sección movida, con la lógica pura. */
-  const allMoved = (text, { keepReview = false } = {}) =>
-    lazyEntries().reduce((current, entry) => {
-      const keepLoaded = entry.loadedWhile === 'reviews-may-run' && keepReview;
-      return reconcileSection(current, entry, { keepLoaded, stash: null, stashLabel: `~/${entry.stash}` }).text;
-    }, text);
+  const allMoved = (text) => lazyEntries().reduce((current, entry) => reconcileSection(current, entry, { keepLoaded: false, stash: null, stashLabel: `~/${entry.stash}` }).text, text);
   /** The dispatcher, the way the harness runs it, pointed at a fixture home. @es El dispatcher como lo corre el harness, apuntando a un home de fixture. */
   const dispatchPost = (context, input, manifest = POST_MANIFEST) =>
     spawnSync(process.execPath, [DISPATCH, manifest], { input, encoding: 'utf8', env: { ...process.env, GENTLE_AI_OVERLAY_HOME: context.home, GENTLE_AI_OVERLAY_CLI_SCRIPT: context.fakeCli } });
@@ -138,16 +134,26 @@ export function registerReapplyCases({ test, expect, newRoot, put, read, install
     expect(evaluateAll(CUSTOMIZATIONS, context).find((result) => result.id === 'gentle-ai-telemetry-disabled').status, 'broken', 'still broken, for the apply command');
   });
 
-  test('dispatcher: review mode enabled -> the review span is restored, the model is told to read its stash now, and the always-lazy sections stay moved', () => {
+  test('dispatcher: review mode enabled -> every section, the review contract included, stays moved and nothing is announced for reading', () => {
     const context = loadedHome();
     const original = claudeOf(context);
     applyAll(CUSTOMIZATIONS.filter((entry) => entry.kind === 'lazy-section'), context);
     installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
-    const output = JSON.parse(dispatchPost(context, shellPayload('gentle-ai review mode enable --scope global', 'PowerShell')).stdout);
-    expect(claudeOf(context), allMoved(original, { keepReview: true }), 'only the review span is back');
+    const moved = claudeOf(context);
+    expect(dispatchPost(context, shellPayload('gentle-ai review mode enable --scope global', 'PowerShell')).stdout, '', 'silent');
+    expect(claudeOf(context), moved, 'CLAUDE.md untouched');
+    expect(moved, allMoved(original), 'every section, the review contract too, is moved');
+  });
+
+  test('re-apply: a section that is needed while the mode is on is restored and the model is told to read its stash now, under the event it names', () => {
+    const conditional = { ...review, loadedWhile: 'reviews-may-run' };
+    const context = installFakeCli(newRoot(), { enabled: false, reviewGlobal: '' });
+    put(context.home, review.file, orchestratorMd({ eol: '\r\n' }));
+    applyAll([conditional], context);
+    installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
+    const output = hookOutput('PostToolUse', reapplySyncSafe(context, [conditional]));
     expect(output.hookSpecificOutput.hookEventName, 'PostToolUse', 'event');
     expect(output.hookSpecificOutput.additionalContext.includes(`read ~/${review.stash} IN FULL now`), true, 'model told to read');
-    lazyEntries().filter((entry) => entry !== review).forEach((entry) => expect(output.hookSpecificOutput.additionalContext.includes(entry.stash), false, `${entry.name}: not announced for reading`));
   });
 
   test('dispatcher: nothing to re-apply -> silent; an unrelated command, or a tool the registration does not name, changes nothing and says nothing', () => {
@@ -179,14 +185,44 @@ export function registerReapplyCases({ test, expect, newRoot, put, read, install
     expect(claudeOf(context), original, 'CLAUDE.md untouched without the registration');
   });
 
-  test('post-command hook run directly (not through the dispatcher): it names its own event, PostToolUse', () => {
+  test('post-command hook run directly (not through the dispatcher): a sync is healed, the user is told, exit 0', () => {
+    const context = loadedHome({ reviewGlobal: 'on' });
+    const original = claudeOf(context);
+    const env = { ...process.env, GENTLE_AI_OVERLAY_HOME: context.home, GENTLE_AI_OVERLAY_CLI_SCRIPT: context.fakeCli };
+    const result = spawnSync(process.execPath, [path.join(HERE, 'post-command-hook.mjs')], { input: shellPayload('gentle-ai sync'), encoding: 'utf8', env });
+    expect(result.status, 0, 'exit');
+    expect(JSON.parse(result.stdout).systemMessage.includes('review contract moved'), true, 'user told');
+    expect(claudeOf(context), allMoved(original), 'every section moved, the mode being on');
+  });
+
+  // The restore path of the two hooks, run for real with the loading condition put back on the review contract
+  // (conditional-review-driver.mjs). @es La ruta de restauración de los dos hooks, ejecutada de verdad con la
+  // condición de carga devuelta al contrato de revisiones (conditional-review-driver.mjs).
+  const DRIVER = path.join(HERE, 'conditional-review-driver.mjs');
+  const movedHomeWithModeOn = () => {
     const context = loadedHome();
     applyAll(CUSTOMIZATIONS.filter((entry) => entry.kind === 'lazy-section'), context);
     installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
+    return context;
+  };
+
+  test('post-command hook, conditional review contract: the restored section is announced to the model under the event PostToolUse', () => {
+    const context = movedHomeWithModeOn();
     const env = { ...process.env, GENTLE_AI_OVERLAY_HOME: context.home, GENTLE_AI_OVERLAY_CLI_SCRIPT: context.fakeCli };
-    const result = spawnSync(process.execPath, [path.join(HERE, 'post-command-hook.mjs')], { input: shellPayload('gentle-ai review mode enable'), encoding: 'utf8', env });
+    const result = spawnSync(process.execPath, [DRIVER, 'post-command-hook.mjs'], { input: shellPayload('gentle-ai review mode enable'), encoding: 'utf8', env });
     expect(result.status, 0, 'exit');
-    expect(JSON.parse(result.stdout).hookSpecificOutput.hookEventName, 'PostToolUse', 'event');
+    const output = JSON.parse(result.stdout);
+    expect(output.hookSpecificOutput.hookEventName, 'PostToolUse', 'event');
+    expect(output.hookSpecificOutput.additionalContext.includes(`read ~/${review.stash} IN FULL now`), true, 'model told to read');
+    expect(inspectSection(claudeOf(context), review).form, 'present', 'the span is back in CLAUDE.md');
+  });
+
+  test('session start, conditional review contract: the restored section is announced to the model as context', () => {
+    const context = movedHomeWithModeOn();
+    const result = run('conditional-review-driver.mjs', ['session-start-hook.mjs', ...flags(context)]);
+    expect(result.status, 0, 'exit');
+    expect(JSON.parse(result.stdout).hookSpecificOutput.additionalContext.includes('IN FULL now'), true, 'model told to read');
+    expect(inspectSection(claudeOf(context), review).form, 'present', 'the span is back in CLAUDE.md');
   });
 
   test('post-command hook run directly: unreadable payload -> exit 0 and a systemMessage saying nothing was re-applied', () => {
@@ -236,16 +272,14 @@ export function registerReapplyCases({ test, expect, newRoot, put, read, install
 
   // ------------------------------------------------------------ session start
 
-  test('session start: reviews off -> every section is moved before the drift check; global on -> the review span is restored and the model is told to read it', () => {
-    const context = loadedHome();
-    const original = claudeOf(context);
-    const moved = run('session-start-hook.mjs', flags(context));
-    expect(moved.status, 0, 'exit');
-    expect(claudeOf(context), allMoved(original), 'every section moved at session start');
-    expect(JSON.parse(moved.stdout).systemMessage.includes('review contract moved'), true, 'user told');
-    installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
-    const restored = JSON.parse(run('session-start-hook.mjs', flags(context)).stdout);
-    expect(claudeOf(context), allMoved(original, { keepReview: true }), 'review span restored at session start');
-    expect(restored.hookSpecificOutput.additionalContext.includes('IN FULL now'), true, 'model told to read');
+  test('session start: every section is moved before the drift check, whether the review mode is off or on', () => {
+    for (const reviewGlobal of ['', 'on']) {
+      const context = loadedHome({ reviewGlobal });
+      const original = claudeOf(context);
+      const moved = run('session-start-hook.mjs', flags(context));
+      expect(moved.status, 0, `exit (mode "${reviewGlobal}")`);
+      expect(claudeOf(context), allMoved(original), `every section moved at session start (mode "${reviewGlobal}")`);
+      expect(JSON.parse(moved.stdout).systemMessage.includes('review contract moved'), true, 'user told');
+    }
   });
 }

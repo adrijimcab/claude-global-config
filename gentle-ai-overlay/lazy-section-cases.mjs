@@ -317,20 +317,26 @@ export function registerLazySectionCases({ test, expect, newRoot, put, read, ins
     expect(applyAll([review], context).length, 0, 'second apply');
   });
 
-  test('lazy kind: global on -> a moved span is broken and apply restores the original bytes', () => {
+  // `loadedWhile: 'reviews-may-run'` is still a supported loading condition, though no real section declares it
+  // now: these cases hold it on the review entry with the condition put back. @es `loadedWhile: 'reviews-may-run'`
+  // sigue siendo una condición de carga admitida, aunque ninguna sección real la declare ahora: estos casos la
+  // prueban sobre la entrada de revisiones con la condición puesta de nuevo.
+  const conditional = { ...review, loadedWhile: 'reviews-may-run' };
+
+  test('lazy kind: global on -> a moved span of a conditional section is broken and apply restores the original bytes', () => {
     const context = lazyHome({ reviewGlobal: '' });
     const original = read(context.home, review.file);
-    applyAll([review], context);
+    applyAll([conditional], context);
     installFakeCli(context, { enabled: false, reviewGlobal: 'on' });
-    expect(kind.evaluate(review, context).status, 'broken', 'status');
-    applyAll([review], context);
+    expect(kind.evaluate(conditional, context).status, 'broken', 'status');
+    applyAll([conditional], context);
     expect(read(context.home, review.file), original, 'restored bytes');
-    expect(kind.evaluate(review, context).status, 'held', 'held once loaded');
+    expect(kind.evaluate(conditional, context).status, 'held', 'held once loaded');
   });
 
-  test('lazy kind near miss: global on while THIS clone is forced off -> the span stays loaded (another clone may review)', () => {
-    expect(kind.evaluate(review, lazyHome({ reviewGlobal: '', cloneOff: true })).status, 'broken', 'the same file with reviews off everywhere');
-    expect(kind.evaluate(review, lazyHome({ reviewGlobal: 'on', cloneOff: true })).status, 'held', 'global on, this clone off');
+  test('lazy kind near miss: global on while THIS clone is forced off -> a conditional span stays loaded (another clone may review)', () => {
+    expect(kind.evaluate(conditional, lazyHome({ reviewGlobal: '', cloneOff: true })).status, 'broken', 'the same file with reviews off everywhere');
+    expect(kind.evaluate(conditional, lazyHome({ reviewGlobal: 'on', cloneOff: true })).status, 'held', 'global on, this clone off');
   });
 
   for (const [label, cliState] of [
@@ -339,24 +345,24 @@ export function registerLazySectionCases({ test, expect, newRoot, put, read, ins
     ['the report schema changed', { reviewSchema: 'gentle-ai.review-mode/v2' }],
     ['the status schema changed', { reviewStatusSchema: 'gentle-ai.rdd-mode-status/v2' }],
   ]) {
-    test(`lazy kind: review mode unreadable (${label}) -> unverifiable, and apply keeps the span loaded`, () => {
+    test(`lazy kind: review mode unreadable (${label}) -> a conditional section is unverifiable, and apply keeps the span loaded`, () => {
       const context = lazyHome(cliState);
       const original = read(context.home, review.file);
-      const [result] = evaluateAll([review], context);
+      const [result] = evaluateAll([conditional], context);
       expect(result.status, 'unverifiable', 'status');
       expect(result.syncSafe, true, 'sync-safe');
-      applyAll([review], context);
+      applyAll([conditional], context);
       expect(read(context.home, review.file), original, 'CLAUDE.md untouched');
     });
   }
 
-  test('lazy kind: a moved span with the mode unreadable is restored, never left pointing at a stash nobody may read', () => {
+  test('lazy kind: a moved conditional span with the mode unreadable is restored, never left pointing at a stash nobody may read', () => {
     const context = lazyHome({ reviewGlobal: '' });
     const original = read(context.home, review.file);
-    applyAll([review], context);
+    applyAll([conditional], context);
     expect(read(context.home, review.file) !== original, true, 'moved first');
     installFakeCli(context, { enabled: false, reviewFault: 'exit' });
-    applyAll([review], context);
+    applyAll([conditional], context);
     expect(read(context.home, review.file), original, 'restored bytes');
   });
 
@@ -370,6 +376,24 @@ export function registerLazySectionCases({ test, expect, newRoot, put, read, ins
       applyAll([always], context);
       expect(evaluateAll([always], context)[0].status, 'held', `moved (${JSON.stringify(cliState)})`);
       expect(read(context.home, always.file) !== original, true, 'CLAUDE.md changed');
+    }
+  });
+
+  // The review contract is lazy whatever the review mode: with the switch on it is still read on its triggers, so
+  // CLAUDE.md stays under the harness per-file limit. @es El contrato de revisiones es diferido sea cual sea el
+  // modo: con el interruptor encendido se lee igualmente ante sus disparadores, así CLAUDE.md queda bajo el límite
+  // por fichero del harness.
+  test('lazy kind: the review contract is lazy even with the global review mode on, and its pointer names the review triggers', () => {
+    expect(review.loadedWhile, undefined, 'declared without a loading condition');
+    const context = lazyHome({ reviewGlobal: 'on' });
+    const original = read(context.home, review.file);
+    expect(evaluateAll([review], context)[0].status, 'broken', 'loaded while the mode is on');
+    applyAll([review], context);
+    expect(evaluateAll([review], context)[0].status, 'held', 'moved while the mode is on');
+    expect(read(context.home, review.file) !== original, true, 'CLAUDE.md changed');
+    const pointer = review.pointer.en;
+    for (const trigger of ['before running any `gentle-ai review` command', 'the review switch is on', 'a capture or STATUS returns a review transition']) {
+      expect(pointer.includes(trigger), true, `the pointer names the trigger "${trigger}"`);
     }
   });
 
