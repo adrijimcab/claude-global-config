@@ -1,48 +1,54 @@
 /**
- * Which file PATHS belong to an AI tool, matched by path SEGMENT, never as a bare word in the text: a
- * directory segment (`.cursor/`), a file name (`AGENTS.md`), a segment prefix (`.aider*`, `AGENT-LEDGER*`),
- * a segment suffix (`*.cursorrules`) or a fragment of the whole path (`*subagent*`). Matching is
- * case-insensitive and a plain scan, no regular expression. The terms are the ones `b100-am-ui` enforced in
- * its own `.husky/lib/tooling-artifact-paths.sh`, each measured against the real company trees.
+ * Which file PATHS belong to an AI tool: the paths that match a glob of `blocked-paths`, the one list the agent
+ * guards and the b100-am-ui in-repo hooks share. Each glob is matched against the whole path with shell `case`
+ * semantics (`path-glob.mjs`), ignoring case and reading a Windows `\` as `/`, exactly as the file's header
+ * tells every reader to. A malformed list is a loud failure at load, never a silently shorter list.
  *
- * @es Qué RUTAS de fichero pertenecen a una herramienta de IA, comparadas por SEGMENTO de ruta, nunca como
- * palabra suelta en el texto: un directorio (`.cursor/`), un nombre de fichero (`AGENTS.md`), un prefijo de
- * segmento (`.aider*`, `AGENT-LEDGER*`), un sufijo (`*.cursorrules`) o un fragmento de la ruta entera
- * (`*subagent*`). Sin distinguir mayúsculas y con escaneo simple, sin expresión regular. Los términos son los
- * que `b100-am-ui` aplicaba en su `.husky/lib/tooling-artifact-paths.sh`, medidos contra los árboles reales.
+ * @es Qué RUTAS de fichero pertenecen a una herramienta de IA: las que casan con un glob de `blocked-paths`, la
+ * única lista que comparten los guards de agentes y los hooks de b100-am-ui. Cada glob se compara con la ruta
+ * entera con la semántica de `case` (`path-glob.mjs`), sin distinguir mayúsculas y leyendo un `\` de Windows como
+ * `/`, tal como la cabecera del fichero manda a todo lector. Una lista mal formada falla ruidosamente al
+ * cargar, nunca queda como una lista más corta en silencio.
  */
 
-/** Directory names: a hit when the segment is not the last one. @es Nombres de directorio: acierto si el segmento no es el último. */
-export const DIRECTORY_SEGMENTS = ['.agents', '.cursor', '.gemini', '.codex', '.opencode', '.kimi', '.windsurf', '.atl', '.mimocode', '.playwright-mcp', 'agent-lifecycle'];
+import { readFileSync } from 'node:fs';
 
-/** File names: a hit when the LAST segment equals one. @es Nombres de fichero: acierto si el último segmento es uno. */
-export const FILE_NAMES = ['agents.md', 'gemini.md'];
+import { UNSUPPORTED, globMatches } from './path-glob.mjs';
 
-/** Segment prefixes (`.aider*`, `AGENT-LEDGER*`). @es Prefijos de segmento. */
-export const SEGMENT_PREFIXES = ['.aider', 'agent-ledger'];
-
-/** Segment suffixes (`*.cursorrules`). @es Sufijos de segmento. */
-export const SEGMENT_SUFFIXES = ['.cursorrules'];
-
-/** Fragments that mark a path anywhere in it (`*subagent*`). @es Fragmentos que marcan una ruta en cualquier punto. */
-export const PATH_FRAGMENTS = ['agent-worktree', 'subagent', 'agent-contract'];
+/** The list file, next to this module. @es El fichero de la lista, junto a este módulo. */
+export const BLOCKED_PATHS_FILE = new URL('./blocked-paths', import.meta.url);
 
 /**
- * @returns The listed terms `path` matches, each as the glob that names it (`.cursor/`, `AGENTS.md`,
- *   `.aider*`, `*.cursorrules`, `*subagent*`); `[]` for a path that belongs to no tool.
- * @es Los términos de la lista que `path` cumple, cada uno como el glob que lo nombra; `[]` si la ruta no es de ninguna herramienta.
+ * The globs of a list text: one per line, blank lines and `#` comments skipped.
+ * @throws when a glob holds a character `case` would read as syntax this reader does not implement, or the list is empty.
+ * @es Los globs de un texto de lista: uno por línea, sin líneas vacías ni comentarios `#`.
  */
-export function toolPathTerms(path) {
-  const segments = path.toLowerCase().replaceAll('\\', '/').split('/');
-  const last = segments.length - 1;
-  const lowered = segments.join('/');
-  const terms = [];
+export function parseBlockedPaths(text) {
+  const globs = text.split('\n').map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith('#'));
 
-  for (const directory of DIRECTORY_SEGMENTS) if (segments.slice(0, last).includes(directory)) terms.push(`${directory}/`);
-  for (const file of FILE_NAMES) if (segments[last] === file) terms.push(file);
-  for (const prefix of SEGMENT_PREFIXES) if (segments.some((segment) => segment.startsWith(prefix))) terms.push(`${prefix}*`);
-  for (const suffix of SEGMENT_SUFFIXES) if (segments.some((segment) => segment.endsWith(suffix))) terms.push(`*${suffix}`);
-  for (const fragment of PATH_FRAGMENTS) if (lowered.includes(fragment)) terms.push(`*${fragment}*`);
+  for (const glob of globs) {
+    const unsupported = [...UNSUPPORTED].find((character) => glob.includes(character));
 
-  return terms;
+    if (unsupported !== undefined) throw new Error(`blocked-paths: "${glob}" holds "${unsupported}", which this reader does not implement. @es blocked-paths: "${glob}" lleva "${unsupported}", que este lector no implementa.`);
+  }
+
+  if (globs.length === 0) throw new Error('blocked-paths: the list holds no glob. @es blocked-paths: la lista no tiene ningún glob.');
+
+  return globs;
+}
+
+/** The shared list, read once. @es La lista compartida, leída una vez. */
+export const BLOCKED_GLOBS = Object.freeze(parseBlockedPaths(readFileSync(BLOCKED_PATHS_FILE, 'utf8')));
+
+const normalized = (text) => text.toLowerCase().replaceAll('\\', '/');
+
+/**
+ * @returns The globs `path` matches, as written in the list; `[]` for a path that belongs to no tool.
+ * @param globs The list to match against (injectable; the shared list by default).
+ * @es Los globs que cumple `path`, tal como están escritos en la lista; `[]` si la ruta no es de ninguna herramienta.
+ */
+export function toolPathTerms(path, globs = BLOCKED_GLOBS) {
+  const subject = normalized(path);
+
+  return globs.filter((glob) => globMatches(normalized(glob), subject));
 }

@@ -8,7 +8,8 @@
 import { addedLines, pathsByCommit } from './diff-added.mjs';
 import { attributionHits } from './attribution.mjs';
 import { renderFindings, scanAdded, scanMessage, scanPaths, scanText } from './findings.mjs';
-import { toolPathTerms } from './tool-paths.mjs';
+import { globMatches } from './path-glob.mjs';
+import { BLOCKED_GLOBS, parseBlockedPaths, toolPathTerms } from './tool-paths.mjs';
 
 let failures = 0;
 let total = 0;
@@ -72,7 +73,7 @@ const long = scanText(`${'x '.repeat(200)}claude`, NAMES, 'x');
 check(long[0].excerpt.length <= 103 && long[0].excerpt.endsWith('...'), 'a very long line is cut in the excerpt');
 
 check(scanAdded(addedLines(twoHunks).map((entry) => ({ ...entry, text: entry.line === 5 ? 'use gentle-ai' : entry.text })), NAMES).map((finding) => finding.where).join() === 'src/a.ts:5', 'an added-line finding is located as path:line');
-check(scanPaths(['.claude/rules.md', 'src/ok.ts'], NAMES).map((finding) => finding.where).join() === '.claude/rules.md', 'a path naming a tool is a finding; a clean path is not');
+check(scanPaths(['.claude/rules.md', 'src/ok.ts'], NAMES).map((finding) => `${finding.where}=${finding.name}`).join() === '.claude/rules.md=claude,.claude/rules.md=.claude/*', 'a path naming a tool is a finding by its name AND by its blocked glob; a clean path is not');
 check(scanPaths(['.claude/rules.md'], NAMES)[0].excerpt === '(path) .claude/rules.md', 'a path finding says it is a path');
 
 const many = Array.from({ length: 25 }, (_, index) => ({ where: `f:${index}`, name: 'claude', excerpt: 'e' }));
@@ -81,27 +82,58 @@ const rendered = renderFindings(many);
 check(rendered.split('\n').length === 21 && rendered.includes('... and 5 more. @es ... y 5 más.'), 'the list is capped at 20 and says how many more, in both languages');
 check(renderFindings(many.slice(0, 2)).split('\n').length === 2 && !renderFindings(many.slice(0, 2)).includes('more'), 'a short list has no "more" line');
 
-// --- AI tool PATHS by segment (tool-paths.mjs): every term, at the root and at depth, plus the near misses.
+// --- AI tool PATHS (tool-paths.mjs over blocked-paths, path-glob.mjs): every glob, the matcher, the loader, the near misses.
 const terms = (path) => toolPathTerms(path).join();
 
 for (const [path, term] of [
-  ['.cursor/rules/a.mdc', '.cursor/'], ['pkg/.gemini/settings.json', '.gemini/'], ['.codex/config.toml', '.codex/'], ['.opencode/x.json', '.opencode/'],
-  ['.kimi/x.json', '.kimi/'], ['.windsurf/rules.md', '.windsurf/'], ['.atl/skill-registry.md', '.atl/'], ['.mimocode/x.json', '.mimocode/'],
-  ['.playwright-mcp/page.yml', '.playwright-mcp/'], ['.agents/x.md', '.agents/'], ['scripts/agent-lifecycle/a.ts', 'agent-lifecycle/'],
-  ['AGENTS.md', 'agents.md'], ['docs/GEMINI.md', 'gemini.md'], ['.aider.conf.yml', '.aider*'], ['AGENT-LEDGER.md', 'agent-ledger*'],
-  ['docs/AGENT-LEDGER-es.md', 'agent-ledger*'], ['rules.cursorrules', '*.cursorrules'], ['scripts/agent-worktree-lifecycle/a.ts', '*agent-worktree*'],
+  ['.cursor/rules/a.mdc', '.cursor/*'], ['pkg/.gemini/settings.json', '*/.gemini/*'], ['.codex/config.toml', '.codex/*'], ['.opencode/x.json', '.opencode/*'],
+  ['.kimi/x.json', '.kimi/*'], ['.windsurf/rules.md', '.windsurf/*'], ['.atl/skill-registry.md', '.atl/*'], ['.mimocode/x.json', '.mimocode/*'],
+  ['.playwright-mcp/page.yml', '.playwright-mcp/*'], ['.agents/x.md', '.agents/*'], ['scripts/agent-lifecycle/a.ts', '*/agent-lifecycle/*'],
+  ['.claude/settings.json', '.claude/*'], ['Discovery-FE/.claude/x.md', '*/.claude/*'], ['CLAUDE.md', 'CLAUDE.md'], ['docs/CLAUDE.md', '*/CLAUDE.md'],
+  ['AGENTS.md', 'AGENTS.md'], ['docs/GEMINI.md', '*/GEMINI.md'], ['.aider.conf.yml', '.aider*'], ['pkg/.aider.conf.yml', '*/.aider*'],
+  ['AGENT-LEDGER.md', 'AGENT-LEDGER*'], ['docs/AGENT-LEDGER-es.md', '*/AGENT-LEDGER*'], ['rules.cursorrules', '*.cursorrules'],
+  ['.github/copilot-instructions.md', '.github/copilot-instructions.md'], ['scripts/agent-worktree-lifecycle/a.ts', '*agent-worktree*'],
   ['src/subagents.ts', '*subagent*'], ['docs/agent-contract.md', '*agent-contract*']
 ]) check(terms(path) === term, `tool path ${term} matches ${path}`);
 
-check(terms('.CURSOR\\Rules\\A.mdc') === '.cursor/', 'matching ignores case and reads a Windows separator');
+check(terms('.CURSOR\\Rules\\A.mdc') === '.cursor/*', 'matching ignores case and reads a Windows separator');
 check(terms('src/cursor-styles.css') === '' && terms('src/app/cursor.component.ts') === '', 'NEAR MISS: "cursor" in a file name is CSS vocabulary, not the .cursor directory');
 check(terms('docs/my.cursor.notes.md') === '', 'NEAR MISS: ".cursor" inside a file name is not a directory segment');
 check(terms('src/agents/list.ts') === '' && terms('docs/agents.md.txt') === '', 'NEAR MISS: an "agents" folder and "agents.md.txt" are not AGENTS.md');
-check(terms('docs/aiderman.md') === '' && terms('src/agent-ledger') === 'agent-ledger*', 'NEAR MISS: "aiderman" lacks the ".aider" prefix, while a bare AGENT-LEDGER segment still matches');
-check(terms('.cursor') === '', 'a FILE named .cursor is not a directory segment');
+check(terms('docs/aiderman.md') === '' && terms('src/agent-ledger') === '*/AGENT-LEDGER*', 'NEAR MISS: "aiderman" lacks the ".aider" prefix, while a bare AGENT-LEDGER segment still matches');
+check(terms('.cursor') === '', 'a FILE named .cursor is not a directory');
 check(terms('docs/notagents.md') === '' && terms('agents.md/x.ts') === '', 'NEAR MISS: AGENTS.md is a whole file name, not a suffix and not a directory');
-check(terms('docs/my.aider.md') === '' && terms('docs/old-agent-ledger.md') === '' && terms('a.cursorrules.bak') === '', 'NEAR MISS: a prefix or suffix term must sit at the edge of its segment');
-check(scanPaths(['.cursor/a.mdc', 'src/ok.ts'], NAMES).map((finding) => `${finding.where}=${finding.name}`).join() === '.cursor/a.mdc=.cursor/', 'scanPaths reports a tool path with its glob and says it is a tool path');
+check(terms('docs/my.aider.md') === '' && terms('docs/old-agent-ledger.md') === '' && terms('a.cursorrules.bak') === '', 'NEAR MISS: a prefix or suffix glob must sit at the edge of its segment');
+check(terms('src/claude-api.ts') === '' && terms('docs/claude.md.bak') === '', 'NEAR MISS: a "claude" word in a file name is not the .claude directory nor CLAUDE.md');
+
+// The 27 globs b100-am-ui enforced in its own list before the lists were unified, all still present.
+const B100_GLOBS = ['.agents/*', '.claude/*', '.cursor/*', '.gemini/*', '.codex/*', '.opencode/*', '.kimi/*', '.windsurf/*', '.aider*', '.atl/*', '.mimocode/*',
+  '.playwright-mcp/*', 'CLAUDE.md', 'GEMINI.md', 'AGENTS.md', '*/CLAUDE.md', '*/GEMINI.md', '*/AGENTS.md', 'AGENT-LEDGER*', '*.cursorrules',
+  '.github/copilot-instructions.md', '*agent-worktree*', '*subagent*', '*/agent-lifecycle/*', 'agent-lifecycle/*', '*agent-contract*', '*/AGENT-LEDGER*'];
+check(B100_GLOBS.length === 27 && B100_GLOBS.every((glob) => BLOCKED_GLOBS.includes(glob)), `the shared list holds all 27 of b100-am-ui's globs (${B100_GLOBS.filter((glob) => BLOCKED_GLOBS.includes(glob)).length} of 27)`);
+check(BLOCKED_GLOBS.length === 39 && new Set(BLOCKED_GLOBS).size === 39, `the shared list holds 39 distinct globs (${BLOCKED_GLOBS.length})`);
+const sampleOf = (glob) => glob.replaceAll('*', 'x').replaceAll('?', 'q');
+check(BLOCKED_GLOBS.every((glob) => toolPathTerms(sampleOf(glob)).includes(glob)), 'every glob of the shared list blocks a path built from it');
+check(['src/app/app.component.ts', 'README.md', 'docs/adr/0001-lib.md'].every((path) => terms(path) === ''), 'three neutral paths match no glob');
+
+// path-glob.mjs: shell `case` semantics.
+check(globMatches('*', '') && globMatches('*', 'a/b/c') && globMatches('a/*', 'a/b/c'), '"*" matches the empty run and crosses "/"');
+check(globMatches('a?c', 'abc') && !globMatches('a?c', 'ac') && !globMatches('a?c', 'abbc'), '"?" matches exactly one character');
+check(globMatches('a*b*c', 'aXbYbZc') && !globMatches('a*b*c', 'aXbYbZ'), 'a later "*" backtracks to the last star');
+check(!globMatches('abc', 'abcd') && !globMatches('abcd', 'abc') && globMatches('abc', 'abc'), 'the WHOLE path must match, neither a prefix nor a longer glob');
+check(globMatches('a**', 'a') && !globMatches('a*', 'b'), 'trailing stars match nothing, and a literal head still has to match');
+
+// parseBlockedPaths: the loader.
+check(parseBlockedPaths('# c\n\n.a/*\r\n  *b*  \n#d\n').join() === '.a/*,*b*', 'comments, blank lines, CR and surrounding spaces are skipped');
+let threw = '';
+try { parseBlockedPaths('.a/*\n[ab]x\n'); } catch (error) { threw = error.message; }
+check(threw.includes('[ab]x') && threw.includes('@es'), 'a glob with "[" is refused loudly, in both languages');
+threw = '';
+try { parseBlockedPaths('# only a comment\n\n'); } catch (error) { threw = error.message; }
+check(threw.includes('no glob') && threw.includes('@es'), 'an empty list is refused loudly, never read as "nothing is blocked"');
+check(toolPathTerms('x/y.md', ['*/y.md', 'z*']).join() === '*/y.md', 'toolPathTerms takes an injected list and returns the globs as written');
+
+check(scanPaths(['.cursor/a.mdc', 'src/ok.ts'], NAMES).map((finding) => `${finding.where}=${finding.name}`).join() === '.cursor/a.mdc=.cursor/*', 'scanPaths reports a tool path with its glob and says it is a tool path');
 check(scanPaths(['.cursor/a.mdc'], NAMES)[0]?.excerpt === '(tool path) .cursor/a.mdc', 'a tool-path finding says what kind it is');
 
 // --- attribution in a commit MESSAGE (attribution.mjs): the phrases, the emoji and the near misses.

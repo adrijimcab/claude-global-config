@@ -1,0 +1,66 @@
+# Paths that belong to an AI tool and must never reach a company repository.
+# The ONE list both readers use: ~/.claude/company-scan/tool-paths.mjs (the agent guards) and the b100-am-ui
+# in-repo commit and push hooks (git config b100.blockedPathsFile points here). It lives only in the personal
+# backup of ~/.claude, never in a company repository.
+#
+# Format: one glob per line; blank lines and lines starting with # are ignored. A glob is matched against the
+# whole repository-relative path with shell `case` semantics: `*` matches any run of characters, `/` included,
+# and `?` matches one character. No other metacharacter is allowed. Matching ignores case on both sides and
+# reads a Windows backslash separator as `/`, so a reader must lower-case both the path and the glob first.
+#
+# @es Rutas que pertenecen a una herramienta de IA y nunca deben llegar a un repositorio de la empresa.
+# @es La ÚNICA lista que usan los dos lectores: ~/.claude/company-scan/tool-paths.mjs (los guards de agentes) y
+# @es los hooks de commit y push de b100-am-ui (git config b100.blockedPathsFile apunta aquí). Vive solo en el
+# @es respaldo personal de ~/.claude, nunca en un repositorio de la empresa.
+# @es Formato: un glob por línea; se ignoran las líneas vacías y las que empiezan por #. Cada glob se compara con
+# @es la ruta entera relativa al repositorio con la semántica de `case` de la shell: `*` casa cualquier tramo de
+# @es caracteres, `/` incluida, y `?` un carácter. No se admite ningún otro metacarácter. La comparación ignora
+# @es mayúsculas en ambos lados y lee la barra invertida de Windows como `/`: todo lector pasa a minúsculas la ruta y el glob.
+
+# Tool directories, at the root and at any depth.
+# @es Directorios de herramientas, en la raíz y a cualquier profundidad.
+.agents/*
+*/.agents/*
+.claude/*
+*/.claude/*
+.cursor/*
+*/.cursor/*
+.gemini/*
+*/.gemini/*
+.codex/*
+*/.codex/*
+.opencode/*
+*/.opencode/*
+.kimi/*
+*/.kimi/*
+.windsurf/*
+*/.windsurf/*
+.atl/*
+*/.atl/*
+.mimocode/*
+*/.mimocode/*
+.playwright-mcp/*
+*/.playwright-mcp/*
+agent-lifecycle/*
+*/agent-lifecycle/*
+
+# Tool files, at the root and at any depth.
+# @es Ficheros de herramientas, en la raíz y a cualquier profundidad.
+CLAUDE.md
+*/CLAUDE.md
+GEMINI.md
+*/GEMINI.md
+AGENTS.md
+*/AGENTS.md
+AGENT-LEDGER*
+*/AGENT-LEDGER*
+.aider*
+*/.aider*
+*.cursorrules
+.github/copilot-instructions.md
+
+# Fragments that mark a path wherever they appear.
+# @es Fragmentos que marcan una ruta dondequiera que aparezcan.
+*agent-worktree*
+*subagent*
+*agent-contract*

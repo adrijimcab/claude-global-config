@@ -12,6 +12,7 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const DIFF = 'company-scan/diff-added.mjs';
 const FINDINGS = 'company-scan/findings.mjs';
 const PATHS = 'company-scan/tool-paths.mjs';
+const GLOB = 'company-scan/path-glob.mjs';
 const ATTRIBUTION = 'company-scan/attribution.mjs';
 
 const MUTANTS = [
@@ -42,22 +43,19 @@ const MUTANTS = [
   ['a message is no longer checked for attribution', FINDINGS, 'return [...scanText(text, names, where), ...attributed];', 'return scanText(text, names, where);'],
   ['an attribution finding stops quoting its line', FINDINGS, '`(attribution) ${lines[hit.line - 1].trim().slice(0, EXCERPT_WIDTH)}`', "'(attribution)'"],
 
-  // --- tool-paths.mjs: segment matching.
-  ['path matching becomes case-sensitive', PATHS, 'path.toLowerCase().replaceAll', 'path.replaceAll'],
+  // --- tool-paths.mjs and path-glob.mjs: the shared list and its `case` matcher.
+  ['path matching becomes case-sensitive', PATHS, 'text.toLowerCase().replaceAll', 'text.replaceAll'],
   ['a Windows separator is no longer read', PATHS, "replaceAll('\\\\', '/')", "replaceAll('\\\\', '\\\\')"],
-  ['a directory term also matches the last segment (a file)', PATHS, 'segments.slice(0, last).includes(directory)', 'segments.includes(directory)'],
-  ['a directory term needs no whole segment (substring of the path)', PATHS, 'segments.slice(0, last).includes(directory)', 'lowered.includes(directory)'],
-  ['a file name matches as a mere suffix of the path', PATHS, 'segments[last] === file', 'lowered.endsWith(file)'],
-  ['a file name matches at any segment, not only the last', PATHS, 'segments[last] === file', 'segments.includes(file)'],
-  ['a segment prefix matches anywhere inside the segment', PATHS, 'segment.startsWith(prefix)', 'segment.includes(prefix)'],
-  ['a segment suffix matches anywhere inside the segment', PATHS, 'segment.endsWith(suffix)', 'segment.includes(suffix)'],
-  ['a path fragment is searched only in the file name', PATHS, 'lowered.includes(fragment)', 'segments[last].includes(fragment)'],
-  ['the directory list loses .windsurf', PATHS, "'.windsurf', ", ''],
-  ['the directory list loses agent-lifecycle', PATHS, ", 'agent-lifecycle']", ']'],
-  ['the file list loses gemini.md', PATHS, ", 'gemini.md']", ']'],
-  ['the prefix list loses agent-ledger', PATHS, ", 'agent-ledger']", ']'],
-  ['the suffix list is empty', PATHS, "SEGMENT_SUFFIXES = ['.cursorrules']", 'SEGMENT_SUFFIXES = []'],
-  ['the fragment list loses agent-contract', PATHS, ", 'agent-contract']", ']'],
+  ['comment lines become globs', PATHS, " && !line.startsWith('#')", ''],
+  ['an unsupported character is accepted', PATHS, 'if (unsupported !== undefined) throw', 'if (false) throw'],
+  ['an empty list is accepted as "nothing is blocked"', PATHS, 'if (globs.length === 0) throw', 'if (false) throw'],
+  ['only the first matching glob is reported', PATHS, 'return globs.filter(', 'return globs.slice(0, 1).filter('],
+  ['the glob is no longer lower-cased', PATHS, 'globMatches(normalized(glob), subject)', 'globMatches(glob, subject)'],
+  ['"?" matches nothing', GLOB, "glob[g] === '?' || ", ''],
+  ['"*" no longer backtracks', GLOB, '} else if (starAt !== -1) {', '} else if (false) {'],
+  ['a prefix of the path is enough', GLOB, 'while (p < path.length) {', 'while (p < path.length && g < glob.length) {'],
+  ['trailing stars must match a character', GLOB, "while (g < glob.length && glob[g] === '*') g += 1;", ''],
+  ['the glob may be longer than the path', GLOB, 'return g === glob.length;', 'return true;'],
 
   // --- attribution.mjs: phrases and term boundaries.
   ['the "generated with" phrase is dropped', ATTRIBUTION, "  ['generated', 'with'],\n", ''],
