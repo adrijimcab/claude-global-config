@@ -122,7 +122,12 @@ try {
   defineRole('probe-editor', 'tools: Read, Edit');
   defineRole('probe-notebook', 'tools: Read, NotebookEdit');
   defineRole('probe-all', 'tools: []');
-  defineRole('probe-all-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit');
+  defineRole('probe-all-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit, Bash, PowerShell');
+  defineRole('probe-all-no-shell-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit');
+  defineRole('probe-bash-only', 'tools: Read, Bash');
+  defineRole('probe-powershell-only', 'tools: Read, PowerShell');
+  defineRole('probe-bash-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit, PowerShell');
+  defineRole('probe-powershell-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit, Bash');
   defineRole('probe-all-half-closed', 'tools: []\ndisallowedTools: Write, Edit');
   defineRole('probe-no-tools-line', 'description: x');
 
@@ -146,7 +151,12 @@ try {
   check('a role declaring Edit is refused', await launch('probe-editor'), 'deny');
   check('a role declaring NotebookEdit is refused', await launch('probe-notebook'), 'deny');
   check('a role with every tool (`tools: []`) is refused', await launch('probe-all'), 'deny');
-  check('every tool minus the three write tools is read-only', await launch('probe-all-closed'), 'note');
+  check('every tool minus the write tools and both shells is read-only', await launch('probe-all-closed'), 'note');
+  check('every tool minus the three write tools still reaches a shell: refused', await launch('probe-all-no-shell-closed'), 'deny');
+  check('a Bash-only role can commit or redirect: refused', await launch('probe-bash-only'), 'deny');
+  check('a PowerShell-only role can write through a command: refused', await launch('probe-powershell-only'), 'deny');
+  check('every tool but Bash closed still reaches Bash: refused', await launch('probe-bash-closed'), 'deny');
+  check('every tool but PowerShell closed still reaches PowerShell: refused', await launch('probe-powershell-closed'), 'deny');
   check('every tool minus only two write tools still writes', await launch('probe-all-half-closed'), 'deny');
   check('a role file with no `tools:` line is refused, never read as read-only', await launch('probe-no-tools-line'), 'deny');
   // A read-only definition that EXISTS one folder above the agents folder: only the name check keeps it out of reach.

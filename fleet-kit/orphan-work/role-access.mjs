@@ -23,15 +23,22 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { declarationOf } from '../../agent-toolset-check/check.mjs';
+import { declarationOf, EXECUTION_TOOLS } from '../../agent-toolset-check/check.mjs';
 
-/** The tools that change files. @es Las herramientas que cambian ficheros. */
-export const WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit'];
+/**
+ * The tools that change files, directly or through a command: a role with Bash or PowerShell can commit or
+ * redirect into a file, so it counts as a writer (owner-side decision 2026-10-19).
+ * @es Las herramientas que cambian ficheros, directamente o por una orden: un rol con Bash o PowerShell puede
+ * hacer commit o redirigir a un fichero, así que cuenta como escritor (decisión del 2026-10-19).
+ */
+export const WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit', ...EXECUTION_TOOLS];
 
 /**
  * Built-in types that have no definition file. Source: the harness's own `Agent` tool listing, which states
  * their tools: Explore and Plan "All tools except Agent, ..., Edit, Write, NotebookEdit"; claude-code-guide
- * "Glob, Grep, Read, WebFetch, WebSearch". Every other built-in (general-purpose, statusline-setup, which
+ * "Glob, Grep, Read, WebFetch, WebSearch". Explore and Plan list Bash there, yet stay in this set: the harness
+ * documents them as read-only search and planning roles, and this was the launch the guard wrongly refused
+ * (their definitions are not files this install can tighten). Every other built-in (general-purpose, statusline-setup, which
  * edits) is a writer, so it is deliberately absent.
  * @es Tipos integrados sin fichero de definición. Fuente: el listado de la herramienta `Agent` del propio
  * harness, que declara sus herramientas. Los demás (general-purpose, statusline-setup, que edita) escriben.
