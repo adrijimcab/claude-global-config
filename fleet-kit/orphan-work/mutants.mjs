@@ -4,6 +4,7 @@
 import { runCampaign } from '../testing/campaign.mjs';
 
 const G = 'orphan-work/guard.mjs';
+const R = 'orphan-work/role-access.mjs';
 
 runCampaign('orphan-work/selftest.mjs', [
   ['a live agent\'s worktree is parked', G, '.filter((worktree) => activeOwner(worktree.path, records, now) === undefined)', '.filter((worktree) => true)'],
@@ -33,6 +34,25 @@ runCampaign('orphan-work/selftest.mjs', [
   ['a POSIX path is read on Windows too', G, "if (platform !== 'win32') return 'posix';", "return 'posix';"],
   ['a lone Git Bash switch is read as a drive path', G, "isLetter(text[at + 1]) && text[at + 2] === '/' && isPathCharacter(text[at + 3])", 'isLetter(text[at + 1]) && isPathCharacter(text[at + 3])'],
   ['a path glued to a word is read', G, 'if (before !== undefined && !BEFORE_A_PATH.includes(before)) return undefined;\n', ''],
+  ['every launch is treated as a writer (the pre-fix refusal)', G, 'return readOnly ? advise(information(parked)) : deny(reason(parked));', 'return deny(reason(parked));'],
+  ['every launch is treated as read-only', G, 'return readOnly ? advise(information(parked)) : deny(reason(parked));', 'return advise(information(parked));'],
+  ['the built-in read-only set is empty', R, "new Set(['Explore', 'Plan', 'claude-code-guide'])", 'new Set([])'],
+  ['Explore is missing from the built-in read-only set', R, "new Set(['Explore', 'Plan', 'claude-code-guide'])", "new Set(['Plan', 'claude-code-guide'])"],
+  ['Plan is missing from the built-in read-only set', R, "new Set(['Explore', 'Plan', 'claude-code-guide'])", "new Set(['Explore', 'claude-code-guide'])"],
+  ['claude-code-guide is missing from the built-in read-only set', R, "new Set(['Explore', 'Plan', 'claude-code-guide'])", "new Set(['Explore', 'Plan'])"],
+  ['general-purpose is a built-in read-only role', R, "new Set(['Explore', 'Plan', 'claude-code-guide'])", "new Set(['Explore', 'Plan', 'claude-code-guide', 'general-purpose'])"],
+  ['an unknown role is read-only', R, 'return READ_ONLY_BUILT_INS.has(role);', 'return true;'],
+  ['a built-in name overrides a role file of the same name', R, 'if (declaration === undefined) return READ_ONLY_BUILT_INS.has(role);', 'if (READ_ONLY_BUILT_INS.has(role)) return true;\n  if (declaration === undefined) return false;'],
+  ['an unreadable role file is read-only', R, 'if (declaration.problem !== undefined) return false;', 'if (declaration.problem !== undefined) return true;'],
+  ['a missing subagent_type is read-only', R, "if (typeof role !== 'string' || !isPlainName(role)) return false;", "if (typeof role !== 'string') return true;\n  if (!isPlainName(role)) return false;"],
+  ['a role name may walk out of the agents folder', R, "role.length > 0 && path.basename(role) === role && !role.includes('.')", 'role.length > 0'],
+  ['Write is not a write tool', R, "['Write', 'Edit', 'NotebookEdit']", "['Edit', 'NotebookEdit']"],
+  ['Edit is not a write tool', R, "['Write', 'Edit', 'NotebookEdit']", "['Write', 'NotebookEdit']"],
+  ['NotebookEdit is not a write tool', R, "['Write', 'Edit', 'NotebookEdit']", "['Write', 'Edit']"],
+  ['`tools: []` is not read as every tool', R, 'declaration.all || declaration.declared.includes(tool)', 'declaration.declared.includes(tool)'],
+  ['disallowedTools is ignored', R, '!declaration.disallowed.includes(tool) && (', 'true && ('],
+  ['the install agents folder is not searched', R, "[path.join(mainCheckout, '.claude', 'agents'), INSTALL_AGENTS]", "[path.join(mainCheckout, '.claude', 'agents')]"],
+  ['the project agents folder is not searched', R, "[path.join(mainCheckout, '.claude', 'agents'), INSTALL_AGENTS]", '[INSTALL_AGENTS]'],
   ['a UNC path is never read', G, "if (here === BACKSLASH) return text[at + 1] === BACKSLASH && isPathCharacter(text[at + 2]) ? 'unc' : undefined;", 'if (here === BACKSLASH) return undefined;'],
   ['a UNC path is not told from a drive-less POSIX one', G, "const unc = slashed.startsWith('//') && (platform === 'win32' || raw.startsWith(`${BACKSLASH}${BACKSLASH}`));", 'const unc = false;'],
   ['a POSIX path is case-folded', G, "return platform === 'win32' || unc || drive ? key.toLowerCase() : key;", 'return key.toLowerCase();'],

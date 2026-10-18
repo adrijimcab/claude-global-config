@@ -111,6 +111,54 @@ try {
   const output = await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: {} }));
 
   check('evaluate refuses the delegation and names the worktree', [output?.hookSpecificOutput.permissionDecision, output?.hookSpecificOutput.permissionDecisionReason.includes('agent-committed')], ['deny', true]);
+  // --- A launch that cannot write is told about the parked work, never refused; a writer still is.
+  // The role is read from its definition (project `.claude/agents` first, then the install's `agents/`).
+  // @es Un lanzamiento que no puede escribir recibe la nota del trabajo aparcado, sin rechazo; un escritor sí
+  // se rechaza. El rol se lee de su definición (`.claude/agents` del proyecto y luego `agents/` de la instalación).
+  const defineRole = (name, frontmatter) => writeFile(repository, `.claude/agents/${name}.md`, `---\nname: ${name}\n${frontmatter}\n---\nbody\n`);
+
+  defineRole('probe-readonly', 'tools: Read, Glob, Grep');
+  defineRole('probe-writer', 'tools: Read, Write');
+  defineRole('probe-editor', 'tools: Read, Edit');
+  defineRole('probe-notebook', 'tools: Read, NotebookEdit');
+  defineRole('probe-all', 'tools: []');
+  defineRole('probe-all-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit');
+  defineRole('probe-all-half-closed', 'tools: []\ndisallowedTools: Write, Edit');
+  defineRole('probe-no-tools-line', 'description: x');
+
+  const launch = async (subagentType) => {
+    const output = await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: subagentType === undefined ? {} : { subagent_type: subagentType } }));
+    const specific = output?.hookSpecificOutput;
+
+    if (specific === undefined) return 'allow';
+
+    return specific.permissionDecision === 'deny' ? 'deny' : specific.additionalContext.includes('agent-committed') ? 'note' : 'note-without-the-worktree';
+  };
+
+  check('Explore (built-in, no file) passes with the parked-work note', await launch('Explore'), 'note');
+  check('Plan (built-in, no file) passes with the note', await launch('Plan'), 'note');
+  check('claude-code-guide (built-in, no file) passes with the note', await launch('claude-code-guide'), 'note');
+  check('general-purpose is refused', await launch('general-purpose'), 'deny');
+  check('a launch with no subagent_type is general-purpose: refused', await launch(undefined), 'deny');
+  check('an unknown role is refused', await launch('no-such-role-anywhere'), 'deny');
+  check('a custom role whose tools exclude Write, Edit and NotebookEdit passes with the note', await launch('probe-readonly'), 'note');
+  check('a role declaring Write is refused', await launch('probe-writer'), 'deny');
+  check('a role declaring Edit is refused', await launch('probe-editor'), 'deny');
+  check('a role declaring NotebookEdit is refused', await launch('probe-notebook'), 'deny');
+  check('a role with every tool (`tools: []`) is refused', await launch('probe-all'), 'deny');
+  check('every tool minus the three write tools is read-only', await launch('probe-all-closed'), 'note');
+  check('every tool minus only two write tools still writes', await launch('probe-all-half-closed'), 'deny');
+  check('a role file with no `tools:` line is refused, never read as read-only', await launch('probe-no-tools-line'), 'deny');
+  check('a role name that walks out of the agents folder is refused', await launch('..\\..\\probe-readonly'), 'deny');
+  check('the install\'s read-only judge (jd-judge-a) passes with the note', await launch('jd-judge-a'), 'note');
+  check('the install\'s writing fixer (jd-fix-agent) is refused', await launch('jd-fix-agent'), 'deny');
+  check('the install\'s `tools: []` reviewer (review-risk) is refused', await launch('review-risk'), 'deny');
+  check('the note says it is information only', (await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { subagent_type: 'Explore' } })))?.hookSpecificOutput.additionalContext.includes('information only'), true);
+
+  defineRole('claude-code-guide', 'tools: Read, Write');
+  check('a role file overrides the built-in of the same name: a writing definition is refused', await launch('claude-code-guide'), 'deny');
+  rmSync(path.join(repository, '.claude', 'agents', 'claude-code-guide.md'));
+
   check('an ungoverned repository is not judged', parkedNames([], root), []);
   check('a malformed payload fails open', await evaluate('nope'), undefined);
 

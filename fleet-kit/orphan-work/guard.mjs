@@ -28,9 +28,10 @@ import path from 'node:path';
 import { findConfig } from '../config/load-config.mjs';
 import { isAgentWorktree, listWorktrees } from '../lib/agent-worktrees.mjs';
 import { gitAsker, isAncestor, porcelainEntries } from '../lib/git.mjs';
-import { deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
+import { advise, deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
 import { ACTIVE_WINDOW_MS, activeOwner, agentRecords } from '../../agent-liveness/active-owner.mjs';
 import { nativeSpelling } from '../../cherry-pick-guard/working-directory.mjs';
+import { agentDirectories, launchesReadOnlyRole } from './role-access.mjs';
 
 export const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 
@@ -306,10 +307,27 @@ function reason(parked) {
   ].join('\n');
 }
 
+/**
+ * The note shown, without refusing, to a launch that cannot write. @es La nota que se muestra, sin rechazar, a un lanzamiento que no puede escribir.
+ */
+function information(parked) {
+  return [
+    "ORPHANED WORK (fleet-kit, information only): a stopped agent's work is parked in its worktree. This launch is READ-ONLY, so it can redo nothing and is NOT refused.",
+    '',
+    ...parked.map(describe),
+    '',
+    'A writer launch stays refused until each is triaged: resume the stopped agent, land or salvage the work, or discard it deliberately.'
+  ].join('\n');
+}
+
 export const evaluate = evaluator('orphan-work', (payload) => {
   const parked = parkedWork(payload);
 
-  return parked.length === 0 ? undefined : deny(reason(parked));
+  if (parked.length === 0) return undefined;
+
+  const readOnly = launchesReadOnlyRole(payload, agentDirectories(findConfig(payload.cwd).repository.mainCheckout));
+
+  return readOnly ? advise(information(parked)) : deny(reason(parked));
 });
 
 runWhenMain(import.meta.url, hookMain(evaluate));
