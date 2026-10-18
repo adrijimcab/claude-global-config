@@ -42,6 +42,7 @@ Las claves de «On-demand», al final, conservan sus frases en el fichero de `~/
 
 - **`shell-one-liner-corrupted-data`**
   RULE: text edits with escapes, backslashes or template literals go through the Edit tool or a `.mjs` file, and after any scripted edit the expected marker is counted before anything relies on it.
+  RULE (face of 2026-10-14 and 2026-10-18, Discovery, recurring): a `.mjs` is safe only when the replacement text is READ from a file the Edit or Write tool wrote; a `.mjs` whose replacement text was itself written through a heredoc or a template literal drops backslashes too (an e2e regex `\s` became `s`, four times). So regexes and any escape-bearing text are edited with the Edit tool only, and a discriminating test proves the regex afterwards.
 
 - **`replied-to-owner-in-english`**
   RULE: every visible line, interstitial narration included, is written in Rioplatense Spanish with the Gentleman tone; English appears only quoted, in a code block, or as a technical term.
