@@ -133,7 +133,26 @@ try {
   utimesSync(path.join(worktreeOf('agent-busy'), 'renamed.txt'), new Date(), new Date());
   check('a rename is timed by its destination', parkedNames([], repository, 'Agent', lastWorkedMs).includes('agent-busy'), false);
 
-  const busyNow = lastWorkedMs({ path: worktreeOf('agent-busy') });
+  // Work stacked on another worktree's live branch is that branch's work, judged on its own.
+  // @es El trabajo apilado sobre la rama viva de otro worktree es de esa rama, que se juzga aparte.
+  const parkedWorkOf = (name) => parkedWork({ tool_name: 'Agent', cwd: repository }, { records: [], lastWorked: () => 0 }).find(({ worktree }) => worktree.branch === name)?.work;
+  const liveBase = [{ id: 'base-agent', worktree: 'stack-base', worktreePath: worktreeOf('stack-base'), transcript }];
+  const stackedOn = (base, name) => git(repository, 'worktree', 'add', '--quiet', '-b', name, worktreeOf(name), base);
+
+  utimesSync(transcript, new Date(), new Date());
+  add('stack-base');
+  commitFiles(worktreeOf('stack-base'), { 'base-1.txt': 'x\n' }, 'feat: base one');
+  commitFiles(worktreeOf('stack-base'), { 'base-2.txt': 'x\n' }, 'feat: base two');
+  stackedOn('stack-base', 'stack-empty');
+  stackedOn('stack-base', 'stack-own');
+  commitFiles(worktreeOf('stack-own'), { 'own.txt': 'x\n' }, 'feat: own');
+  const stackNames = () => parkedNames(liveBase).filter((name) => name.startsWith('stack-'));
+
+  check('a worktree stacked on a live branch with no commits of its own is not parked', stackNames().includes('stack-empty'), false);
+  check('a stacked worktree with one commit of its own is parked, and that one commit is the count', [stackNames().includes('stack-own'), parkedWork({ tool_name: 'Agent', cwd: repository }, { records: liveBase, lastWorked: () => 0 }).find(({ worktree }) => worktree.branch === 'stack-own')?.work.unintegrated], [true, 1]);
+  check('the base keeps its own commits counted once it stops', parkedWorkOf('stack-base')?.unintegrated, 2);
+
+  const busyNow =lastWorkedMs({ path: worktreeOf('agent-busy') });
 
   check('the last-work time is the newest entry, not the old HEAD', Date.now() - busyNow < 60 * 1000, true);
   check('an unreadable worktree has no last-work time', lastWorkedMs({ path: path.join(root, 'no-such-worktree') }), 0);

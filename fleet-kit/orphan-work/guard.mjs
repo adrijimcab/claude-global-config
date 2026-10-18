@@ -27,7 +27,7 @@ import path from 'node:path';
 
 import { findConfig } from '../config/load-config.mjs';
 import { isAgentWorktree, listWorktrees } from '../lib/agent-worktrees.mjs';
-import { gitAsker, porcelainEntries } from '../lib/git.mjs';
+import { gitAsker, isAncestor, porcelainEntries } from '../lib/git.mjs';
 import { deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
 import { ACTIVE_WINDOW_MS, activeOwner, agentRecords } from '../../agent-liveness/active-owner.mjs';
 import { nativeSpelling } from '../../cherry-pick-guard/working-directory.mjs';
@@ -35,20 +35,41 @@ import { nativeSpelling } from '../../cherry-pick-guard/working-directory.mjs';
 export const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 
 /**
- * What a worktree holds that no integration branch does.
+ * What a worktree holds that no integration branch, and no other worktree's branch, does.
+ *
+ * A commit counts as unintegrated when `git cherry` finds it missing from the integration branch AND it is
+ * not part of the branch of another LIVE worktree that sits BELOW this one (that branch's tip is an ancestor
+ * of this worktree's tip, or equal to it). Commits stacked on somebody else's unlanded branch are that branch's
+ * work, and that branch is judged on its own. Only a branch below counts: the base of a stack keeps owning
+ * its commits, so a stack is never hidden from both ends.
+ *
+ * REMAINING BOUNDS: a stacked base that has been deleted, with no worktree left on it, counts as orphaned
+ * again; and a base whose worktree has STOPPED holds nothing, so stopped work is still judged in full (its
+ * stacked child then counts the base's commits too, and both are named).
+ * @param others the LIVE linked worktrees of the repository, `[{ path, branch }]`; this one is skipped.
  * @returns `{ dirty, unintegrated }` counts, or `{ unmeasurable: why }`.
- * @es Lo que guarda un worktree que ninguna rama de integración tiene.
+ * @es Lo que guarda un worktree que ninguna rama de integración, ni la rama de otro worktree vivo, tiene. Un
+ * commit cuenta como no integrado si `git cherry` lo echa en falta en la rama de integración Y no forma
+ * parte de la rama de otro worktree enlazado VIVO que está POR DEBAJO de este (su punta es ancestro de la punta
+ * de este, o igual). Lo apilado sobre la rama sin aterrizar de otro es trabajo de esa rama, que se juzga
+ * aparte. Solo cuenta una rama inferior: la base de una pila conserva sus commits. LÍMITES: una base
+ * apilada que se borró, sin worktree encima, vuelve a contar como huérfana; y la base cuyo worktree PARÓ no
+ * retiene nada: el trabajo parado se juzga entero (su hijo apilado cuenta entonces también los commits de la base y se nombran ambos).
  */
-export function workIn(worktree, integrationBranch) {
+export function workIn(worktree, integrationBranch, others = []) {
   const ask = gitAsker(worktree.path);
+  const tip = worktree.branch ?? 'HEAD';
 
   try {
     const dirty = porcelainEntries(ask).length;
-    const cherry = ask('cherry', integrationBranch, worktree.branch ?? 'HEAD');
+    const cherry = ask('cherry', integrationBranch, tip);
 
     if (cherry.status !== 0) return { unmeasurable: `git cherry ${integrationBranch} failed: ${cherry.stderr.trim()}` };
 
-    return { dirty, unintegrated: cherry.stdout.split('\n').filter((line) => line.startsWith('+')).length };
+    const below = others.filter((other) => other.branch !== undefined && other.path !== worktree.path && isAncestor(ask, other.branch, tip));
+    const candidates = cherry.stdout.split('\n').filter((line) => line.startsWith('+')).map((line) => line.slice(1).trim());
+
+    return { dirty, unintegrated: candidates.filter((sha) => !below.some((other) => isAncestor(ask, sha, other.branch))).length };
   } catch (error) {
     return { unmeasurable: error instanceof Error ? error.message : String(error) };
   }
@@ -254,11 +275,15 @@ export function parkedWork(payload, { records = agentRecords(), now = Date.now()
 
   const integrationBranch = governed.config.integrationBranches[0];
 
-  return listWorktrees(gitAsker(governed.repository.mainCheckout))
+  const linked = listWorktrees(gitAsker(governed.repository.mainCheckout));
+  const isLive = (worktree) => existsSync(worktree.path) && (activeOwner(worktree.path, records, now) !== undefined || now - lastWorked(worktree) < ACTIVE_WINDOW_MS);
+  const liveBranches = linked.filter(isLive);
+
+  return linked
     .filter((worktree) => isAgentWorktree(governed, worktree.path) && existsSync(worktree.path))
     .filter((worktree) => activeOwner(worktree.path, records, now) === undefined)
     .filter((worktree) => now - lastWorked(worktree) >= ACTIVE_WINDOW_MS)
-    .map((worktree) => ({ worktree, work: workIn(worktree, integrationBranch) }))
+    .map((worktree) => ({ worktree, work: workIn(worktree, integrationBranch, liveBranches) }))
     .filter(({ work }) => holdsWork(work));
 }
 
