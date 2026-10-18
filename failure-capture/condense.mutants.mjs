@@ -59,7 +59,7 @@ const MUTANTS = [
 
   // --- the command
   ['a dry run is written for real', COMMAND, 'write: args.write === true })', 'write: true })'],
-  ['the ledger is read before the lock by the command', COMMAND, 'runCondense({ load: loadLedgers,', 'runCondense({ load: ((early) => () => early)(loadLedgers()),'],
+  ['the ledger is read before the lock by the command', COMMAND, 'runCondense({ load: () => loadLedgers().filter((ledger) => scope === undefined || ledger.scope === scope),', 'runCondense({ load: ((early) => () => early)(loadLedgers().filter((ledger) => scope === undefined || ledger.scope === scope)),'],
   ['an unreadable keys file is not refused', COMMAND, "speaker.complain('condense.keysInvalid', { detail: error instanceof Error ? error.message : String(error) });", 'speaker.data(String(error));'],
   ['a refused keys file does not stop the run', COMMAND, '\n\n      return 1;\n    }\n  }\n\n  const outcome', '\n    }\n  }\n\n  const outcome'],
   ['a keys file without a keys array is accepted', COMMAND, "if (!Array.isArray(keyMap)) throw", 'if (false) throw'],
