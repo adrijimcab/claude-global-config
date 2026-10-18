@@ -18,8 +18,8 @@ const GUARD = 'premise-judge/journal-guard.mjs';
 
 const MUTANTS = [
   // --- THE RUBRIC AND ITS WIRING.
-  ['the rubric stops telling the model the gate passes continued stops', PROMPT, "  '1. The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.',\n", ''],
-  ['the rubric asks the model to test stop_hook_active again', PROMPT, 'so you only see first stops.', 'so you only see first stops. If the input field stop_hook_active is true, answer ok.'],
+  ['the rubric stops telling the model it may see the rewrite after a block', PROMPT, "  '1. The input may be a first stop or the rewrite after a block (stop_hook_active true), and you judge both the same way, by the rules below.',\n", ''],
+  ['the rubric asks the model to test stop_hook_active again', PROMPT, 'by the rules below.', 'by the rules below. If the input field stop_hook_active is true, answer ok.'],
   ['the rubric judges more than the final message', PROMPT, 'Judge only the field last_assistant_message.', 'Judge the whole input.'],
   ['the rubric judges the transcript too', PROMPT, ' Never judge earlier messages or anything you could read through transcript_path.', ''],
   ['the rubric stops passing briefs to subagents', PROMPT, 'addressed to a subagent or a peer session rather than to the owner', 'addressed to the owner'],
@@ -33,9 +33,16 @@ const MUTANTS = [
   ['the rubric drops the prose exception', PROMPT, 'The one exception is a body whose full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands.', ''],
   ['the rubric blocks prose with a supporting list', PROMPT, 'Answer {"ok": true} when prose carries the message and a list only supports it', 'Answer ok false when a list is present'],
   ['the rubric stops looking at what carries the reply', PROMPT, 'Look at what CARRIES it:', 'Look at it:'],
-  ['the signature is still v1', PROMPT, "'voice-judge rubric v6.'", "'voice-judge rubric v1.'"],
+  ['the signature is still v1', PROMPT, "'voice-judge rubric v7.'", "'voice-judge rubric v1.'"],
   ['a reply with no second person can fail as tuteo', PROMPT, ' Rule 4 fails only a tú or usted word that actually appears, and the reason must quote it: a reply with no second-person verb at all, written in the first person ("cierro la unidad", "me traiga") and the third person ("tiene que quedar"), is not tuteo.', ''],
-  ['a first-person reply can fail as cold for lacking a second-person verb', PROMPT, ' Sentences in the first person (cierro, paso, lo medí, me traiga) are a first-person voice, so a reply that explains its why in them is not cold, and a reply is never failed for not addressing him with a second-person verb.', ''],
+  ['a first-person reply can fail as cold for lacking a second-person verb', PROMPT, ' Sentences in the first person (cierro, paso, lo medí, me traiga) are a first-person voice, so a reply that explains its why in them and also speaks to him somewhere is not cold.', ' Sentences in the first person are a first-person voice, so a reply that explains its why in them is not cold, and a reply is never failed for not addressing him with a second-person verb.'],
+  ['a long reply that never speaks to the owner can pass as neutral', PROMPT, 'Neutral-register test, for a reply to the owner of more than two lines: answer {"ok": false} when NO sentence anywhere speaks to him', 'Neutral-register test, for a reply to the owner of more than two lines: answer {"ok": true} when NO sentence anywhere speaks to him'],
+  ['the neutral test fails a reply that speaks to him', PROMPT, 'A reply that speaks to him even once in voseo, or that carries such a sentence of reflection or lesson in prose, is never failed by this test, and', 'A reply that is a neutral status report is failed by this test, and'],
+  ['the neutral test stops scanning the whole reply', PROMPT, ': scan the whole reply for these before you decide, since a single one is enough to pass.', '.'],
+  ['the neutral test fails mentor prose with a principle', PROMPT, 'which means no short stand-alone sentence that states a general principle or lesson for any future case', 'which means nothing more'],
+  ['the neutral test counts a diagnosis as mentor voice', PROMPT, ', admitting a mistake of this turn or judging a result ("la diferencia es enorme", "está bien pensado") is NOT such a sentence,', ' is such a sentence,'],
+  ['the neutral test counts a past form as speaking to him', PROMPT, 'The possessive tu or tus and a past form such as pediste or dejaste do not count as speaking to him.', 'A past form such as pediste or dejaste counts as speaking to him.'],
+  ['the blanket pass for a short plain reply is back', PROMPT, 'decime) is not cold and passes', 'decime), however short or plain, is not cold and passes'],
   ['a present-subjunctive second-person form can fail as tuteo', PROMPT, ' A present-subjunctive second-person form (que sepas, que reinicies, que puedas, que tengas, cuando vuelvas) is normal Rioplatense voseo and never a tú failure; only indicative tú forms (tienes, puedes, quieres, sabes) and imperative tú forms (ten, ven, haz) fail.', ''],
   ['every su counts as usted whatever its antecedent', PROMPT, ' The possessive su or sus counts as usted only when its antecedent is the owner himself; judge it from the antecedent, and a su that belongs to a third person (a session, a worker, a tool: "medidas por su sesión", "Su prueba reprodujo", "subió su declaración") is never usted, so the reason must not ask to turn it into tu.', ''],
   ['the rubric blocks when unsure', PROMPT, 'When unsure, answer {"ok": true}.', 'When unsure, answer ok false.'],
@@ -56,7 +63,7 @@ const MUTANTS = [
   ['the rubric loses its signature line', PROMPT, '  PROMPT_SIGNATURE,\n', ''],
   ['the pinned timeout is not the settings one', PROMPT, 'TIMEOUT_SECONDS = 30', 'TIMEOUT_SECONDS = 20'],
   ['the marker is not what the rubric spells', PROMPT, "MARKER = 'VOICE-JUDGE:'", "MARKER = 'VOICE JUDGE:'"],
-  ['the signature is the premise judge\'s', PROMPT, "'voice-judge rubric v6.'", "'premise-judge rubric v2.'"],
+  ['the signature is the premise judge\'s', PROMPT, "'voice-judge rubric v7.'", "'premise-judge rubric v2.'"],
 
   // --- THE SHARED JOURNAL GUARD, FOR THE VOICE JUDGE.
   ['the guard does not journal the voice judge', GUARD, '  { mechanism: VOICE_MECHANISM, marker: VOICE_MARKER },\n', ''],

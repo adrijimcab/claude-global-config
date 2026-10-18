@@ -42,8 +42,14 @@ async function judge(message, model) {
   try {
     const { answer, costUsd, durationMs } = await askModel(promptFor(message), { timeoutMs: 120000, model });
 
-    return { verdict: verdictOf(answer), costUsd, durationMs };
-  } catch {
+    const verdict = verdictOf(answer);
+
+    if (verdict === null) console.error(`? not a rubric verdict: ${String(answer).replace(/\s+/g, ' ').slice(0, 200)}`);
+
+    return { verdict, costUsd, durationMs };
+  } catch (error) {
+    console.error(`? model call failed: ${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 200)}`);
+
     return { verdict: null, costUsd: 0, durationMs: 0 };
   }
 }
