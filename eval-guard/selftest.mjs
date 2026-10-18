@@ -27,7 +27,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { digestInput } from '../hook-state/journal.mjs';
-import { WRITE_MARKERS } from './script-writes.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
@@ -68,6 +67,9 @@ const lines = (...parts) => parts.join('\n');
 
 // A file-writing script fed to an interpreter through a shell, one case per write marker.
 // @es Un script que escribe un fichero entregado a un intérprete por un shell, un caso por marcador de escritura.
+// The list is written out here on purpose: it is the specification, not a copy of the module's own list.
+// @es La lista está escrita aquí a propósito: es la especificación, no una copia de la lista del módulo.
+const WRITE_MARKERS = ['writeFile', 'appendFile', 'fs.write', 'createWriteStream', 'write_text', 'write_bytes', 'Set-Content', 'Add-Content', 'Out-File', 'WriteAllText'];
 const markerCases = WRITE_MARKERS.map((marker) => ['deny', delegated(lines("node - <<'EOF'", `target.${marker}('out.txt', data);`, 'EOF')), `a delegated heredoc script calling ${marker} is refused`, 'writes a file']);
 
 const SHELL_LIKE = ['sh', 'bash', 'zsh', 'dash', 'pwsh', 'powershell'];

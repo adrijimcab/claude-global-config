@@ -115,7 +115,7 @@ const MUTANTS = [
   ['blanks before the redirection target are not skipped', WRITES, "    while (text[target] === ' ' || text[target] === '\\t') target += 1;\n", ''],
   ['> is a redirection for every interpreter', WRITES, 'if (shellLike && redirectsToFile(text))', 'if (redirectsToFile(text))'],
   // --- heredocs: the body is data, the scan resumes after the terminator ---
-  ['the heredoc body is not skipped, so its lines are inspected as commands', DETECT, '        for (const heredoc of pendingHeredocs) index = skipHeredocBody(command, index, heredoc);\n', ''],
+  ['the heredoc body is not skipped, so its lines are inspected as commands', DETECT, '          index = skipHeredocBody(command, index, heredoc);\n', ''],
   ['the scan does not resume after the terminator, so a later dangerous command hides', DETECT, "if (line === heredoc.delimiter) return lineEnd === -1 ? command.length : lineEnd + 1;", 'if (line === heredoc.delimiter) return command.length;'],
   ['an unterminated body is not treated as data', DETECT, '  return command.length;\n}\n\n/**\n * Splits', '  return start;\n}\n\n/**\n * Splits'],
   ['<<- no longer strips the tabs of the terminator line', DETECT, '    if (heredoc.stripTabs) {', '    if (false) {'],
