@@ -18,10 +18,17 @@ in every session and every agent, ODD or not.
    dependencies) that a new project extends without editing the kit. The seams are designed in; the features
    behind them are built only when a consumer needs them, and no seam weakens a guarantee (no silent modes;
    the safe default stays).
-4. **Architecture fits the domain.** Hexagonal (ports and adapters) where the code talks to external
-   systems: HTTP, storage, browser APIs, third-party SDKs. The tension is explicit: a 40-line hook script
-   does not get layers it does not need, and there YAGNI wins. Layers are added when a second adapter or a
-   test seam is real, never in advance.
+   **This binds what is already built, not only what comes** (owner, 2026-10-18: «SOLID PARA LOS FUTUROS Y
+   PARA TODO LO QUE HAY CONSTRUIDO TAMBIEN, SI HAY QUE CAMBIAR ALGO SE HACE, pensando en arquitectura
+   hexagonal, conectores, puertos, clean code, buenas practicas, performance, escalabilidad, TODO SE HACE
+   ASÍ»): existing code that does not meet this standard is refactored to it as tracked ODD work, area by
+   area, found by an audit that reads the code; "it already works" is never a reason to leave it below the
+   standard.
+4. **Hexagonal architecture.** Domain logic sits behind ports, and every external system (HTTP, storage,
+   the file system, processes, browser APIs, third-party SDKs, git, engram) is reached through an adapter
+   that implements a port, so a new connector is a new adapter and never an edit of the domain. This is the
+   shape of all code, existing and new; what scales is the seam, so a small script gets the port it needs to
+   be replaceable and testable, and no layer that serves nothing (KISS).
 5. **Route: tracked ODD for every non-trivial change.** `tracked-odd` for every change, however small or
    settled; `direct` only for trivial scope (a typo, a rename, a comment tweak, a genuinely one-line
    no-logic change). Full text: point 1 of `~/.claude/route-mandate.md` (single source).
@@ -38,9 +45,15 @@ cómo una librería, un kit compartido o el tooling global sirve a proyectos fut
 detrás de costuras estables (puertos, configuración, dependencias inyectadas) que un proyecto nuevo extiende
 sin editar el kit; las costuras se diseñan, las funciones detrás se construyen cuando un consumidor las
 necesita, y ninguna costura debilita una garantía (sin modos silenciosos; se mantiene el valor por defecto
-seguro). (4) La
-arquitectura que encaja con el dominio: hexagonal donde se habla con sistemas externos; un script de 40
-líneas no recibe capas que no necesita (gana YAGNI). (5) Ruta: `tracked-odd` para todo cambio, por chico o
+seguro). Esto obliga también a lo ya construido (dueño, 2026-10-18: «SOLID PARA LOS FUTUROS Y PARA TODO LO
+QUE HAY CONSTRUIDO TAMBIEN, SI HAY QUE CAMBIAR ALGO SE HACE»): el código existente que no cumple el estándar
+se refactoriza como trabajo ODD seguido, área por área, a partir de una auditoría que lee el código; «ya
+funciona» nunca es motivo para dejarlo por debajo. (4) Arquitectura hexagonal: la lógica de dominio detrás de
+puertos, y todo sistema externo (HTTP, almacenamiento, sistema de ficheros, procesos, APIs del navegador, SDKs
+de terceros, git, engram) se alcanza con un adaptador que implementa un puerto, así un conector nuevo es un
+adaptador nuevo y nunca una edición del dominio; es la forma de todo el código, existente y nuevo, y un
+script chico recibe el puerto que necesita para ser reemplazable y testeable, sin capas que no sirven (KISS).
+(5) Ruta: `tracked-odd` para todo cambio, por chico o
 asentado que sea; `direct` solo para el alcance trivial (una errata, un renombre, un comentario, un cambio
 de una línea sin lógica). (6) Modelo según la tarea: cada agente delegado corre en el modelo más barato que
 la hace bien: `haiku` para trabajo de solo lectura y mecánico, `sonnet` para implementar y revisar, `opus`
