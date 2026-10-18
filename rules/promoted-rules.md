@@ -51,7 +51,7 @@ Las claves de «On-demand», al final, conservan sus frases en el fichero de `~/
   RULE, this face: a mutant's behaviour is evidence about the mutant only; a brief's free prose carries no claim about product behaviour — such a claim goes on a `MEASURED:` line with the command that reproduced it, or on a `HYPOTHESIS:` line.
 
 - **`engram-writes-refused-after-session-resume`**
-  RULE: after any session resume, probe one engram write before relying on engram; when it is refused ("host session … already ended"), keep the record in file memory, tell the owner, and move it to engram from a fresh session.
+  RULE: after any session resume, probe one engram write before relying on engram; when it is refused ("host session … already ended"), write through the engram CLI instead (the route in rules/10-contracts.md), read it back, and never keep the record in a file (owner order 2026-10-18).
 
 ## On-demand promoted rules — binding, READ IN FULL when the situation applies
 - Before writing a delegation brief, launching or messaging a worker, quoting a path or mechanism from a document, blaming a tool, or acting on a worktree, process or branch that is not yours: `~/.claude/lessons/on-demand/promoted-delegation.md`.
