@@ -45,7 +45,7 @@ branches and `npm view`, measured 2026-10-06; the per-major detail and citations
 | `standalone: true` | omit (default) | omit | omit | omit |
 | `changeDetection: OnPush` | write it | write it | write it | omit (default); `Eager` only on purpose |
 | Change detection default | zone.js | zone.js | zoneless | zoneless |
-| Zoneless | EXP: avoid | DP in 20.0-20.1; `provideZonelessChangeDetection()` STABLE from 20.2 | default; a zone app needs `provideZoneChangeDetection()` | default |
+| Zoneless | EXP: avoid (`provideExperimentalZonelessChangeDetection`, absent from the 21 and 22 d.ts) | DP in 20.0-20.1; `provideZonelessChangeDetection()` STABLE from 20.2 | default; a zone app needs `provideZoneChangeDetection()` | default |
 | `signal`/`computed` | stable | stable | stable | stable |
 | `input()`/`output()`/`model()`, signal queries | stable | stable | stable | stable; `model()` over an input+output pair |
 | `effect()` | DP: avoid | stable, last resort | same | same |
@@ -61,7 +61,7 @@ branches and `npm view`, measured 2026-10-06; the per-major detail and citations
 | Host bindings | `host: {}` metadata (the legacy 19 style guide's "consider @HostBinding" is superseded) | `host: {}` | same | same |
 | DI | `inject()` | `inject()` | `inject()` | `inject()` |
 | HTTP backend | XHR default; add `withFetch()` for SSR | same | same | Fetch default: omit `withFetch()` (deprecated); `withXhr()` only for upload progress |
-| Incremental hydration | DP: avoid | stable: `withIncrementalHydration()` | same | default: omit it (deprecated) |
+| Incremental hydration | EXP: avoid | stable: `withIncrementalHydration()` | same | default: omit it (deprecated) |
 | Route render mode (SSR) | DP | stable: `provideServerRendering(withRoutes(...))` | same | same |
 | Builder | `@angular-devkit/build-angular:application` | `@angular/build:application` | same | same; webpack builders deprecated |
 | `ng new` test runner | Karma+Jasmine | Karma+Jasmine (Vitest builder EXP) | Vitest | Vitest |
