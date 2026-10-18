@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Write|Edit"
+    }
+  ],
+  "why": "Third occurrence of shell-one-liner-corrupted-data: a worker wrote a regex source in a string through a script and the spec file lost its backslashes, the brief notwithstanding. JavaScript drops a backslash before a non-escape character in a string or template, so the authoring-time gate refuses it."
+}
