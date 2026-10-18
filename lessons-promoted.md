@@ -16,7 +16,7 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-09-22 — promotion-to-contract-read-as-prevention: mechanism .claude/failure-capture/capture.mjs <!--fc:promotion-to-contract-read-as-prevention#2-->
 - [promoted] 2026-10-01 — contract-doc-names-a-mechanism-nobody-verifies: mechanism ~/.claude/contract-path-check/check.mjs <!--fc:contract-doc-names-a-mechanism-nobody-verifies#3-->
 - [promoted] 2026-09-16 — gitignored-deliverable-destroyed-by-worktree-autoclean: mechanism .claude/worktree-work/worktree-work.mjs <!--fc:gitignored-deliverable-destroyed-by-worktree-autoclean#1-->
-- [promoted] 2026-09-22 — collision-fixed-by-deleting-unread-side: mechanism .claude/collision-guard/guard.mjs <!--fc:collision-fixed-by-deleting-unread-side#3-->
+- [promoted] 2026-09-22 — collision-fixed-by-deleting-unread-side: mechanism .claude/collision-guard/guard.mjs <!--fc:collision-fixed-by-deleting-unread-side#4-->
 - [promoted] 2026-09-30 — audit-verdict-from-commit-subjects-not-from-reading: no mechanism <!--fc:audit-verdict-from-commit-subjects-not-from-reading#13-->
 - [promoted] 2026-09-30 — brief-marker-written-as-prose-not-literal-form: mechanism C:/Users/adrian.jimenez/.claude/brief-provenance/guard.mjs <!--fc:brief-marker-written-as-prose-not-literal-form#3-->
 - [promoted] 2026-10-01 — delegated-role-toolset-narrower-than-its-contract: mechanism ~/.claude/agent-toolset-check/check.mjs <!--fc:delegated-role-toolset-narrower-than-its-contract#1-->

@@ -21,3 +21,4 @@ Binding. The harness does NOT load this file; `~/.claude/rules/promoted-rules.md
 - **`collision-fixed-by-deleting-unread-side`**
   RULE: before choosing a side, diff what each side uniquely HOLDS, not just what the gate will re-check; when both sides carry content, the resolution is a union you construct and verify, never a side you pick.
   RULE: act on what a finding SAYS, never on what its state name suggests.
+  RULE (face of 2026-10-18, Discovery): before writing a shared memory or configuration file, check whether it exists and read it; extend it, never replace it, because another session may have created it minutes earlier.
