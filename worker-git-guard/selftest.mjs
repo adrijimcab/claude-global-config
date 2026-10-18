@@ -7,7 +7,9 @@
  *   - WHO CALLS: a subagent by `agent_id`; one known only by its transcript directory; the main session
  *     (always allowed).
  *   - WHICH FAMILY, each with a refused form and its nearest allowed form: reset, checkout/switch, restore,
- *     clean, commit `--no-verify`/`-n`, push `--no-verify`.
+ *     clean, commit `--no-verify`/`-n`, push `--no-verify`, and the plumbing forms read-tree `-u`/`--reset`,
+ *     checkout-index `-f`/`-a`, update-index `--force-remove`, update-ref `-d`, symbolic-ref writes (and the
+ *     read-only plumbing that stays allowed).
  *   - HOW IT IS REACHED: `git -C`, chains, `$(...)`, `bash -c`, subshell, PowerShell spellings.
  *   - DATA, not commands: echo, quoted messages, heredoc, comment, PowerShell string and here-string.
  *   - NEAR MISSES: other subcommands, `stash` (another guard), `--amend`, `-m"no"`.
@@ -101,6 +103,49 @@ for (const form of ['git commit -m "no-verify words"', 'git commit -m"no"', 'git
 for (const form of ['git push --no-verify', 'git push origin main --no-verify', 'git push --no-verify https://example.invalid/r.git', 'git push --no-verif']) denied(form);
 for (const form of ['git push', 'git push origin main', 'git push -n', 'git push --dry-run', 'git push origin feat/no-verify']) allowed(form);
 
+// --- FAMILY 7: read-tree that writes the tree or discards the index (b100 report) ----------------
+for (const form of ['git read-tree --reset -u HEAD', 'git read-tree -u HEAD', 'git read-tree -m -u HEAD', 'git read-tree -mu HEAD', 'git read-tree -um HEAD', 'git read-tree --reset HEAD', 'git read-tree --res HEAD', 'git read-tree --prefix sub/ -u HEAD', 'git read-tree -u -- HEAD']) denied(form);
+for (const form of ['git read-tree HEAD', 'git read-tree -m HEAD', 'git read-tree --empty', 'git read-tree --prefix=sub/ HEAD', 'git read-tree --prefix -u HEAD', 'git read-tree --index-output /tmp/i HEAD', 'git read-tree --index-output -u HEAD', 'git read-tree --exclude-per-directory -u HEAD','git read-tree --re HEAD', 'GIT_INDEX_FILE=/tmp/idx git read-tree HEAD']) allowed(form);
+
+// --- FAMILY 8: checkout-index that overwrites files ---------------------------------------------
+for (const form of ['git checkout-index -f a.txt', 'git checkout-index --force a.txt', 'git checkout-index -a', 'git checkout-index --all', 'git checkout-index -fa', 'git checkout-index -qaf', 'git checkout-index --fo a', 'git checkout-index --al', 'git checkout-index -u -a']) denied(form);
+for (const form of ['git checkout-index a.txt', 'git checkout-index -q a.txt', 'git checkout-index --prefix out/ a.txt', 'git checkout-index --prefix -f a.txt', 'git checkout-index --stage -a a.txt', 'git checkout-index --no-create a.txt', 'git checkout-index -- -f', 'git checkout-index --temp a.txt']) allowed(form);
+
+// --- FAMILY 9: update-index --force-remove ------------------------------------------------------
+for (const form of ['git update-index --force-remove a.txt', 'git update-index --force-r a.txt', 'git update-index --add --force-remove a.txt']) denied(form);
+for (const form of ['git update-index --refresh', 'git update-index --really-refresh', 'git update-index --add a.txt', 'git update-index --remove a.txt', 'git update-index --cacheinfo 100644,abc,a.txt', 'git update-index --force-write-index', 'git update-index --force-untracked-cache', 'git update-index --no-force-remove a', 'git update-index --force-w', 'git update-index --force-']) allowed(form);
+
+// --- FAMILY 10: update-ref -d -------------------------------------------------------------------
+for (const form of ['git update-ref -d refs/heads/x', 'git update-ref -d refs/heads/x abc', 'git update-ref -m why -d refs/heads/x', 'git update-ref -dm why refs/heads/x', 'git update-ref --no-deref -d HEAD']) denied(form);
+for (const form of ['git update-ref refs/heads/x abc', 'git update-ref -m -d refs/heads/x abc', 'git update-ref -m why refs/heads/x abc', 'git update-ref --stdin', 'git update-ref refs/heads/x -- -d']) allowed(form);
+
+// --- FAMILY 11: symbolic-ref that repoints or deletes -------------------------------------------
+for (const form of ['git symbolic-ref HEAD refs/heads/other', 'git symbolic-ref -m why HEAD refs/heads/other', 'git symbolic-ref -d HEAD', 'git symbolic-ref --delete HEAD', 'git symbolic-ref --del HEAD', 'git symbolic-ref -q -d refs/remotes/origin/HEAD', 'git symbolic-ref -- HEAD refs/heads/other']) denied(form);
+for (const form of ['git symbolic-ref HEAD', 'git symbolic-ref --short HEAD', 'git symbolic-ref -q HEAD', 'git symbolic-ref -m HEAD', 'git symbolic-ref -m why HEAD', 'git symbolic-ref --no-recurse HEAD', 'git symbolic-ref -- HEAD']) allowed(form);
+
+// --- Read-only plumbing stays allowed -----------------------------------------------------------
+for (const form of ['git ls-files', 'git cat-file -p HEAD', 'git rev-parse HEAD', 'git ls-tree HEAD', 'git diff-index HEAD', 'git diff-index --cached HEAD', 'git update-index --refresh -q']) allowed(form);
+
+// --- Plumbing reached the same ways as porcelain ------------------------------------------------
+denied('git -C C:/some/worktree read-tree --reset -u HEAD');
+denied('git -c core.x=1 checkout-index -fa');
+denied('GIT_INDEX_FILE=/tmp/i git read-tree -u HEAD');
+denied('env GIT_DIR=x git update-ref -d refs/heads/y');
+denied('git status && git read-tree --reset -u HEAD');
+denied('bash -c "git read-tree --reset -u HEAD"');
+denied('echo $(git symbolic-ref HEAD refs/heads/z)');
+expect('deny', asSubagent('PowerShell', 'git read-tree --reset -u HEAD'), 'PowerShell, read-tree');
+expect('deny', asSubagent('PowerShell', 'git -C C:\\wt checkout-index -a'), 'PowerShell, -C path');
+expect('deny', asSubagent('PowerShell', '$env:GIT_INDEX_FILE="x"; git.exe update-index --force-remove a'), 'PowerShell, env then git.exe');
+expect('deny', asSubagent('PowerShell', '& git update-ref -d refs/heads/x'), 'PowerShell, call operator');
+expect('deny', asSubagent('PowerShell', "git read-tree '--reset' -u HEAD"), 'PowerShell, single-quoted option');
+expect('allow', asSubagent('PowerShell', 'git read-tree HEAD'), 'PowerShell, bare read-tree');
+expect('allow', asMain('Bash', 'git read-tree --reset -u HEAD'), 'main session, read-tree');
+denied('git read-tree "--reset" -u HEAD');
+denied("git read-tree '--reset' -u HEAD");
+allowed('echo git read-tree --reset -u HEAD');
+allowed('git commit -m "git read-tree --reset -u HEAD"');
+
 // --- OUT OF SCOPE (measured incidents only) -----------------------------------------------------
 for (const form of ['git stash', 'git rebase main', 'git cherry-pick abc', 'git log', 'git add -A', 'git fetch --all', 'git branch -D x', 'git worktree list']) allowed(form);
 
@@ -147,9 +192,15 @@ check('clean refusal names the dry run', reasonOf('git clean -fd').includes('--d
 check('commit refusal names commitlint and the pre-commit hook', reasonOf('git commit -nm x').includes('commitlint') && reasonOf('git commit -nm x').includes('pre-commit'));
 check('push refusal names the pre-push hook', reasonOf('git push --no-verify').includes('pre-push'));
 
-const headlines = ['git reset', 'git checkout main', 'git restore x', 'git clean -f', 'git commit -n', 'git push --no-verify'].map((command) => reasonOf(command).split('\n')[2]);
+check('read-tree refusal names the safe route in both halves', ['git read-tree -u HEAD'].every((c) => { const t = reasonOf(c); return t.includes('commit your work in progress') && t.includes('commiteá tu trabajo a medias') && t.includes('GIT_INDEX_FILE'); }));
+check('checkout-index refusal names the safe route', reasonOf('git checkout-index -f a').includes('commit your work in progress'));
+check('update-index refusal names the safe route', reasonOf('git update-index --force-remove a').includes('commit your work in progress'));
+check('update-ref refusal says the orchestrator removes branches', reasonOf('git update-ref -d refs/heads/x').includes('orchestrator removes branches'));
+check('symbolic-ref refusal names the allowed read', reasonOf('git symbolic-ref HEAD refs/heads/x').includes('--short HEAD') && reasonOf('git symbolic-ref HEAD refs/heads/x').includes('orchestrator creates the branches'));
 
-check('each family has its own text', new Set(headlines).size === 6, headlines.join(' | '));
+const headlines = ['git reset', 'git checkout main', 'git restore x', 'git clean -f', 'git commit -n', 'git push --no-verify', 'git read-tree -u HEAD', 'git checkout-index -f a', 'git update-index --force-remove a', 'git update-ref -d r', 'git symbolic-ref HEAD r'].map((command) => reasonOf(command).split('\n')[2]);
+
+check('each family has its own text', new Set(headlines).size === 11, headlines.join(' | '));
 check('the first offending invocation is the one named', reasonOf('git reset -q && git clean -fd').includes('git reset -q') && !reasonOf('git reset -q && git clean -fd').split('\n')[0].includes('git clean'));
 
 /** The verdict when the decision throws; a throw that escapes is a failed check. @es El veredicto cuando la decisión lanza. */

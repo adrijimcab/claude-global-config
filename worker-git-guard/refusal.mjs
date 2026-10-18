@@ -125,6 +125,106 @@ export const MESSAGES = {
       '',
       'USAR EN SU LUGAR: informá los commits de tu rama; el orquestador publica, y solo después de pasar los gates.'
     ]
+  },
+  readTree: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: a delegated worker may not run `git read-tree` with `-u` or `--reset` ({command}).',
+      '',
+      'WHY. `read-tree -u` overwrites the working tree and `--reset` discards the index, the same loss as `git reset`',
+      'or `git restore` by the plumbing door (a b100 worker cleared a conflicted index this way).',
+      '',
+      'USE INSTEAD: commit your work in progress on your branch, or ask the orchestrator to clear the index. A bare',
+      '`git read-tree <tree>` into a temporary `GIT_INDEX_FILE` only reads and is allowed.'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede ejecutar `git read-tree` con `-u` ni `--reset` ({command}).',
+      '',
+      'POR QUÉ. `read-tree -u` sobrescribe el árbol de trabajo y `--reset` descarta el índice, la misma pérdida que',
+      '`git reset` o `git restore` por la puerta de la plomería (un worker de b100 limpió un índice en conflicto así).',
+      '',
+      'USAR EN SU LUGAR: commiteá tu trabajo a medias en tu rama, o pedile al orquestador que limpie el índice. Un',
+      '`git read-tree <árbol>` simple sobre un `GIT_INDEX_FILE` temporal solo lee y está permitido.'
+    ]
+  },
+  checkoutIndex: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: a delegated worker may not run `git checkout-index` with `-f` or `-a` ({command}).',
+      '',
+      'WHY. `-f` overwrites existing files and `-a` writes every indexed file, so uncommitted edits on disk are lost',
+      '(the same loss as `git checkout -- <path>`).',
+      '',
+      'USE INSTEAD: commit your work in progress on your branch, or ask the orchestrator. `git checkout-index <file>`',
+      'without `-f` leaves existing files alone and is allowed.'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede ejecutar `git checkout-index` con `-f` ni `-a` ({command}).',
+      '',
+      'POR QUÉ. `-f` sobrescribe ficheros existentes y `-a` escribe todos los del índice, así que las ediciones sin',
+      'commitear en disco se pierden (la misma pérdida que `git checkout -- <ruta>`).',
+      '',
+      'USAR EN SU LUGAR: commiteá tu trabajo a medias en tu rama, o pedile al orquestador. `git checkout-index <fichero>`',
+      'sin `-f` no toca los ficheros existentes y está permitido.'
+    ]
+  },
+  updateIndex: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: a delegated worker may not run `git update-index --force-remove` ({command}).',
+      '',
+      'WHY. `--force-remove` drops a path from the index even though the file is still on disk, so the staged state',
+      'of that work is gone with no commit to bring it back.',
+      '',
+      'USE INSTEAD: commit your work in progress on your branch, or ask the orchestrator. `update-index --refresh`',
+      'only reads and is allowed.'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede ejecutar `git update-index --force-remove` ({command}).',
+      '',
+      'POR QUÉ. `--force-remove` saca una ruta del índice aunque el fichero siga en disco, así que el estado en',
+      'staging de ese trabajo se pierde sin un commit que lo recupere.',
+      '',
+      'USAR EN SU LUGAR: commiteá tu trabajo a medias en tu rama, o pedile al orquestador. `update-index --refresh`',
+      'solo lee y está permitido.'
+    ]
+  },
+  updateRef: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: a delegated worker may not delete a ref with `git update-ref -d` ({command}).',
+      '',
+      'WHY. Deleting a branch or tag ref can leave commits that are the only record of the work with no name, the',
+      'same risk as `git reset` moving HEAD.',
+      '',
+      'USE INSTEAD: leave refs as they are and report the commits on your branch; the orchestrator removes branches',
+      'once their content is integrated.'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede borrar una referencia con `git update-ref -d` ({command}).',
+      '',
+      'POR QUÉ. Borrar la referencia de una rama o etiqueta puede dejar sin nombre commits que son el único',
+      'registro del trabajo, el mismo riesgo que `git reset` moviendo HEAD.',
+      '',
+      'USAR EN SU LUGAR: dejá las referencias como están e informá los commits de tu rama; el orquestador borra las',
+      'ramas cuando su contenido ya está integrado.'
+    ]
+  },
+  symbolicRef: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: a delegated worker may not repoint or delete a symbolic ref ({command}).',
+      '',
+      "WHY. A worker's branch is fixed by its TENANCY (the `checkout` reasoning); `symbolic-ref HEAD <ref>` moves HEAD",
+      'without touching the files, so the next commit lands on another branch.',
+      '',
+      'USE INSTEAD: nothing is needed; the orchestrator creates the branches and worktrees. Reading is allowed:',
+      '`git symbolic-ref --short HEAD`.'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede reapuntar ni borrar una referencia simbólica ({command}).',
+      '',
+      'POR QUÉ. La rama de un worker la fija su TENANCY (el razonamiento de `checkout`); `symbolic-ref HEAD <ref>`',
+      'mueve HEAD sin tocar los ficheros, así que el siguiente commit cae en otra rama.',
+      '',
+      'USAR EN SU LUGAR: no hace falta nada; el orquestador crea las ramas y los worktrees. Leer está permitido:',
+      '`git symbolic-ref --short HEAD`.'
+    ]
   }
 };
 
