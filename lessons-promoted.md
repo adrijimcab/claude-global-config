@@ -23,7 +23,7 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-10-01 — blamed-the-tool-for-a-defect-i-built-into-the-command: mechanism ~/.claude/exit-code-guard/guard.mjs <!--fc:blamed-the-tool-for-a-defect-i-built-into-the-command#1-->
 - [promoted] 2026-09-30 — acted-on-a-live-actors-working-state: mechanism C:/Users/adrian.jimenez/.claude/commit-pathspec-guard/guard.mjs <!--fc:acted-on-a-live-actors-working-state#2-->
 - [promoted] 2026-10-01 — integrated-a-range-without-running-its-cheap-gates: mechanism C:/Users/adrian.jimenez/Desktop/Projects/b100-am-ui/.claude/ungated-landing-guard/guard.mjs <!--fc:integrated-a-range-without-running-its-cheap-gates#8-->
-- [promoted] 2026-10-04 — shell-one-liner-corrupted-data: mechanism C:/Users/adrian.jimenez/.claude/eval-guard/guard.mjs <!--fc:shell-one-liner-corrupted-data#5-->
+- [promoted] 2026-10-04 — shell-one-liner-corrupted-data: mechanism C:/Users/adrian.jimenez/.claude/eval-guard/guard.mjs <!--fc:shell-one-liner-corrupted-data#6-->
 - [promoted] 2026-10-01 — orchestrator-cwd-change-leaked-to-workers: mechanism C:/Users/adrian.jimenez/.claude/cwd-change-guard/guard.mjs <!--fc:orchestrator-cwd-change-leaked-to-workers#3-->
 - [promoted] 2026-09-30 — worker-overwrote-master-backlog: mechanism C:/Users/adrian.jimenez/.claude/backlog-owner-guard/guard.mjs <!--fc:worker-overwrote-master-backlog#1-->
 - [promoted] 2026-09-30 — unverified-commit-published-by-another-sessions-sync: mechanism C:/Users/adrian.jimenez/.claude/worktree-landing/land.mjs <!--fc:unverified-commit-published-by-another-sessions-sync#3-->
