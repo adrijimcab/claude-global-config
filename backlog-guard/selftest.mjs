@@ -505,12 +505,59 @@ check('a fenced block is not the author words', proseOutsideQuotes('a\n```\nlo a
 check('a quote line is not the author words', proseOutsideQuotes('> lo anoto\nok').includes('lo anoto'), false);
 check('guillemets are a quotation', proseOutsideQuotes('la regla «lo anoto» dice').includes('lo anoto'), false);
 check('an opener with no closer stays visible', proseOutsideQuotes('dijo "lo anoto').includes('lo anoto'), true);
-check('a new announced item still blocks', findAnnouncement('Encontré un defecto. Lo anoto en el backlog cuando cierre la tanda.'), 'lo anoto');
+check('a new announced item still blocks', findAnnouncement('Encontré un defecto. Lo anoto en el backlog cuando cierre la tanda.'), 'lo anoto en el backlog');
+
+// --- PHRASE FORMS, not bare verbs. Each FALSE POSITIVE below is a phrase whose dismissal is recorded in
+// --- `state/dismissals.jsonl` (2026-10-11 to 2026-10-18) or reported by the orchestrator on 2026-10-18; each
+// --- TRUE POSITIVE announces a NEW unrecorded item. The verbs «sumo / agrego / anoto / apunto» alone also say
+// --- «I add finished work to a checkpoint» or «I would add it if you ask», and «falta / queda por» also say
+// --- «nothing is missing» or «stays under a threshold».
+// @es FORMAS DE FRASE, no verbos sueltos. Cada FALSO POSITIVO es una frase con descarte registrado en
+// @es `state/dismissals.jsonl` o reportada por el orquestador; cada VERDADERO POSITIVO anuncia un ítem NUEVO.
+const FALSE_POSITIVES = [
+  ['adding a finished worker fix to a checkpoint (3 dismissals of «lo sumo»)', 'Lo sumo al checkpoint-37 cuando el worker termine.'],
+  ['adding a finished result to a landing (dismissal of «lo agrego»)', 'Lo agrego al checkpoint-40 en cuanto el worker confirme.'],
+  ['a conditional offer to extend a report (dismissal of «lo agrego»)', 'Lo agrego si querés ampliar el esquema del informe.'],
+  ['«a lo sumo» is «at most»', 'A lo sumo tarda 200 ms en el peor caso.'],
+  ['noting the item inside a checkpoint (orchestrator report of «lo anoto»)', 'Lo anoto en el checkpoint-42 al aterrizar.'],
+  ['«queda por debajo» is a measurement threshold (2 dismissals of «queda por»)', 'El parseo queda por debajo de los 200 ms.'],
+  ['«no hace falta hacer nada» says no action is needed (dismissal of «falta hacer»)', 'No hace falta hacer nada mientras el worker termina.'],
+  ['nothing left to integrate (dismissal of «pendiente de integrar»)', 'No hay nada pendiente de integrar tras el aterrizaje.'],
+  ['«ya no falta integrar» (orchestrator report of «falta integrar»)', 'Ya no falta integrar nada de la tanda.'],
+  ['«no hay» in front of a marker', 'No hay pendiente de integrar nada en la tanda.'],
+  ['«queda por» followed by a noun, plural', 'Quedan por debajo del umbral dos mediciones.'],
+  ['noting the item inside a checkpoint («apunto»)', 'Lo apunto en el checkpoint-43 al aterrizar.'],
+  ['«lo que queda pendiente» describes an item recorded earlier (a labelled live turn)', 'Lo que queda pendiente, sin apuro: un runner de selftests.']
+];
+const TRUE_POSITIVES = [
+  ['I leave an item pending', 'Lo dejo pendiente para la próxima tanda.', 'lo dejo pendiente'],
+  ['an item stays pending', 'Queda pendiente el cambio del hook.', 'queda pendiente'],
+  ['items stay pending', 'Quedan pendientes dos cambios del hook.', 'quedan pendientes'],
+  ['I add it to the backlog', 'Lo agrego al backlog al cerrar.', 'agrego al backlog'],
+  ['I add it to the backlog («sumo»)', 'Lo sumo al backlog cuando cierre.', 'sumo al backlog'],
+  ['I add it to the pending list', 'Lo agrego a la lista de pendientes.', 'lo agrego a la lista'],
+  ['I add it to the pending list («sumo»)', 'Lo sumo a la lista de pendientes.', 'lo sumo a la lista'],
+  ['I note it as pending', 'Lo anoto como pendiente.', 'lo anoto como pendiente'],
+  ['I note it for later', 'Lo apunto para después.', 'lo apunto para después'],
+  ['work stays to be done', 'Queda por resolver la migración.', 'queda por'],
+  ['an infinitive in -er', 'Queda por hacer el cambio del hook.', 'queda por'],
+  ['an infinitive in -ir', 'Queda por definir la ruta.', 'queda por'],
+  ['an infinitive right before the full stop', 'Eso queda por resolver.', 'queda por'],
+  ['several things stay to be done', 'Quedan por integrar tres ramas.', 'quedan por'],
+  ['something is missing to integrate', 'Falta integrar la rama del worker.', 'falta integrar'],
+  ['work is pending integration', 'Hay trabajo pendiente de integrar en dos ramas.', 'pendiente de integrar'],
+  ['«uno» ends in «no» but negates nothing', 'Es uno pendiente de integrar todavía.', 'pendiente de integrar'],
+  ['a negator at the very start of the text is a negator', 'Nada pendiente de integrar. Queda por resolver la migración.', 'queda por'],
+  ['the second occurrence is not negated even when the first is', 'No falta integrar nada, pero falta integrar la rama del worker.', 'falta integrar']
+];
+
+for (const [label, text] of FALSE_POSITIVES) check(`does not fire: ${label}`, findAnnouncement(text), undefined);
+for (const [label, text, marker] of TRUE_POSITIVES) check(`still fires: ${label}`, findAnnouncement(text), marker);
 check('the bare word backlog does not block', findAnnouncement('Revisé el backlog y no cambió nada.'), undefined);
 check('a quoted announcement does not block', findAnnouncement('La regla dice "lo anoto" y la cumplí.'), undefined);
 check('an item already recorded in the same sentence does not block', findAnnouncement('Lo anoto: ya está en el backlog.'), undefined);
 check('an observation cited in the next sentence does not block', findAnnouncement('Va al backlog final.\nLo guardé en engram (#1209).'), undefined);
-check('an observation reference alone records the sentence', findAnnouncement('Lo anoto como #1209.'), undefined);
+check('an observation reference alone records the sentence', findAnnouncement('Lo anoto como pendiente, es el #1209.'), undefined);
 check('"sigue pendiente" (continues) is not new', findAnnouncement('Sigue pendiente tu decisión.'), undefined);
 check('the infinitive "encolar" mentions the rule, it does not announce', findAnnouncement('Resolver en el momento en vez de encolar.'), undefined);
 check('an uppercase TODO: still blocks', findAnnouncement('Quedó un TODO: reconciliar.'), 'TODO:');
