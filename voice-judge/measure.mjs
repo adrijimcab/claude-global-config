@@ -66,7 +66,7 @@ const percent = (part, whole) => (whole === 0 ? 'n/a' : `${((100 * part) / whole
  * llamadas a la vez, e imprime por corrida el RECALL sobre los que deben fallar y la PRECISIÓN sobre los que deben
  * pasar, del conjunto real etiquetado (`real-*`) y de todos. Un `?` no cuenta como ninguno: es un mal funcionamiento.
  */
-async function rates(fixtures, runs, model, parallel) {
+async function rates(fixtures, runs, model, parallel, prefix) {
   const jobs = fixtures.flatMap((fixture) => Array.from({ length: runs }, (_, run) => ({ fixture, run })));
   const verdicts = new Map();
   let next = 0;
@@ -101,7 +101,7 @@ async function rates(fixtures, runs, model, parallel) {
 
       return { recall: caught.length / Math.max(1, red.length), precision: letThrough.length / Math.max(1, green.length) };
     };
-    const real = line('real', fixtures.filter((fixture) => fixture.id.startsWith('real-')));
+    const real = line('set', fixtures.filter((fixture) => fixture.id.startsWith(prefix)));
 
     line('all', fixtures);
     if (real.recall < 0.9 || real.precision < 0.95) ships = false;
@@ -118,7 +118,9 @@ async function main(argv) {
   const model = option('--model', 'haiku');
   const only = option('--only', '')?.split(',').filter(Boolean);
   const fixtures = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json')).map((name) => JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8'))).filter((fixture) => only.length === 0 || only.includes(fixture.id));
-  if (argv.includes('--rates')) return rates(fixtures, runs, model, Number(option('--parallel', '6')));
+  const prefix = option('--prefix', 'real-');
+
+  if (argv.includes('--rates')) return rates(argv.includes('--prefix') ? fixtures.filter((fixture) => fixture.id.startsWith(prefix)) : fixtures, runs, model, Number(option('--parallel', '6')), prefix);
 
   let wrong = 0;
   let cost = 0;

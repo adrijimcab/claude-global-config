@@ -1,0 +1,6 @@
+{
+  "id": "held-red-664a8a26-10181717",
+  "expect": "fail",
+  "source": "664a8a26 2026-10-18T17:17:57.466Z (held-out set, never used to tune the rubric; real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
+  "message": "P8 S3 ya tiene la interfaz alineada con el schema, en el commit `506ae40f`. Según el writer pasaron el typecheck, el lint y 348 specs. No la derivó del schema con `z.infer` y la razón me convence. El schema es `.passthrough()`, así que el tipo inferido arrastra firmas de índice, y además `Charts` y `Configuration` tienen otra forma que la que usan muchos consumidores. Derivarla habría obligado a meter casts o a tocar decenas de archivos. A cambio dejó un chequeo en tiempo de compilación que rompe el build si interfaz y schema se separan, y probó que funciona rompiéndolo a propósito.\n\nEse chequeo hoy cubre solo `Properties` y `Metrics`. Le pedí que lo extienda ya a los otros dos campos que alineó a mano, así no queda ningún hueco. Cuando lo tenga, congelo el rango y lo juzgan los dos jueces."
+}
