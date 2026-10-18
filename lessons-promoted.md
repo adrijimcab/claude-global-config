@@ -32,3 +32,5 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-10-04 — root-cause-stated-before-measured: no mechanism <!--fc:root-cause-stated-before-measured#2-->
 - [promoted] 2026-10-02 — brief-had-workers-open-every-image: no mechanism <!--fc:brief-had-workers-open-every-image#2-->
 - [promoted] 2026-10-05 — brief-measured-line-carried-an-unmeasured-claim: no mechanism <!--fc:brief-measured-line-carried-an-unmeasured-claim#6-->
+
+- [promoted] 2026-10-18 — engram-writes-refused-after-session-resume: no mechanism <!--fc:engram-writes-refused-after-session-resume#2-->
