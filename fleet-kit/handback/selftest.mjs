@@ -90,7 +90,20 @@ try {
 
   writeFileSync(refusalsFile, `${record('w1')}${record('w1')}${record('other')}{"agentId":"w1","ki`);
   check('a torn last line is not counted and does not throw', counted('w1'), 2);
-  check('the guard still refuses over a torn journal (third refusal)', (await evaluate(JSON.stringify(payload)))?.hookSpecificOutput.permissionDecision, 'deny');
+  const overTorn = (await evaluate(JSON.stringify(payload)))?.hookSpecificOutput;
+
+  check('the guard still refuses over a torn journal (third refusal)', overTorn?.permissionDecision, 'deny');
+  check('the reason says, bilingual, that one unreadable line was skipped', [/held 1 unreadable line;/.test(overTorn?.permissionDecisionReason ?? ''), /@es /.test(overTorn?.permissionDecisionReason ?? '')], [true, true]);
+
+  check('the attempt number counts the two readable refusals around the damage', /3 of 3/.test(overTorn?.permissionDecisionReason ?? ''), true);
+
+  writeFileSync(refusalsFile, `${record('w1')}\n\n${record('w1')}`);
+  const overClean = (await evaluate(JSON.stringify(payload)))?.hookSpecificOutput;
+
+  check('a journal with only blank lines (no damage) adds no note', [overClean?.permissionDecision, /unreadable/.test(overClean?.permissionDecisionReason ?? '')], ['deny', false]);
+
+  writeFileSync(refusalsFile, `x\n${record('w1')}y\n${record('w1')}`);
+  check('the count of skipped lines is the real one (two)', /held 2 unreadable lines;/.test((await evaluate(JSON.stringify(payload)))?.hookSpecificOutput.permissionDecisionReason ?? ''), true);
 
   writeFileSync(refusalsFile, `${record('w1')}{"agentId":"w1"\n${record('w1')}`);
   check('a corrupt line in the middle is skipped, the records around it count', counted('w1'), 2);
