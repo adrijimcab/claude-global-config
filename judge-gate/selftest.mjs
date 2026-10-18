@@ -388,7 +388,7 @@ check('sidecar: run.mjs declares its Stop registration', existsSync(sidecarPath)
 
 for (const judge of Object.values(JUDGES)) {
   check(`rubric: the ${judge.name} rubric no longer asks the model to test stop_hook_active`, judge.prompt.includes('If the input field stop_hook_active is true'), false);
-  check(`rubric: the ${judge.name} rubric tells the model the gate passes continued stops in code`, judge.prompt.includes('The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.'), true);
+  check(`rubric: the ${judge.name} rubric tells the model it may judge the rewrite after a block`, judge.prompt.includes('the rewrite after a block') && !judge.prompt.includes('you only see first stops'), true);
 }
 
 // A torn line is appended last: the readers above parse every line of the log. @es La línea rota va al final.
