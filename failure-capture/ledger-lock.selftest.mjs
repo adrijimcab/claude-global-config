@@ -15,10 +15,11 @@
  * bucle de reintentos acotado.
  */
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { releaseLock, takeLock, withLock } from './ledger-lock.mjs';
 import { provisionLoop, worldEnv } from './fixture-loop.mjs';
@@ -160,6 +161,172 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
   const refused = attempt(() => withLock(lock, () => { ran += 1; }, options(at)));
 
   check('withLock on a held lock does not run the work and leaves the holder\'s lock', refused.held === false && ran === 0 && existsSync(lock), JSON.stringify(refused));
+}
+
+// --- the owner of a lock: liveness plus age, and a release that removes only its own lock -------------------
+/** The pid of a process that has already exited: dead for certain, for the next few seconds. @es El pid de un proceso que ya terminó: seguro muerto durante los próximos segundos. */
+const deadPid = spawnSync(process.execPath, ['-e', '0']).pid;
+
+/** A lock file written the way the code under test writes its own, naming `pid` as the owner. @es Un lock escrito como lo escribe el código bajo prueba, con `pid` como dueño. */
+function ownedBy(name, pid, ageMs) {
+  const lock = path.join(scratch, `${name}.lock`);
+  const at = Date.now();
+
+  writeFileSync(lock, `${String(pid)}:fixture`);
+  backdate(lock, at, ageMs);
+
+  return { lock, at };
+}
+
+{
+  const { lock, at } = ownedBy('old-live-owner', process.pid, STALE_AFTER + 10_000);
+
+  check('a lock past the stale age whose owner is still alive is held, never robbed', taken(lock, options(at)) === false && existsSync(lock));
+}
+
+{
+  const { lock, at } = ownedBy('old-dead-owner', deadPid, STALE_AFTER + 10_000);
+
+  check('a lock past the stale age whose owner is dead is taken, and no breaker file is left', taken(lock, options(at)) === true && gone(`${lock}.breaker`));
+  releaseLock(lock);
+}
+
+{
+  // A system process this user may not signal exists all the same: its lock is not a dead one. Real pid 4 is
+  // the Windows System process and pid 1 is init elsewhere; the default liveness check is the one under test.
+  // @es Un proceso del sistema al que este usuario no puede enviar señal existe igual: su lock no es de un muerto.
+  const { lock, at } = ownedBy('old-system-owner', process.platform === 'win32' ? 4 : 1, STALE_AFTER + 10_000);
+
+  check('a lock whose owner exists but may not be signalled is held', taken(lock, options(at)) === false && existsSync(lock));
+}
+
+{
+  const { lock, at } = ownedBy('young-dead-owner', deadPid, 1_000);
+
+  check('NEAR MISS: a lock whose owner is dead but is not yet old is still held', taken(lock, options(at)) === false);
+}
+
+{
+  const lock = path.join(scratch, 'foreign-release.lock');
+
+  takeLock(lock, options(Date.now()));
+  writeFileSync(lock, `${String(process.pid)}:somebody-else`);
+  releaseLock(lock);
+  check('a release never removes a lock that is no longer the one this process took', existsSync(lock));
+}
+
+{
+  const { lock } = held('never-taken');
+
+  releaseLock(lock);
+  check('a release of a lock this process never took leaves it alone', existsSync(lock));
+}
+
+{
+  const { lock, at } = ownedBy('breaker-held', deadPid, STALE_AFTER + 10_000);
+
+  writeFileSync(`${lock}.breaker`, `${String(process.pid)}:breaker`);
+  check('a stale lock is left alone while a live breaker is at work on it', taken(lock, options(at)) === false && existsSync(lock));
+  rmSync(`${lock}.breaker`, { force: true });
+}
+
+{
+  const { lock, at } = ownedBy('breaker-dead', deadPid, STALE_AFTER + 10_000);
+
+  writeFileSync(`${lock}.breaker`, `${String(deadPid)}:breaker`);
+  backdate(`${lock}.breaker`, at, STALE_AFTER + 10_000);
+  check('a breaker left by a dead process does not wedge the lock', taken(lock, options(at, { attempts: 5 })) === true && gone(`${lock}.breaker`));
+  releaseLock(lock);
+}
+
+{
+  // The break itself, in the order the race has it: the stale lock was judged, then another process replaced it
+  // with a live one before the breaker acted. The live lock must survive. @es La rotura misma, en el orden de la
+  // carrera: se juzgó caducado el lock y otro proceso lo sustituyó por uno vivo antes de que el rompedor actuara.
+  const { lock, at } = ownedBy('replaced-before-break', deadPid, STALE_AFTER + 10_000);
+  let replaced = false;
+
+  check('a stale lock replaced by a live one while it is being broken is not removed', taken(lock, options(at, { attempts: 1, isAlive: (pid) => { if (!replaced) { replaced = true; writeFileSync(lock, `${String(process.pid)}:fresh`); } return pid === process.pid; } })) === false && existsSync(lock) && readFileSync(lock, 'utf8') === `${String(process.pid)}:fresh`);
+}
+
+{
+  // The lock is released by its owner between the judgement and the break: nothing is left to break, and taking it works.
+  // @es El dueño suelta el lock entre el juicio y la rotura: no queda nada que romper, y tomarlo funciona.
+  const { lock, at } = ownedBy('released-before-break', deadPid, STALE_AFTER + 10_000);
+  const outcome = attempt(() => takeLock(lock, options(at, { isAlive: () => { rmSync(lock, { force: true }); return false; } })));
+
+  check('a stale lock that disappears before the breaker re-reads it is no error, and is taken', outcome === true, String(outcome));
+  releaseLock(lock);
+}
+
+{
+  // On Windows a file being deleted, or open in another process, refuses a create with EPERM or EBUSY: that is
+  // contention to wait out, like EEXIST, never a fault. @es En Windows un fichero que se borra, o abierto en otro
+  // proceso, rechaza el create con EPERM o EBUSY: es contienda que se espera, como EEXIST, nunca un fallo.
+  const failing = (code, times) => { let left = times; return (file) => { if (left > 0) { left -= 1; throw Object.assign(new Error(code), { code }); } return openSync(file, 'wx'); }; };
+  const lock = path.join(scratch, 'contended-create.lock');
+
+  check('a create refused twice with EPERM is taken on the third attempt', taken(lock, options(Date.now(), { attempts: 5, create: failing('EPERM', 2) })) === true);
+  releaseLock(lock);
+  check('a create refused with EBUSY on every attempt stands aside without throwing', taken(lock, options(Date.now(), { attempts: 3, create: failing('EBUSY', 9) })) === false);
+  check('a create refused with EACCES is a fault, thrown at once', taken(lock, options(Date.now(), { attempts: 3, create: failing('EACCES', 9) })) === 'threw');
+
+  const stale = ownedBy('busy-removal', deadPid, STALE_AFTER + 10_000);
+  let removals = 0;
+  const busyOnce = (file) => { removals += 1; if (removals === 1) throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' }); rmSync(file, { force: true }); };
+
+  check('a removal refused once with EBUSY while breaking a stale lock is retried, not thrown', taken(stale.lock, options(stale.at, { attempts: 6, remove: busyOnce })) === true && removals >= 2, `removals: ${String(removals)}`);
+  releaseLock(stale.lock);
+
+  const broken = ownedBy('failing-removal', deadPid, STALE_AFTER + 10_000);
+
+  check('a removal that fails for another reason is a fault, thrown', taken(broken.lock, options(broken.at, { remove: () => { throw Object.assign(new Error('EIO'), { code: 'EIO' }); } })) === 'threw');
+}
+
+const CONTENDER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ledger-lock-contender.mjs');
+
+/**
+ * Runs `count` contenders as real processes at the same moment on one lock and reports how many entered the
+ * critical section while another was inside, and each exit code (3 is a contender that never held the lock).
+ * @es Lanza `count` contendientes como procesos reales a la vez sobre un lock e informa cuántos entraron a la
+ * sección crítica con otro dentro, y cada código de salida (3 es quien nunca tuvo el lock).
+ */
+async function race(name, { count, holdMs, staleAfterMs, attempts, prepare = () => undefined }) {
+  const dir = path.join(scratch, name);
+  const lock = path.join(dir, 'ledger.lock');
+  const violations = path.join(dir, 'violations.txt');
+
+  mkdirSync(dir, { recursive: true });
+  prepare(lock);
+
+  const errors = [];
+  const children = Array.from({ length: count }, () => new Promise((resolve) => {
+    const child = spawn(process.execPath, [CONTENDER, lock, path.join(dir, 'inside.txt'), violations, String(holdMs), String(staleAfterMs), String(attempts)], { stdio: ['ignore', 'ignore', 'pipe'] });
+
+    child.stderr.on('data', (chunk) => errors.push(String(chunk).split('\n').find((line) => line.includes('Error')) ?? ''));
+    child.on('exit', (code) => resolve(code));
+  }));
+  const codes = await Promise.all(children);
+
+  return { overlaps: existsSync(violations) ? readFileSync(violations, 'utf8').split('\n').filter(Boolean).length : 0, codes, errors, lockLeft: existsSync(lock) };
+}
+
+{
+  // A holder slower than the stale age is ALIVE: the old code judged by age alone and let the next waiter delete
+  // its lock, so two processes were inside at once. @es Un dueño más lento que la edad límite sigue VIVO: el código
+  // anterior juzgaba solo por edad y dejaba que el siguiente en espera borrase su lock, y dos procesos quedaban dentro.
+  const outcome = await race('slow-live-holder', { count: 4, holdMs: 200, staleAfterMs: 40, attempts: 400 });
+
+  check('K1: four real processes holding the lock longer than the stale age are never inside together', outcome.overlaps === 0 && outcome.codes.every((code) => code === 0), JSON.stringify(outcome));
+  check('K1: ...and nobody leaves the lock behind', !outcome.lockLeft);
+}
+
+{
+  // A lock left by a dead process, taken over by several waiters at once: exactly one at a time may enter.
+  // @es Un lock de un proceso muerto, que varios en espera quieren tomar a la vez: entra uno solo cada vez.
+  const outcome = await race('dead-holder-takeover', { count: 6, holdMs: 60, staleAfterMs: 40, attempts: 400, prepare: (lock) => { writeFileSync(lock, `${String(deadPid)}:fixture`); backdate(lock, Date.now(), 120_000); } });
+
+  check('K1: six real processes taking over a dead owner\'s lock are never inside together', outcome.overlaps === 0 && outcome.codes.every((code) => code === 0), JSON.stringify(outcome));
 }
 
 // --- capture.mjs, end to end in a constructed repository and home --------------------------------------

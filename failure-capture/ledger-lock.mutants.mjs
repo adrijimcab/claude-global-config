@@ -22,27 +22,45 @@ const RELEASE_ALWAYS = '} finally {\n    releaseLock(lockFile);\n  }';
 
 const MUTANTS = [
   // --- taking: exclusive, bounded, and never stealing a live lock
-  ['taking is not exclusive, so a second writer is let in', LOCK, "openSync(lockFile, 'wx')", "openSync(lockFile, 'w')"],
-  ['every lock is stale, so a live holder is robbed', LOCK, 'return now() - statSync(lockFile).mtimeMs > staleAfterMs;', 'return true;'],
-  ['no lock is ever stale, so a dead writer wedges every later one', LOCK, 'return now() - statSync(lockFile).mtimeMs > staleAfterMs;', 'return false;'],
-  ['a stale lock is recognised but not broken', LOCK, 'if (isStale(lockFile, staleAfterMs, now)) releaseLock(lockFile);', 'if (false) releaseLock(lockFile);'],
-  ['a lock that vanishes while it is examined is an error', LOCK, '} catch {\n    return false;', '} catch (error) {\n    throw error;'],
+  ['taking is not exclusive, so a second writer is let in', LOCK, "openSync(file, 'wx')", "openSync(file, 'w')"],
+  ['age is ignored, so a young lock of a dead owner is robbed', LOCK, 'if (now() - statSync(lockFile).mtimeMs <= staleAfterMs) return undefined;', ''],
+  ['the owner is ignored, so a slow but live holder is robbed', LOCK, 'return owner.pid !== undefined && isAlive(owner.pid) ? undefined : owner.token;', 'return owner.token;'],
+  ['no lock is ever stale, so a dead writer wedges every later one', LOCK, 'return owner.pid !== undefined && isAlive(owner.pid) ? undefined : owner.token;', 'return undefined;'],
+  ['a lock with no readable owner is taken for a live one, so a crash between create and write wedges it', LOCK, 'return owner.pid !== undefined && isAlive(owner.pid) ? undefined : owner.token;', 'return owner.pid === undefined || isAlive(owner.pid) ? undefined : owner.token;'],
+  ['a process we may not signal is taken for dead, so its lock is robbed', LOCK, "return error?.code === 'EPERM';", 'return false;'],
+  ['a stale lock is recognised but not broken', LOCK, '      breakStale(lockFile, { staleAfterMs, now, isAlive, remove });', ''],
+  ['a lock that vanishes while it is examined is an error', LOCK, '} catch {\n    return undefined;\n  }\n\n  const owner = ownerOf(lockFile);', '} catch (error) {\n    throw error;\n  }\n\n  const owner = ownerOf(lockFile);'],
+  ['a lock that vanishes while its owner is read is an error', LOCK, '} catch {\n    return undefined;\n  }\n\n  const pid', '} catch (error) {\n    throw error;\n  }\n\n  const pid'],
+  ['the breaker file is not exclusive, so two breakers work at once', LOCK, "openSync(breaker, 'wx')", "openSync(breaker, 'w')"],
+  ['the breaker removes the lock without checking it is still the one judged stale', LOCK, 'if (ownerOf(lockFile)?.token === judged) removeQuietly(lockFile, options);', 'removeQuietly(lockFile, options);'],
+  ['the breaker file is left behind after a break', LOCK, '} finally {\n    removeQuietly(breaker, options);', '} finally {\n    void breaker;'],
+  ['a breaker file of a dead breaker is never cleared', LOCK, "error?.code === 'EEXIST' && staleToken(breaker, options) !== undefined", "error?.code === 'EEXIST' && false"],
+  ['a live breaker file is cleared as if its owner were dead', LOCK, "error?.code === 'EEXIST' && staleToken(breaker, options) !== undefined", "error?.code === 'EEXIST'"],
+  ['the owner token is never written into the lock', LOCK, 'writeSync(fd, token);', 'void token;'],
+  ['the token taken is not remembered, so a release cannot find it', LOCK, 'taken.set(lockFile, token);', 'void token;'],
   ['the stale limit shrinks to a millisecond, so a fresh lock reads as dead', LOCK, 'export const STALE_AFTER_MS = 60_000;', 'export const STALE_AFTER_MS = 1;'],
   ['the stale limit grows past any real age, so a dead lock is never broken', LOCK, 'export const STALE_AFTER_MS = 60_000;', 'export const STALE_AFTER_MS = 600_000_000;'],
   ['one attempt too many is made', LOCK, 'attempt < attempts', 'attempt <= attempts'],
-  ['a failure other than "already exists" is waited out as if another writer held the lock', LOCK, "if (error?.code !== 'EEXIST') throw new Error(", "if (false) throw new Error("],
-  ['contention is thrown as a fault instead of waited out', LOCK, "error?.code !== 'EEXIST'", "error?.code === 'EEXIST'"],
+  ['a failure other than "already exists" is waited out as if another writer held the lock', LOCK, "if (!CONTENTION.has(error?.code)) throw new Error(", "if (false) throw new Error("],
+  ['contention is thrown as a fault instead of waited out', LOCK, "if (!CONTENTION.has(error?.code)) throw new Error(", "if (CONTENTION.has(error?.code)) throw new Error("],
+  ['a file being deleted or busy (Windows EPERM, EBUSY) is a fault instead of contention', LOCK, "new Set(['EEXIST', 'EPERM', 'EBUSY'])", "new Set(['EEXIST'])"],
+  ['a busy file while breaking a stale lock is a fault instead of a retry', LOCK, 'if (!CONTENTION.has(error?.code)) throw error;', 'throw error;'],
+  ['any failure while breaking a stale lock is swallowed', LOCK, 'if (!CONTENTION.has(error?.code)) throw error;', ''],
   ['the fault refusal loses its Spanish half', LOCK, '. @es no se pudo crear el lock del ledger', '. no se pudo crear el lock del ledger'],
   ['the taker never pauses between attempts', LOCK, '      wait();', '      '],
   ['the default retry bound shrinks to one attempt', LOCK, 'attempts = 40', 'attempts = 1'],
 
   // --- releasing
-  ['releasing does nothing, so a lock outlives its writer', LOCK, 'rmSync(lockFile, { force: true });', 'void lockFile;'],
-  ['releasing a lock that is already gone is an error', LOCK, 'rmSync(lockFile, { force: true });', 'rmSync(lockFile);'],
+  ['releasing does nothing, so a lock outlives its writer', LOCK, 'if (mine !== undefined && ownerOf(lockFile)?.token === mine) rmSync(lockFile, { force: true });', 'void mine;'],
+  ['releasing removes a lock another process now holds', LOCK, 'if (mine !== undefined && ownerOf(lockFile)?.token === mine) rmSync(lockFile, { force: true });', 'if (mine !== undefined) rmSync(lockFile, { force: true });'],
+  ['releasing removes a lock this process never took', LOCK, 'if (mine !== undefined && ownerOf(lockFile)?.token === mine) rmSync(lockFile, { force: true });', 'rmSync(lockFile, { force: true });'],
 
   // --- withLock: the work runs only under the lock, and the lock is always given back
   ['the work runs even though the lock is held', LOCK, REFUSE_HELD, 'takeLock(lockFile, options);'],
-  ['a refused writer removes the holder\'s lock', LOCK, REFUSE_HELD, 'if (!takeLock(lockFile, options)) { releaseLock(lockFile); return { held: false }; }'],
+  // (A refused writer that released anyway is no longer a defect worth a mutant: a release removes only the lock
+  // whose token this process took, and a refused writer took none; "releasing removes a lock this process never
+  // took" above is the mutant that guards it.) @es (Un escritor rechazado que soltara igual ya no es un defecto
+  // con mutante propio: soltar borra solo el lock cuyo token tomó este proceso, y el rechazado no tomó ninguno.)
   ['the lock is not released when the work fails', LOCK, RELEASE_ALWAYS, '} catch (error) {\n    throw error;\n  } finally {\n  }'],
   ['the lock is released only when the work fails', LOCK, RELEASE_ALWAYS, '} catch (error) {\n    releaseLock(lockFile);\n    throw error;\n  }'],
 
