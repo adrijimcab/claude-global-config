@@ -18,6 +18,8 @@
  * RUBRIC v5 (2026-10-12): v4 with rule 1 rewritten. The gate (`../judge-gate/`) now passes a continued stop in code, so
  * the model is no longer asked to test `stop_hook_active`; measured on the voice judge, the model failed that test in 1 of 5
  * runs. The hook is a `command` hook because `if` is evaluated only on tool events (docs, read 2026-10-12).
+ * RUBRIC v6 (2026-10-18): rule 1 rewritten again. The gate now also judges the rewrite after a block, until the turn has
+ * had two blocks (judge-gate MAX_BLOCKS_PER_TURN), so the model may see either kind of stop and judges both the same way.
  * @es RÚBRICA v5: v4 con la regla 1 reescrita. La compuerta pasa en código toda parada continuada; el modelo ya no
  * prueba `stop_hook_active` (medido en el juez de voz: falló esa prueba en 1 de 5 corridas).
  *
@@ -55,7 +57,7 @@
 export const MARKER = 'PREMISE-JUDGE:';
 
 /** The first line of the rubric: how this hook is told apart among the Stop hooks of a transcript. @es La primera línea de la rúbrica. */
-export const PROMPT_SIGNATURE = 'premise-judge rubric v5.';
+export const PROMPT_SIGNATURE = 'premise-judge rubric v6.';
 
 /** The timeout of the hook, in seconds: the documented default, written down so the selftest pins it. @es El timeout del hook, en segundos. */
 export const TIMEOUT_SECONDS = 30;
@@ -66,7 +68,7 @@ export const PROMPT = [
   'You review the FINAL message of one assistant turn. The hook input JSON is: $ARGUMENTS',
   '',
   'Rules, in order:',
-  '1. The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.',
+  '1. You see either the first stop of a turn or the rewrite after a block: the gate judges a continued stop until its turn has had two blocks. Judge both the same way.',
   '2. Judge only the field last_assistant_message. Do not judge style, tone, completeness, language or code quality.',
   '3. Answer ok false ONLY in one of these three cases, and only when you can quote the exact sentence:',
   '   (a) The message presents a premise or claim as a constraint or as the reason for a decision (for example "your mandate says", "the config requires", "the docs say", "the agent reported", "tu mandato exige", "según la documentación"), and the message gives no evidence for it: no file path, file:line, URL, quotation of the source, or command with its output.',

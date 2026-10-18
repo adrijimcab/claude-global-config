@@ -65,13 +65,13 @@ check('settings: its timeout is the pinned one', commandHooks[0]?.timeout, TIMEO
 check('rubric: the gate runs this rubric, the single source', JUDGES.premise.prompt === PROMPT, true);
 check('rubric: starts with its signature', PROMPT.startsWith(`${PROMPT_SIGNATURE}\n`), true);
 check('rubric: one $ and it is $ARGUMENTS', [PROMPT.split('$').length - 1, PROMPT.split('$ARGUMENTS').length - 1], [1, 1]);
-check('rubric: the gate passes continued stops in code', PROMPT.includes('The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.'), true);
+check('rubric: the model judges the first stop and the rewrite after a block alike', PROMPT.includes('You see either the first stop of a turn or the rewrite after a block: the gate judges a continued stop until its turn has had two blocks. Judge both the same way.'), true);
 check('rubric: the model is no longer asked to test stop_hook_active', PROMPT.includes('If the input field stop_hook_active'), false);
 check('rubric: judges an own decision justified as the easier path while it names a better one', PROMPT.includes('(c) The message states its own decision or recommendation and justifies it as the easier'), true);
 check('rubric: unverified passes only when it cannot be measured this turn', PROMPT.includes("passes ONLY when it cannot be measured this turn (another machine, the future, a third party's intent, a cost not yet incurred)"), true);
 check('rubric: case d is retired', PROMPT.includes('(d) '), false);
 check('rubric: three cases', PROMPT.includes('in one of these three cases'), true);
-check('rubric: the signature is the v5 line', PROMPT_SIGNATURE, 'premise-judge rubric v5.');
+check('rubric: the signature is the v6 line', PROMPT_SIGNATURE, 'premise-judge rubric v6.');
 check('rubric: never holds the literal marker', PROMPT.includes(MARKER), false);
 check('rubric: spells the marker in words', PROMPT.includes('starts with the word PREMISE-JUDGE followed by a colon'), true);
 check('rubric: the marker is what the words spell', MARKER, 'PREMISE-JUDGE:');

@@ -21,13 +21,13 @@ const LATENCY = 'premise-judge/latency.mjs';
 
 const MUTANTS = [
   // --- THE RUBRIC AND ITS WIRING.
-  ['the rubric stops telling the model the gate passes continued stops', PROMPT, "  '1. The gate in front of you already passed every continued stop (stop_hook_active true) in code, so you only see first stops.',\n", ''],
-  ['the rubric asks the model to test stop_hook_active again', PROMPT, 'so you only see first stops.', 'so you only see first stops. If the input field stop_hook_active is true, answer ok.'],
+  ['the rubric stops telling the model it judges both kinds of stop', PROMPT, "  '1. You see either the first stop of a turn or the rewrite after a block: the gate judges a continued stop until its turn has had two blocks. Judge both the same way.',\n", ''],
+  ['the rubric asks the model to test stop_hook_active again', PROMPT, 'Judge both the same way.', 'Judge both the same way. If the input field stop_hook_active is true, answer ok.'],
   ['the rubric drops the own-decision case', PROMPT, '(c) The message states its own decision', '(x) The message states its own decision'],
   ['the rubric brings case d back', PROMPT, "  '4. In every other case", "  '   (d) A reply is judged for a state.',\n  '4. In every other case"],
   ['rule 4 lets any unverified claim pass', PROMPT, 'as unverified passes ONLY when it cannot be measured this turn (', 'as unverified passes ('],
   ['the rubric counts four cases', PROMPT, 'in one of these three cases', 'in one of these four cases'],
-  ['the signature is still v3', PROMPT, 'premise-judge rubric v5.', 'premise-judge rubric v3.'],
+  ['the signature is still v5', PROMPT, 'premise-judge rubric v6.', 'premise-judge rubric v5.'],
   ['the rubric spells the marker literally', PROMPT, 'starts with the word PREMISE-JUDGE followed by a colon', 'starts with PREMISE-JUDGE:'],
   ['the rubric loses its signature line', PROMPT, '  PROMPT_SIGNATURE,\n', ''],
   ['the pinned timeout is not the settings one', PROMPT, 'TIMEOUT_SECONDS = 30', 'TIMEOUT_SECONDS = 20'],
