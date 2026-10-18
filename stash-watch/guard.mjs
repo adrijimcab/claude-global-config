@@ -25,6 +25,10 @@
  *     nothing and is shown again. So the refusal is cleared by being SEEN, not by an action. That is
  *     the honest scope: noticing is mechanised, triage is not, because whether a stash is worth keeping
  *     is a judgement about its content that no script can make.
+ *   - It ignores a stash younger than `SETTLE_WINDOW_MS`, by the stash's own commit time and never by its
+ *     message: a commit hook parks one for the length of a commit. A young stash is not marked as shown, so
+ *     a later `Stop` reports it if it is still there. @es Ignora un stash más joven que la ventana, por su
+ *     propia fecha y nunca por su mensaje; no lo marca como mostrado.
  *   - The tradeoff, stated: a stash somebody chose to keep is re-reported at the start of every
  *     session. That is intended — the stack is supposed to be empty, and a stash that is kept on
  *     purpose should be kept as a `reaped/` tag or a branch, where it is visible and cannot be dropped
@@ -89,6 +93,19 @@ function repositoryOf(payload) {
   return process.env.CLAUDE_PROJECT_DIR ?? (typeof payload?.cwd === 'string' ? payload.cwd : process.cwd());
 }
 
+/**
+ * How old a stash must be, measured from its own commit time, before the guard reports it: 10 minutes. A
+ * commit hook (lint-staged) parks a stash for the length of one commit, which on this machine is minutes at
+ * most (pre-commit typecheck plus lint-staged), then drops it. Younger stashes are neither reported nor marked
+ * as shown, so a later `Stop` reports one that survives. The message is never consulted: a stash is judged by
+ * what it holds.
+ * @es Antigüedad mínima de un stash, medida desde su propio commit, para que el guard lo informe: 10 minutos.
+ * Un hook de commit (lint-staged) aparca un stash lo que dura un commit (minutos como mucho) y lo descarta.
+ * Los más jóvenes no se informan ni se marcan como mostrados; un `Stop` posterior informa el que sobreviva.
+ * Nunca se mira el mensaje: un stash se juzga por lo que contiene.
+ */
+export const SETTLE_WINDOW_MS = 10 * 60 * 1000;
+
 /** Sessions remembered at most; older ones are forgotten so the state file stays bounded. @es Sesiones recordadas como máximo. */
 const REMEMBERED_SESSIONS = 100;
 
@@ -145,8 +162,19 @@ export function decide(payload, { repoRoot = repositoryOf(payload), stateDir = d
     return undefined;
   }
 
+  // Only stashes past the settle window are judged; a young one is neither reported nor part of what is
+  // recorded as shown, so it is still unshown at a later Stop.
+  // @es Sólo se juzgan los stashes que pasaron la ventana; uno joven ni se informa ni entra en lo que se
+  // registra como mostrado, así que sigue sin mostrarse en un `Stop` posterior.
+  const settled = inventory.stashes.filter((stash) => now - stash.createdAt.getTime() >= SETTLE_WINDOW_MS);
+
+  if (settled.length === 0) {
+    note(stateDir, { event: 'settling', repoRoot, stashes: inventory.stashes.length });
+    return undefined;
+  }
+
   const sessionId = typeof payload?.session_id === 'string' ? payload.session_id : 'unknown';
-  const seen = fingerprint(inventory.stashes);
+  const seen = fingerprint(settled);
   const file = noticedPath(stateDir);
   const noticed = readJson(file, {});
 
@@ -167,9 +195,9 @@ export function decide(payload, { repoRoot = repositoryOf(payload), stateDir = d
     return undefined;
   }
 
-  note(stateDir, { event: 'block', session: sessionId, stashes: inventory.stashes.map((stash) => stash.sha) });
+  note(stateDir, { event: 'block', session: sessionId, stashes: settled.map((stash) => stash.sha) });
 
-  return { decision: 'block', reason: reason(inventory.stashes, now) };
+  return { decision: 'block', reason: reason(settled, now) };
 }
 
 /**

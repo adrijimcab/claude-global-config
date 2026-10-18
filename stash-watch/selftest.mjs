@@ -31,7 +31,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { decide as decideGuard, fingerprint } from './guard.mjs';
+import { decide as decideGuard, fingerprint, SETTLE_WINDOW_MS } from './guard.mjs';
 import { parseSubject, stashInventory } from './stashes.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
@@ -64,9 +64,13 @@ const git = (cwd, ...args) => execFileSync('git', args, { cwd, env: cleanEnv, en
  * @es La decisión de la guardia. Un throw es un veredicto: se registra como check FALLIDO y se responde con
  * un marcador que no es ni allow (`undefined`) ni block.
  */
-function decide(...args) {
+function decide(payload, options = {}) {
   try {
-    return decideGuard(...args);
+    // Stashes built here are seconds old; unless a case names its own clock, the guard sees them after the
+    // settle window, so the long-standing cases keep judging the stack and not its age.
+    // @es Los stashes de aquí tienen segundos; salvo que un caso fije su reloj, la guardia los ve pasada la
+    // ventana, y los casos de siempre siguen juzgando la pila y no su edad.
+    return decideGuard(payload, { now: Date.now() + 2 * SETTLE_WINDOW_MS, ...options });
   } catch (error) {
     check('decide() does not throw @es decide() no lanza', false, error.message);
 
@@ -177,6 +181,59 @@ try {
   check('every stash gone: silent again, even for a session never shown', decide(payload('s7'), { repoRoot: repo, stateDir: state }) === undefined);
 
   // ---------------------------------------------------------------------------------------------
+  process.stdout.write('the settle window: a young stash is neither reported nor marked shown\n');
+
+  const settling = fixture('settle-repo');
+  const settleState = stateOf('settle');
+  const noticedOf = (dir) => {
+    try {
+      return JSON.parse(readFileSync(path.join(dir, 'noticed.json'), 'utf8'));
+    } catch {
+      return {};
+    }
+  };
+
+  writeFileSync(path.join(settling, 'tracked.txt'), 'settle\n');
+  git(settling, 'stash', 'push', '--quiet', '-m', 'lint-staged automatic backup');
+
+  const bornAt = stashInventory(settling).stashes[0].createdAt.getTime();
+
+  check('a young stash is not reported, whatever its message says', decide(payload('y1'), { repoRoot: settling, stateDir: settleState, now: bornAt + 1000 }) === undefined);
+  check('and it is not marked as shown', noticedOf(settleState).y1 === undefined, JSON.stringify(noticedOf(settleState)));
+  check('one ms short of the window is still young', decide(payload('y1'), { repoRoot: settling, stateDir: settleState, now: bornAt + SETTLE_WINDOW_MS - 1 }) === undefined);
+
+  const settled = decide(payload('y1'), { repoRoot: settling, stateDir: settleState, now: bornAt + SETTLE_WINDOW_MS });
+
+  check('the same stash, still there at a later Stop once old enough, is reported', settled?.decision === 'block' && settled.reason.includes('lint-staged automatic backup'), JSON.stringify(settled));
+  check('an old stash is reported exactly as before: ref and counts', settled?.reason.includes('stash@{0}') === true && settled.reason.includes('tracked.txt  +1 -2'), settled?.reason);
+
+  // A session that has seen the old set is not disturbed by a young newcomer, which stays unshown until old.
+  // @es Una sesión que vio el conjunto viejo no se altera por un recién llegado joven, que sigue sin mostrarse.
+  const mixedState = stateOf('settle-mixed');
+
+  // The first stash is dated two windows back by its commit time, so which one is young never rests on
+  // two stashes landing in different seconds.
+  // @es El primer stash lleva fecha de hace dos ventanas, así que cuál es joven no depende de que dos
+  // stashes caigan en segundos distintos.
+  const mixed = fixture('settle-mixed-repo');
+  const backdated = `${Math.floor((Date.now() - 2 * SETTLE_WINDOW_MS) / 1000)} +0000`;
+
+  writeFileSync(path.join(mixed, 'tracked.txt'), 'veteran\n');
+  execFileSync('git', ['stash', 'push', '--quiet', '-m', 'veteran'], { cwd: mixed, env: { ...cleanEnv, GIT_COMMITTER_DATE: backdated }, windowsHide: true });
+  decide(payload('m1'), { repoRoot: mixed, stateDir: mixedState });
+  writeFileSync(path.join(mixed, 'tracked.txt'), 'newcomer\n');
+  git(mixed, 'stash', 'push', '--quiet', '-m', 'newcomer');
+
+  const newcomerAt = stashInventory(mixed).stashes[0].createdAt.getTime();
+  const during = decide(payload('m1'), { repoRoot: mixed, stateDir: mixedState, now: newcomerAt + 1000 });
+
+  check('a young newcomer next to a shown stash passes silently', during === undefined, JSON.stringify(during));
+
+  const after = decide(payload('m1'), { repoRoot: mixed, stateDir: mixedState, now: newcomerAt + SETTLE_WINDOW_MS });
+
+  check('and is reported at a later Stop once old, with the old one', after?.decision === 'block' && after.reason.includes('newcomer') && after.reason.includes('stash@{1}'), JSON.stringify(after));
+
+  // ---------------------------------------------------------------------------------------------
   process.stdout.write('what a stash holds beyond tracked edits\n');
 
   const wide = fixture('untracked-repo');
@@ -221,7 +278,11 @@ try {
   check('clean stack: exit 0 and no output', cleanRun.status === 0 && cleanRun.stdout === '', JSON.stringify(cleanRun));
 
   writeFileSync(path.join(shimRepo, 'tracked.txt'), 'shim\n');
-  git(shimRepo, 'stash', 'push', '--quiet', '-m', 'shim-stash');
+  // The real process reads the real clock, so the stash is made old: its commit time is two windows back.
+  // @es El proceso real lee el reloj real, así que el stash se hace viejo: su fecha es de hace dos ventanas.
+  const oldDate = `${Math.floor((Date.now() - 2 * SETTLE_WINDOW_MS) / 1000)} +0000`;
+
+  execFileSync('git', ['stash', 'push', '--quiet', '-m', 'shim-stash'], { cwd: shimRepo, env: { ...cleanEnv, GIT_COMMITTER_DATE: oldDate }, windowsHide: true });
 
   const blockRun = shim(`﻿${JSON.stringify(payload('e1'))}`);
   let blockOutput;
