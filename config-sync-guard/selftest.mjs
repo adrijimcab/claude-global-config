@@ -283,7 +283,7 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   check('a live SUBAGENT of another session ran the shell call -> excused (its work in progress)', kindWith(agents({ w: shellActor('s-2', true, T - 500, T + 500) })), 'allow');
   check('a live subagent of THIS session ran the shell call -> excused, its parent does not commit a worker\'s working state', kindWith(agents({ w: shellActor('s-1', true, T - 500, T + 500) })), 'allow');
   check('a worker WROTE the file while this session merely ran a command over the same time -> the write outranks the window: excused', decide(STOP_PAYLOAD(), { repos: [repo], liveAgents: agents({ w: liveAgent('s-2', edit(here('foo.txt'))), m: shellActor('s-1', false, T - 500, T + 500) }), mtimeOf: () => T })?.kind ?? 'allow', 'allow');
-  check('this session and another both ran a shell call over the mtime -> block (the maker is still blocked)', kindWith(agents({ a: shellActor('s-2', false, T - 500, T + 500), b: shellActor('s-1', false, T - 500, T + 500) })), 'block');
+  check('this session and another both ran a shell call over the mtime -> note: two sessions cannot name a maker (S3b), so it is unexplained and blocks nobody', kindWith(agents({ a: shellActor('s-2', false, T - 500, T + 500), b: shellActor('s-1', false, T - 500, T + 500) })), 'note');
   check('no shell call contains the mtime (outside every window) -> unexplained, so a note', kindWith(agents({ m: shellActor('s-1', false, T - 9000, T - 5000) })), 'note');
   check('a shell call ending exactly one tolerance before the mtime still explains it -> block', kindWith(agents({ m: shellActor('s-1', false, T - 5000, T - CLOCK_TOLERANCE_MS) })), 'block');
   check('a shell call ending one millisecond more than that before the mtime does not -> note', kindWith(agents({ m: shellActor('s-1', false, T - 5000, T - CLOCK_TOLERANCE_MS - 1) })), 'note');
@@ -308,6 +308,42 @@ check('clean repo -> allow', verdictKind(STOP_PAYLOAD(), { repos: [fakeRepo('r')
   check('a LIVE worker of this session beside its main transcript is not named as finished worker output', finishedBlock(agents({ m: mainAgent('s-1', edit(here('foo.txt'))), w: liveAgent('s-1', edit(here('foo.txt'))) }))?.dirtyRepos?.[0]?.workerOutput, []);
   check('a path this session\'s main transcript wrote (no finished worker) names no worker output', finishedBlock(agents({ m: mainAgent('s-1', edit(here('foo.txt'))) }))?.dirtyRepos?.[0]?.workerOutput, []);
   check('a payload without a session id cannot tell "another session" from "mine": a main shell call blocks', decide({ hook_event_name: 'Stop' }, { repos: [repo], liveAgents: agents({ m: shellActor('s-2', false, T - 500, T + 500) }), mtimeOf: () => T })?.kind, 'block');
+}
+
+// ---------------------------------------------------------------------------------------------
+// STATE SPACE: a shell window claims a path only when its command COULD have written THAT repository
+// (its cwd is inside it, or its text names its root), and windows of two or more sessions that remain
+// resolve to `unexplained`. The repo root is `HERE`; the dirty path is `foo.txt`, changed at `T`.
+// Measured 2026-10-18: a long `land.mjs` call of one session claimed peers' writes in a repo it never
+// touched. @es ESPACIO DE ESTADOS: una ventana de shell reclama una ruta solo si su comando PUDO escribir
+// ESE repositorio (cwd dentro o texto con su raíz); si quedan ventanas de dos o más sesiones, `unexplained`.
+// ---------------------------------------------------------------------------------------------
+{
+  const T = 3_000_000;
+  const repo = fakeRepo('r', { statusText: '## master...origin/master\n M foo.txt\n' });
+  const OUTSIDE = path.join(path.dirname(HERE), 'somewhere-else');
+  const running = (session, subagent, command, cwd) => ({ session, subagent, live: true, writes: [], windows: [{ start: T - 500, end: T + 500, command, cwd }] });
+  const kindOf = (liveAgents, session = 's-1', authoredWrites = []) => decide(STOP_PAYLOAD({ session_id: session }), { repos: [repo], liveAgents, authoredWrites, mtimeOf: () => T })?.kind ?? 'allow';
+  const slashes = (text) => text.split('\\').join('/');
+
+  check('a long window of s-1 whose command never names the repo and whose cwd is elsewhere does not claim: unexplained -> note', kindOf(agents({ m: running('s-1', false, 'node land.mjs --branch x', OUTSIDE) })), 'note');
+  check('the same window with no cwd recorded and no repo in the command does not claim either', kindOf(agents({ m: running('s-1', false, 'node land.mjs', undefined) })), 'note');
+  check('a window whose cwd is inside the repo claims and stays maker -> block', kindOf(agents({ m: running('s-1', false, 'node run.mjs', path.join(HERE, 'sub')) })), 'block');
+  check('a window whose cwd IS the repo root claims -> block', kindOf(agents({ m: running('s-1', false, 'node run.mjs', HERE) })), 'block');
+  check('a cwd that only shares the repo root as a name prefix is another directory: no claim', kindOf(agents({ m: running('s-1', false, 'node run.mjs', `${HERE}-other`) })), 'note');
+  check('a command that names the repo root claims -> block', kindOf(agents({ m: running('s-1', false, `node ${path.join(HERE, 'tool.mjs')}`, OUTSIDE) })), 'block');
+  check('the root is recognised with forward slashes -> block', kindOf(agents({ m: running('s-1', false, `node ${slashes(HERE)}/tool.mjs`, OUTSIDE) })), 'block');
+  check('the root is recognised in another letter case -> block', kindOf(agents({ m: running('s-1', false, `node ${HERE.toUpperCase()}/tool.mjs`, OUTSIDE) })), 'block');
+  check('the root is recognised in its MSYS spelling -> block', kindOf(agents({ m: running('s-1', false, `node /${slashes(HERE).replace(':', '')}/tool.mjs`, OUTSIDE) })), 'block');
+  check('a window with no command and no cwd (an old record) still claims, as before -> block', kindOf(agents({ m: shellActor('s-1', false, T - 500, T + 500) })), 'block');
+  check('a window with an empty command and an outside cwd does not claim', kindOf(agents({ m: running('s-1', false, '', OUTSIDE) })), 'note');
+  check('windows of two sessions that both name the repo cannot name a maker: unexplained -> note, for s-1', kindOf(agents({ a: running('s-1', false, 'node x', HERE), b: running('s-2', false, 'node x', HERE) })), 'note');
+  check('windows of two sessions that both name the repo: unexplained -> note, never a block, for s-2 too', kindOf(agents({ a: running('s-1', false, 'node x', HERE), b: running('s-2', false, 'node x', HERE) }), 's-2'), 'note');
+  check('two sessions overlap but only s-2 names the repo: s-2 alone claims, so s-1 is excused', kindOf(agents({ a: running('s-1', false, 'node land.mjs', OUTSIDE), b: running('s-2', false, 'node x', HERE) })), 'allow');
+  check('two sessions overlap but only s-2 names the repo: s-2 is the maker -> block', kindOf(agents({ a: running('s-1', false, 'node land.mjs', OUTSIDE), b: running('s-2', false, 'node x', HERE) }), 's-2'), 'block');
+  check('a main transcript and a subagent of the SAME session both naming the repo are one session: still maker -> block', kindOf(agents({ a: running('s-1', false, 'node x', HERE), b: running('s-1', true, 'node x', HERE) })), 'block');
+  check('a recorded author outranks windows of two sessions: s-2 recorded -> s-2 blocks', kindOf(agents({ a: running('s-1', false, 'node x', HERE), b: running('s-3', false, 'node x', HERE) }), 's-2', [{ path: here('foo.txt').replaceAll('\\', '/').toLowerCase(), mtimeMs: T, session: 's-2' }]), 'block');
+  check('a structured write outranks windows of two sessions: its worker holds the path -> excused', kindOf(agents({ w: liveAgent('s-3', edit(here('foo.txt'))), a: running('s-1', false, 'node x', HERE), b: running('s-2', false, 'node x', HERE) })), 'allow');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -688,6 +724,12 @@ check(
   check('a call whose result is an error is failed', shellCallsIn(callAt(1, 'a', 'PowerShell', { command: 'git commit' }) + failedAt(4, 'a'), now)[0]?.failed, true);
   check('a call with no result is not failed: it may still be running', shellCallsIn(callAt(1, 'a', 'Bash', { command: 'git commit' }), now), [{ start: ms(1), command: 'git commit', failed: false, end: now }]);
   check('a call without a command carries an empty one', shellCallsIn(callAt(1, 'a', 'Bash') + resultAt(2, 'a'), now)[0]?.command, '');
+  const callIn = (second, id, command, cwd) => `${JSON.stringify({ timestamp: at(second), cwd, type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } })}\n`;
+
+  check('a shell call carries the working directory of its tool_use record', shellCallsIn(callIn(1, 'a', 'ls', 'C:\\work') + resultAt(2, 'a'), now)[0]?.cwd, 'C:\\work');
+  check('a running call carries its working directory too', shellCallsIn(callIn(1, 'a', 'ls', 'C:\\work'), now)[0]?.cwd, 'C:\\work');
+  check('a record without a working directory leaves it undefined', shellCallsIn(callAt(1, 'a', 'Bash') + resultAt(2, 'a'), now)[0]?.cwd, undefined);
+  check('a non-string working directory is ignored', shellCallsIn(callIn(1, 'a', 'ls', 42) + resultAt(2, 'a'), now)[0]?.cwd, undefined);
   check('the window list is the call list without the extra fields', shellWindowsIn(callAt(1, 'a', 'Bash', { command: 'x' }) + failedAt(4, 'a'), now), [{ start: ms(1), end: ms(4) }]);
 
   const windows = [{ start: ms(10), end: ms(20) }];
@@ -785,9 +827,9 @@ check('pathspecCommitCommand stages then commits only the named paths, quoted, a
 
   const texts = liveAgentWrites(now, [liveRecord, deadRecord, deadMain, { id: 'agent-cut-off', session: 's-dead', subagent: true, transcript: cutOff }, { id: 'agent-ancient', session: 's-dead', subagent: true, transcript: ancient }]);
 
-  check('liveAgentWrites includes the live agent, with its session and what it wrote', texts.get('agent-live'), { session: 's-live', subagent: true, live: true, writes: ['c:/fake/live.ts'], windows: [{ start: Date.parse('2026-10-01T00:00:01.000Z'), end: Date.parse('2026-10-01T00:00:03.000Z') }] });
+  check('liveAgentWrites includes the live agent, with its session and what it wrote', texts.get('agent-live'), { session: 's-live', subagent: true, live: true, writes: ['c:/fake/live.ts'], windows: [{ start: Date.parse('2026-10-01T00:00:01.000Z'), command: '', end: Date.parse('2026-10-01T00:00:03.000Z'), failed: false }] });
   check('liveAgentWrites keeps a FINISHED subagent within the horizon, marked not live, with what it wrote', texts.get('agent-dead'), { session: 's-dead', subagent: true, live: false, writes: ['c:/fake/dead.ts'], windows: [] });
-  check('a finished subagent\'s shell call that never returned ends where its transcript ends, not now', texts.get('agent-cut-off')?.windows, [{ start: Date.parse('2026-10-01T00:00:01.000Z'), end: now - 60 * 60 * 1000 }]);
+  check('a finished subagent\'s shell call that never returned ends where its transcript ends, not now', texts.get('agent-cut-off')?.windows, [{ start: Date.parse('2026-10-01T00:00:01.000Z'), command: '', failed: false, end: now - 60 * 60 * 1000 }]);
   check('liveAgentWrites EXCLUDES a finished subagent past the horizon', texts.has('agent-ancient'), false);
   check('liveAgentWrites EXCLUDES a stopped MAIN transcript: the horizon is for workers only', texts.has('main-dead'), false);
   check('the finished subagent window is exactly six hours', FINISHED_HORIZON_MS, 6 * 60 * 60 * 1000);

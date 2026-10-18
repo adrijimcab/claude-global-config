@@ -35,13 +35,17 @@ function blocksOf(record) {
 }
 
 /**
- * Every shell call of the JSONL `transcriptText` as `{ start, end, command, failed }`: the windows below
- * plus the call's `input.command` and whether its result was an error (a call with no result has
+ * Every shell call of the JSONL `transcriptText` as `{ start, end, command, cwd, failed }`: the windows below
+ * plus the call's `input.command`, the working directory its `tool_use` record carries (`cwd`, undefined
+ * when the record has none) and whether its result was an error (a call with no result has
  * `failed: false`). The ONE place a shell call's `tool_use` is paired with its `tool_result`; the windows are
- * this list without the extra fields. Timing rules as `shellWindowsIn`.
- * @es Cada llamada de shell de `transcriptText` como `{ start, end, command, failed }`: las ventanas de abajo
- * más el `input.command` y si el resultado fue un error (sin resultado, `failed: false`). El ÚNICO sitio que
- * empareja `tool_use` con `tool_result`; las ventanas son esta lista sin los campos extra.
+ * this list without the extra fields. Timing rules as `shellWindowsIn`. The command and the cwd are what
+ * `window-reach.mjs` reads to tell WHERE a call could have written.
+ * @es Cada llamada de shell de `transcriptText` como `{ start, end, command, cwd, failed }`: las ventanas de
+ * abajo más el `input.command`, el directorio de trabajo que lleva su registro `tool_use` (`cwd`, undefined si
+ * no lo trae) y si el resultado fue un error (sin resultado, `failed: false`). El ÚNICO sitio que
+ * empareja `tool_use` con `tool_result`; las ventanas son esta lista sin los campos extra. El comando y el cwd
+ * son lo que lee `window-reach.mjs` para saber DÓNDE pudo escribir una llamada.
  */
 export function shellCallsIn(transcriptText, now = Date.now()) {
   return pairedShellCalls(transcriptText, now);
@@ -82,7 +86,7 @@ function pairedShellCalls(transcriptText, now) {
     last = Math.max(last, at);
 
     for (const block of blocksOf(record)) {
-      if (block?.type === 'tool_use' && SHELL_TOOLS.has(block.name)) open.set(block.id, { start: at, command: String(block.input?.command ?? '') });
+      if (block?.type === 'tool_use' && SHELL_TOOLS.has(block.name)) open.set(block.id, { start: at, command: String(block.input?.command ?? ''), cwd: typeof record.cwd === 'string' ? record.cwd : undefined });
 
       if (block?.type === 'tool_result' && open.has(block.tool_use_id)) {
         windows.push({ ...open.get(block.tool_use_id), end: at, failed: block.is_error === true });
@@ -91,7 +95,7 @@ function pairedShellCalls(transcriptText, now) {
     }
   }
 
-  for (const { start, command } of open.values()) windows.push({ start, command, failed: false, end: start < last ? last : now });
+  for (const { start, command, cwd } of open.values()) windows.push({ start, command, cwd, failed: false, end: start < last ? last : now });
 
   return windows;
 }

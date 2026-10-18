@@ -36,7 +36,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
-import { shellWindowsIn } from './shell-windows.mjs';
+import { shellCallsIn } from './shell-windows.mjs';
 import { normalizedPath, writtenPathsIn } from './transcript-writes.mjs';
 
 /** Same measured window as `agent-liveness/liveness.mjs`, same measured reason (see module docblock). @es Misma ventana medida, mismo motivo medido. */
@@ -135,7 +135,7 @@ export function liveAgentWrites(now = Date.now(), records = agentRecords()) {
     try {
       const text = readFileSync(record.transcript, 'utf8');
 
-      byAgent.set(record.id, { session: record.session, subagent: record.subagent, live, writes: writtenPathsIn(text), windows: shellWindowsIn(text, live ? now : now - age) });
+      byAgent.set(record.id, { session: record.session, subagent: record.subagent, live, writes: writtenPathsIn(text), windows: shellCallsIn(text, live ? now : now - age) });
     } catch {
       continue;
     }

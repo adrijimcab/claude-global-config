@@ -114,7 +114,7 @@ function judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf, authore
   return dirtyPaths.map((relativePath) => {
     const absolute = path.join(repo.worktree, relativePath);
     const mtimeMs = mtimeOf(absolute);
-    const claims = claimsOn(absolute, mtimeMs, liveAgents, authorsAt(authoredWrites, absolute, mtimeMs));
+    const claims = claimsOn(absolute, mtimeMs, liveAgents, authorsAt(authoredWrites, absolute, mtimeMs), repo.worktree);
 
     return { absolute, verdict: ownershipVerdict(claims, sessionId), workers: finishedWorkersOf(claims, sessionId) };
   });

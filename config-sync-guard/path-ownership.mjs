@@ -46,6 +46,7 @@
 
 import { writersOf } from './attribution.mjs';
 import { withinWindow } from './shell-windows.mjs';
+import { couldHaveWritten } from './window-reach.mjs';
 
 /**
  * Every actor claiming `dirtyPath`, as `[{ id, session, subagent, live }]`: the `authors` recorded for its
@@ -58,6 +59,13 @@ import { withinWindow } from './shell-windows.mjs';
  * with no measurable time (`undefined`) is inside no window: every comparison with `undefined` is false.
  * AUTHORS OUTRANK WRITES: a recorded author is a fact about THIS content, a structured write only says the
  * file was written at some point, and a window only who happened to be running.
+ * WINDOWS ARE SCOPED AND NEVER SHARED: a window counts only when its call could have written `repoRoot`
+ * (`window-reach.mjs`: its cwd inside it, or its text naming it), and when the windows that remain belong
+ * to two or more sessions the evidence cannot name a maker, so there is NO claim (`unexplained`, which
+ * blocks nobody and is surfaced) rather than a claim for each.
+ * @es LAS VENTANAS SE ACOTAN Y NUNCA SE REPARTEN: una ventana cuenta solo si su llamada pudo escribir
+ * `repoRoot` (cwd dentro o texto con su raíz); si las que quedan son de dos o más sesiones, la evidencia no
+ * nombra a un autor y NO hay reclamo (`unexplained`: no bloquea a nadie y se avisa), en vez de uno por sesión.
  * @es Cada actor vivo que reclama `dirtyPath`, ABSOLUTA en el checkout; los `authors` registrados para su
  * contenido actual mandan sobre las escrituras, y estas sobre las ventanas: un fichero sucio lo cambia una
  * escritura a ESE fichero, nunca una a la misma ruta relativa en otro worktree. LAS ESCRITURAS PESAN MÁS
@@ -65,14 +73,22 @@ import { withinWindow } from './shell-windows.mjs';
  * comando (medido en el estado real: un shell largo del coordinador coincidió con la escritura de un
  * worker y le habría culpado). Sin hora medible no cae en ninguna ventana.
  */
-export function claimsOn(dirtyPath, mtimeMs, liveAgents, authors = []) {
+export function claimsOn(dirtyPath, mtimeMs, liveAgents, authors, repoRoot) {
   if (authors.length > 0) return authors.map((session) => ({ id: `author-${session}`, session, subagent: false, live: true }));
 
   const writers = writersOf(dirtyPath, liveAgents);
-  const runners = [...liveAgents].filter(([, agent]) => withinWindow(agent.windows ?? [], mtimeMs)).map(([id, agent]) => ({ id, ...agent }));
 
-  return (writers.length > 0 ? writers : runners).map(({ id, session, subagent, live }) => ({ id, session, subagent, live }));
+  if (writers.length > 0) return writers.map(claimOf);
+
+  const runners = [...liveAgents]
+    .filter(([, agent]) => withinWindow((agent.windows ?? []).filter((window) => couldHaveWritten(window, repoRoot)), mtimeMs))
+    .map(([id, agent]) => ({ id, ...agent }));
+
+  return new Set(runners.map(({ session }) => session)).size > 1 ? [] : runners.map(claimOf);
 }
+
+/** The fields of an actor a claim keeps. @es Los campos de un actor que conserva un reclamo. */
+const claimOf = ({ id, session, subagent, live }) => ({ id, session, subagent, live });
 
 /** Whether `claim` is a subagent that has stopped (its transcript is past the liveness window). @es Si `claim` es de un subagente que ya paró. */
 const isFinishedWorker = (claim) => claim.subagent && !claim.live;
