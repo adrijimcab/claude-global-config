@@ -544,7 +544,11 @@ try {
   const playwrightLog = namedLog(playwrightReport);
   check(playwrightLog !== undefined && read(path.dirname(playwrightLog), path.basename(playwrightLog))?.includes('teardown filler 59'), 'a red Playwright-like suite: the named file holds the whole output');
 
-  const runnerRedReport = expectRefused('a selftest-runner red keeps its lines', layout({ work: { verdict: '1\n' } }), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'RED    fake/selftest.mjs (exit 1)' });
+  const closeStack = suiteFixture("console.log('Chrome CLOSE-MARK FAILED');\nconsole.log('    Expected 1 to be 2.');\nconsole.log('    at UserContext.<anonymous> (src/close.spec.ts:1:1)');\nprocess.exit(1);");
+  const closeReport = expectRefused('a failure line right above its stack', closeStack, { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'close.spec.ts:1:1' });
+  check(closeReport.split('CLOSE-MARK FAILED').length === 2, `a failure line right above its stack is shown once: ${closeReport}`);
+
+  const runnerRedReport =expectRefused('a selftest-runner red keeps its lines', layout({ work: { verdict: '1\n' } }), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'RED    fake/selftest.mjs (exit 1)' });
   const runnerLog = namedLog(runnerRedReport);
   check(runnerRedReport.includes('BOOM-MARK') && !runnerRedReport.includes('GREEN  other/selftest.mjs'), `a selftest-runner red: its red lines are shown and its green ones are not: ${runnerRedReport}`);
   check(runnerLog !== undefined && read(path.dirname(runnerLog), path.basename(runnerLog))?.includes('GREEN  other/selftest.mjs'), 'a selftest-runner red: the named file holds the green lines too');
