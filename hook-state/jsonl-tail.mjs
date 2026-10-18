@@ -65,6 +65,9 @@ function parseLine(bytes) {
   }
 }
 
+/** Whether a line holds nothing but whitespace (a blank line is not damage). @es Si una línea solo tiene espacios (una línea vacía no es un daño). */
+const isBlank = (bytes) => bytes.toString('utf8').trim() === '';
+
 /**
  * The last `n` records of `file`, oldest first, reading backwards one chunk at a time and stopping as soon as
  * `n` are found.
@@ -72,9 +75,10 @@ function parseLine(bytes) {
  * @param options.chunkBytes Bytes per read. @es Bytes por lectura.
  * @param options.onRead Called with the bytes of every read. @es Se llama con los bytes de cada lectura.
  * @param options.readBytes Replaces `fs.readSync` (a test seam for short reads). @es Sustituye a `fs.readSync` (punto de prueba para lecturas cortas).
+ * @param options.onSkip Called once per non-blank line that did not parse (a torn or corrupt record), so a caller can report damage it would otherwise not see; blank lines are not counted, and only the lines actually examined are. @es Se llama una vez por cada línea no vacía que no parseó (un registro roto o corrupto), para que quien llama informe un daño que si no pasaría inadvertido; las líneas vacías no cuentan, y solo las realmente examinadas.
  */
-export function lastRecords(file, n, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING, readBytes = readSync } = {}) {
-  const io = { onRead, readBytes };
+export function lastRecords(file, n, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING, readBytes = readSync, onSkip = NOTHING } = {}) {
+  const io = { onRead, readBytes, onSkip };
   const fd = openSync(file, 'r');
   try {
     const found = [];
@@ -87,6 +91,7 @@ export function lastRecords(file, n, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead 
       for (let at = lines.length - 1; at >= 0 && found.length < n; at -= 1) {
         const parsed = parseLine(lines[at]);
         if (parsed !== undefined) found.push(parsed.value);
+        else if (!isBlank(lines[at])) io.onSkip();
       }
       end = start;
     }
@@ -108,8 +113,8 @@ export function lastRecords(file, n, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead 
  * Reading stops at the size measured on entry: what a writer appends meanwhile waits for the next call.
  * @returns `{ records, offset }`. @es `{ records, offset }`.
  */
-export function readFrom(file, offset, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING, readBytes = readSync } = {}) {
-  const io = { onRead, readBytes };
+export function readFrom(file, offset, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING, readBytes = readSync, onSkip = NOTHING } = {}) {
+  const io = { onRead, readBytes, onSkip };
   const fd = openSync(file, 'r');
   try {
     const size = fstatSync(fd).size;
@@ -134,6 +139,7 @@ export function readFrom(file, offset, { chunkBytes = DEFAULT_CHUNK_BYTES, onRea
         for (const line of splitLines(buffer.subarray(0, last))) {
           const parsed = parseLine(line);
           if (parsed !== undefined) records.push(parsed.value);
+          else if (!isBlank(line)) io.onSkip();
         }
       }
       carry = buffer.subarray(last + 1);
