@@ -20,7 +20,8 @@
  * `--strict`, y que cada línea de evidencia impresa es bilingüe.
  */
 
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +32,7 @@ import { main, parseArguments, rootsSummary } from './check.mjs';
 import { collectFacts } from './collect-facts.mjs';
 import { limitOf, severityOf } from './eslint-verdicts.mjs';
 import { scriptSample, templateSample } from './eslint-facts.mjs';
+import * as landingPath from './landing-path.mjs';
 import { forbids, forbidsCycles } from './layering-probe.mjs';
 import { MESSAGES } from './messages.mjs';
 import { GATES, SECURITY_RULES, gatesOf } from './profile.mjs';
@@ -190,6 +192,102 @@ check('an empty project has no landing root', absent.facts.landing.roots.length 
 check('the stack comes from @angular/core', enforced.facts.stack === 'angular');
 check('the stack can be forced', (await collectFacts(fixture('absent-node'), { stack: 'angular', showConfig: strictTsc })).stack === 'angular');
 
+// --- inputs the checker cannot read: unmeasured, never a crash read as a strict failure -------------------------
+// Projects are generated under `fixtures/` (git-ignored by nothing, removed on every exit): a committed file that
+// is invalid JSON on purpose would break every other JSON tool that walks the repository.
+// @es Los proyectos se generan bajo `fixtures/` y se borran en toda salida: un fichero versionado con JSON inválido
+// a propósito rompería cualquier otra herramienta JSON que recorra el repositorio.
+const generatedRoots = [];
+
+/** A speaker sink that records its lines. @es Un sumidero de speaker que guarda sus líneas. */
+const sink = () => {
+  const lines = { out: [], err: [] };
+
+  return { lines, sink: { log: (text) => lines.out.push(text), error: (text) => lines.err.push(text) } };
+};
+
+process.once('exit', () => generatedRoots.forEach((root) => rmSync(root, { recursive: true, force: true })));
+
+/** A generated project holding `files` (path to text), as its root. @es Un proyecto generado con `files`, como su raíz. */
+function generated(files) {
+  const root = mkdtempSync(path.join(here, 'fixtures', '.generated-'));
+
+  generatedRoots.push(root);
+  for (const [name, text] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+    writeFileSync(path.join(root, name), text);
+  }
+
+  return root;
+}
+
+/** The facts and verdicts of a project, or `threw:` with the reason. @es Los hechos y veredictos, o `threw:`. */
+async function gradeGenerated(root, options = {}) {
+  try {
+    const facts = await collectFacts(root, { printConfig: answering({}), showConfig: strictTsc, ...options });
+
+    return { facts, verdicts: gradeProject(facts) };
+  } catch (error) {
+    return { threw: String(error.message) };
+  }
+}
+
+const NOT_JSON = '{ "scripts": ';
+const brokenPackage = await gradeGenerated(generated({ 'package.json': NOT_JSON }));
+const brokenPackageNode = await gradeGenerated(generated({ 'package.json': NOT_JSON }), { stack: 'node' });
+const brokenFleet = await gradeGenerated(generated({ 'package.json': '{ "scripts": { "ci": "eslint ." } }', '.claude/fleet-kit.json': NOT_JSON }));
+const brokenJscpd = await gradeGenerated(generated({ 'package.json': '{ "scripts": { "ci": "eslint ." } }', '.jscpd.json': NOT_JSON }));
+const unreadableIds = (graded) => (graded.verdicts ?? []).filter((verdict) => verdict.verdict === 'unmeasured').map((verdict) => verdict.id);
+
+check('a package.json that is not JSON does not crash the facts', brokenPackage.threw === undefined && brokenPackage.facts.unreadable?.file.endsWith('package.json'));
+check('an unreadable package.json leaves every gate of every stack unmeasured, with the file named', brokenPackage.verdicts?.length === GATES.length && unreadableIds(brokenPackage).length === GATES.length && brokenPackage.verdicts.every((verdict) => verdict.evidence[0].id === 'input-unreadable' && verdict.evidence[0].params.file === 'package.json'));
+check('an unreadable package.json with a forced stack leaves that stack unmeasured', brokenPackageNode.verdicts?.length === gatesOf('node').length && unreadableIds(brokenPackageNode).length === gatesOf('node').length && brokenPackageNode.facts.stack === 'node');
+check('a fleet-kit.json that is not JSON is unreadable input too', brokenFleet.facts?.unreadable?.file.endsWith('fleet-kit.json') && unreadableIds(brokenFleet).length === GATES.length);
+check('a .jscpd.json that is not JSON leaves only duplication unmeasured', brokenJscpd.threw === undefined && unreadableIds(brokenJscpd).join() === 'duplication' && brokenJscpd.verdicts.find((verdict) => verdict.id === 'duplication').evidence[0].id === 'jscpd-unreadable');
+check('the unreadable-input evidence is bilingual', ['input-unreadable', 'jscpd-unreadable'].every((id) => MESSAGES[id]?.en.length > 10 && MESSAGES[id]?.es.length > 10 && MESSAGES[id].en !== MESSAGES[id].es));
+
+{
+  const absentFile = path.join(generated({}), 'package.json');
+  const broken = generated({ 'package.json': NOT_JSON });
+  const asDirectory = generated({ 'package.json/inside.txt': 'x' });
+  const outcome = (file) => { try { return { value: landingPath.readJson(file) }; } catch (error) { return { error, typed: typeof landingPath.UnreadableJsonError === 'function' && error instanceof landingPath.UnreadableJsonError }; } };
+
+  check('readJson of an absent file is undefined', outcome(absentFile).value === undefined && outcome(absentFile).error === undefined);
+  check('readJson of a file that is not JSON throws the typed error naming the file', outcome(path.join(broken, 'package.json')).typed && outcome(path.join(broken, 'package.json')).error.file.endsWith('package.json'));
+  check('readJson of a path it cannot read throws the typed error too', outcome(path.join(asDirectory, 'package.json')).typed === true);
+  check('the typed error is bilingual', outcome(path.join(broken, 'package.json')).error?.message.includes(' @es '));
+}
+
+{
+  /** The exit code of `main`, or `threw` when it lets an exception out. @es El código de `main`, o `threw` si deja salir una excepción. */
+  const exitOf = async (argv, recorder, collect) => { try { return await main(argv, makeSpeaker(MESSAGES, recorder.sink), collect); } catch { return 'threw'; } };
+  const boom = () => { throw new Error('boom'); };
+  const crashed = sink();
+  const crashedCode = await exitOf([fixture('absent-node')], crashed, boom);
+
+  check('a crash of the measuring exits 2 (not measured), never 1 (strict failure)', crashedCode === 2);
+  check('a crash reports its reason in one bilingual line', crashed.lines.err.length === 1 && crashed.lines.err[0].includes('boom') && crashed.lines.err[0].includes(' @es '));
+
+  const strictCrash = sink();
+
+  check('a crash under --strict is still exit 2', (await exitOf([fixture('absent-node'), '--strict'], strictCrash, boom)) === 2);
+
+  const unreadable = sink();
+  const unreadableRoot = generated({ 'package.json': NOT_JSON });
+
+  check('a project with unreadable input reports and exits 0 without --strict', (await exitOf([unreadableRoot], unreadable)) === 0 && unreadable.lines.out.some((line) => line.startsWith('UNMEASURED')));
+  check('a project with unreadable input fails --strict with exit 1, as any gate not enforced', (await exitOf([unreadableRoot, '--strict'], sink())) === 1);
+
+  const crashRoot = generated({ 'package.json': '{}', '.gitlab-ci.yml/inside.txt': 'a directory where a file is expected' });
+  const cli = spawnSync(process.execPath, [path.join(here, 'check.mjs'), crashRoot], { encoding: 'utf8' });
+
+  check('an error that is not an unreadable JSON still propagates out of the facts', (await gradeGenerated(crashRoot)).threw?.includes('EISDIR') === true);
+  check('readJsonResult tells absent, invalid and ok apart', landingPath.readJsonResult?.(path.join(crashRoot, 'nothing.json')).state === 'absent' && landingPath.readJsonResult?.(path.join(unreadableRoot, 'package.json')).state === 'invalid' && landingPath.readJsonResult?.(path.join(crashRoot, 'package.json')).state === 'ok');
+
+  check('the command exits 2 when the measuring really crashes (a directory where the CI file is expected)', cli.status === 2);
+  check('the crashed command prints a bilingual reason on its error stream', cli.stderr.includes(' @es ') && !cli.stderr.includes('    at '));
+}
+
 // --- the profile itself ---------------------------------------------------------------------------------------
 check('every gate id is unique', new Set(GATES.map((gate) => gate.id)).size === GATES.length);
 check('every gate states a threshold and a bilingual why', GATES.every((gate) => gate.threshold !== undefined && gate.why.en.length > 20 && gate.why.es.length > 20 && gate.why.en !== gate.why.es));
@@ -205,12 +303,6 @@ for (const gate of GATES.filter((candidate) => candidate.kind === 'eslint-rule')
 check('README carries the jscpd settings', readme.includes('`minTokens` 70, `threshold` 0') && readme.includes('--audit-level=high'));
 
 // --- the command ------------------------------------------------------------------------------------------------
-const sink = () => {
-  const lines = { out: [], err: [] };
-
-  return { lines, sink: { log: (text) => lines.out.push(text), error: (text) => lines.err.push(text) } };
-};
-
 check('arguments: a root alone is usable', parseArguments(['x'])?.root === 'x');
 check('arguments: --stack and --strict are read', (() => { const options = parseArguments(['x', '--stack', 'node', '--strict']); return options.stack === 'node' && options.strict; })());
 check('arguments: no root, a second root, an unknown flag or an unknown stack are refused', parseArguments([]) === undefined && parseArguments(['a', 'b']) === undefined && parseArguments(['a', '--nope']) === undefined && parseArguments(['a', '--stack', 'ruby']) === undefined && parseArguments(['a', '--stack']) === undefined);

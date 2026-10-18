@@ -83,8 +83,24 @@ export function printReport(speaker, facts, verdicts) {
   speaker.say('summary', tally(verdicts));
 }
 
-/** Runs the command; returns its exit code. @es Ejecuta el comando; devuelve su código de salida. */
-export async function main(argv, speaker = makeSpeaker(MESSAGES)) {
+/**
+ * Runs the command; returns its exit code. A crash while measuring is reported with its reason and exits 2 (not
+ * measured): left to escape it would exit 1, the code of a strict failure.
+ * @es Ejecuta el comando; devuelve su código de salida. Un fallo al medir se informa con su motivo y sale con 2 (no
+ * medido): si escapara saldría con 1, el código de un fallo estricto.
+ */
+export async function main(argv, speaker = makeSpeaker(MESSAGES), collect = collectFacts) {
+  try {
+    return await run(argv, speaker, collect);
+  } catch (error) {
+    speaker.complain('crashed', { reason: String(error?.message ?? error) });
+
+    return EXIT_NOT_MEASURED;
+  }
+}
+
+/** The command's work, which may throw. @es El trabajo del comando, que puede lanzar. */
+async function run(argv, speaker, collect) {
   const options = parseArguments(argv);
 
   if (options === undefined) {
@@ -101,7 +117,7 @@ export async function main(argv, speaker = makeSpeaker(MESSAGES)) {
     return EXIT_NOT_MEASURED;
   }
 
-  const facts = await collectFacts(root, { stack: options.stack });
+  const facts = await collect(root, { stack: options.stack });
   const verdicts = gradeProject(facts);
   const { enforced, total } = tally(verdicts);
 

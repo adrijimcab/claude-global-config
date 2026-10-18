@@ -112,6 +112,8 @@ function jscpdSettings(facts, commands) {
 
 /** jscpd with the profile's minTokens (or lower) and threshold 0, on the landing path. @es jscpd con el minTokens del perfil (o menor) y umbral 0, en el camino. */
 export function duplication(gate, facts) {
+  if (facts.jscpd?.error !== undefined) return unmeasured(gate, [ev('jscpd-unreadable', { file: relative(facts, facts.jscpd.file) })]);
+
   const found = reach(facts.landing, 'jscpd');
   const settings = jscpdSettings(facts, [...found.enforcing, ...found.other]);
   const present = facts.jscpd !== undefined || found.enforcing.length + found.other.length > 0;

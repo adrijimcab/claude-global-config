@@ -15,7 +15,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { readJson } from './landing-path.mjs';
+import { readJson, readJsonResult } from './landing-path.mjs';
 
 const ESLINT_CONFIGS = ['eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs', 'eslint.config.ts', 'eslint.config.mts', 'eslint.config.cts', '.eslintrc.json', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.yml', '.eslintrc.yaml', '.eslintrc'];
 const DEPCRUISE_CONFIGS = ['.dependency-cruiser.cjs', '.dependency-cruiser.js', '.dependency-cruiser.mjs', '.dependency-cruiser.json'];
@@ -56,11 +56,14 @@ export async function depcruiseConfig(root) {
   }
 }
 
-/** The jscpd settings as `{ file, config }` or undefined. @es Los ajustes de jscpd. */
+/** The jscpd settings as `{ file, config }`, `{ file, error }` when `.jscpd.json` is unreadable, or undefined. @es Los ajustes de jscpd; `{ file, error }` si `.jscpd.json` es ilegible. */
 export function jscpdConfig(root) {
   const file = path.join(root, '.jscpd.json');
 
-  if (existsSync(file)) return { file, config: readJson(file) };
+  const read = readJsonResult(file);
+
+  if (read.state === 'invalid') return { file, error: 'cannot be read or is not valid JSON @es no se puede leer o no es JSON válido' };
+  if (read.state === 'ok') return { file, config: read.value };
 
   const inPackage = readJson(path.join(root, 'package.json'))?.jscpd;
 
