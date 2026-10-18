@@ -110,7 +110,7 @@ try {
 
   const output = await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: {} }));
 
-  check('evaluate refuses the delegation and names the worktree', [output?.hookSpecificOutput.permissionDecision, output?.hookSpecificOutput.permissionDecisionReason.includes('agent-committed')], ['deny', true]);
+  check('evaluate refuses the delegation and names the worktree', [output?.hookSpecificOutput.permissionDecision, output?.hookSpecificOutput.permissionDecisionReason?.includes('agent-committed')], ['deny', true]);
   // --- A launch that cannot write is told about the parked work, never refused; a writer still is.
   // The role is read from its definition (project `.claude/agents` first, then the install's `agents/`).
   // @es Un lanzamiento que no puede escribir recibe la nota del trabajo aparcado, sin rechazo; un escritor sí
@@ -149,7 +149,10 @@ try {
   check('every tool minus the three write tools is read-only', await launch('probe-all-closed'), 'note');
   check('every tool minus only two write tools still writes', await launch('probe-all-half-closed'), 'deny');
   check('a role file with no `tools:` line is refused, never read as read-only', await launch('probe-no-tools-line'), 'deny');
-  check('a role name that walks out of the agents folder is refused', await launch('..\\..\\probe-readonly'), 'deny');
+  // A read-only definition that EXISTS one folder above the agents folder: only the name check keeps it out of reach.
+  // @es Una definición de solo lectura que EXISTE una carpeta por encima de la de agentes: solo la comprobación del nombre la deja fuera de alcance.
+  writeFile(repository, '.claude/probe-outside.md', '---\nname: probe-outside\ntools: Read\n---\nbody\n');
+  check('a role name that walks out of the agents folder is refused', await launch('../probe-outside'), 'deny');
   check('the install\'s read-only judge (jd-judge-a) passes with the note', await launch('jd-judge-a'), 'note');
   check('the install\'s writing fixer (jd-fix-agent) is refused', await launch('jd-fix-agent'), 'deny');
   check('the install\'s `tools: []` reviewer (review-risk) is refused', await launch('review-risk'), 'deny');
