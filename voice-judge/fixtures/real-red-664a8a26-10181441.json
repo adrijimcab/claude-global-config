@@ -1,0 +1,6 @@
+{
+  "id": "real-red-664a8a26-10181441",
+  "expect": "fail",
+  "source": "664a8a26 2026-10-18T14:41:06.674Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
+  "message": "pdt volvió con los 12 hallazgos atendidos en 8 commits. Arregló 9, reforzó uno y refutó dos con evidencia. El más serio que tenía, el límite de código duplicado, según el writer no era un defecto: la ruta sí carga la info del proyecto (`app.routes.ts:399`) y lo probó con un e2e de carga directa. Además sumó validación estricta para estructura, reglas y reportes, con specs por cada tipo de fallo.\n\nYa lo congelé y les pasé el re-juicio a los mismos dos jueces que lo revisaron. Conocen el ledger y van a verificar ellos mismos las dos refutaciones, en lugar de creerle al writer. También les pedí que revisen cómo maneja el sobre de PROD, por lo del 204. La otra sesión me avisó que `InsightStructureService.findById`, que usan tips y código duplicado, todavía lee sin validar. Lo sumo a R0."
+}

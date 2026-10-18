@@ -1,0 +1,6 @@
+{
+  "id": "neutral-spanish-first-person",
+  "expect": "fail",
+  "source": "synthetic, modelled on the neutral-register replies measured on 2026-10-12: correct and polite first-person Spanish with no voseo form, no Rioplatense expression and no warmth toward the owner",
+  "message": "Revisé el hook y encontré por qué no se disparaba. El matcher estaba escrito para otro evento, de modo que nunca se ejecutaba con la configuración actual.\n\nLo corregí en el archivo de ajustes y comprobé que ahora responde a cada parada. Dejé el cambio commiteado en la rama de trabajo.\n\nSigo con la siguiente unidad y le aviso cuando haya entregas o algo que necesite su decisión."
+}
