@@ -27,6 +27,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { digestInput } from '../hook-state/journal.mjs';
+import { WRITE_MARKERS } from './script-writes.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
@@ -59,7 +60,68 @@ function run(input) {
 const payload = (command, tool = 'Bash') =>
   JSON.stringify({ session_id: 'selftest', hook_event_name: 'PreToolUse', tool_name: tool, tool_input: { command } });
 
+/** The payload of a DELEGATED agent (agent_id plus a subagents transcript). @es El payload de un agente DELEGADO. */
+const delegated = (command, tool = 'Bash') =>
+  JSON.stringify({ session_id: 'selftest', agent_id: 'agent-selftest', transcript_path: '/home/u/.claude/projects/p/s/subagents/agent-selftest.jsonl', hook_event_name: 'PreToolUse', tool_name: tool, tool_input: { command } });
+
+const lines = (...parts) => parts.join('\n');
+
+// A file-writing script fed to an interpreter through a shell, one case per write marker.
+// @es Un script que escribe un fichero entregado a un intérprete por un shell, un caso por marcador de escritura.
+const markerCases = WRITE_MARKERS.map((marker) => ['deny', delegated(lines("node - <<'EOF'", `target.${marker}('out.txt', data);`, 'EOF')), `a delegated heredoc script calling ${marker} is refused`, 'writes a file']);
+
+const SHELL_LIKE = ['sh', 'bash', 'zsh', 'dash', 'pwsh', 'powershell'];
+const NOT_SHELL_LIKE = ['node', 'nodejs', 'python', 'python3'];
+
+// Every interpreter is refused when its stdin script writes; only the shell-like ones read `>` as a redirection.
+// @es Todo intérprete se rechaza si su script de stdin escribe; solo los tipo shell leen `>` como redirección.
+const interpreterCases = [
+  ...[...SHELL_LIKE, ...NOT_SHELL_LIKE].map((name) => ['deny', delegated(lines(`${name} - <<'EOF'`, 'Set-Content out.txt', 'EOF')), `${name} reading a writing script from a heredoc is refused`, 'writes a file']),
+  ...SHELL_LIKE.map((name) => ['deny', delegated(lines(`${name} - <<'EOF'`, 'echo x > out.txt', 'EOF')), `${name}: > in its heredoc script is a redirection`, 'redirects output']),
+  ...NOT_SHELL_LIKE.map((name) => ['allow', delegated(lines(`${name} - <<'EOF'`, 'print(1 > 0)', 'EOF')), `${name}: > in its heredoc script is a comparison, not a redirection`])
+];
+
 const cases = [
+  // --- REFUSED: a delegated agent writes a file from a script fed through a shell / RECHAZADO: un agente delegado escribe un fichero desde un script entregado por un shell
+  ['deny', delegated(lines("node - <<'EOF'", "const fs = require('fs');", "fs.writeFileSync('guard.mjs', 'line with \\\\ backslash and an it's');", 'EOF')), 'the 2026-10-18 incident: node - heredoc with writeFileSync', 'writes a file'],
+  ['deny', delegated(lines("node <<'EOF'", "fs.writeFileSync('a.txt', 'x');", 'EOF')), 'node reading its script from a heredoc with no dash', 'writes a file'],
+  ['deny', delegated(lines('node - <<EOF', "fs.writeFileSync('a.txt', 'x');", 'EOF')), 'an unquoted heredoc delimiter', 'writes a file'],
+  ['deny', delegated(lines('node - <<-EOF', "\tfs.writeFileSync('a.txt', 'x');", '\tEOF')), 'the <<- form with a tab-indented terminator', 'writes a file'],
+  ['deny', delegated(lines('cd repo && node - <<"EOF"', "fs.writeFileSync('a.txt', 'x');", 'EOF')), 'a heredoc after && with a double-quoted delimiter', 'writes a file'],
+  ['deny', delegated(lines("node - <<'EOF' | tee log.txt", "fs.writeFileSync('a.txt', 'x');", 'EOF')), 'the heredoc command is piped on', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "open('out.txt', 'w').write('x')", 'EOF')), "python3 heredoc with open(…, 'w')", 'writes a file'],
+  ['deny', delegated(lines("python - <<'EOF'", "with open(path, mode='a') as handle:", '    handle.write(text)', 'EOF')), 'python heredoc with open(…, mode=a)', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "handle = open(path, 'r+')", 'EOF')), "python heredoc with open(…, 'r+')", 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", 'open(path, "wb").write(data)', 'EOF')), 'python heredoc with a double-quoted wb mode', 'writes a file'],
+  ['deny', delegated(lines("bash <<'EOF'", 'echo done > out.txt', 'EOF')), 'a bash heredoc redirecting into a file', 'writes a file'],
+  ['deny', delegated(lines("sh -s <<'EOF'", 'echo done >> out.txt', 'EOF')), 'an sh heredoc appending with >>', 'writes a file'],
+  ['deny', delegated(lines("pwsh - <<'EOF'", "'x' | Set-Content out.txt", 'EOF')), 'a pwsh heredoc with Set-Content', 'writes a file'],
+  ['deny', delegated("python3 - <<< \"open('out.txt', 'w').write('x')\""), 'a here-string to python3 writing a file', 'writes a file'],
+  ['deny', delegated("bash <<< 'echo done > out.txt'"), 'a here-string to bash redirecting into a file', 'writes a file'],
+  ['deny', delegated(lines("@'", "const fs = require('fs'); fs.writeFileSync('a.txt', 'it's');", "'@ | node -"), 'PowerShell'), 'a PowerShell @-quote here-string piped to node, apostrophes inside', 'writes a file'],
+  ['deny', delegated(lines('@"', "'x' | Set-Content out.txt", '"@ | pwsh -'), 'PowerShell'), 'a PowerShell @-doublequote here-string piped to pwsh', 'writes a file'],
+  ...markerCases,
+  ...interpreterCases,
+  ['deny', delegated(lines("python3 - <<'EOF'", "open(path, 'xb').write(data)", 'EOF')), "python heredoc with an exclusive-create mode (xb)", 'writes a file'],
+  ['deny', delegated(lines('grep "@\'" notes.txt', "node - <<'EOF'", "fs.writeFileSync('a', 'b');", 'EOF')), 'an @-quote in the middle of a line is no here-string and hides nothing after it', 'writes a file'],
+  ['allow', delegated(lines("bash <<'EOF'", 'echo x >>/dev/null', 'echo y > /dev/null', 'EOF')), 'redirections to /dev/null, appended or spaced, are not file writes'],
+  ['allow', delegated("bash <<< 'echo ok'; python3 tool.py \"open('f', 'w')\""), 'the here-string flag belongs to ONE word: later words are not here-strings'],
+  ['allow', delegated(lines("node - ; <<'EOF'", "fs.writeFileSync('a', 'b');", 'EOF')), 'a heredoc after a separator belongs to no earlier command'],
+
+  // --- ALLOWED: the same shapes that do not write a file, or are not a delegated agent / PERMITIDO: lo que no escribe, o no es un agente delegado
+  ['allow', payload(lines("node - <<'EOF'", "fs.writeFileSync('guard.mjs', 'x');", 'EOF')), 'the orchestrator (not delegated) keeps the heredoc'],
+  ['allow', delegated(lines("node - <<'EOF'", 'console.log(2 > 1, [1].map((x) => x));', 'EOF')), 'node comparison and arrow are not redirections'],
+  ['allow', delegated(lines("node - <<'EOF'", "console.log(require('fs').readFileSync('a.txt', 'utf8'));", 'EOF')), 'a node heredoc that only reads'],
+  ['allow', delegated(lines("bash <<'EOF'", 'ls | wc -l', 'echo hi 2>&1', 'echo gone >/dev/null', 'EOF')), 'a bash heredoc with fd copies and /dev/null only'],
+  ['allow', delegated(lines("python3 - <<'EOF'", "print(open('a.txt').read())", "print(open('a.txt', 'r').read(), open('b.bin', 'rb').read())", 'EOF')), 'a python heredoc that only reads'],
+  ['allow', delegated(lines("python3 - <<'EOF'", "print(reopen('a.txt', 'w'))", 'EOF')), 'a name that merely ends in open( is no open call'],
+  ['allow', delegated(lines("node tool.mjs <<'EOF'", "fs.writeFileSync('a.txt', 'x');", 'EOF')), 'node running a script FILE: the heredoc is its data, not its script'],
+  ['allow', delegated(lines("cat > notes.txt <<'EOF'", 'plain text', 'EOF')), 'cat with a heredoc is no interpreter'],
+  ['allow', delegated(lines("node - <<'EOF'", "console.log('x');", 'EOF', "echo fs.writeFileSync('a.txt', 'x')")), 'text after the terminator is not the script'],
+  ['allow', delegated(lines("@'", "console.log(1 > 0);", "'@ | node -"), 'PowerShell'), 'a PowerShell here-string that does not write'],
+  ['allow', delegated(lines("@'", "fs.writeFileSync('a.txt', 'x');", "'@ | Out-Host"), 'PowerShell'), 'a PowerShell here-string that reaches no interpreter'],
+  ['allow', delegated("python3 - <<< \"print(open('a.txt').read())\""), 'a here-string that only reads'],
+
   // --- REFUSED: shapes measured to arrive mangled / RECHAZADAS: formas medidas que llegan destrozadas
   ['deny', payload(String.raw`node -e "const re = new RegExp('\\b' + name + '\\b'); console.log(re)"`), 'failure 1: the doubled \\b that became a BACKSPACE'],
   ['deny', payload(`node -e 'console.log("d'échouer")'`), 'failure 2: apostrophe closes the payload early'],

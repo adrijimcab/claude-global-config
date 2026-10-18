@@ -20,6 +20,10 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const DETECT = 'eval-guard/detect.mjs';
 const GUARD = 'eval-guard/guard.mjs';
+const WRITES = 'eval-guard/script-writes.mjs';
+
+/** A marker taken out of the list of write calls, one mutant each. @es Un marcador fuera de la lista de llamadas de escritura, un mutante cada uno. */
+const markerMutants = ['writeFile', 'appendFile', 'fs.write', 'createWriteStream', 'write_text', 'write_bytes', 'Set-Content', 'Add-Content', 'Out-File'].map((marker) => [`the write marker ${marker} is no longer recognised`, WRITES, `'${marker}', `, '']);
 
 const MUTANTS = [
   // --- noisy: the script's own arguments are read as node's ---
@@ -62,6 +66,54 @@ const MUTANTS = [
   ['the denial journal stores the command text again (the pre-fix behaviour)', GUARD, '    commandDigest: digestInput(command),', '    command,'],
   ['the denial journal stores the digest of something else', GUARD, '    commandDigest: digestInput(command),', "    commandDigest: digestInput(''),"],
   ['the denial journal stores the text next to its digest', GUARD, '    commandDigest: digestInput(command),', '    commandDigest: digestInput(command),\n    command,'],
+  // --- a delegated agent's script that writes a file, fed through a shell ---
+  ['the script-write rule also runs for the orchestrator', DETECT, 'if (delegated && STDIN_INTERPRETERS.has(name)) {', 'if (STDIN_INTERPRETERS.has(name)) {'],
+  ['the script-write rule never runs', DETECT, 'if (delegated && STDIN_INTERPRETERS.has(name)) {', 'if (false && STDIN_INTERPRETERS.has(name)) {'],
+  ['no caller is read as delegated', GUARD, 'delegated: isSubagentCaller(payload)', 'delegated: false'],
+  ['every caller is read as delegated', GUARD, 'delegated: isSubagentCaller(payload)', 'delegated: true'],
+  ['the script-write refusal has no text of its own', GUARD, "if (refusal.kind === 'script-write') return scriptWriteReason(refusal);\n", ''],
+  ['PowerShell here-strings are not cut out', DETECT, 'const prepared = delegated ? extractPowerShellHereStrings(command) : { text: command, scripts: [] };', 'const prepared = { text: command, scripts: [] };'],
+  ['PowerShell here-string scripts are not judged', DETECT, "...powerShellScripts.map((text) => ({ text, source: 'PowerShell here-string' }))", '...[]'],
+  ['a script FILE argument no longer takes the script off standard input', DETECT, "const readsStandardInput = words.every((word) => word.hereString || word.raw === '-' || isOptionWord(word));", 'const readsStandardInput = true;'],
+  ['a lone dash is no longer standard input', DETECT, " || word.raw === '-'", ''],
+  ['options no longer leave the script on standard input', DETECT, ' || isOptionWord(word)', ''],
+  ['here-string words are not judged', DETECT, "...words.filter((word) => word.hereString).map((word) => ({ text: word.raw, source: 'here-string' })),", ''],
+  ['heredoc bodies are not judged', DETECT, "...heredocs.map((text) => ({ text, source: 'heredoc' })),", ''],
+  ['a here-string word is never flagged', DETECT, 'nextWordIsHereString = true;', 'nextWordIsHereString = false;'],
+  ['the here-string flag leaks to every later word', DETECT, '      nextWordIsHereString = false;\n    }\n  };', '    }\n  };'],
+  ['the heredoc body is not kept', DETECT, 'heredoc.body = command.slice(bodyStart, index);', "heredoc.body = '';"],
+  ['the heredoc body is not given to its command', DETECT, "lastClosed?.heredocs.push(item.heredoc.body ?? '');", "lastClosed?.heredocs.push('');"],
+  ['a heredoc after a separator is given to the command before it', DETECT, 'else lastClosed = undefined;', 'else lastClosed = lastClosed;'],
+  ['@\' here-strings are not recognised', DETECT, 'const POWERSHELL_HERE_STRING_QUOTES = ["\'", \'"\'];', 'const POWERSHELL_HERE_STRING_QUOTES = [\'"\'];'],
+  ['@" here-strings are not recognised', DETECT, 'const POWERSHELL_HERE_STRING_QUOTES = ["\'", \'"\'];', 'const POWERSHELL_HERE_STRING_QUOTES = ["\'"];'],
+  ['an @-quote in the middle of a line opens a here-string', DETECT, "command.slice(index + 2, bodyStart).trim() === ''", 'true'],
+  ['sh is not an interpreter of standard input', DETECT, "'sh', ", ''],
+  ['bash is not an interpreter of standard input', DETECT, "'bash', ", ''],
+  ['zsh is not an interpreter of standard input', DETECT, "'zsh', ", ''],
+  ['dash is not an interpreter of standard input', DETECT, "'dash', ", ''],
+  ['pwsh is not an interpreter of standard input', DETECT, "'pwsh', ", ''],
+  ['powershell is not an interpreter of standard input', DETECT, ", 'powershell']", ']'],
+  ['node is not an interpreter of standard input', DETECT, ", 'node', 'nodejs'", ", 'nodejs'"],
+  ['nodejs is not an interpreter of standard input', DETECT, "'node', 'nodejs', ", "'node', "],
+  ['python is not an interpreter of standard input', DETECT, "'nodejs', 'python', ", "'nodejs', "],
+  ['python3 is not an interpreter of standard input', DETECT, "'python', 'python3'])", "'python'])"],
+  ['no interpreter is shell-like', DETECT, "new Set(['sh', 'bash', 'zsh', 'dash', 'pwsh', 'powershell'])", 'new Set([])'],
+  ['every interpreter is shell-like', DETECT, 'SHELL_LIKE_INTERPRETERS.has(name) }', 'true }'],
+  ...markerMutants,
+  ['the WriteAllText marker is no longer recognised', WRITES, ", 'WriteAllText'", ''],
+  ['the w mode no longer writes', WRITES, "const WRITING_MODE_LETTERS = 'wax+';", "const WRITING_MODE_LETTERS = 'ax+';"],
+  ['the a mode no longer writes', WRITES, "const WRITING_MODE_LETTERS = 'wax+';", "const WRITING_MODE_LETTERS = 'wx+';"],
+  ['the x mode no longer writes', WRITES, "const WRITING_MODE_LETTERS = 'wax+';", "const WRITING_MODE_LETTERS = 'wa+';"],
+  ['the + mode no longer writes', WRITES, "const WRITING_MODE_LETTERS = 'wax+';", "const WRITING_MODE_LETTERS = 'wax';"],
+  ['only the first mode letter is read', WRITES, '[...mode].some(', '[...mode].slice(0, 1).some('],
+  ['python open calls are never looked at', WRITES, 'if (opensForWriting(text))', 'if (false)'],
+  ['a name ending in open( is read as an open call', WRITES, 'const startsACall = !isIdentifierCharacter(text[from - 1]);', 'const startsACall = true;'],
+  ['the mode= keyword is not read', WRITES, "parts.find((part) => part.startsWith('mode='))", 'parts.find(() => false)'],
+  ['a file-descriptor copy is read as a file redirection', WRITES, "    if (text[target] === '&') continue;\n", ''],
+  ['a redirection to /dev/null is a file write', WRITES, 'if (!text.startsWith(NULL_DEVICE, target)) return true;', 'return true;'],
+  ['the second > of >> is read as the target', WRITES, "    if (text[target] === '>') target += 1;\n", ''],
+  ['blanks before the redirection target are not skipped', WRITES, "    while (text[target] === ' ' || text[target] === '\\t') target += 1;\n", ''],
+  ['> is a redirection for every interpreter', WRITES, 'if (shellLike && redirectsToFile(text))', 'if (redirectsToFile(text))'],
   // --- heredocs: the body is data, the scan resumes after the terminator ---
   ['the heredoc body is not skipped, so its lines are inspected as commands', DETECT, '        for (const heredoc of pendingHeredocs) index = skipHeredocBody(command, index, heredoc);\n', ''],
   ['the scan does not resume after the terminator, so a later dangerous command hides', DETECT, "if (line === heredoc.delimiter) return lineEnd === -1 ? command.length : lineEnd + 1;", 'if (line === heredoc.delimiter) return command.length;'],
@@ -74,7 +126,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['eval-guard', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['eval-guard', 'mutation-proof', 'hook-state', 'bilingual-output', 'hook-caller'],
   selftest: 'eval-guard/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

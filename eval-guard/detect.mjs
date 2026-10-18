@@ -53,6 +53,8 @@
  * en vez de prohibir acentos que nunca tuvieron la culpa. SIN REGEX (M5).
  */
 
+import { writeEvidence } from './script-writes.mjs';
+
 /** Unquoted characters that end a word and start a new command position. @es Caracteres que cierran palabra y abren posición de comando. */
 const OPERATOR_CHARACTERS = new Set([';', '|', '&', '(', ')', '{', '}', '<', '>', '\n', '`']);
 
@@ -203,6 +205,7 @@ export function tokenize(command) {
   const pendingHeredocs = [];
   let current;
   let index = 0;
+  let nextWordIsHereString = false;
 
   const flush = () => {
     if (current !== undefined) {
@@ -212,7 +215,10 @@ export function tokenize(command) {
   };
 
   const open = (start) => {
-    if (current === undefined) current = { kind: 'word', raw: '', start, quoted: false, bare: false, unterminated: false };
+    if (current === undefined) {
+      current = { kind: 'word', raw: '', start, quoted: false, bare: false, unterminated: false, hereString: nextWordIsHereString };
+      nextWordIsHereString = false;
+    }
   };
 
   while (index < command.length) {
@@ -230,6 +236,7 @@ export function tokenize(command) {
     // comando, así que los tres caracteres se consumen como separador y se sigue tokenizando.
     if (startsHereString(command, index)) {
       flush();
+      nextWordIsHereString = true;
       index += HERE_STRING_LENGTH;
       continue;
     }
@@ -240,10 +247,10 @@ export function tokenize(command) {
     // de esta línea sigue tokenizándose; el cuerpo se salta al acabar la línea.
     if (startsHeredoc(command, index)) {
       flush();
-      items.push({ kind: 'operator', raw: HEREDOC_OPERATOR, start: index });
 
       const declaration = readHeredocDeclaration(command, index + HEREDOC_OPERATOR.length);
 
+      items.push({ kind: 'operator', raw: HEREDOC_OPERATOR, start: index, heredoc: declaration });
       pendingHeredocs.push(declaration);
       index = declaration.next;
       continue;
@@ -255,7 +262,13 @@ export function tokenize(command) {
       index += 1;
 
       if (character === '\n' && pendingHeredocs.length > 0) {
-        for (const heredoc of pendingHeredocs) index = skipHeredocBody(command, index, heredoc);
+        for (const heredoc of pendingHeredocs) {
+          const bodyStart = index;
+
+          index = skipHeredocBody(command, index, heredoc);
+          heredoc.body = command.slice(bodyStart, index);
+        }
+
         pendingHeredocs.length = 0;
       }
 
@@ -343,10 +356,25 @@ export function tokenize(command) {
 export function invocations(items) {
   const groups = [];
   let group = [];
+  let lastClosed;
+
+  const close = () => {
+    if (group.length === 0) return;
+
+    group.heredocs = [];
+    groups.push(group);
+    lastClosed = group;
+  };
 
   for (const item of items) {
     if (item.kind === 'operator') {
-      if (group.length > 0) groups.push(group);
+      close();
+
+      // A heredoc body belongs to the command the `<<` follows: it is that command's standard input.
+      // @es El cuerpo de un heredoc es de la orden a la que sigue el `<<`: es su entrada estándar.
+      if (item.heredoc !== undefined) lastClosed?.heredocs.push(item.heredoc.body ?? '');
+      else lastClosed = undefined;
+
       group = [];
       continue;
     }
@@ -354,9 +382,48 @@ export function invocations(items) {
     group.push(item);
   }
 
-  if (group.length > 0) groups.push(group);
+  close();
 
   return groups;
+}
+
+/** What marks a PowerShell here-string: `@'` or `@"` and a line break, closed by a line that starts with the quote and `@`. @es Lo que marca un here-string de PowerShell. */
+const POWERSHELL_HERE_STRING_QUOTES = ["'", '"'];
+const POWERSHELL_PLACEHOLDER = 'POWERSHELLHEREDATA';
+
+/**
+ * Cuts the PowerShell here-strings (`@'…'@`, `@"…"@`) out of a command: their text is returned apart and a
+ * plain word stands in their place, so the quotes inside them cannot shift where the rest is tokenized.
+ * An unterminated one runs to the end of the command.
+ * @es Recorta los here-strings de PowerShell de un comando: su texto se devuelve aparte y una palabra
+ * simple ocupa su lugar, así las comillas de dentro no mueven cómo se tokeniza el resto. Uno sin cerrar
+ * llega hasta el final del comando.
+ */
+export function extractPowerShellHereStrings(command) {
+  const scripts = [];
+  let text = '';
+  let index = 0;
+
+  while (index < command.length) {
+    const quote = POWERSHELL_HERE_STRING_QUOTES.find((candidate) => command.startsWith(`@${candidate}`, index));
+    const bodyStart = quote === undefined ? -1 : command.indexOf('\n', index + 2);
+    const opensOnItsOwnLine = bodyStart !== -1 && command.slice(index + 2, bodyStart).trim() === '';
+
+    if (!opensOnItsOwnLine) {
+      text += command[index];
+      index += 1;
+      continue;
+    }
+
+    const closing = command.indexOf(`\n${quote}@`, bodyStart);
+    const end = closing === -1 ? command.length : closing;
+
+    scripts.push(command.slice(bodyStart + 1, end));
+    text += POWERSHELL_PLACEHOLDER;
+    index = closing === -1 ? command.length : closing + 3;
+  }
+
+  return { text, scripts };
 }
 
 /** The trailing path segment of a program token, lowercased and without a `.exe` tail. @es Último segmento de ruta del programa, en minúsculas y sin `.exe`. */
@@ -685,6 +752,44 @@ function inspectInterpreter(program, name, words) {
 }
 
 /**
+ * Interpreters that run a script read from standard input, and whether they are shell-like (their `>` is a
+ * redirection). @es Intérpretes que ejecutan un script leído de la entrada estándar, y si son tipo shell
+ * (su `>` es una redirección).
+ */
+const SHELL_LIKE_INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'dash', 'pwsh', 'powershell']);
+const STDIN_INTERPRETERS = new Set([...SHELL_LIKE_INTERPRETERS, 'node', 'nodejs', 'python', 'python3']);
+
+/**
+ * The refusal for a script that an interpreter reads from standard input (a heredoc body, a here-string
+ * word, or a PowerShell here-string) and that writes a file; `undefined` when the invocation reads its
+ * script from elsewhere (a script path, `-e`, `-c`) or the script does not write.
+ * @es El rechazo para un script que un intérprete lee de la entrada estándar (cuerpo de heredoc, palabra
+ * de here-string o here-string de PowerShell) y que escribe un fichero; `undefined` si la invocación lee
+ * su script de otro sitio (ruta, `-e`, `-c`) o el script no escribe.
+ */
+function inspectStdinScript(program, name, words, heredocs, powerShellScripts) {
+  const readsStandardInput = words.every((word) => word.hereString || word.raw === '-' || isOptionWord(word));
+
+  if (!readsStandardInput) return undefined;
+
+  const sources = [
+    ...heredocs.map((text) => ({ text, source: 'heredoc' })),
+    ...words.filter((word) => word.hereString).map((word) => ({ text: word.raw, source: 'here-string' })),
+    ...powerShellScripts.map((text) => ({ text, source: 'PowerShell here-string' }))
+  ];
+
+  for (const { text, source } of sources) {
+    const evidence = writeEvidence(text, { shellLike: SHELL_LIKE_INTERPRETERS.has(name) });
+
+    if (evidence !== undefined) {
+      return { kind: 'script-write', program: program.raw, flag: `${name} + ${source}`, payload: text, findings: [{ offset: 0, code: 0x3c, kind: `the ${source} fed to ${name} ${evidence}` }] };
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * The decision. Returns `undefined` when the command may run, or a refusal describing exactly what was
  * found and where — an offset and a code point, so the refusal is checkable rather than an assertion.
  *
@@ -699,14 +804,18 @@ function inspectInterpreter(program, name, words) {
  * tal cual. Un one-liner ASCII, un `'\n'`, una ruta Windows y un texto acentuado pasan intactos — eso
  * es lo que evita que la regla se esquive, y aquí ya se sabe lo que vale un gate esquivado.
  */
-export function inspectCommand(command, { toolName } = {}) {
+export function inspectCommand(command, { toolName, delegated = false } = {}) {
   // MSYS path translation exists only in Git Bash. Through the PowerShell tool `cmd /c` reaches cmd as
   // written (measured 2026-09-14 by a live `cmd /c echo` through that tool), so the switch rule is Bash's.
   // @es La traducción de rutas de MSYS sólo existe en Git Bash; por la herramienta PowerShell `cmd /c`
   // llega tal cual, así que la regla del switch es sólo de Bash.
   const msysTranslates = toolName !== 'PowerShell';
 
-  for (const invocation of invocations(tokenize(command))) {
+  // The script-writing rule is for a DELEGATED agent only; its PowerShell here-strings are cut out first.
+  // @es La regla de scripts que escriben es solo para un agente DELEGADO; antes se recortan sus here-strings de PowerShell.
+  const prepared = delegated ? extractPowerShellHereStrings(command) : { text: command, scripts: [] };
+
+  for (const invocation of invocations(tokenize(prepared.text))) {
     let position = 0;
 
     while (position < invocation.length && isEnvironmentAssignment(invocation[position])) position += 1;
@@ -746,6 +855,17 @@ export function inspectCommand(command, { toolName } = {}) {
           findings: [{ offset: 0, code: raw.charCodeAt(0), kind: `single-slash switch \`${raw}\` is rewritten to a path before cmd sees it` }]
         };
       }
+    }
+
+    // A script an interpreter reads from standard input that WRITES A FILE: the same family again. The file
+    // is written through a shell layer the Write and Edit tools never use (2026-10-18: a delegated writer's
+    // heredoc dropped a backslash of its own guard source).
+    // @es Un script que un intérprete lee de la entrada estándar y que ESCRIBE UN FICHERO: la misma familia.
+    // El fichero se escribe por una capa de shell que las herramientas Write y Edit no usan.
+    if (delegated && STDIN_INTERPRETERS.has(name)) {
+      const scriptRefusal = inspectStdinScript(program, name, invocation.slice(position + 1), invocation.heredocs, prepared.scripts);
+
+      if (scriptRefusal !== undefined) return scriptRefusal;
     }
 
     // Text-editing programs: the SAME failure family as a mangled node payload. A pattern or script that
