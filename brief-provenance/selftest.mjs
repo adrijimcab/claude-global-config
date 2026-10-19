@@ -287,6 +287,7 @@ const cases = [
   ['deny', claim('MEASURED: playwright closes, see lib/x.js:12:x'), 'a column that is not a number is not a citation', 'playwright'],
   ['deny', claim('MEASURED: playwright closes, see lib/x.js:12:5-6'), 'a column is one number, never a range', 'playwright'],
   ['deny', claim('MEASURED: playwright closes, see lib/x.js:12:'), 'an empty column is not a citation', 'playwright'],
+  ['deny', claim('MEASURED: playwright closes, see lib/x.js:abc:5'), 'a column after a non-number is not a citation', 'playwright'],
   ['deny', claim('MEASURED: playwright closes, see 12:5'), 'a line and column with no path is not a citation', 'playwright'],
   ['deny', claim('MEASURED: playwright 1.58:2 closes its children'), 'a version-like 1.58:2 is not a path:line citation', 'playwright'],
   ['deny', claim('MEASURED: playwright closes its children at lib/x.js:abc'), 'a colon followed by a non-number is not a citation', 'playwright'],
@@ -316,6 +317,7 @@ const cases = [
   ['deny', claim('MEASURED: eslint reports nothing, preexit 0', WORDS), 'a word that ends in exit is not the exit word', 'eslint'],
   ['allow', claim('MEASURED: `npx eslint src` reports nothing', WORDS), 'a backticked command is a run receipt'],
   ['deny', claim('MEASURED: `eslint` reports nothing', WORDS), 'a backticked single word is not a command', 'eslint'],
+  ['deny', claim('MEASURED: `eslint` and `tsc` report nothing', WORDS), 'the prose between two code spans is not a command', 'eslint'],
   ['deny', claim('MEASURED: eslint reports nothing after `npx eslint src', WORDS), 'an unclosed backtick quotes no command', 'eslint'],
   ['deny', claim('MEASURED: eslint reports nothing, see ` eslint `', WORDS), 'a single word padded with blanks is not a command', 'eslint'],
   ['allow', claim('MEASURED: typescript 5.8.0, read in package.json.', WORDS), 'a manifest ending the sentence is still cited'],
@@ -329,7 +331,8 @@ const cases = [
   ['deny', claim('MEASURED: typescript ~ in package.json', WORDS), 'a range operator alone is no version', 'typescript'],
   ['deny', claim('MEASURED: typescript ~.8 in package.json', WORDS), 'a version starts with a digit after its operators', 'typescript'],
   ...['~', '^', '<', '>', '=', 'v'].map((lead) => ['allow', claim(`MEASURED: typescript ${lead}5.8.0 in package.json`, WORDS), `${JSON.stringify(lead)} may open a version read from the manifest`]),
-  ['allow', claim('MEASURED: typescript >=5.8.0 in package.json', WORDS), 'several range operators may open a version'],
+  ['allow', claim('MEASURED: typescript >=5.8.0 in package.json', WORDS), 'a two-character range operator may open a version'],
+  ['allow', claim('MEASURED: typescript =v5.8.0 in package.json', WORDS), 'several range operators may open a version'],
 
   // Names that are English words never count; a name of the same project that is not one still does.
   // @es Los nombres que son palabras inglesas nunca cuentan; uno del mismo proyecto que no lo es, sí.

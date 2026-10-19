@@ -29,8 +29,12 @@ const CITATION_SEPARATORS = ' \t\r,;()[]{}<>|"\'`';
 /** The manifests a version may be read from. @es Los manifiestos de los que se lee una versión. */
 const MANIFESTS = ['package.json', 'package-lock.json'];
 
-/** The range operators that may open a version read from a manifest. @es Los operadores que pueden abrir una versión. */
-const VERSION_LEAD = '~^<>=v';
+/**
+ * The range operators that may open a version read from a manifest. `<` and `>` are not listed: they already
+ * separate citation words, so `>=5.8.0` reaches this scan as `=5.8.0`.
+ * @es Los operadores que pueden abrir una versión. `<` y `>` no están: ya separan las palabras de una cita.
+ */
+const VERSION_LEAD = '~^=v';
 
 /** The word an exit code follows. @es La palabra a la que sigue un código de salida. */
 const EXIT_WORD = 'exit';

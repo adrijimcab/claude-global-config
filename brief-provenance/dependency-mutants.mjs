@@ -49,7 +49,7 @@ const droppedWords = ENGLISH.map((word) => [
   `const ENGLISH_WORDS = new Set([${ENGLISH.filter((other) => other !== word).map((other) => `'${other}'`).join(', ')}]);`
 ]);
 
-const VERSION_LINE = "const VERSION_LEAD = '~^<>=v';";
+const VERSION_LINE = "const VERSION_LEAD = '~^=v';";
 
 export const DEPENDENCY_MUTANTS = [
   // What separates a name from its prose / Qué separa un nombre de su prosa
@@ -114,7 +114,7 @@ export const DEPENDENCY_MUTANTS = [
   ['exit=N is no receipt', EVIDENCE, '(token.startsWith(`${EXIT_WORD}=`) && isDigits(token.slice(EXIT_WORD.length + 1)))', 'false'],
   ['exit= followed by anything is a receipt', EVIDENCE, 'isDigits(token.slice(EXIT_WORD.length + 1))', 'true'],
   // What counts as a manifest version / Qué cuenta como versión de manifiesto
-  ...droppedCharacters(EVIDENCE, VERSION_LINE, ['~', '^', '<', '>', '=', 'v'], 'the version operator list'),
+  ...droppedCharacters(EVIDENCE, VERSION_LINE, ['~', '^', '=', 'v'], 'the version operator list'),
   ['a version need not start with a digit', EVIDENCE, 'isDigits(rest.charAt(0)) && rest.includes', 'rest.includes'],
   ['a version needs no dot', EVIDENCE, " && rest.includes('.');", ';'],
   ['the lockfile is no manifest', EVIDENCE, "const MANIFESTS = ['package.json', 'package-lock.json'];", "const MANIFESTS = ['package.json'];"],
