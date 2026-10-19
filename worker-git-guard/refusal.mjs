@@ -75,6 +75,8 @@ export const MESSAGES = {
       'WORKER-GIT GUARD REFUSED this command: a delegated worker may not run a forced `git clean` ({command}).',
       '',
       'WHY. `clean -f` deletes untracked files for good; git has no copy of them, so the work cannot be recovered.',
+      'With `clean.requireForce` set to false on the line (`-c`, `--config-env`, `GIT_CONFIG_*`), `clean` deletes',
+      'without `-f` too.',
       '',
       'USE INSTEAD: `git clean -n` or `git clean --dry-run` lists what would go and is allowed; remove a file you',
       'created yourself by name.'
@@ -83,7 +85,8 @@ export const MESSAGES = {
       'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede ejecutar un `git clean` forzado ({command}).',
       '',
       'POR QUÉ. `clean -f` borra ficheros sin seguimiento para siempre; git no guarda copia, así que el trabajo',
-      'no se recupera.',
+      'no se recupera. Con `clean.requireForce` en falso en la línea (`-c`, `--config-env`, `GIT_CONFIG_*`), `clean`',
+      'borra también sin `-f`.',
       '',
       'USAR EN SU LUGAR: `git clean -n` o `git clean --dry-run` lista lo que se borraría y está permitido; un fichero',
       'creado por el propio worker se borra por su nombre.'
@@ -114,10 +117,11 @@ export const MESSAGES = {
       'WORKER-GIT GUARD REFUSED this command: a delegated worker must name its paths in `git commit` ({command}).',
       '',
       'WHY. A commit without `-- <paths>` takes everything already staged, `-a`/`--all` stages every tracked change,',
-      'and `-i`/`--include` commits everything staged besides the named paths. A pathspec that names no specific',
-      'path (`.`, `:/`, `*`, only exclusions, only a variable such as `$FILES`) is the same sweep. After a commit',
-      'rejected by commitlint the files stay staged, so the next commit swept them in under the wrong message',
-      '(twice), and history rewriting is denied, so it could not be split.',
+      'and `-i`/`--include`, `-p`/`--patch` and `--interactive` commit everything staged besides the named paths. A',
+      'pathspec that reaches the worktree root (`.` or `*` there, `:/`, `src/..`, `$PWD/`), only exclusions or only a',
+      'variable such as `$FILES` is the same sweep. After a commit rejected by commitlint the files stay staged, so',
+      'the next commit swept them in under the wrong message (twice), and history rewriting is denied, so it could',
+      'not be split.',
       '',
       'USE INSTEAD: `git commit -m "<msg>" -- <path> <path>` commits only the named paths. After a rejected commit,',
       'run `git status --porcelain` before the next one.'
@@ -126,10 +130,11 @@ export const MESSAGES = {
       'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado debe nombrar sus rutas en `git commit` ({command}).',
       '',
       'POR QUÉ. Un commit sin `-- <rutas>` toma todo lo que ya está en el índice, `-a`/`--all` agrega cada cambio',
-      'rastreado, e `-i`/`--include` incluye todo el índice además de las rutas nombradas. Un pathspec que no nombra',
-      'rutas concretas (`.`, `:/`, `*`, solo exclusiones, solo una variable como `$FILES`) es el mismo barrido. Tras',
-      'un commit rechazado por commitlint los ficheros siguen en el índice, así que el commit siguiente los arrastró',
-      'bajo otro mensaje (dos veces), y reescribir historia está denegado, por lo que no se pudo separar.',
+      'rastreado, e `-i`/`--include`, `-p`/`--patch` e `--interactive` incluyen todo el índice además de las rutas',
+      'nombradas. Un pathspec que llega a la raíz del worktree (`.` o `*` allí, `:/`, `src/..`, `$PWD/`), solo',
+      'exclusiones o solo una variable como `$FILES` es el mismo barrido. Tras un commit rechazado por commitlint los',
+      'ficheros siguen en el índice, así que el commit siguiente los arrastró bajo otro mensaje (dos veces), y',
+      'reescribir historia está denegado, por lo que no se pudo separar.',
       '',
       'USAR EN SU LUGAR: `git commit -m "<msg>" -- <ruta> <ruta>` incluye solo las rutas nombradas. Tras un commit',
       'rechazado, ejecute `git status --porcelain` antes del siguiente.'
@@ -181,6 +186,46 @@ export const MESSAGES = {
       'ruta que la línea deje clara.'
     ]
   },
+  commitAfterWrites: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: this `git commit` runs after an earlier command of the same line that may write files ({command}).',
+      '',
+      'WHY. The guard checks the commit before the line runs, so files that `{writer}` creates under the pathspec (or a',
+      'pathspec file it writes) are not there yet when the check looks, and git then leaves new untracked files out',
+      'of the commit in silence.',
+      '',
+      'USE INSTEAD: run that command first, then commit in its own command after the files exist (and `git add` them',
+      'if they are new), so the check sees the tree the commit will take.'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: este `git commit` corre tras un comando anterior de la misma línea que puede escribir ficheros ({command}).',
+      '',
+      'POR QUÉ. El guard comprueba el commit antes de que la línea corra, así que los ficheros que `{writer}` crea bajo el',
+      'pathspec (o el fichero de pathspec que escribe) aún no existen cuando la comprobación mira, y git luego deja',
+      'fuera del commit en silencio los ficheros nuevos sin seguimiento.',
+      '',
+      'USAR EN SU LUGAR: ejecute primero ese comando y haga el commit en su propio comando cuando los ficheros existan',
+      '(y agréguelos con `git add` si son nuevos), para que la comprobación vea el árbol que el commit va a tomar.'
+    ]
+  },
+  aliasUnseen: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: it runs a git alias whose body the line does not show ({command}).',
+      '',
+      'WHY. The alias is set on the line through `--config-env` with a variable the line does not set, or its body is',
+      'a shell expansion, so the git command it runs is unseen and could reset, check out or skip the hooks.',
+      '',
+      'USE INSTEAD: run the git command itself, spelled out on the line.'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: ejecuta un alias de git cuyo cuerpo la línea no muestra ({command}).',
+      '',
+      'POR QUÉ. El alias se fija en la línea con `--config-env` y una variable que la línea no fija, o su cuerpo es una',
+      'expansión de la shell, así que el comando de git que ejecuta no se ve y podría hacer reset, checkout u omitir los hooks.',
+      '',
+      'USAR EN SU LUGAR: ejecute el propio comando de git, escrito en la línea.'
+    ]
+  },
   pushNoVerify: {
     en: [
       'WORKER-GIT GUARD REFUSED this command: a delegated worker may not skip the push hooks ({command}).',
@@ -209,7 +254,9 @@ export const MESSAGES = {
       '',
       'USE INSTEAD: commit your work in progress on your branch, or ask the orchestrator to clear the index. To read',
       'a tree, set a temporary `GIT_INDEX_FILE` on the same command line (`GIT_INDEX_FILE=<tmp> git read-tree <tree>`),',
-      'use `--index-output=<file>`, or check with `-n`/`--dry-run`; those leave the live index alone and are allowed.'
+      'use `--index-output=<file>`, or check with `-n`/`--dry-run`; those leave the live index alone and are allowed.',
+      'The temporary path must be a literal one outside the git directory: naming `.git/index` (the live index) or',
+      'hiding the path behind a variable is refused.'
     ],
     es: [
       'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede ejecutar `git read-tree` sobre el índice vivo ni con `-u` ni con `--reset` ({command}).',
@@ -220,7 +267,9 @@ export const MESSAGES = {
       '',
       'USAR EN SU LUGAR: haga commit de su trabajo a medias en su rama, o pida al orquestador que limpie el índice.',
       'Para leer un árbol, fije un `GIT_INDEX_FILE` temporal en la misma línea (`GIT_INDEX_FILE=<tmp> git read-tree <árbol>`),',
-      'use `--index-output=<fichero>` o compruebe con `-n`/`--dry-run`; eso no toca el índice vivo y está permitido.'
+      'use `--index-output=<fichero>` o compruebe con `-n`/`--dry-run`; eso no toca el índice vivo y está permitido.',
+      'La ruta temporal debe ser literal y estar fuera del directorio de git: nombrar `.git/index` (el índice vivo) o',
+      'esconder la ruta tras una variable se rechaza.'
     ]
   },
   checkoutIndex: {

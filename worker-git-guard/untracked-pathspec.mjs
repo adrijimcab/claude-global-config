@@ -9,39 +9,49 @@
  * that landed only in 0235cc85, so 26b7227b alone does not build).
  *
  * THE DECISION. For each `commit` invocation that carries a pathspec, ask git once, in the directory the commit
- * runs in: `git ls-files --others --exclude-standard -z -- <paths>`. A non-empty answer is an offender, minus the
- * files an earlier `git add` of the same `&&` chain names (`git add -- d/new && git commit -m x -- d`, the flow the
- * refusal recommends): by then they are tracked. The directory is the payload cwd moved by the line's own `cd` and
- * by the invocation's `git -C` (`company-remote/invocation-directory.mjs`, the one fold of `-C` the guards share).
+ * runs in and on the repository the line points it at (`--git-dir`, `--work-tree`, `GIT_DIR`, `GIT_WORK_TREE`,
+ * `GIT_INDEX_FILE` are forwarded): `git ls-files --others --exclude-standard -z -- <paths>`. A non-empty answer is
+ * an offender, minus the files an earlier `git add` of the same `&&` chain stages (`git add -- d/new && git commit
+ * -m x -- d`, the flow the refusal recommends). That `add` is read through git's own option table: a dry run, `-u`,
+ * `-p`, `-i`, `-e` and `-N` stage no new file, so they do not count; `-A` with no path covers the whole worktree.
+ * The directory is the payload cwd moved by the line's own `cd` and by the invocation's `git -C`
+ * (`company-remote/invocation-directory.mjs`, the one fold of `-C` the guards share).
+ *
+ * THE TREE THE HOOK SEES (both judges, 2026-10-19). The whole line is judged before any of it runs, so when an
+ * earlier command of the line may write files (`line-writes.mjs`) and the commit reads a pathspec file or names a
+ * pathspec that can match files still to come (a glob or a directory), the answer would be about a stale tree;
+ * such a commit is refused, and the refusal says to commit in its own command once the files exist.
  *
  * `--pathspec-from-file=<file>` (judge B, 2026-10-19). Its paths are read from the file, relative to the directory
- * the commit runs in, one per line (NUL separated with `--pathspec-file-nul`), and checked like the words after
- * `--`. A file that cannot be read (stdin `-`, a missing file, an unknown directory) is an offender of its own, and
- * a file whose paths name no specific path (`pathspec-scope.mjs`) is refused like a commit without paths.
+ * the commit runs in, one per line (NUL separated with `--pathspec-file-nul`), a line in double quotes unquoted as
+ * git does (C style: `\n`, `\t`, `\"`, `\\`, octal bytes), and checked like the words after `--`. A file that cannot
+ * be read (stdin `-`, a missing file, an unknown directory) is an offender of its own, and a file whose paths sweep
+ * the worktree (`pathspec-scope.mjs`) is refused like a commit without paths.
  *
- * WHY A MODULE OF ITS OWN. The lexical classifier (`forbidden-invocations.mjs`) is pure and runs no process;
- * this decision runs git and reads files. Only `guard.mjs` composes the two, and git and the file system are
- * PORTS: `listUntracked` and `readPathspecFile` are the default adapters and a caller injects others.
+ * WHY A MODULE OF ITS OWN. The lexical classifier (`forbidden-invocations.mjs`) runs no process; this decision runs
+ * git and reads files. Only `guard.mjs` composes the two, and git and the file system are PORTS: `listUntracked` and
+ * `readPathspecFile` are the default adapters and a caller injects others.
  *
  * AN ERROR IS NOT A DECISION. Git failing, timing out or not being found yields `unchecked`, never an offender,
  * so a broken git never blocks a worker; `guard.mjs` journals the miss so it stays visible.
  *
- * LEFT OUT, stated. An earlier `git add` counts only for literal paths (no glob, no pathspec magic, no expansion,
- * no `-A` without paths), and only when nothing but `&&` joins it to the commit.
+ * LEFT OUT, stated. An earlier `git add` counts only when nothing but `&&` joins it to the commit, and only for the
+ * paths it names literally (a glob resolved as a literal path names no file) or for `-A` with no path; one that
+ * reads its paths from a file does not count.
  *
  * @es Si un `git commit -- <rutas>` delegado nombra un pathspec que cubre ficheros SIN SEGUIMIENTO, que git deja
- * fuera del commit sin avisar. MEDIDO (master, repo desechable, 2026-10-19): `git commit -- d`, con `d` un directorio
- * con un fichero rastreado modificado y otro nuevo sin seguimiento, sale con 0 y hace commit solo del rastreado;
- * nombrar el fichero sin seguimiento falla y no hace commit de nada. LA DECISIÓN: por cada `commit` con pathspec se
- * pregunta a git una vez, en el directorio donde corre: `git ls-files --others --exclude-standard -z -- <rutas>`;
- * una respuesta no vacía es un infractor, salvo los ficheros que nombra un `git add` anterior de la misma cadena
- * `&&`, que para entonces ya están rastreados. El directorio es el cwd del payload movido por los `cd` de la línea y
- * por el `git -C` (`company-remote/invocation-directory.mjs`). `--pathspec-from-file=<fichero>`: sus rutas se leen
- * del fichero (una por línea, o separadas por NUL con `--pathspec-file-nul`) y se comprueban igual; un fichero
- * ilegible es un infractor propio, y uno que no nombra rutas concretas se rechaza como un commit sin rutas. Git y el
- * sistema de ficheros son PUERTOS inyectables. UN ERROR NO ES UNA DECISIÓN: si git falla, expira o no existe el
- * resultado es `unchecked`, y `guard.mjs` lo anota. QUEDA FUERA: un `git add` anterior solo cuenta con rutas
- * literales y unido al commit solo por `&&`.
+ * fuera del commit sin avisar. MEDIDO (master, 2026-10-19): `git commit -- d` con un fichero nuevo sin seguimiento en
+ * `d` sale con 0 y lo deja fuera. LA DECISIÓN: por cada `commit` con pathspec se pregunta a git una vez, en su
+ * directorio y sobre el repositorio al que la línea lo apunta (se reenvían `--git-dir`, `--work-tree`, `GIT_DIR`,
+ * `GIT_WORK_TREE` y `GIT_INDEX_FILE`); una respuesta no vacía es un infractor, salvo lo que agrega un `git add`
+ * anterior de la misma cadena `&&`, leído con la tabla de opciones de git (un ensayo, `-u`, `-p`, `-i`, `-e` y `-N` no
+ * agregan ficheros nuevos; `-A` sin rutas cubre todo el worktree). EL ÁRBOL QUE VE EL HOOK: la línea se juzga antes de
+ * correr, así que si un comando anterior puede escribir ficheros y el commit lee un fichero de pathspec o nombra un
+ * pathspec que puede casar con ficheros por venir (un glob o un directorio), se rechaza y se pide hacer el commit en
+ * su propio comando cuando los ficheros existan. `--pathspec-from-file`: sus líneas se leen (con NUL si se pide, y
+ * las entrecomilladas al estilo C se desentrecomillan como hace git) y se comprueban igual; un fichero ilegible es un
+ * infractor propio y uno que barre el worktree se rechaza como un commit sin rutas. Git y el sistema de ficheros son
+ * PUERTOS inyectables; un error de git es `unchecked`, nunca un infractor.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -49,33 +59,39 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { invocationDirectory } from '../company-remote/invocation-directory.mjs';
-import { finalValue, optionsOf, surely } from './git-options.mjs';
+import { finalValue, mayBe, optionsOf, surely } from './git-options.mjs';
 import { lineInvocations } from './line-invocations.mjs';
-import { namesSpecificPaths } from './pathspec-scope.mjs';
+import { earlierWriter } from './line-writes.mjs';
+import { matchesFilesToCome, sweepsWorktree } from './pathspec-scope.mjs';
+import { gitEnvironmentOf, isWithin, repositoryLayout } from './repository-layout.mjs';
 
 /** How long git may take before the check gives up. @es Cuánto puede tardar git antes de abandonar la comprobación. */
 export const GIT_TIMEOUT_MS = 5000;
 
-/** The separator that starts a pathspec. @es El separador que abre un pathspec. */
-const PATHSPEC_SEPARATOR = '--';
-
 /** The `--pathspec-from-file` value that means standard input, which the guard cannot read. @es El valor que significa la entrada estándar. */
 const STANDARD_INPUT = '-';
+
+/** The `git add` options that stage no new file. @es Las opciones de `git add` que no agregan ficheros nuevos. */
+const ADDS_NO_NEW_FILE = ['dry-run', 'update', 'interactive', 'patch', 'edit', 'intent-to-add'];
+
+/** The C escapes git unquotes in a quoted pathspec line. @es Los escapes C que git desentrecomilla. */
+const C_ESCAPES = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '\\': 92, '"': 34 };
 
 /**
  * The default adapter: asks git, in `directory`, for the untracked and not ignored files under `pathspecs`. The
  * arguments go as an array, never through a shell.
  * @param {string} directory Where git runs.
  * @param {string[]} pathspecs The pathspec of the commit.
+ * @param {Record<string, string>} [environment] The repository variables the line sets, forwarded to git.
  * @param {typeof spawnSync} [run] The process port, injectable so a selftest can make git time out.
  * @returns {{ files: string[] } | { error: string }} The untracked paths, or why git could not tell.
  * @es El adaptador por defecto: pregunta a git, en `directory`, por los ficheros sin seguimiento y no ignorados
- * bajo `pathspecs`, con los argumentos como arreglo y sin shell. `run` es el puerto de procesos, inyectable para
- * que un selftest haga expirar a git. Devuelve las rutas, o por qué git no pudo decirlo.
+ * bajo `pathspecs`, con los argumentos como arreglo y sin shell, y con las variables de repositorio de la línea.
  */
-export function listUntracked(directory, pathspecs, run = spawnSync) {
+export function listUntracked(directory, pathspecs, environment = {}, run = spawnSync) {
   const result = run('git', ['ls-files', '--others', '--exclude-standard', '-z', '--', ...pathspecs], {
     cwd: directory,
+    env: { ...process.env, ...environment },
     encoding: 'utf8',
     timeout: GIT_TIMEOUT_MS,
     windowsHide: true
@@ -104,31 +120,48 @@ export function readPathspecFile(file) {
   }
 }
 
-/** The paths an `add` stages that a later commit can rely on: literal paths, resolved. @es Las rutas literales que agrega un `add`, resueltas. */
+/** A pathspec line as git reads it: unquoted C style when it is in double quotes. @es Una línea de pathspec como la lee git. */
+function unquoted(line) {
+  if (line.length < 2 || !line.startsWith('"') || !line.endsWith('"')) return line;
+
+  const bytes = [];
+  const body = line.slice(1, -1);
+
+  for (let at = 0; at < body.length; at += 1) {
+    const character = body.charAt(at);
+    const next = body.charAt(at + 1);
+
+    if (character !== '\\') {
+      bytes.push(...Buffer.from(character, 'utf8'));
+    } else if (/^[0-7]{3}$/.test(body.slice(at + 1, at + 4))) {
+      bytes.push(Number.parseInt(body.slice(at + 1, at + 4), 8));
+      at += 3;
+    } else {
+      bytes.push(C_ESCAPES[next] ?? next.charCodeAt(0));
+      at += 1;
+    }
+  }
+
+  return Buffer.from(bytes).toString('utf8');
+}
+
+/** The paths an `add` stages new files under, resolved. @es Las rutas bajo las que un `add` agrega ficheros nuevos, resueltas. */
 function addedPaths(invocation) {
   const directory = invocationDirectory(invocation);
 
   if (typeof directory !== 'string') return [];
 
-  const separator = invocation.args.indexOf(PATHSPEC_SEPARATOR);
-  const options = separator === -1 ? invocation.args : invocation.args.slice(0, separator);
+  const { events, positionals } = optionsOf('add', invocation.args);
 
-  if (options.some((word) => word === '-n' || word === '--dry-run')) return [];
+  if (ADDS_NO_NEW_FILE.some((key) => mayBe(events, key)) || finalValue(events, 'pathspec-from-file') !== undefined) return [];
 
-  const words = separator === -1 ? invocation.args.filter((word) => !word.startsWith('-')) : invocation.args.slice(separator + 1);
+  if (positionals.length === 0) {
+    const layout = surely(events, 'all') ? repositoryLayout(directory, invocation.environment, invocation.gitOptions) : undefined;
 
-  return words.map((word) => path.resolve(directory, word));
-}
+    return layout === undefined ? [] : [layout.root];
+  }
 
-/**
- * Whether `file` is `added` itself or lies under it. A glob or a magic pathspec, resolved as a literal path,
- * names no real file, so it never covers one.
- * @es Si `file` es `added` o está debajo. Un glob o un pathspec mágico, resuelto como ruta literal, no cubre nada.
- */
-function isUnder(added, file) {
-  const relative = path.relative(added, file);
-
-  return !relative.startsWith('..') && !path.isAbsolute(relative);
+  return positionals.map((word) => path.resolve(directory, word));
 }
 
 /**
@@ -148,22 +181,25 @@ function pathspecOf(args, directory, read) {
 
   if (text === undefined) return { unreadable: file };
 
-  const lines = text.split(surely(events, 'pathspec-file-nul') ? '\0' : '\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
+  const nul = surely(events, 'pathspec-file-nul');
+  const lines = text.split(nul ? '\0' : '\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
 
-  return { pathspecs: lines.filter((line) => line.length > 0), fromFile: true };
+  return { pathspecs: lines.filter((line) => line.length > 0).map((line) => (nul ? line : unquoted(line))), fromFile: true };
 }
 
 /**
- * The first commit of `script` whose pathspec covers untracked files, or whose pathspec file cannot be read or
- * names no specific path, and every commit that could not be checked.
+ * The first commit of `script` whose pathspec covers untracked files, whose pathspec file cannot be read or sweeps
+ * the worktree, or that runs after an earlier command of the line may have written files under it; and every
+ * commit that could not be checked.
  * @param {string} script The shell line exactly as the tool received it.
  * @param {string} dialect `bash` or `powershell`.
  * @param {string} cwd The directory the line starts in.
- * @param {(directory: string, pathspecs: string[]) => ({ files: string[] } | { error: string })} [list] The git port.
+ * @param {(directory: string, pathspecs: string[], environment: Record<string, string>) => ({ files: string[] } | { error: string })} [list] The git port.
  * @param {(file: string) => string | undefined} [read] The file port.
- * @returns {{ offender?: { family: string, text: string, files?: string[], file?: string }, unchecked: Array<{ text: string, directory: string | undefined, reason: string }> }}
- * @es El primer commit de `script` cuyo pathspec cubre ficheros sin seguimiento, o cuyo fichero de pathspec no se
- * puede leer o no nombra rutas concretas, y cada commit que no se pudo comprobar.
+ * @returns {{ offender?: { family: string, text: string, files?: string[], directory?: string, file?: string, writer?: string }, unchecked: Array<{ text: string, directory: string | undefined, reason: string }> }}
+ * @es El primer commit de `script` cuyo pathspec cubre ficheros sin seguimiento, cuyo fichero de pathspec no se
+ * puede leer o barre el worktree, o que corre tras un comando de la línea que pudo escribir ficheros bajo él; y
+ * cada commit que no se pudo comprobar.
  */
 export function untrackedUnderCommits(script, dialect, cwd, list = listUntracked, read = readPathspecFile) {
   const unchecked = [];
@@ -182,14 +218,26 @@ export function untrackedUnderCommits(script, dialect, cwd, list = listUntracked
 
     if (pathspec === undefined) continue;
     if (pathspec.unreadable !== undefined) return { offender: { family: 'commitPathspecFile', text: invocation.text, file: pathspec.unreadable }, unchecked };
-    if (pathspec.fromFile && !namesSpecificPaths(pathspec.pathspecs, undefined)) return { offender: { family: 'commitNoPaths', text: invocation.text }, unchecked };
 
-    if (typeof directory !== 'string') {
-      unchecked.push({ text: invocation.text, directory, reason: 'the directory the commit runs in cannot be followed from the line' });
+    const layout = repositoryLayout(directory, invocation.environment, invocation.gitOptions);
+
+    if (pathspec.fromFile && sweepsWorktree(pathspec.pathspecs, { dialect: undefined, directory, layout })) return { offender: { family: 'commitNoPaths', text: invocation.text }, unchecked };
+
+    const writer = earlierWriter(invocation.before, dialect);
+    const base = typeof directory === 'string' ? directory : cwd;
+
+    if (writer !== undefined && (pathspec.fromFile || pathspec.pathspecs.some((spec) => matchesFilesToCome(spec, base, layout?.root)))) {
+      return { offender: { family: 'commitAfterWrites', text: invocation.text, writer }, unchecked };
+    }
+
+    const environment = typeof directory === 'string' ? gitEnvironmentOf(directory, invocation.environment, invocation.gitOptions) : undefined;
+
+    if (environment === undefined) {
+      unchecked.push({ text: invocation.text, directory, reason: 'the directory or the repository the commit runs in cannot be followed from the line' });
       continue;
     }
 
-    const answer = list(directory, pathspec.pathspecs);
+    const answer = list(directory, pathspec.pathspecs, environment);
 
     if (answer.error !== undefined) {
       unchecked.push({ text: invocation.text, directory, reason: answer.error });
@@ -197,9 +245,9 @@ export function untrackedUnderCommits(script, dialect, cwd, list = listUntracked
     }
 
     const staged = added.filter((entry) => entry.chain === invocation.chain);
-    const files = answer.files.filter((file) => !staged.some((entry) => isUnder(entry.resolved, path.resolve(directory, file))));
+    const files = answer.files.filter((file) => !staged.some((entry) => isWithin(entry.resolved, path.resolve(directory, file))));
 
-    if (files.length > 0) return { offender: { family: 'commitUntracked', text: invocation.text, files }, unchecked };
+    if (files.length > 0) return { offender: { family: 'commitUntracked', text: invocation.text, files, directory }, unchecked };
   }
 
   return { unchecked };

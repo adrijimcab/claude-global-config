@@ -19,8 +19,8 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INSTALL = path.resolve(KIT, '..');
 const KIT_FOLDER = path.basename(KIT);
 
-/** The non-vendored folders outside the kit a kit module imports (the state-location module and its bilingual output). @es Las carpetas de fuera del kit que importa un módulo del kit. */
-const SHARED_PATHS = ['hook-state', 'bilingual-output'];
+/** The non-vendored folders outside the kit a kit module imports (the state-location module and its bilingual output, and the one `-C` fold the guards share). @es Las carpetas de fuera del kit que importa un módulo del kit. */
+const SHARED_PATHS = ['hook-state', 'bilingual-output', 'company-remote'];
 
 /** Every kit folder a selftest can reach through its imports. @es Cada carpeta del kit alcanzable desde un selftest. */
 export const KIT_PATHS = ['config', 'lib', 'testing', 'diff-coverage', 'gate-run', 'landing-guard', 'worktree-tenancy', 'orphan-work', 'handback'];

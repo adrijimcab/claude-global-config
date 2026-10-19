@@ -20,7 +20,7 @@ import { findConfig } from '../config/load-config.mjs';
 import { isDisabled } from '../config/validate.mjs';
 import { judge, readVerdict } from '../gate-run/verdicts.mjs';
 import { gitAsker } from '../lib/git.mjs';
-import { effectiveDirectory } from '../lib/invocation-directory.mjs';
+import { invocationDirectory } from '../../company-remote/invocation-directory.mjs';
 import { repositoryOptions } from '../lib/invocation-repository.mjs';
 import { dialectOfTool } from '../../shell-command/shell-command.mjs';
 import { requestedMoves } from './branch-moves.mjs';
@@ -48,7 +48,7 @@ export function landingFindings(payload, { stateRoot } = {}) {
   if (dialect === undefined || typeof command !== 'string' || typeof payload?.cwd !== 'string') return [];
 
   return requestedMoves(command, dialect, payload.cwd).flatMap((request) => {
-    const directory = effectiveDirectory(request.invocation);
+    const directory = invocationDirectory(request.invocation);
 
     if (directory === undefined) return [];
 

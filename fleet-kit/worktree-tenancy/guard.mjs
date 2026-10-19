@@ -25,7 +25,7 @@ import path from 'node:path';
 import { findConfig } from '../config/load-config.mjs';
 import { isAgentWorktree } from '../lib/agent-worktrees.mjs';
 import { deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
-import { effectiveDirectory } from '../lib/invocation-directory.mjs';
+import { invocationDirectory } from '../../company-remote/invocation-directory.mjs';
 import { activeOwner, agentRecords } from '../../agent-liveness/active-owner.mjs';
 import { gitInvocations } from '../../shell-command/git-invocations.mjs';
 import { dialectOfTool } from '../../shell-command/shell-command.mjs';
@@ -34,7 +34,7 @@ export const MUTATING = new Set(['commit', 'add', 'stash', 'reset', 'clean', 're
 
 /** The directory a mutating invocation changes: its own, or the path `git worktree remove` names. @es El directorio que cambia una invocación mutante. */
 export function mutatedDirectory(invocation) {
-  const directory = effectiveDirectory(invocation);
+  const directory = invocationDirectory(invocation);
 
   if (directory === undefined) return undefined;
   if (invocation.subcommand === 'worktree' && invocation.args[0] === 'remove') {

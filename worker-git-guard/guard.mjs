@@ -62,8 +62,23 @@ function journal(entry) {
   }
 }
 
-/** A path as a shell word: quoted only when it holds whitespace. @es Una ruta como palabra de shell: entrecomillada solo si lleva espacios. */
-const shellWord = (file) => (/\s/.test(file) ? `"${file}"` : file);
+/** The characters a path may hold and stay one plain word in bash and PowerShell. @es Los caracteres que dejan una ruta como palabra simple. */
+const PLAIN_WORD = /^[A-Za-z0-9_./-]+$/;
+
+/**
+ * An untracked file as the worker's own shell must type it (judge review, 2026-10-19): relative to the directory
+ * the worker's shell is in, with forward slashes, and single-quoted for that shell when it holds anything else
+ * than plain characters (bash closes and reopens the quote around a `'`, PowerShell doubles it).
+ * @es Un fichero sin seguimiento como debe escribirlo la shell del worker: relativo a su directorio, con barras
+ * normales, y entre comillas simples de esa shell si lleva algo más que caracteres simples.
+ */
+function shellWord(file, directory, cwd, dialect) {
+  const relative = path.relative(cwd, path.resolve(directory, file)).split('\\').join('/') || '.';
+
+  if (PLAIN_WORD.test(relative)) return relative;
+
+  return dialect === 'powershell' ? `'${relative.split("'").join("''")}'` : `'${relative.split("'").join("'\\''")}'`;
+}
 
 /**
  * The deny output for a commit whose pathspec covers untracked files, or `undefined` to let it run. A git that
@@ -86,11 +101,11 @@ function untrackedRefusal(payload, command, dialect, cwd, list) {
 
   if (found.offender === undefined) return undefined;
 
-  const { family, text, files, file } = found.offender;
+  const { family, text, files, file, writer, directory } = found.offender;
 
-  if (family !== 'commitUntracked') return refusalText(family, text, { file: file ?? '' });
+  if (family !== 'commitUntracked') return refusalText(family, text, { file: file ?? '', writer: writer ?? '' });
 
-  const listed = files.slice(0, LISTED_PATHS).map(shellWord);
+  const listed = files.slice(0, LISTED_PATHS).map((untracked) => shellWord(untracked, directory, cwd, dialect));
 
   return refusalText('commitUntracked', text, { paths: listed.join(' '), total: files.length });
 }
