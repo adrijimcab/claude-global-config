@@ -53,6 +53,8 @@
  * en vez de prohibir acentos que nunca tuvieron la culpa. SIN REGEX (M5).
  */
 
+import { isEnvironmentAssignment, programIndex, programName } from './launchers.mjs';
+import { familyOf, NODE_OPTIONS_TAKING_A_VALUE, readsScriptFromStdin } from './script-source.mjs';
 import { writeEvidence } from './script-writes.mjs';
 
 /** Unquoted characters that end a word and start a new command position. @es Caracteres que cierran palabra y abren posición de comando. */
@@ -78,6 +80,25 @@ const CARRIAGE_RETURN = 13;
 
 const HEREDOC_OPERATOR = '<<';
 const HERE_STRING_LENGTH = 3;
+const ARITHMETIC_OPEN = '((';
+const ARITHMETIC_CLOSE = '))';
+
+/**
+ * The redirection operator that starts at `index` (`>`, `>>`, `>|`, `>&`, `<`, `<&`, `<>`, `&>`, `&>>`), or
+ * `undefined`. The caller has already ruled out `<<` and `<<<`.
+ * @es El operador de redirección que empieza en `index`, o `undefined`. El llamador ya descartó `<<` y `<<<`.
+ */
+function redirectionAt(command, index) {
+  const character = command[index];
+
+  if (character === '&') return command[index + 1] === '>' ? (command[index + 2] === '>' ? '&>>' : '&>') : undefined;
+  if (character === '<') return command[index + 1] === '&' || command[index + 1] === '>' ? `<${command[index + 1]}` : '<';
+  if (character !== '>') return undefined;
+
+  const second = command[index + 1] === '>' || command[index + 1] === '|' ? command[index + 1] : '';
+
+  return command[index + 1 + second.length] === '&' ? `>${second}&` : `>${second}`;
+}
 
 /** What a comment may follow: a blank or a command separator. A brace is NOT one (`${#x}`). @es Lo que puede preceder a un comentario: un blanco o un separador de comandos; una llave NO (`${#x}`). */
 const BEFORE_A_COMMENT = new Set([...BLANK_CHARACTERS, '\n', ';', '|', '&']);
@@ -205,7 +226,8 @@ export function tokenize(command) {
   const pendingHeredocs = [];
   let current;
   let index = 0;
-  let nextWordIsHereString = false;
+  let hereStringAt;
+  let nextWordIsTarget = false;
 
   const flush = () => {
     if (current !== undefined) {
@@ -216,9 +238,16 @@ export function tokenize(command) {
 
   const open = (start) => {
     if (current === undefined) {
-      current = { kind: 'word', raw: '', start, quoted: false, bare: false, unterminated: false, hereString: nextWordIsHereString };
-      nextWordIsHereString = false;
+      current = { kind: 'word', raw: '', start, quoted: false, bare: false, unterminated: false, hereString: hereStringAt !== undefined, hereStringAt, redirectTarget: nextWordIsTarget };
+      hereStringAt = undefined;
+      nextWordIsTarget = false;
     }
+  };
+
+  // A bare run of digits glued to a redirection (`2>&1`, `0<<EOF`) is the file descriptor it redirects, not a
+  // word of the command. @es Unos dígitos pegados a una redirección son el descriptor que redirige, no una palabra.
+  const dropDescriptor = (at) => {
+    if (current !== undefined && !current.quoted && current.raw.length > 0 && current.start + current.raw.length === at && [...current.raw].every((digit) => digit >= '0' && digit <= '9')) current = undefined;
   };
 
   while (index < command.length) {
@@ -230,34 +259,61 @@ export function tokenize(command) {
       continue;
     }
 
-    // `<<<` is a here-string, NOT a heredoc: the word after it is an ordinary argument of the command, so
-    // the three characters are consumed as a separator and tokenizing goes on.
-    // @es `<<<` es un here-string, NO un heredoc: la palabra siguiente es un argumento ordinario del
-    // comando, así que los tres caracteres se consumen como separador y se sigue tokenizando.
+    // `<<<` is a here-string, NOT a heredoc: the word after it is the command's standard input, so the three
+    // characters are consumed as a separator, the next word remembers where its opener was, and tokenizing goes on.
+    // @es `<<<` es un here-string, NO un heredoc: la palabra siguiente es la entrada estándar de la orden, así que
+    // los tres caracteres se consumen como separador, la palabra recuerda dónde estaba su apertura y se sigue.
     if (startsHereString(command, index)) {
+      dropDescriptor(index);
       flush();
-      nextWordIsHereString = true;
+      hereStringAt = index;
       index += HERE_STRING_LENGTH;
       continue;
     }
 
-    // `<<WORD`, `<<-WORD`, `<<'WORD'`, `<<"WORD"`: the lines up to the terminator are DATA. The command on
-    // this line keeps being tokenized; the body is skipped once the line ends.
-    // @es `<<WORD`, `<<-WORD`, `<<'WORD'`, `<<"WORD"`: las líneas hasta el terminador son DATOS. El comando
-    // de esta línea sigue tokenizándose; el cuerpo se salta al acabar la línea.
+    // `<<WORD`, `<<-WORD`, `<<'WORD'`, `<<"WORD"`: the lines up to the terminator are DATA, the standard input of
+    // the command the `<<` belongs to. It is a redirection, not a separator: the words after the delimiter on this
+    // line are still that command's (`node <<'EOF' tool.mjs`). The body is skipped once the line ends.
+    // @es `<<WORD` …: las líneas hasta el terminador son DATOS, la entrada estándar de la orden a la que pertenece el
+    // `<<`. Es una redirección, no un separador: las palabras tras el delimitador siguen siendo de esa orden.
     if (startsHeredoc(command, index)) {
+      dropDescriptor(index);
       flush();
 
       const declaration = readHeredocDeclaration(command, index + HEREDOC_OPERATOR.length);
 
-      items.push({ kind: 'operator', raw: HEREDOC_OPERATOR, start: index, heredoc: declaration });
+      items.push({ kind: 'heredoc', raw: HEREDOC_OPERATOR, start: index, heredoc: declaration });
       pendingHeredocs.push(declaration);
       index = declaration.next;
       continue;
     }
 
+    // `>`, `>>`, `>|`, `>&`, `<`, `<&`, `<>`, `&>`, `&>>`: a redirection of THIS command, never a separator; the
+    // word after it is its target. @es Una redirección de ESTA orden, nunca un separador; la palabra siguiente es su destino.
+    const redirection = redirectionAt(command, index);
+
+    if (redirection !== undefined) {
+      dropDescriptor(index);
+      flush();
+      items.push({ kind: 'redirect', raw: redirection, start: index, afterDash: command[index - 1] === '-' });
+      nextWordIsTarget = true;
+      index += redirection.length;
+      continue;
+    }
+
+    // `(( … ))` is arithmetic: its `>` compares, so the whole expression is data (to the end of the line when
+    // it never closes). @es `(( … ))` es aritmética: su `>` compara, así que la expresión entera es dato.
+    if (command.startsWith(ARITHMETIC_OPEN, index)) {
+      const close = command.indexOf(ARITHMETIC_CLOSE, index + ARITHMETIC_OPEN.length);
+      const lineEnd = command.indexOf('\n', index);
+
+      index = close !== -1 ? close + ARITHMETIC_CLOSE.length : lineEnd === -1 ? command.length : lineEnd;
+      continue;
+    }
+
     if (OPERATOR_CHARACTERS.has(character)) {
       flush();
+      nextWordIsTarget = false;
       items.push({ kind: 'operator', raw: character, start: index });
       index += 1;
 
@@ -352,33 +408,103 @@ export function tokenize(command) {
   return items;
 }
 
-/** Groups tokens into the individual command invocations an operator separates. @es Agrupa tokens en las invocaciones que separan los operadores. */
+/** The code point every heredoc and here-string opener starts with (`<`). @es El code point con que empieza toda apertura de heredoc y here-string. */
+const LESS_THAN = 0x3c;
+
+/** The standard input a here-string word gives its command. @es La entrada estándar que da a su orden una palabra de here-string. */
+const hereStringInput = (word) => ({ text: word.raw, source: 'here-string', offset: word.hereStringAt, code: LESS_THAN });
+
+/** A command: its words, its redirections, its own standard input, and the commands piped into it. @es Una orden: palabras, redirecciones, entrada estándar propia y órdenes que le llegan por tubería. */
+const newCommand = () => Object.assign([], { redirects: [], inputs: [], upstream: [] });
+
+/**
+ * Groups tokens into the individual command invocations an operator separates. Each group is the command's
+ * words, and carries:
+ *   - `redirects`: its redirections `{ raw, target, afterDash }`; they never split a command, so in
+ *     `python3 - 2>&1 <<'EOF'` the `2>&1` and the heredoc are both python3's;
+ *   - `inputs`: its own standard input, `{ text, source, offset, code }`, from a heredoc or a here-string; a
+ *     heredoc or here-string right after a compound (`{ node -; } <<EOF`, `( python3 - ) <<EOF`) is the
+ *     standard input of every command inside it, and a redirection there is theirs too;
+ *   - `upstream`: the commands piped into it with `|` or `|&` (never `||`), whose standard input flows on.
+ * @es Agrupa tokens en las invocaciones que separan los operadores. Cada grupo son las palabras de la orden y
+ * lleva sus redirecciones (que nunca parten una orden), su entrada estándar propia (heredoc o here-string, y la
+ * que sigue a un compuesto es de cada orden de dentro) y las órdenes que le llegan por `|` o `|&` (nunca `||`).
+ */
 export function invocations(items) {
   const groups = [];
-  let group = [];
-  let lastClosed;
+  const compoundStarts = [];
+  let group = newCommand();
+  let compound;
+  let pipedFrom = [];
 
   const close = () => {
-    if (group.length === 0) return;
+    const closed = group.length > 0 ? group : undefined;
 
-    group.heredocs = [];
-    groups.push(group);
-    lastClosed = group;
+    if (closed !== undefined) groups.push(closed);
+    group = newCommand();
+
+    return closed;
   };
 
-  for (const item of items) {
-    if (item.kind === 'operator') {
-      close();
+  // Where a redirection or a heredoc lands: the open command, or every command of the compound just closed.
+  // @es Dónde cae una redirección o un heredoc: la orden abierta, o cada orden del compuesto recién cerrado.
+  const owners = () => (group.length === 0 && compound !== undefined ? compound : [group]);
 
-      // A heredoc body belongs to the command the `<<` follows: it is that command's standard input.
-      // @es El cuerpo de un heredoc es de la orden a la que sigue el `<<`: es su entrada estándar.
-      if (item.heredoc !== undefined) lastClosed?.heredocs.push(item.heredoc.body ?? '');
-      else lastClosed = undefined;
+  for (let at = 0; at < items.length; at += 1) {
+    const item = items[at];
 
-      group = [];
+    if (item.kind === 'heredoc') {
+      for (const owner of owners()) owner.inputs.push({ text: item.heredoc.body ?? '', source: 'heredoc', offset: item.start, code: LESS_THAN });
       continue;
     }
 
+    if (item.kind === 'redirect') {
+      const next = items[at + 1];
+      const redirection = { raw: item.raw, afterDash: item.afterDash, target: next?.kind === 'word' && next.redirectTarget ? next : undefined };
+
+      if (redirection.target !== undefined) at += 1;
+      for (const owner of owners()) owner.redirects.push(redirection);
+      continue;
+    }
+
+    if (item.kind === 'operator') {
+      const closed = close();
+      const next = items[at + 1];
+      const glued = next?.kind === 'operator' && next.start === item.start + 1;
+
+      if (item.raw === '|' && glued && next.raw === '|') {
+        at += 1;
+        pipedFrom = [];
+      } else if (item.raw === '|') {
+        if (glued && next.raw === '&') at += 1;
+        pipedFrom = closed !== undefined ? [closed] : compound ?? [];
+      } else if (item.raw === '{' || item.raw === '(') {
+        compoundStarts.push(groups.length);
+      } else if (item.raw === '}' || item.raw === ')') {
+        const start = compoundStarts.pop();
+
+        compound = start === undefined ? undefined : groups.slice(start);
+        continue;
+      } else {
+        pipedFrom = [];
+      }
+
+      compound = undefined;
+      continue;
+    }
+
+    if (item.hereString && group.length === 0) {
+      for (const owner of owners()) owner.inputs.push(hereStringInput(item));
+      continue;
+    }
+
+    if (group.length === 0) {
+      group.upstream = pipedFrom;
+      pipedFrom = [];
+      compound = undefined;
+    }
+
+    if (item.hereString) group.inputs.push(hereStringInput(item));
     group.push(item);
   }
 
@@ -389,15 +515,22 @@ export function invocations(items) {
 
 /** What marks a PowerShell here-string: `@'` or `@"` and a line break, closed by a line that starts with the quote and `@`. @es Lo que marca un here-string de PowerShell. */
 const POWERSHELL_HERE_STRING_QUOTES = ["'", '"'];
-const POWERSHELL_PLACEHOLDER = 'POWERSHELLHEREDATA';
+export const POWERSHELL_PLACEHOLDER = 'POWERSHELLHEREDATA';
+
+/** What may sit before a here-string opener: it must start a token. @es Lo que puede ir delante de una apertura de here-string: debe empezar un token. */
+const BEFORE_A_POWERSHELL_TOKEN = ' \t\r\n(=|;,{';
+
+/** The code point of `@`, the first character of a PowerShell here-string opener. @es El code point de `@`. */
+const AT_SIGN = 0x40;
 
 /**
- * Cuts the PowerShell here-strings (`@'…'@`, `@"…"@`) out of a command: their text is returned apart and a
- * plain word stands in their place, so the quotes inside them cannot shift where the rest is tokenized.
- * An unterminated one runs to the end of the command.
- * @es Recorta los here-strings de PowerShell de un comando: su texto se devuelve aparte y una palabra
- * simple ocupa su lugar, así las comillas de dentro no mueven cómo se tokeniza el resto. Uno sin cerrar
- * llega hasta el final del comando.
+ * Cuts the terminated PowerShell here-strings (`@'…'@`, `@"…"@`) out of a PowerShell command: each one's text and
+ * the offset of its opener are returned apart and a numbered plain word (`POWERSHELLHEREDATA0`) stands in its
+ * place, so the quotes inside cannot shift where the rest is tokenized. An opener counts only at the start of a
+ * token and on a line of its own; an unterminated one is left in the text, so it hides nothing after it.
+ * @es Recorta los here-strings de PowerShell terminados de una orden de PowerShell: se devuelven aparte su texto
+ * y el offset de su apertura, y una palabra numerada ocupa su lugar. Una apertura cuenta solo al inicio de un
+ * token y sola en su línea; una sin cerrar se deja en el texto, así no esconde nada de lo que sigue.
  */
 export function extractPowerShellHereStrings(command) {
   const scripts = [];
@@ -406,59 +539,23 @@ export function extractPowerShellHereStrings(command) {
 
   while (index < command.length) {
     const quote = POWERSHELL_HERE_STRING_QUOTES.find((candidate) => command.startsWith(`@${candidate}`, index));
-    const bodyStart = quote === undefined ? -1 : command.indexOf('\n', index + 2);
+    const startsAToken = index === 0 || BEFORE_A_POWERSHELL_TOKEN.includes(command[index - 1]);
+    const bodyStart = quote === undefined || !startsAToken ? -1 : command.indexOf('\n', index + 2);
     const opensOnItsOwnLine = bodyStart !== -1 && command.slice(index + 2, bodyStart).trim() === '';
+    const closing = opensOnItsOwnLine ? command.indexOf(`\n${quote}@`, bodyStart) : -1;
 
-    if (!opensOnItsOwnLine) {
+    if (closing === -1) {
       text += command[index];
       index += 1;
       continue;
     }
 
-    const closing = command.indexOf(`\n${quote}@`, bodyStart);
-    const end = closing === -1 ? command.length : closing;
-
-    scripts.push(command.slice(bodyStart + 1, end));
-    text += POWERSHELL_PLACEHOLDER;
-    index = closing === -1 ? command.length : closing + 3;
+    scripts.push({ text: command.slice(bodyStart + 1, closing), offset: index, code: AT_SIGN });
+    text += `${POWERSHELL_PLACEHOLDER}${scripts.length - 1}`;
+    index = closing + 3;
   }
 
   return { text, scripts };
-}
-
-/** The trailing path segment of a program token, lowercased and without a `.exe` tail. @es Último segmento de ruta del programa, en minúsculas y sin `.exe`. */
-function programName(raw) {
-  let start = 0;
-
-  for (let index = 0; index < raw.length; index += 1) {
-    if (raw[index] === '/' || raw[index] === BACKSLASH) start = index + 1;
-  }
-
-  const name = raw.slice(start).toLowerCase();
-
-  return name.endsWith('.exe') ? name.slice(0, -4) : name;
-}
-
-/** `FOO=bar node …` — a leading assignment is a prefix, not the program. @es Una asignación inicial es prefijo, no el programa. */
-function isEnvironmentAssignment(token) {
-  if (token.quoted) return false;
-
-  const equals = token.raw.indexOf('=');
-
-  if (equals <= 0) return false;
-
-  for (let index = 0; index < equals; index += 1) {
-    const character = token.raw[index];
-    const isWordCharacter =
-      (character >= 'a' && character <= 'z') ||
-      (character >= 'A' && character <= 'Z') ||
-      (character >= '0' && character <= '9') ||
-      character === '_';
-
-    if (!isWordCharacter) return false;
-  }
-
-  return true;
 }
 
 /**
@@ -501,36 +598,6 @@ export function evaluateFlag(token) {
 
   return undefined;
 }
-
-/**
- * Node options that take their value from the NEXT word (`node -r ./hook.js script.mjs`). Without this the
- * value would be read as the script path and end node's options one word too early, so a later `-e` would
- * go unexamined. Options written with `=` (`--input-type=module`) carry their value inline and need no entry.
- * The list is the documented value-taking options; a value option missing from it ends the scan early,
- * which can only MISS a refusal and never invent one.
- *
- * @es Opciones de node cuyo valor es la palabra SIGUIENTE. Sin esto el valor se leería como la ruta del
- * script y las opciones de node acabarían una palabra antes, dejando sin examinar un `-e` posterior. Las
- * escritas con `=` llevan el valor dentro. Una opción con valor que falte aquí corta el escaneo antes:
- * solo puede OMITIR un rechazo, nunca inventarlo.
- */
-const NODE_OPTIONS_TAKING_A_VALUE = new Set([
-  '-r',
-  '--require',
-  '--import',
-  '--loader',
-  '--experimental-loader',
-  '-C',
-  '--conditions',
-  '--input-type',
-  '--env-file',
-  '--title',
-  '--stack-trace-limit',
-  '--disable-warning',
-  '--watch-path',
-  '--test-name-pattern',
-  '--inspect-port',
-]);
 
 /**
  * Whether a word ends node's own options. Node stops parsing options at the first word that is not one
@@ -752,37 +819,105 @@ function inspectInterpreter(program, name, words) {
 }
 
 /**
- * Interpreters that run a script read from standard input, and whether they are shell-like (their `>` is a
- * redirection). @es Intérpretes que ejecutan un script leído de la entrada estándar, y si son tipo shell
- * (su `>` es una redirección).
+ * The literal text a command writes to its standard output: a PowerShell here-string standing alone as a
+ * statement (`@'…'@ | node -`). @es El texto literal que una orden escribe en su salida estándar: un here-string
+ * de PowerShell solo como sentencia.
  */
-const SHELL_LIKE_INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'dash', 'pwsh', 'powershell']);
-const STDIN_INTERPRETERS = new Set([...SHELL_LIKE_INTERPRETERS, 'node', 'nodejs', 'python', 'python3']);
+function literalOutputOf(command, powerShellScripts) {
+  const word = command[0];
+
+  if (command.length !== 1 || !word.raw.startsWith(POWERSHELL_PLACEHOLDER)) return [];
+
+  const script = powerShellScripts[Number(word.raw.slice(POWERSHELL_PLACEHOLDER.length))];
+
+  return script === undefined ? [] : [{ text: script.text, source: 'PowerShell here-string', offset: script.offset, code: script.code }];
+}
 
 /**
- * The refusal for a script that an interpreter reads from standard input (a heredoc body, a here-string
- * word, or a PowerShell here-string) and that writes a file; `undefined` when the invocation reads its
- * script from elsewhere (a script path, `-e`, `-c`) or the script does not write.
- * @es El rechazo para un script que un intérprete lee de la entrada estándar (cuerpo de heredoc, palabra
- * de here-string o here-string de PowerShell) y que escribe un fichero; `undefined` si la invocación lee
- * su script de otro sitio (ruta, `-e`, `-c`) o el script no escribe.
+ * Every text that reaches a command's standard input: its own heredoc or here-string, else whatever flows down
+ * the pipe into it, a heredoc fed to the command before (`cat <<EOF | node -`) included.
+ * @es Cada texto que llega a la entrada estándar de una orden: su propio heredoc o here-string, si no lo que baja
+ * por la tubería, incluido el heredoc de la orden anterior.
  */
-function inspectStdinScript(program, name, words, heredocs, powerShellScripts) {
-  const readsStandardInput = words.every((word) => word.hereString || word.raw === '-' || isOptionWord(word));
+function stdinTexts(command, powerShellScripts) {
+  if (command.inputs.length > 0) return command.inputs;
 
-  if (!readsStandardInput) return undefined;
+  return command.upstream.flatMap((before) => [...stdinTexts(before, powerShellScripts), ...literalOutputOf(before, powerShellScripts)]);
+}
 
-  const sources = [
-    ...heredocs.map((text) => ({ text, source: 'heredoc' })),
-    ...words.filter((word) => word.hereString).map((word) => ({ text: word.raw, source: 'here-string' })),
-    ...powerShellScripts.map((text) => ({ text, source: 'PowerShell here-string' }))
-  ];
+/** Redirection targets that are no file. @es Destinos de redirección que no son un fichero. */
+const NON_FILE_SINKS = new Set(['/dev/null', '/dev/stderr', '/dev/stdout', '$null', 'nul']);
 
-  for (const { text, source } of sources) {
-    const evidence = writeEvidence(text, { shellLike: SHELL_LIKE_INTERPRETERS.has(name) });
+/** Whether a redirection writes into a file: an output one, not a descriptor copy, not a sink, not an arrow `->`. @es Si una redirección escribe en un fichero. */
+function writesIntoFile(redirection) {
+  if (!redirection.raw.includes('>') || redirection.afterDash || redirection.target === undefined) return false;
+
+  const target = redirection.target.raw;
+  const descriptorCopy = redirection.raw.endsWith('&') && (target === '-' || [...target].every((digit) => digit >= '0' && digit <= '9'));
+
+  return !descriptorCopy && !NON_FILE_SINKS.has(target.toLowerCase());
+}
+
+/** Whether a `sed` option edits files in place. @es Si una opción de `sed` edita ficheros en su sitio. */
+const editsInPlace = (word) => isOptionWord(word) && (word.raw === '--in-place' || word.raw.startsWith('--in-place=') || (word.raw[1] !== '-' && word.raw.includes('i')));
+
+/**
+ * The reason a SHELL script writes a file, read with this module's own tokenizer, so quotes, comments, heredoc
+ * bodies and `[[ … ]]` / `(( … ))` comparisons are what the shell makes of them: a redirection into a file, a
+ * `cp`, a `tee` with a file, a `sed -i`, or a nested interpreter fed a script that writes.
+ * @es La razón por la que un script de SHELL escribe un fichero, leída con el propio tokenizador de este módulo:
+ * una redirección a un fichero, un `cp`, un `tee` con fichero, un `sed -i`, o un intérprete anidado al que se le
+ * entrega un script que escribe.
+ */
+function shellScriptWrites(text, family) {
+  const nested = inspectCommand(text, { toolName: family.powershell ? 'PowerShell' : 'Bash', delegated: true });
+
+  if (nested?.kind === 'script-write') return `feeds ${nested.flag} a script that writes a file`;
+
+  for (const command of invocations(tokenize(text))) {
+    const comparison = command.some((word) => !word.quoted && word.raw === '[[');
+    const redirection = comparison ? undefined : command.redirects.find(writesIntoFile);
+
+    if (redirection !== undefined) return `redirects output into a file (${redirection.raw} ${redirection.target.raw})`;
+
+    const at = programIndex(command, 0);
+
+    if (at === -1) continue;
+
+    const name = programName(command[at].raw);
+    const words = command.slice(at + 1);
+
+    if (name === 'cp') return 'calls cp';
+    if (name === 'tee' && words.some((word) => !isOptionWord(word) && !NON_FILE_SINKS.has(word.raw.toLowerCase()))) return 'calls tee with a file';
+    if (name === 'sed' && words.some(editsInPlace)) return 'calls sed -i';
+  }
+
+  return undefined;
+}
+
+/**
+ * The refusal for a script that an interpreter reads from standard input and that writes a file; `undefined`
+ * when the invocation takes its script from elsewhere (a script path, `-e`, `-c`) or no stdin text writes. The
+ * program is found past its launchers (`env`, `timeout 5`, `npx`), its family by base name, and the finding
+ * points at the real opener of the text (the `<<`, the `<<<`, the `@` of a PowerShell here-string).
+ * @es El rechazo para un script que un intérprete lee de la entrada estándar y que escribe un fichero; el
+ * programa se busca tras sus lanzadores, su familia por nombre base, y el hallazgo señala la apertura real del texto.
+ */
+function inspectStdinScript(command, position, powerShellScripts) {
+  const at = programIndex(command, position);
+
+  if (at === -1) return undefined;
+
+  const name = programName(command[at].raw);
+  const family = familyOf(name);
+
+  if (family === undefined || !readsScriptFromStdin(family, command.slice(at + 1))) return undefined;
+
+  for (const input of stdinTexts(command, powerShellScripts)) {
+    const evidence = writeEvidence(input.text) ?? (family.shellLike ? shellScriptWrites(input.text, family) : undefined);
 
     if (evidence !== undefined) {
-      return { kind: 'script-write', program: program.raw, flag: `${name} + ${source}`, payload: text, findings: [{ offset: 0, code: 0x3c, kind: `the ${source} fed to ${name} ${evidence}` }] };
+      return { kind: 'script-write', program: command[at].raw, flag: `${name} + ${input.source}`, payload: input.text, findings: [{ offset: input.offset, code: input.code, kind: `the ${input.source} fed to ${name} ${evidence}` }] };
     }
   }
 
@@ -811,9 +946,11 @@ export function inspectCommand(command, { toolName, delegated = false } = {}) {
   // llega tal cual, así que la regla del switch es sólo de Bash.
   const msysTranslates = toolName !== 'PowerShell';
 
-  // The script-writing rule is for a DELEGATED agent only; its PowerShell here-strings are cut out first.
-  // @es La regla de scripts que escriben es solo para un agente DELEGADO; antes se recortan sus here-strings de PowerShell.
-  const prepared = delegated ? extractPowerShellHereStrings(command) : { text: command, scripts: [] };
+  // The script-writing rule is for a DELEGATED agent only. PowerShell here-strings are PowerShell syntax, so they
+  // are cut out of a PowerShell command only; a Bash command's `@'` is Bash's own quote.
+  // @es La regla de scripts que escriben es solo para un agente DELEGADO. Los here-strings de PowerShell son
+  // sintaxis de PowerShell: se recortan solo de una orden de PowerShell; el `@'` de Bash es una comilla de Bash.
+  const prepared = delegated && toolName === 'PowerShell' ? extractPowerShellHereStrings(command) : { text: command, scripts: [] };
 
   for (const invocation of invocations(tokenize(prepared.text))) {
     let position = 0;
@@ -862,8 +999,8 @@ export function inspectCommand(command, { toolName, delegated = false } = {}) {
     // heredoc dropped a backslash of its own guard source).
     // @es Un script que un intérprete lee de la entrada estándar y que ESCRIBE UN FICHERO: la misma familia.
     // El fichero se escribe por una capa de shell que las herramientas Write y Edit no usan.
-    if (delegated && STDIN_INTERPRETERS.has(name)) {
-      const scriptRefusal = inspectStdinScript(program, name, invocation.slice(position + 1), invocation.heredocs, prepared.scripts);
+    if (delegated) {
+      const scriptRefusal = inspectStdinScript(invocation, position, prepared.scripts);
 
       if (scriptRefusal !== undefined) return scriptRefusal;
     }

@@ -94,9 +94,36 @@ function calledMarker(text) {
   return CALL_MARKERS.find((marker) => (marker.endsWith('*') ? callSites(text, marker.slice(0, -1), true) : callSites(text, marker, false)).length > 0);
 }
 
+/**
+ * `text` with the inside of every one-line quoted run blanked, so a word inside a message is never a command word.
+ * A quote with no partner on its line is left as it is, so it blanks nothing after it.
+ * @es `text` con el interior de cada tramo entre comillas de una línea en blanco; una comilla sin pareja en su
+ * línea se deja como está, así no blanquea nada de lo que sigue.
+ */
+function withoutQuotedText(text) {
+  let result = '';
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    const newline = text.indexOf('\n', index);
+    const lineEnd = newline === -1 ? text.length : newline;
+    const close = character === "'" || character === '"' ? text.indexOf(character, index + 1) : -1;
+
+    if (close === -1 || close > lineEnd) {
+      result += character;
+      continue;
+    }
+
+    result += `${character}${' '.repeat(close - index - 1)}${character}`;
+    index = close;
+  }
+
+  return result;
+}
+
 /** The first writing cmdlet used as a command word in `text`, or `undefined`. @es El primer cmdlet que escribe usado como palabra de orden. */
 function usedCmdlet(text) {
-  const lower = text.toLowerCase();
+  const lower = withoutQuotedText(text).toLowerCase();
 
   return CMDLET_MARKERS.find((cmdlet) => {
     const wanted = cmdlet.toLowerCase();

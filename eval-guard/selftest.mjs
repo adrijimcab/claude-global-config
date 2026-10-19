@@ -27,6 +27,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { digestInput } from '../hook-state/journal.mjs';
+import { extractPowerShellHereStrings } from './detect.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
@@ -65,22 +66,130 @@ const delegated = (command, tool = 'Bash') =>
 
 const lines = (...parts) => parts.join('\n');
 
-// A file-writing script fed to an interpreter through a shell, one case per write marker.
-// @es Un script que escribe un fichero entregado a un intérprete por un shell, un caso por marcador de escritura.
-// The list is written out here on purpose: it is the specification, not a copy of the module's own list.
-// @es La lista está escrita aquí a propósito: es la especificación, no una copia de la lista del módulo.
-const WRITE_MARKERS = ['writeFile', 'appendFile', 'fs.write', 'createWriteStream', 'write_text', 'write_bytes', 'Set-Content', 'Add-Content', 'Out-File', 'WriteAllText'];
-const markerCases = WRITE_MARKERS.map((marker) => ['deny', delegated(lines("node - <<'EOF'", `target.${marker}('out.txt', data);`, 'EOF')), `a delegated heredoc script calling ${marker} is refused`, 'writes a file']);
+// A file-writing script fed to an interpreter through a shell, one case per write marker, each written as the
+// CALL its language makes. The lists are written out here on purpose: they are the specification, not a copy of
+// the module's own lists.
+// @es Un script que escribe un fichero entregado a un intérprete por un shell, un caso por marcador, cada uno
+// escrito como la LLAMADA de su lenguaje. Las listas están escritas aquí a propósito: son la especificación.
+const CALL_MARKERS = ['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'createWriteStream', 'writeSync', 'fs.write', 'copyFileSync', 'renameSync', 'cpSync', 'write_text', 'write_bytes', 'shutil.copy', 'shutil.copy2', 'shutil.copyfile', 'shutil.copytree', 'os.replace', 'WriteAllText'];
+const CMDLETS = ['Set-Content', 'Add-Content', 'Out-File', 'set-content'];
+const markerCases = [
+  ...CALL_MARKERS.map((marker) => ['deny', delegated(lines("node - <<'EOF'", `${marker}('out.txt', data);`, 'EOF')), `a delegated heredoc script calling ${marker}( is refused`, 'writes a file']),
+  ...CALL_MARKERS.map((marker) => ['deny', delegated(lines("python3 - <<'EOF'", `target.${marker} ('out.txt', data)`, 'EOF')), `a delegated heredoc script calling .${marker} ( is refused`, 'writes a file']),
+  ...CMDLETS.map((cmdlet) => ['deny', delegated(lines("pwsh - <<'EOF'", `'x' | ${cmdlet} out.txt`, 'EOF')), `a delegated pwsh script running ${cmdlet} is refused`, 'writes a file'])
+];
 
 const SHELL_LIKE = ['sh', 'bash', 'zsh', 'dash', 'pwsh', 'powershell'];
-const NOT_SHELL_LIKE = ['node', 'nodejs', 'python', 'python3'];
+const NOT_SHELL_LIKE = ['node', 'nodejs', 'tsx', 'python', 'python3', 'python3.12', 'py', 'perl', 'ruby', 'deno', 'bun'];
 
 // Every interpreter is refused when its stdin script writes; only the shell-like ones read `>` as a redirection.
 // @es Todo intérprete se rechaza si su script de stdin escribe; solo los tipo shell leen `>` como redirección.
 const interpreterCases = [
   ...[...SHELL_LIKE, ...NOT_SHELL_LIKE].map((name) => ['deny', delegated(lines(`${name} - <<'EOF'`, 'Set-Content out.txt', 'EOF')), `${name} reading a writing script from a heredoc is refused`, 'writes a file']),
+  ...[...SHELL_LIKE, ...NOT_SHELL_LIKE].map((name) => ['deny', delegated(lines(`/usr/bin/${name}.exe <<'EOF'`, 'Set-Content out.txt', 'EOF')), `${name} named by a path with .exe is matched by base name`, 'writes a file']),
   ...SHELL_LIKE.map((name) => ['deny', delegated(lines(`${name} - <<'EOF'`, 'echo x > out.txt', 'EOF')), `${name}: > in its heredoc script is a redirection`, 'redirects output']),
   ...NOT_SHELL_LIKE.map((name) => ['allow', delegated(lines(`${name} - <<'EOF'`, 'print(1 > 0)', 'EOF')), `${name}: > in its heredoc script is a comparison, not a redirection`])
+];
+
+const WRITE = "fs.writeFileSync('a.txt', 'x');";
+const at = (command, opener) => `at offset ${command.indexOf(opener)}`;
+
+// E1: an interpreter reads its script from stdin whenever no script path argument is given, whatever else is there.
+// @es E1: un intérprete lee su script de stdin siempre que no recibe una ruta de script, haya lo que haya.
+const stdinShapeCases = [
+  ['deny', delegated(lines("python3 - 2>&1 <<'EOF'", "open('out.txt', 'w').write('x')", 'EOF')), 'a redirection between the interpreter and << stays with the interpreter (2>&1)', 'writes a file'],
+  ['deny', delegated(lines("node - >/dev/null <<'EOF'", WRITE, 'EOF')), 'a >/dev/null between the interpreter and <<', 'writes a file'],
+  ['deny', delegated(lines("node - > log.txt <<'EOF'", WRITE, 'EOF')), 'a > log between the interpreter and <<: the log is no script path', 'writes a file'],
+  ['deny', delegated(lines("node - 0<<'EOF'", WRITE, 'EOF')), 'an fd-numbered heredoc (0<<)', 'writes a file'],
+  ['deny', delegated(lines("node - 0<<<\"fs.writeFileSync('a', 'b')\"")), 'an fd-numbered here-string (0<<<)', 'writes a file'],
+  ['deny', delegated(lines("python3 - arg1 arg2 <<'EOF'", "open('out.txt', 'w')", 'EOF')), 'script arguments after - leave the script on stdin', 'writes a file'],
+  ['deny', delegated(lines("node -r ./hook.js - <<'EOF'", WRITE, 'EOF')), 'an option value (-r ./x) is no script path', 'writes a file'],
+  ['deny', delegated(lines("node --require ./hook.js <<'EOF'", WRITE, 'EOF')), 'a long option value is no script path', 'writes a file'],
+  ['deny', delegated(lines("python3 -W ignore <<'EOF'", "open('o', 'w')", 'EOF')), 'python -W value is no script path', 'writes a file'],
+  ['deny', delegated(lines("bash -o pipefail <<'EOF'", 'echo x > out.txt', 'EOF')), 'bash -o value is no script path', 'writes a file'],
+  ['deny', delegated(lines("bash -s a b <<'EOF'", 'echo x > out.txt', 'EOF')), 'bash -s reads stdin whatever its arguments', 'writes a file'],
+  ['deny', delegated(lines("bash -s -- a b <<'EOF'", 'echo x > out.txt', 'EOF')), 'bash -s -- args reads stdin', 'writes a file'],
+  ['deny', delegated(lines("node -- <<'EOF'", WRITE, 'EOF')), 'a -- with no script path after it is stdin', 'writes a file'],
+  ['deny', delegated(lines("node -- - x <<'EOF'", WRITE, 'EOF')), 'a -- followed by - is stdin', 'writes a file'],
+  ['deny', delegated(lines("node /dev/stdin <<'EOF'", WRITE, 'EOF')), '/dev/stdin as the script is stdin', 'writes a file'],
+  ['deny', delegated(lines("pwsh -NoProfile -Command - <<'EOF'", "'x' | Set-Content o.txt", 'EOF')), 'pwsh -Command - reads stdin', 'writes a file'],
+  ['deny', delegated(lines("deno run - <<'EOF'", WRITE, 'EOF')), 'deno run - reads stdin', 'writes a file'],
+  ['deny', delegated(lines("bun run - <<'EOF'", WRITE, 'EOF')), 'bun run - reads stdin', 'writes a file'],
+  ['deny', delegated(lines("perl -Mstrict - <<'EOF'", "open(my $f, '>', 'o'); copyFileSync('a', 'b');", 'EOF')), 'perl -Mmodule keeps the script on stdin', 'writes a file'],
+  ['deny', delegated(lines("cat <<'EOF' | node -", WRITE, 'EOF')), 'a heredoc piped into an interpreter flows through the pipe', 'writes a file'],
+  ['deny', delegated(lines("cat <<'EOF' | tr a a | node -", WRITE, 'EOF')), 'a heredoc flows through every stage of a pipe', 'writes a file'],
+  ['deny', delegated(lines("cat <<'EOF' |& node -", WRITE, 'EOF')), 'a heredoc piped with |& flows', 'writes a file'],
+  ['deny', delegated(lines("{ node -; } <<'EOF'", WRITE, 'EOF')), 'a heredoc after a brace group is its commands\' stdin', 'writes a file'],
+  ['deny', delegated(lines("( python3 - ) <<'EOF'", "open('o', 'w')", 'EOF')), 'a heredoc after a subshell is its commands\' stdin', 'writes a file'],
+  ['deny', delegated("{ node -; } <<< \"fs.writeFileSync('a', 'b')\""), 'a here-string after a brace group', 'writes a file'],
+  ...['env', 'env FOO=1 -u BAR', 'command', 'exec', 'time', 'time -p', 'timeout 5', 'timeout -s KILL 5', 'nice', 'nice -n 5', 'npx', 'npx --yes', 'env FOO=1 timeout 5'].map((wrapper) => ['deny', delegated(lines(`${wrapper} node - <<'EOF'`, WRITE, 'EOF')), `the launcher "${wrapper}" is unwrapped to node`, 'writes a file']),
+  ['deny', delegated(lines("npx tsx - <<'EOF'", WRITE, 'EOF')), 'npx tsx - is tsx reading stdin', 'writes a file'],
+  ['deny', delegated(lines("python3 - 2>&1 <<'EOF'", "open('o', 'w')", 'EOF')), 'the finding points at the real << opener', `${at(lines("python3 - 2>&1 <<'EOF'"), '<<')} (U+003C)`],
+  ['deny', delegated("python3 - <<< \"open('o', 'w')\""), 'the finding points at the real <<< opener', `${at("python3 - <<< \"open('o', 'w')\"", '<<<')} (U+003C)`],
+  ['deny', delegated(lines("$x = 1; @'", WRITE, "'@ | node -"), 'PowerShell'), 'the finding points at the @ of a PowerShell here-string', `${at("$x = 1; @'", '@')} (U+0040)`]
+];
+
+// E1 and E5: the shapes that take the script from elsewhere, or attribute no stdin, still pass.
+// @es E1 y E5: las formas que toman el script de otro sitio, o no atribuyen stdin, siguen pasando.
+const stdinElsewhereCases = [
+  ['allow', delegated(lines("node <<'EOF' tool.mjs", WRITE, 'EOF')), 'the words after the delimiter stay the command\'s: tool.mjs is its script'],
+  ['allow', delegated(lines("python3 tool.py 2>&1 <<'EOF'", "open('o', 'w')", 'EOF')), 'a script path before the redirection'],
+  ['allow', delegated(lines("node -e \"console.log(1)\" <<'EOF'", WRITE, 'EOF')), 'node -e: the heredoc is data'],
+  ['allow', delegated(lines("python3 -c 'print(1)' <<'EOF'", "open('o', 'w')", 'EOF')), 'python -c: the heredoc is data'],
+  ['allow', delegated(lines("python3 -m tool <<'EOF'", "open('o', 'w')", 'EOF')), 'python -m: the heredoc is data'],
+  ['allow', delegated(lines("bash -c 'cat' <<'EOF'", 'echo x > out.txt', 'EOF')), 'bash -c: the heredoc is data'],
+  ['allow', delegated(lines("node -- tool.mjs <<'EOF'", WRITE, 'EOF')), 'a script path after --'],
+  ['allow', delegated(lines("deno run tool.ts <<'EOF'", WRITE, 'EOF')), 'deno run with a script path'],
+  ['allow', delegated(lines("deno eval 'console.log(1)' <<'EOF'", WRITE, 'EOF')), 'deno eval: the heredoc is data'],
+  ['allow', delegated(lines("pwsh -File tool.ps1 <<'EOF'", "'x' | Set-Content o.txt", 'EOF')), 'pwsh -File path: the heredoc is data'],
+  ['allow', delegated(lines("command -v node <<'EOF'", WRITE, 'EOF')), 'command -v runs nothing'],
+  ['allow', delegated(lines("cat <<'EOF' | node tool.mjs", WRITE, 'EOF')), 'a piped heredoc into a script FILE run is data'],
+  ['allow', delegated(lines("cat <<'EOF' || node -", WRITE, 'EOF')), '|| is no pipe: nothing flows into node'],
+  ['allow', delegated(lines("@'", WRITE, "'@ | Out-Host; pwsh -NoProfile -Command Get-Date"), 'PowerShell'), 'a here-string is attributed only to the command it is piped into'],
+  ['allow', delegated(lines("$s = @'", WRITE, "'@", 'node tool.mjs'), 'PowerShell'), 'an assigned here-string feeds no later interpreter']
+];
+
+// E3: false refusals. Markers count only as call sites; `>` only as a shell redirection into a file.
+// @es E3: rechazos falsos. Los marcadores cuentan solo como llamadas; `>` solo como redirección de shell a un fichero.
+const falseRefusalCases = [
+  ['allow', delegated(lines("node - <<'EOF'", "console.log('remember writeFileSync and Set-Content');", 'EOF')), 'a marker inside a message is no call'],
+  ['allow', delegated(lines("node - <<'EOF'", 'myWriteFile(x); rewriteFileSync(y);', 'EOF')), 'a longer name is no call of the marker'],
+  ['allow', delegated(lines("pwsh - <<'EOF'", 'Get-Content in.txt; Write-Host "use Set-Content later"', 'EOF')), 'a cmdlet name inside a string is no command'],
+  ['allow', delegated(lines("bash <<'EOF'", "awk '$1 > 5' data.txt", "jq '.a > 1' x.json", 'EOF')), 'a > inside awk and jq programs'],
+  ['allow', delegated(lines("bash <<'EOF'", 'if [[ "$a" > "$b" ]]; then echo yes; fi', '(( n > 3 )) && echo big', 'EOF')), 'a > inside [[ ]] and (( ))'],
+  ['allow', delegated(lines("bash <<'EOF'", '# write > out.txt later', 'echo "a > b"', "echo 'x -> y'", 'echo a->b', 'EOF')), 'a > in a comment, in quotes and in an arrow'],
+  ['allow', delegated(lines("bash <<'EOF'", 'echo x > /dev/stderr', 'echo y >/dev/stdout', 'echo z >&2', 'echo w &>/dev/null', 'EOF')), 'stderr, stdout and descriptor copies are no files'],
+  ['allow', delegated(lines("pwsh - <<'EOF'", 'Get-Date > $null', 'Get-Date > NUL', 'EOF')), 'PowerShell $null and NUL are no files'],
+  ['allow', delegated(lines("bash <<'EOF'", "awk '$1 > 5' <<'X'", '3 > 2', 'X', 'EOF')), 'a read-only awk heredoc nested in a shell script'],
+  ['allow', delegated(lines("awk '$1 > 5' <<'EOF'", '7', 'EOF')), 'a read-only awk heredoc'],
+  ['allow', delegated(lines("bash <<'EOF'", 'tee < in.txt', 'sed -n p a.txt', 'EOF')), 'tee with no file and sed without -i'],
+  ['deny', delegated(lines("bash <<'EOF'", 'echo x | tee out.txt', 'EOF')), 'tee with a file writes', 'calls tee'],
+  ['deny', delegated(lines("bash <<'EOF'", 'cp a.txt b.txt', 'EOF')), 'cp writes', 'calls cp'],
+  ['deny', delegated(lines("bash <<'EOF'", "sed -i 's/a/b/' f.txt", 'EOF')), 'sed -i writes', 'calls sed -i'],
+  ['deny', delegated(lines("bash <<'EOF'", "sed --in-place 's/a/b/' f.txt", 'EOF')), 'sed --in-place writes', 'calls sed -i'],
+  ['deny', delegated(lines("bash <<'EOF'", 'echo x &> out.txt', 'EOF')), '&> into a file writes', 'redirects output'],
+  ['deny', delegated(lines("bash <<'EOF'", '{ echo x; } > out.txt', 'EOF')), 'a redirection after a brace group writes', 'redirects output'],
+  ['deny', delegated(lines("bash <<'EOF'", "node - <<'X'", WRITE, 'X', 'EOF')), 'a nested heredoc fed to node inside a shell script', 'writes a file']
+];
+
+// E2: python open with nested parens, a method open, and the new markers.
+// @es E2: open de python con paréntesis anidados, un open de método y los marcadores nuevos.
+const openCases = [
+  ['deny', delegated(lines("python3 - <<'EOF'", "open(os.path.join(root, 'b'), 'w').write(x)", 'EOF')), 'open with a nested-paren first argument', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "open(f'{root}/x,y', 'a')", 'EOF')), 'open whose first argument holds a comma in quotes', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "Path(p).open('w').write(x)", 'EOF')), 'Path(p).open(\'w\')', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "Path(p).open(mode='x')", 'EOF')), 'a method open with mode=', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "io.open(p, 'w')", 'EOF')), 'io.open takes the mode second', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "open(p, encoding='utf8', mode='w')", 'EOF')), 'mode= after another keyword', 'writes a file'],
+  ['allow', delegated(lines("python3 - <<'EOF'", "Path(p).open().read(); Path(p).open('r'); io.open('w.txt', 'r')", 'EOF')), 'read-only method opens'],
+  ['allow', delegated(lines("python3 - <<'EOF'", "open(os.path.join(root, 'w'), 'r')", 'EOF')), 'a w inside the nested path is no mode']
+];
+
+// E4: PowerShell here-strings are PowerShell syntax only, opened at a token start, never swallowing an unterminated rest.
+// @es E4: los here-strings de PowerShell son solo sintaxis de PowerShell, abiertos al inicio de un token, sin tragarse un resto sin cerrar.
+const powerShellCases = [
+  ['deny', delegated(lines('echo "@\'', '"', "node - <<'EOF'", WRITE, 'EOF')), 'a Bash command\'s @\' is not cut as a PowerShell here-string', 'writes a file'],
+  ['allow', delegated(lines('Write-Output "x@\'', WRITE, '\'@"', 'node -'), 'PowerShell'), 'an @\' inside a token opens no here-string']
 ];
 
 const cases = [
@@ -104,6 +213,11 @@ const cases = [
   ['deny', delegated(lines('@"', "'x' | Set-Content out.txt", '"@ | pwsh -'), 'PowerShell'), 'a PowerShell @-doublequote here-string piped to pwsh', 'writes a file'],
   ...markerCases,
   ...interpreterCases,
+  ...stdinShapeCases,
+  ...stdinElsewhereCases,
+  ...falseRefusalCases,
+  ...openCases,
+  ...powerShellCases,
   ['deny', delegated(lines("python3 - <<'EOF'", "open(path, 'xb').write(data)", 'EOF')), "python heredoc with an exclusive-create mode (xb)", 'writes a file'],
   ['deny', delegated(lines('grep "@\'" notes.txt', "node - <<'EOF'", "fs.writeFileSync('a', 'b');", 'EOF')), 'an @-quote in the middle of a line is no here-string and hides nothing after it', 'writes a file'],
   ['allow', delegated(lines("bash <<'EOF'", 'echo x >>/dev/null', 'echo y > /dev/null', 'EOF')), 'redirections to /dev/null, appended or spaced, are not file writes'],
@@ -375,5 +489,27 @@ for (const [expected, input, label, fragment] of cases) {
   }
 }
 
-console.log(`\n${cases.length - failures}/${cases.length} passed`);
+// --- E4: the PowerShell here-string cut, read directly: an unterminated opener and a mid-token one stay text.
+// @es E4: el recorte de here-strings de PowerShell, leído directamente: una apertura sin cerrar o dentro de un token sigue siendo texto.
+let directChecks = 0;
+
+{
+  const unterminated = lines("Write-Output @'", 'never closed', 'node -');
+  const midToken = lines("x@'", 'body', "'@");
+  const closed = lines("$a = @'", 'body', "'@ | node -");
+  const results = [
+    [JSON.stringify(extractPowerShellHereStrings(unterminated)) === JSON.stringify({ text: unterminated, scripts: [] }), 'an unterminated opener is left in the text, hiding nothing'],
+    [JSON.stringify(extractPowerShellHereStrings(midToken)) === JSON.stringify({ text: midToken, scripts: [] }), 'an opener inside a token is no here-string'],
+    [JSON.stringify(extractPowerShellHereStrings(closed)) === JSON.stringify({ text: '$a = POWERSHELLHEREDATA0 | node -', scripts: [{ text: 'body', offset: 5, code: 0x40 }] }), 'a terminated one is cut with its offset and code point']
+  ];
+
+  for (const [ok, label] of results) {
+    directChecks += 1;
+    if (!ok) failures += 1;
+
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  }
+}
+
+console.log(`\n${cases.length + directChecks - failures}/${cases.length + directChecks} passed`);
 process.exit(failures === 0 ? 0 : 1);
