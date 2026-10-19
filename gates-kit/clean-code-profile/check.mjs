@@ -3,14 +3,19 @@
  * The clean-code profile checker: `node check.mjs <project root> [--stack angular|node] [--strict]`. For every
  * gate of the profile it reports whether the project has it ENFORCED on its landing path, CONFIGURED-ONLY or
  * ABSENT (or UNMEASURED when the tool that answers could not run), each with the evidence that decided it: the
- * file and line, the root that reaches it, what ESLint or the compiler answered. It reads, never writes.
- * Exit: 0 the report was produced; 1 with `--strict` when some gate is not enforced; 2 nothing was measured.
+ * file and line, the root that reaches it, what ESLint or the compiler answered. It writes no file, but it is not
+ * a passive reader: it runs the project's own installed tools (ESLint, the compiler, and knip, which loads a
+ * `knip.ts` or `knip.js` as code and may run for up to 300 s) and loads a dependency-cruiser config written as
+ * code, so it executes the project's code; run it only on a project you trust. Exit: 0 the report was produced; 1 with `--strict` when some gate is not enforced; 2 nothing was measured.
  *
  * @es El checker del perfil de código limpio: `node check.mjs <raíz del proyecto> [--stack angular|node]
  * [--strict]`. Para cada gate del perfil informa si el proyecto lo tiene APLICADO en su camino de aterrizaje,
  * SOLO-CONFIGURADO o AUSENTE (o SIN-MEDIR si la herramienta que responde no pudo correr), cada uno con la
  * evidencia que lo decidió: fichero y línea, la raíz que lo alcanza, lo que respondió ESLint o el compilador.
- * Lee, nunca escribe. Salida: 0 se produjo el informe; 1 con `--strict` si algún gate no está aplicado; 2 no
+ * No escribe ningún fichero, pero no es un lector pasivo: ejecuta las herramientas instaladas del propio proyecto
+ * (ESLint, el compilador y knip, que carga un `knip.ts` o `knip.js` como código y puede correr hasta 300 s) y
+ * carga una config de dependency-cruiser escrita como código, así que ejecuta código del proyecto; solo debe
+ * ejecutarse sobre un proyecto de confianza. Salida: 0 se produjo el informe; 1 con `--strict` si algún gate no está aplicado; 2 no
  * se midió nada.
  */
 
