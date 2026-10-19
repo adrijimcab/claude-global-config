@@ -181,10 +181,24 @@ const consoleError = console.error;
 
 console.error = (text) => printedErrors.push(String(text).split(' @es ')[0]);
 
-const exits = [await measure.main(['--rubric']), await measure.main(['--rubric', '--rates']), await measure.main(['--rubric', noMarker])];
+// `--only` names no fixture, so a mutant that lets a wrong rubric through still reaches no model call.
+const noFixture = ['--only', 'no-fixture-has-this-id'];
+const exits = [await measure.main(['--rubric', ...noFixture]), await measure.main([...noFixture, '--rubric']), await measure.main([...noFixture, '--rubric', missingRubric])];
 
 console.error = consoleError;
-check('measure: a wrong --rubric exits 2 before any model call, and says why', [exits, printedErrors], [[2, 2, 2], ['--rubric needs the path of a rubric module after it', '--rubric needs the path of a rubric module after it', `the rubric module ${noMarker} exports no MARKER string`]]);
+check('measure: a wrong --rubric exits 2 before any model call, and says why', [exits, printedErrors.slice(0, 2), printedErrors.length, printedErrors[2]?.startsWith(`the rubric module ${missingRubric} cannot be loaded: `)], [[2, 2, 2], ['--rubric needs the path of a rubric module after it', '--rubric needs the path of a rubric module after it'], 3, true]);
+const printedLines = [];
+const consoleLog = console.log;
+
+console.log = (text) => printedLines.push(String(text));
+
+const matrixExit = await measure.main(['--rubric', goodRubric, ...noFixture]);
+const matrixLines = printedLines.splice(0);
+const ratesExit = await measure.main(['--rates', '--runs', '1', '--rubric', goodRubric, ...noFixture]);
+
+console.log = consoleLog;
+check('measure: the matrix view starts and ends with the path of the active rubric', [matrixExit, matrixLines[0], matrixLines.at(-1)?.startsWith(`rubric=${goodRubric} runs=0 `)], [0, `rubric=${goodRubric}`, true]);
+check('measure: --rates names the active rubric and never meets the ship bar without a held-out fixture', [ratesExit, printedLines[0], printedLines.at(-1)], [1, `rubric=${goodRubric}`, `rubric=${goodRubric} cost=$0.0000 ship-bar(held-out set, every run: recall>=90% and precision>=95%)=NOT MET (no held-out fixture in this run)`]);
 check('measure: the held-out prefix', measure.HELD_OUT_PREFIX, 'held-');
 check('measure: a block is read with the marker of the loaded rubric, with its reason', [measure.judgedOf('{"ok": false, "reason": "X-JUDGE: tuteo"}', 'X-JUDGE:'), measure.judgedOf('{"ok": false, "reason": "X-JUDGE: tuteo"}', MARKER), measure.judgedOf('{"ok": true}', 'X-JUDGE:')], [{ verdict: false, reason: 'X-JUDGE: tuteo' }, { verdict: null, reason: '' }, { verdict: true, reason: '' }]);
 check('measure: a reason cites rule 4 by tuteo, usted, a tú form or the rule number', ['VOICE-JUDGE: tuteo in the second line', 'VOICE-JUDGE: an Usted form', 'VOICE-JUDGE: the tú verb', 'VOICE-JUDGE: rule 4, quoted word', 'VOICE-JUDGE: regla 4, la palabra'].map(measure.citesRule4), [true, true, true, true, true]);

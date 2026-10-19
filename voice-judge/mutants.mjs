@@ -96,6 +96,8 @@ const MUTANTS = [
   ['a module that cannot be loaded is not named', MEASURE, '`the rubric module ${file} cannot be loaded: ${error?.message ?? error} @es', '`the rubric cannot be loaded @es'],
   ['a wrong --rubric exits 0', MEASURE, '    return 2;\n', '    return 0;\n'],
   ['a wrong --rubric is not printed', MEASURE, '    console.error(String(error?.message ?? error));\n\n    return 2;', '    return 2;'],
+  ['the active rubric is not printed first', MEASURE, '  console.log(`rubric=${rubric.path}`);\n', ''],
+  ['a run with no held-out fixture meets the ship bar', MEASURE, '    if (!meetsShipBar(held)) ships = false;\n', ''],
   ['the held-out prefix is the tuning one', MEASURE, "HELD_OUT_PREFIX = 'held-'", "HELD_OUT_PREFIX = 'real-'"],
   ['a block reason is dropped', MEASURE, "return { verdict: false, reason: read.reason };", "return { verdict: false, reason: '' };"],
   ['tuteo is not a rule-4 reason', MEASURE, '/tuteo|usted|', '/usted|'],

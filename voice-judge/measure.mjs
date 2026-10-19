@@ -217,7 +217,8 @@ async function rates(fixtures, runs, model, parallel, rubric) {
   }));
 
   const heldOut = fixtures.filter((fixture) => fixture.id.startsWith(HELD_OUT_PREFIX));
-  let ships = heldOut.length > 0;
+  // An empty held-out set meets no bar: `meetsShipBar` scores an empty side 0. @es Un conjunto reservado vacío no alcanza ninguna barra.
+  let ships = true;
 
   for (let run = 0; run < runs; run += 1) {
     const judgedFor = (fixture) => results.get(`${fixture.id}#${run}`);
