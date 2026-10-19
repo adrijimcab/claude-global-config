@@ -505,11 +505,11 @@ check('a fenced block is not the author words', proseOutsideQuotes('a\n```\nlo a
 check('a quote line is not the author words', proseOutsideQuotes('> lo anoto\nok').includes('lo anoto'), false);
 check('guillemets are a quotation', proseOutsideQuotes('la regla «lo anoto» dice').includes('lo anoto'), false);
 check('an opener with no closer stays visible', proseOutsideQuotes('dijo "lo anoto').includes('lo anoto'), true);
-check('a new announced item still blocks', findAnnouncement('Encontré un defecto. Lo anoto en el backlog cuando cierre la tanda.'), 'lo anoto en el backlog');
+check('a new announced item still blocks', findAnnouncement('Encontré un defecto. Lo anoto en el backlog cuando cierre la tanda.'), 'lo anoto');
 
 // --- PHRASE FORMS, not bare verbs. Each FALSE POSITIVE below is a phrase whose dismissal is recorded in
 // --- `state/dismissals.jsonl` (2026-10-11 to 2026-10-18) or reported by the orchestrator on 2026-10-18; each
-// --- TRUE POSITIVE announces a NEW unrecorded item. The verbs «sumo / agrego / anoto / apunto» alone also say
+// --- TRUE POSITIVE announces a NEW unrecorded item. The verbs «sumo / agrego» alone also say
 // --- «I add finished work to a checkpoint» or «I would add it if you ask», and «falta / queda por» also say
 // --- «nothing is missing» or «stays under a threshold».
 // @es FORMAS DE FRASE, no verbos sueltos. Cada FALSO POSITIVO es una frase con descarte registrado en
@@ -519,15 +519,20 @@ const FALSE_POSITIVES = [
   ['adding a finished result to a landing (dismissal of «lo agrego»)', 'Lo agrego al checkpoint-40 en cuanto el worker confirme.'],
   ['a conditional offer to extend a report (dismissal of «lo agrego»)', 'Lo agrego si querés ampliar el esquema del informe.'],
   ['«a lo sumo» is «at most»', 'A lo sumo tarda 200 ms en el peor caso.'],
-  ['noting the item inside a checkpoint (orchestrator report of «lo anoto»)', 'Lo anoto en el checkpoint-42 al aterrizar.'],
   ['«queda por debajo» is a measurement threshold (2 dismissals of «queda por»)', 'El parseo queda por debajo de los 200 ms.'],
   ['«no hace falta hacer nada» says no action is needed (dismissal of «falta hacer»)', 'No hace falta hacer nada mientras el worker termina.'],
   ['nothing left to integrate (dismissal of «pendiente de integrar»)', 'No hay nada pendiente de integrar tras el aterrizaje.'],
   ['«ya no falta integrar» (orchestrator report of «falta integrar»)', 'Ya no falta integrar nada de la tanda.'],
   ['«no hay» in front of a marker', 'No hay pendiente de integrar nada en la tanda.'],
   ['«queda por» followed by a noun, plural', 'Quedan por debajo del umbral dos mediciones.'],
-  ['noting the item inside a checkpoint («apunto»)', 'Lo apunto en el checkpoint-43 al aterrizar.'],
-  ['«lo que queda pendiente» describes an item recorded earlier (a labelled live turn)', 'Lo que queda pendiente, sin apuro: un runner de selftests.']
+  // A negated STATE marker says nothing is pending. The text opens with the negator, so only the start-of-text
+  // rule can void it: no other marker of the list appears in it.
+  // @es Un marcador de ESTADO negado dice que nada está pendiente; el texto abre con el negador, y solo la regla
+  // del inicio del texto puede anularlo.
+  ['a negator at the very start of the text is a negator', 'Nada pendiente de integrar tras el aterrizaje.'],
+  ['«nothing pending» in English', 'No pending tasks for this batch.'],
+  ['«no lo dejo pendiente» says it is closed now', 'No lo dejo pendiente: lo cierro en esta tanda.'],
+  ['«no queda por hacer nada» says nothing is left', 'Ya no queda por hacer nada en la tanda.']
 ];
 const TRUE_POSITIVES = [
   ['I leave an item pending', 'Lo dejo pendiente para la próxima tanda.', 'lo dejo pendiente'],
@@ -537,8 +542,8 @@ const TRUE_POSITIVES = [
   ['I add it to the backlog («sumo»)', 'Lo sumo al backlog cuando cierre.', 'sumo al backlog'],
   ['I add it to the pending list', 'Lo agrego a la lista de pendientes.', 'lo agrego a la lista'],
   ['I add it to the pending list («sumo»)', 'Lo sumo a la lista de pendientes.', 'lo sumo a la lista'],
-  ['I note it as pending', 'Lo anoto como pendiente.', 'lo anoto como pendiente'],
-  ['I note it for later', 'Lo apunto para después.', 'lo apunto para después'],
+  ['I note it as pending', 'Lo anoto como pendiente.', 'lo anoto'],
+  ['I note it for later', 'Lo apunto para después.', 'lo apunto'],
   ['work stays to be done', 'Queda por resolver la migración.', 'queda por'],
   ['an infinitive in -er', 'Queda por hacer el cambio del hook.', 'queda por'],
   ['an infinitive in -ir', 'Queda por definir la ruta.', 'queda por'],
@@ -547,12 +552,54 @@ const TRUE_POSITIVES = [
   ['something is missing to integrate', 'Falta integrar la rama del worker.', 'falta integrar'],
   ['work is pending integration', 'Hay trabajo pendiente de integrar en dos ramas.', 'pendiente de integrar'],
   ['«uno» ends in «no» but negates nothing', 'Es uno pendiente de integrar todavía.', 'pendiente de integrar'],
-  ['a negator at the very start of the text is a negator', 'Nada pendiente de integrar. Queda por resolver la migración.', 'queda por'],
-  ['the second occurrence is not negated even when the first is', 'No falta integrar nada, pero falta integrar la rama del worker.', 'falta integrar']
+  ['the second occurrence is not negated even when the first is', 'No falta integrar nada, pero falta integrar la rama del worker.', 'falta integrar'],
+  // A heading over pending work is still an announcement: nothing in its own sentence or its neighbours
+  // points at a record, and a false positive costs one dismissal where a false negative loses an item.
+  // @es Un encabezado sobre trabajo pendiente sigue siendo un anuncio: nada en su frase ni en sus vecinas apunta a un registro.
+  ['«lo que queda pendiente» as a heading with no record beside it', 'Lo que queda pendiente, sin apuro: un runner de selftests.', 'queda pendiente'],
+  // A negated RECORDING verb says the item is NOT recorded yet: it is still pending.
+  // @es Un verbo de REGISTRO negado dice que el ítem AÚN no está registrado: sigue pendiente.
+  ['«todavía no lo anoto en el backlog» says it is not recorded yet', 'Todavía no lo anoto en el backlog.', 'lo anoto'],
+  ['«aún no paso al backlog» says it is not recorded yet', 'Aún no paso al backlog el defecto del parser.', 'paso al backlog'],
+  // The bare verbs «anoto / apunto»: no dismissal on record justifies narrowing them.
+  // @es Los verbos sueltos «anoto / apunto»: ningún descarte registrado justifica estrecharlos.
+  ['the bare «lo anoto»', 'Lo anoto.', 'lo anoto'],
+  ['the bare «lo apunto»', 'Lo apunto y sigo con la tanda.', 'lo apunto']
 ];
 
 for (const [label, text] of FALSE_POSITIVES) check(`does not fire: ${label}`, findAnnouncement(text), undefined);
 for (const [label, text, marker] of TRUE_POSITIVES) check(`still fires: ${label}`, findAnnouncement(text), marker);
+
+// The word after «queda por», read past the whitespace and markdown around it, enclitic infinitives included.
+// Judged on one sentence, so a line break or a quote mark reaches the word reader untouched.
+// @es La palabra tras «queda por», leída más allá de los espacios y del markdown que la rodean, infinitivos con enclítico incluidos.
+const INFINITIVE_SHAPES = [
+  ['a line break before the infinitive', 'queda por\nresolver la migración', 'queda por'],
+  ['a carriage return before the infinitive', 'queda por\r\nresolver la migración', 'queda por'],
+  ['a tab before the infinitive', 'queda por\tresolver la migración', 'queda por'],
+  ['a carriage return right after the infinitive', 'queda por resolver\r', 'queda por'],
+  ['a bold infinitive', 'queda por **resolver** la migración', 'queda por'],
+  ['an italic infinitive', 'queda por _resolver_ la migración', 'queda por'],
+  ['an infinitive in a code span', 'queda por `resolver` la migración', 'queda por'],
+  ['an em dash right after the infinitive', 'queda por resolver—la migración entera', 'queda por'],
+  ['a slash right after the infinitive', 'queda por integrar/main la rama', 'queda por'],
+  ['a straight quote right after the infinitive', 'queda por resolver" dijo', 'queda por'],
+  ['a closing guillemet right after the infinitive', 'queda por resolver» dijo', 'queda por'],
+  ['a closing curly quote right after the infinitive', 'queda por resolver” dijo', 'queda por'],
+  ['an enclitic infinitive in -arlo', 'queda por revisarlo mañana', 'queda por'],
+  ['an enclitic infinitive in -erla', 'queda por hacerla mañana', 'queda por'],
+  ['an enclitic infinitive in -irlos', 'quedan por definirlos mañana', 'quedan por'],
+  ['an enclitic infinitive in -arse', 'queda por integrarse la rama', 'queda por'],
+  ['an enclitic infinitive in -arle', 'queda por avisarle al dueño', 'queda por'],
+  ['an enclitic infinitive in -arlas', 'quedan por revisarlas mañana', 'quedan por'],
+  ['an enclitic infinitive in -arles', 'queda por avisarles a los dos', 'queda por'],
+  ['an enclitic infinitive in -arme', 'queda por avisarme cuando cierre', 'queda por'],
+  ['an enclitic infinitive in -arte', 'queda por pasarte el informe', 'queda por'],
+  ['an enclitic infinitive in -arnos', 'queda por avisarnos cuando cierre', 'queda por'],
+  ['a noun after the frame still does not fire', 'queda por **debajo** del umbral', undefined]
+];
+
+for (const [label, text, marker] of INFINITIVE_SHAPES) check(`infinitive shape: ${label}`, findPendingMarker(text), marker);
 check('the bare word backlog does not block', findAnnouncement('Revisé el backlog y no cambió nada.'), undefined);
 check('a quoted announcement does not block', findAnnouncement('La regla dice "lo anoto" y la cumplí.'), undefined);
 check('an item already recorded in the same sentence does not block', findAnnouncement('Lo anoto: ya está en el backlog.'), undefined);
@@ -567,7 +614,10 @@ check('findAnnouncement of a non-string is undefined', findAnnouncement(undefine
 {
   const counts = replay();
   check('every labelled false positive of the live journals is judged, 60 of them', counts.allow.total, 60);
-  check('at least 58 of the 60 dismissed refusals are now allowed', counts.allow.allowed >= 58, true);
+  // 57, not 58: the heading «Lo que queda pendiente, sin apuro» (turn 5) fires again by decision, since nothing
+  // beside it points at a record and a false negative would lose an item. @es 57: el encabezado de la vuelta 5
+  // vuelve a disparar por decisión, porque nada a su lado apunta a un registro.
+  check('at least 57 of the 60 dismissed refusals are now allowed', counts.allow.allowed >= 57, true);
   check('all 4 genuine announcements still block', counts.block, { total: 4, blocked: 4 });
 }
 

@@ -33,16 +33,20 @@
  * «lo sumo» (5), «lo agrego» (2), «queda por» (5), «falta hacer», «falta integrar» (2) and «pendiente de
  * integrar» were each a phrase that is NOT a new pending item: finished work added to a checkpoint
  * («lo sumo al checkpoint-37»), a conditional offer, a measurement («queda por debajo de los 200 ms»),
- * a negation («no hace falta hacer nada», «nada pendiente de integrar»). So the verbs «sumo / agrego /
- * anoto / apunto» are markers only with their destination («a la lista», «como pendiente», «en el
- * backlog», «para después»); «queda por» needs an infinitive after it; and a marker preceded by a negator
- * or by «lo que» is a description, not an announcement. «lo dejo pendiente», «queda pendiente» and
- * «quedan pendientes» were added: they announce pending work and none of them fired before.
+ * a negation («no hace falta hacer nada», «nada pendiente de integrar»). So the verbs «sumo / agrego» are
+ * markers only with their destination («a la lista», «como pendiente»); «anoto / apunto» stay bare, since
+ * no dismissal is on record for them; «queda por» needs an infinitive after it; and a negator voids only a
+ * marker that STATES something is pending («queda», «falta», «pendiente»): negating it says nothing is.
+ * A negated RECORDING verb («todavía no lo anoto en el backlog») says the item is not recorded yet, so it
+ * still fires. «lo dejo pendiente», «queda pendiente» and «quedan pendientes» were added: they announce
+ * pending work and none of them fired before.
  * @es FORMAS DE FRASE, NO VERBOS SUELTOS (2026-10-18, por datos): los descartes de `lo sumo`, `lo agrego`,
  * `queda por`, `falta hacer`, `falta integrar` y `pendiente de integrar` eran frases que NO son un ítem
- * pendiente nuevo. Por eso los verbos solo son marcador con su destino, `queda por` pide un infinitivo, y
- * un negador o «lo que» delante vuelve el marcador una descripción. Se añadieron `lo dejo pendiente`,
- * `queda pendiente` y `quedan pendientes`, que anuncian trabajo pendiente y antes no disparaban.
+ * pendiente nuevo. Por eso `sumo / agrego` solo son marcador con su destino; `anoto / apunto` siguen
+ * sueltos, sin descartes registrados; `queda por` pide un infinitivo; y un negador anula solo un marcador
+ * que AFIRMA que algo está pendiente («queda», «falta», «pendiente»). Un verbo de REGISTRO negado («todavía
+ * no lo anoto en el backlog») dice que el ítem aún no está registrado, y sigue disparando. Se añadieron
+ * `lo dejo pendiente`, `queda pendiente` y `quedan pendientes`, que anuncian trabajo pendiente y antes no disparaban.
  *
  * @es Marcadores de trabajo pendiente — la mitad de LOCALIZACIÓN del mecanismo backlog-guard. Localizan
  * un candidato a «queda algo pendiente» en el mensaje final; NO dictaminan que el hallazgo sea real. Un
@@ -67,23 +71,15 @@ export const PENDING_MARKERS = Object.freeze([
   'queda por',
   'quedan por',
   'sin lanzar',
-  // The verbs «anoto / apunto / sumo / agrego» are markers only WITH the destination that makes them a new
-  // pending item. Alone they also say «I add finished work to a checkpoint» («lo sumo al checkpoint-37»,
-  // 3 dismissals), «a lo sumo» (at most) and «I would add it if you ask» (1 dismissal); see the 2026-10-18 note.
-  // @es Los verbos «anoto / apunto / sumo / agrego» son marcador solo CON el destino que los vuelve un ítem
-  // @es pendiente nuevo; solos también dicen «sumo trabajo terminado a un checkpoint», «a lo sumo» y una oferta.
-  'lo anoto como pendiente',
-  'lo anoto en el backlog',
-  'lo anoto para después',
-  'lo anoto para despues',
-  'lo anoto para más adelante',
-  'lo anoto para mas adelante',
-  'lo apunto como pendiente',
-  'lo apunto en el backlog',
-  'lo apunto para después',
-  'lo apunto para despues',
-  'lo apunto para más adelante',
-  'lo apunto para mas adelante',
+  // «anoto / apunto» stay bare: the dismissal log holds no false positive for them.
+  // @es «anoto / apunto» quedan sueltos: el registro de descartes no tiene ningún falso positivo suyo.
+  'lo anoto',
+  'lo apunto',
+  // The verbs «sumo / agrego» are markers only WITH the destination that makes them a new pending item. Alone
+  // they also say «I add finished work to a checkpoint» («lo sumo al checkpoint-37», 3 dismissals), «a lo sumo»
+  // (at most) and «I would add it if you ask» (1 dismissal); see the 2026-10-18 note.
+  // @es Los verbos «sumo / agrego» son marcador solo CON el destino que los vuelve un ítem pendiente nuevo;
+  // @es solos también dicen «sumo trabajo terminado a un checkpoint», «a lo sumo» y una oferta.
   'lo sumo a la lista',
   'lo sumo a pendientes',
   'lo sumo como pendiente',
@@ -153,15 +149,33 @@ const INFINITIVE_FRAMES = Object.freeze(['queda por', 'quedan por']);
 const INFINITIVE_ENDINGS = Object.freeze(['ar', 'er', 'ir']);
 
 /**
- * What may stand right before a marker to turn it into something that is NOT a new announcement. Negators
- * make it its opposite: «no hace falta hacer», «no hay nada pendiente de integrar», «ya no falta integrar».
- * «lo que» turns it into a description of what exists: «Lo que queda pendiente, sin apuro» is a heading over
- * an item recorded earlier (a labelled live turn). The text before the marker must END with one of these
- * (the haystack is lowercase).
- * @es Lo que puede preceder a un marcador para que NO sea un anuncio nuevo. Los negadores lo vuelven su
- * contrario; «lo que» lo vuelve una descripción de lo ya existente. El texto previo debe TERMINAR en uno de estos.
+ * Object pronouns an infinitive may carry attached («revisarlo», «hacerla», «integrarse»). The empty one is
+ * the bare infinitive. @es Pronombres que un infinitivo puede llevar pegados; el vacío es el infinitivo solo.
  */
-const VOIDING_PREFIXES = Object.freeze(['no ', 'nada ', 'no hace ', 'no hay ', 'lo que ']);
+const ENCLITICS = Object.freeze(['', 'lo', 'la', 'los', 'las', 'le', 'les', 'se', 'me', 'te', 'nos']);
+
+/** Markdown emphasis and code marks that may wrap a word. @es Marcas de markdown que pueden envolver una palabra. */
+const WORD_WRAPPERS = '*_`';
+
+/** Characters that end a word: whitespace, punctuation, dashes, the slash, quote marks and markdown wrappers. @es Caracteres que terminan una palabra. */
+const WORD_STOPS = ` \n\r\t.,;:!?()—–/"'«»“”‘’${WORD_WRAPPERS}`;
+
+/**
+ * The start of every marker that STATES something is pending: negating one says nothing is («no hace falta
+ * hacer», «nada pendiente de integrar», «ya no falta integrar», «no pending tasks»). A negated RECORDING
+ * marker is the opposite case and is never voided: «todavía no lo anoto en el backlog» says the item is not
+ * recorded yet, so it is still pending.
+ * @es El comienzo de cada marcador que AFIRMA que algo está pendiente: negarlo dice que nada lo está. Un
+ * marcador de REGISTRO negado es el caso contrario y nunca se anula: «todavía no lo anoto» dice que sigue pendiente.
+ */
+const STATE_MARKER_STARTS = Object.freeze(['queda', 'falta', 'pendiente', 'pending', 'lo dej']);
+
+/**
+ * Negators that, standing right before a STATE marker, turn it into its opposite. The text before the marker
+ * must END with one of these (the haystack is lowercase).
+ * @es Negadores que, justo delante de un marcador de ESTADO, lo vuelven su contrario. El texto previo debe TERMINAR en uno de estos.
+ */
+const VOIDING_PREFIXES = Object.freeze(['no ', 'nada ', 'no hace ', 'no hay ']);
 
 /**
  * Returns the first pending-work marker present in `message`, or `undefined`. Pure, no regex.
@@ -178,20 +192,25 @@ export function findPendingMarker(message) {
 }
 
 /**
- * Whether `marker` appears in `haystack` as an ANNOUNCEMENT: at least one occurrence that no negator
- * precedes and, for the «queda por» frames, that an infinitive follows.
- * @es Si `marker` aparece en `haystack` como ANUNCIO: al menos una aparición que ningún negador precede y,
- * en los marcos «queda por», que un infinitivo sigue.
+ * Whether `marker` appears in `haystack` as an ANNOUNCEMENT: at least one occurrence that is not a negated
+ * STATE marker and, for the «queda por» frames, that an infinitive follows.
+ * @es Si `marker` aparece en `haystack` como ANUNCIO: al menos una aparición que no sea un marcador de ESTADO
+ * negado y, en los marcos «queda por», que un infinitivo sigue.
  */
 function announcesAt(haystack, marker) {
   for (let at = haystack.indexOf(marker); at !== -1; at = haystack.indexOf(marker, at + 1)) {
-    if (!isNegatedBefore(haystack, at) && (!INFINITIVE_FRAMES.includes(marker) || infinitiveFollows(haystack, at + marker.length))) return true;
+    if (!(statesPending(marker) && isNegatedBefore(haystack, at)) && (!INFINITIVE_FRAMES.includes(marker) || infinitiveFollows(haystack, at + marker.length))) return true;
   }
 
   return false;
 }
 
-/** Whether the text right before `at` voids the phrase (a negator or «lo que»). @es Si lo que precede a `at` anula la frase (un negador o «lo que»). */
+/** Whether `marker` states something is pending, so a negator voids it. @es Si `marker` afirma que algo está pendiente, y un negador lo anula. */
+function statesPending(marker) {
+  return STATE_MARKER_STARTS.some((start) => marker.startsWith(start));
+}
+
+/** Whether a negator stands right before `at`. @es Si un negador está justo antes de `at`. */
 function isNegatedBefore(haystack, at) {
   const before = haystack.slice(0, at);
 
@@ -203,17 +222,22 @@ function isNegatedBefore(haystack, at) {
   });
 }
 
-/** Whether the word starting after `from` (spaces skipped) is an infinitive: ends in -ar, -er or -ir. @es Si la palabra que sigue a `from` es un infinitivo: acaba en -ar, -er o -ir. */
+/**
+ * Whether the word starting after `from` is an infinitive, bare or with an attached pronoun: ends in -ar, -er
+ * or -ir, optionally followed by one of `ENCLITICS`. Whitespace and markdown wrappers before it are skipped.
+ * @es Si la palabra que sigue a `from` es un infinitivo, solo o con pronombre pegado. Se saltan los espacios y
+ * las marcas de markdown que la preceden.
+ */
 function infinitiveFollows(haystack, from) {
   let start = from;
 
-  while (haystack[start] === ' ') start += 1;
+  while (start < haystack.length && (haystack[start].trim() === '' || WORD_WRAPPERS.includes(haystack[start]))) start += 1;
 
   let end = start;
 
-  while (end < haystack.length && !' \n\t.,;:!?()'.includes(haystack[end])) end += 1;
+  while (end < haystack.length && !WORD_STOPS.includes(haystack[end])) end += 1;
 
   const word = haystack.slice(start, end);
 
-  return INFINITIVE_ENDINGS.some((ending) => word.endsWith(ending));
+  return INFINITIVE_ENDINGS.some((ending) => ENCLITICS.some((pronoun) => word.endsWith(ending + pronoun)));
 }
