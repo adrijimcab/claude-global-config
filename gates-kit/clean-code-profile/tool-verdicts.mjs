@@ -10,6 +10,8 @@
  * aplica la regla única de `verdict-parts.mjs`. Los números con que comparan vienen de `profile.mjs`, no de aquí.
  */
 
+import { halvesOf } from '../../bilingual-output/message.mjs';
+
 import { AUDIT_LEVELS_AT_LEAST_HIGH, JSCPD } from './profile.mjs';
 import { reach } from './landing-reach.mjs';
 import { forbids, forbidsCycles } from './layering-probe.mjs';
@@ -139,7 +141,11 @@ export function deadCode(gate, facts) {
   else if (configured) evidence.push(ev('knip-script', {}));
   else evidence.push(ev('no-knip', {}));
 
-  if (config !== undefined && config.ignoreEntries === undefined) evidence.push(ev('knip-ignore-unmeasured', { file: relative(facts, config.file), reason: config.reason }));
+  if (config !== undefined && config.ignoreEntries === undefined) {
+    const { en: reasonEn, es: reasonEs } = halvesOf(config.reason);
+
+    evidence.push(ev('knip-ignore-unmeasured', { file: relative(facts, config.file), reasonEn, reasonEs }));
+  }
   if (config?.ignoreEntries > 0) evidence.push(ev('knip-ignore-debt', { count: config.ignoreEntries, file: relative(facts, config.file) }));
 
   return settle({ gate, meets: configured, present: configured, found, evidence: [...evidence, ...landingEvidence(found, 'knip', facts.landing, facts.root)] });

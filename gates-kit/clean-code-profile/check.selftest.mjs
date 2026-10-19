@@ -53,6 +53,11 @@ function check(label, condition) {
   else failures.push(label);
 }
 
+/** How many ` @es ` markers a printed line carries; a one-line bilingual message carries exactly one. @es Cuántas marcas ` @es ` lleva una línea impresa. */
+const esMarkers = (line) => String(line).split(' @es ').length - 1;
+/** The English and Spanish halves of a one-line message. @es Las mitades inglesa y española de un mensaje de una línea. */
+const halves = (line) => { const at = String(line).indexOf(' @es '); return at === -1 ? [String(line), ''] : [String(line).slice(0, at), String(line).slice(at + 5)]; };
+
 /** The strong ESLint answer: every rule of the profile at its limit. @es La respuesta fuerte de ESLint. */
 const STRONG_SCRIPT = {
   complexity: [2, { max: 13 }],
@@ -269,6 +274,13 @@ check('the unreadable-input evidence is bilingual', ['input-unreadable', 'jscpd-
 
   check('a crash of the measuring exits 2 (not measured), never 1 (strict failure)', crashedCode === 2);
   check('a crash reports its reason in one bilingual line', crashed.lines.err.length === 1 && crashed.lines.err[0].includes('boom') && crashed.lines.err[0].includes(' @es '));
+  check('a crash whose reason is English only keeps exactly one @es, the reason in both halves', esMarkers(crashed.lines.err[0]) === 1 && halves(crashed.lines.err[0]).every((half) => half.includes('boom')));
+
+  const bilingualCrash = sink();
+
+  await exitOf([fixture('absent-node')], bilingualCrash, () => { throw new Error('boom @es pum'); });
+  check('a crash whose reason is already bilingual keeps exactly one @es', esMarkers(bilingualCrash.lines.err[0]) === 1);
+  check('...with the English reason in the English half and the Spanish one in the Spanish half', halves(bilingualCrash.lines.err[0])[0].includes('boom') && !halves(bilingualCrash.lines.err[0])[0].includes('pum') && halves(bilingualCrash.lines.err[0])[1].includes('pum') && !halves(bilingualCrash.lines.err[0])[1].includes('boom'));
 
   const strictCrash = sink();
 
@@ -288,6 +300,7 @@ check('the unreadable-input evidence is bilingual', ['input-unreadable', 'jscpd-
 
   check('the command exits 2 when the measuring really crashes (a directory where the CI file is expected)', cli.status === 2);
   check('the crashed command prints a bilingual reason on its error stream', cli.stderr.includes(' @es ') && !cli.stderr.includes('    at '));
+  check('the crashed command prints exactly one @es', esMarkers(cli.stderr) === 1);
 }
 
 // --- knip: a .ts / .js / .jsonc config is asked to knip itself, never parsed as JSON -------------------------------
@@ -373,7 +386,17 @@ check('every knip failure reason is bilingual', ['nothing here', ''].every((text
 
   check('collectFacts hands the injected knip to the config reader (debt reported)', ids(debt).includes('knip-ignore-debt') && debt.evidence.find((entry) => entry.id === 'knip-ignore-debt').params.count === 3);
   check('a measured zero reports neither debt nor "not measured"', !ids(clean).includes('knip-ignore-debt') && !ids(clean).includes('knip-ignore-unmeasured'));
-  check('an ignore debt knip could not report is stated as NOT measured with its reason, never as zero', ids(unmeasured).includes('knip-ignore-unmeasured') && !ids(unmeasured).includes('knip-ignore-debt') && unmeasured.evidence.find((entry) => entry.id === 'knip-ignore-unmeasured').params.reason?.includes('knip said no') === true);
+  /** The printed line of a verdict's "not measured" evidence, or `threw:`. @es La línea impresa de la evidencia "no medido". */
+  const unmeasuredLineOf = (verdict) => { const entry = verdict.evidence.find((item) => item.id === 'knip-ignore-unmeasured'); try { return makeSpeaker(MESSAGES).line(entry.id, entry.params); } catch (error) { return `threw: ${error.message}`; } };
+  const unmeasuredLine = unmeasuredLineOf(unmeasured);
+
+  check('an ignore debt knip could not report is stated as NOT measured with its reason, never as zero', ids(unmeasured).includes('knip-ignore-unmeasured') && !ids(unmeasured).includes('knip-ignore-debt') && unmeasuredLine.includes('knip said no'));
+  check('the knip "not measured" line carries exactly one @es', esMarkers(unmeasuredLine) === 1);
+  check('...with the English reason in the English half and the Spanish one in the Spanish half', halves(unmeasuredLine)[0].includes('knip said no') && !halves(unmeasuredLine)[0].includes('dijo') && halves(unmeasuredLine)[1].includes('knip dijo que no') && !halves(unmeasuredLine)[1].includes('said'));
+
+  const englishOnlyLine = unmeasuredLineOf(await graded({ 'knip.ts': typed }, { error: 'knip timed out' }));
+
+  check('a knip reason in one language only goes into both halves, with exactly one @es', esMarkers(englishOnlyLine) === 1 && halves(englishOnlyLine).every((half) => half.includes('knip timed out')));
   check('a project without any knip config states no ignore debt either way', !ids(await graded({}, undefined)).some((id) => id.startsWith('knip-ignore')));
   check('the knip "not measured" line is bilingual', MESSAGES['knip-ignore-unmeasured']?.en.length > 10 && MESSAGES['knip-ignore-unmeasured']?.es.length > 10);
 }

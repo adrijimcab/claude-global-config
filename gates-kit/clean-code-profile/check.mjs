@@ -18,6 +18,7 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { halvesOf } from '../../bilingual-output/message.mjs';
 import { makeSpeaker } from '../../bilingual-output/speaker.mjs';
 
 import { collectFacts } from './collect-facts.mjs';
@@ -93,7 +94,9 @@ export async function main(argv, speaker = makeSpeaker(MESSAGES), collect = coll
   try {
     return await run(argv, speaker, collect);
   } catch (error) {
-    speaker.complain('crashed', { reason: String(error?.message ?? error) });
+    const { en: reasonEn, es: reasonEs } = halvesOf(error?.message ?? error);
+
+    speaker.complain('crashed', { reasonEn, reasonEs });
 
     return EXIT_NOT_MEASURED;
   }
