@@ -4,14 +4,18 @@
  * is `English. @es Español.` and a multi-line one is its English lines followed by the Spanish lines, each
  * marked `  @es`. A message names its data as `{name}` placeholders, filled from the call's parameters, so
  * the Spanish half cannot drift to say something the English half does not (`messageProblems` compares
- * their placeholders). Values a program parses (exit codes, JSON, keys) never pass through here.
+ * their placeholders). A datum that is itself written in one language (an error reason, say) is passed once
+ * per half, `{reasonEn}` in English and `{reasonEs}` in Spanish, so the line keeps exactly one `@es`.
+ * Values a program parses (exit codes, JSON, keys) never pass through here.
  *
  * @es La forma de la casa de un mensaje de ejecución bilingüe, y la prueba de que una tabla de ellos
  * conserva las dos mitades. Un mensaje es `{ en, es }`; cada mitad es una cadena o un array de líneas.
  * Renderizado, uno de una línea es `English. @es Español.` y uno de varias son sus líneas en inglés seguidas
  * de las españolas, cada una marcada `  @es`. Un mensaje nombra sus datos como marcadores `{nombre}`,
  * rellenados desde los parámetros de la llamada, de modo que la mitad española no pueda decir algo que la
- * inglesa no dice (`messageProblems` compara sus marcadores). Los valores que un programa parsea (códigos
+ * inglesa no dice (`messageProblems` compara sus marcadores). Un dato escrito en un idioma (el motivo de un
+ * error, por ejemplo) se pasa una vez por mitad, `{reasonEn}` en inglés y `{reasonEs}` en español, para que la
+ * línea conserve exactamente un `@es`. Los valores que un programa parsea (códigos
  * de salida, JSON, claves) nunca pasan por aquí.
  */
 
@@ -85,10 +89,38 @@ export function render({ en, es }, params = {}) {
 }
 
 /**
+ * The `{ en, es }` halves of a datum that may already be bilingual (a thrown error's message, say), to pass as
+ * `{xEn}` and `{xEs}`: split at its first ` @es `, or the same text in both halves when it holds none.
+ * @es Las mitades `{ en, es }` de un dato que puede venir ya bilingüe (el mensaje de un error lanzado, por
+ * ejemplo), para pasarlas como `{xEn}` y `{xEs}`: partido en su primer ` @es `, o el mismo texto en ambas
+ * mitades si no lleva ninguno.
+ */
+export function halvesOf(text) {
+  const value = String(text);
+  const at = value.indexOf(' @es ');
+
+  return at === -1 ? { en: value, es: value } : { en: value.slice(0, at), es: value.slice(at + ' @es '.length) };
+}
+
+/**
+ * The data a half names, as a sorted list: a datum that is itself written in one language is passed once per
+ * half, `{xEn}` in the English half and `{xEs}` in the Spanish half, and both name the one datum `x`
+ * (`suffix` is the half's own: `En` or `Es`). Any other name, the other half's suffix included, is itself.
+ * @es Los datos que nombra una mitad, como lista ordenada: un dato escrito en un idioma se pasa una vez por
+ * mitad, `{xEn}` en la inglesa y `{xEs}` en la española, y ambos nombran el mismo dato `x` (`suffix` es el
+ * de la propia mitad: `En` o `Es`). Cualquier otro nombre, el sufijo de la otra mitad incluido, es él mismo.
+ */
+function dataOf(half, suffix) {
+  const data = placeholdersOf(half).map((name) => (name.length > suffix.length && name.endsWith(suffix) ? `${name.slice(0, -suffix.length)}#half` : name));
+
+  return [...new Set(data)].sort();
+}
+
+/**
  * What is wrong with a table of messages, as readable problems (empty when nothing is): a half missing or
- * empty, a Spanish half identical to the English one (an untranslated copy), and placeholders that differ
- * between the halves, so one language would show data the other omits.
- * @es Qué falla en una tabla de mensajes, como problemas legibles (vacío si nada): una mitad ausente o vacía, una mitad española idéntica a la inglesa y marcadores distintos entre las mitades.
+ * empty, a Spanish half identical to the English one (an untranslated copy), and halves that name different
+ * data (`dataOf`), so one language would show data the other omits.
+ * @es Qué falla en una tabla de mensajes, como problemas legibles (vacío si nada): una mitad ausente o vacía, una mitad española idéntica a la inglesa y mitades que nombran datos distintos (`dataOf`).
  */
 export function messageProblems(table) {
   const problems = [];
@@ -103,7 +135,7 @@ export function messageProblems(table) {
     }
 
     if (english === spanish) problems.push(`${id}: the Spanish half is a copy of the English one. @es ${id}: la mitad española es una copia de la inglesa.`);
-    if ([...new Set(placeholdersOf(english))].sort().join() !== [...new Set(placeholdersOf(spanish))].sort().join()) problems.push(`${id}: the halves name different placeholders. @es ${id}: las mitades nombran marcadores distintos.`);
+    if (dataOf(english, 'En').join() !== dataOf(spanish, 'Es').join()) problems.push(`${id}: the halves name different placeholders. @es ${id}: las mitades nombran marcadores distintos.`);
   }
 
   return problems;

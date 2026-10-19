@@ -10,7 +10,7 @@
  * sobreviven, y que `messageProblems` marca cada forma de perder una mitad. Una tabla limpia no informa nada.
  */
 
-import { messageProblems, placeholdersOf, render } from './message.mjs';
+import { halvesOf, messageProblems, placeholdersOf, render } from './message.mjs';
 
 let passed = 0;
 const failures = [];
@@ -40,6 +40,19 @@ equal('a Spanish half that drops a placeholder is flagged', messageProblems({ ..
 equal('a Spanish half that adds a placeholder is flagged', messageProblems({ ...CLEAN, bad: { en: 'Key.', es: 'Clave {key}.' } }).length, 1);
 equal('the same placeholders in another order are not a problem', messageProblems({ ...CLEAN, ok: { en: '{a} then {b}.', es: '{b} tras {a}.' } }), []);
 equal('...whichever half is the reordered one', messageProblems({ ...CLEAN, ok: { en: '{b} then {a}.', es: '{a} tras {b}.' } }), []);
+// A datum written in one language is passed once per half: `{xEn}` in English and `{xEs}` in Spanish are one datum.
+// @es Un dato escrito en un idioma se pasa una vez por mitad: `{xEn}` en inglés y `{xEs}` en español son un mismo dato.
+equal('a datum split into its English and Spanish halves is not a problem', messageProblems({ ...CLEAN, ok: { en: 'Failed: {reasonEn}.', es: 'Falló: {reasonEs}.' } }), []);
+equal('a split datum renders each half in its own language, with one @es', render({ en: 'Failed: {reasonEn}.', es: 'Falló: {reasonEs}.' }, { reasonEn: 'boom', reasonEs: 'pum' }), 'Failed: boom. @es Falló: pum.');
+equal('the Spanish half of a datum in the English half is flagged', messageProblems({ ...CLEAN, bad: { en: 'Failed: {reasonEs}.', es: 'Falló: {reasonEs}.' } }).length, 1);
+equal('the English half of a datum in the Spanish half is flagged', messageProblems({ ...CLEAN, bad: { en: 'Failed: {reasonEn}.', es: 'Falló: {reasonEn}.' } }).length, 1);
+equal('a split datum against a plain one is flagged', messageProblems({ ...CLEAN, bad: { en: 'Failed: {reasonEn}.', es: 'Falló: {reason}.' } }).length, 1);
+equal('a split datum whose stems differ is flagged', messageProblems({ ...CLEAN, bad: { en: 'Failed: {reasonEn}.', es: 'Falló: {causeEs}.' } }).length, 1);
+equal('a one-line bilingual text splits at its first @es', attempt(() => halvesOf('boom @es pum')), { en: 'boom', es: 'pum' });
+equal('a later @es stays in the Spanish half', attempt(() => halvesOf('a @es b @es c')), { en: 'a', es: 'b @es c' });
+equal('a text in one language only is both halves', attempt(() => halvesOf('boom')), { en: 'boom', es: 'boom' });
+equal('a value that is not text is read as its text', attempt(() => halvesOf(42)), { en: '42', es: '42' });
+equal('a name that is only the suffix is a plain placeholder', messageProblems({ ...CLEAN, bad: { en: 'Failed: {En}.', es: 'Falló: {Es}.' } }).length, 1);
 
 // G8-a: a message without its @es half is refused when rendered, by name, in both languages — never printed English only.
 // @es G8-a: un mensaje sin su mitad @es se rechaza al renderizarlo, por nombre y en ambos idiomas; nunca se imprime solo en inglés.
