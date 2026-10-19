@@ -1,6 +1,6 @@
 {
   "id": "held-v8-red-5f411d3c-10121411",
   "expect": "fail",
-  "source": "5f411d3c 2026-10-12T14:11:50.858Z (held-out set of rubric v8, never used to tune it; real final reply to the owner that the owner rejects, the v8 pass test fails: short checkpoint log with a \"te aviso\" close; no reasoning, no stance)",
+  "source": "5f411d3c 2026-10-12T14:11:50.858Z (held-out set of rubric v8, never used to tune it; real final reply to the owner that the owner rejects, the v8 pass test fails: short checkpoint log with a \"te aviso\" close; no reasoning, no stance) RE-CHECKED 2026-10-19 against rule 6 as revised after Judgment Day (V1): still fail, on traits (a) and (b). It carries no decision, so (c) and (d) are not needed, but its only address to him is the promise on the closing line, and its two paragraphs are a log of what landed and what remains.",
   "message": "El checkpoint-29 también quedó en `master` (`f4f852c`), confirmado en origin, y cerré su worktree. El `master` vivo está limpio.\n\nYa solo falta el recorte global del presupuesto, que sigue trabajando. Cuando vuelva lo verifico, lo aterrizo, apago el engram viejo y te aviso para el reinicio."
 }

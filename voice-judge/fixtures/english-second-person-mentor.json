@@ -1,0 +1,6 @@
+{
+  "id": "english-second-person-mentor",
+  "expect": "pass",
+  "source": "synthetic, added 2026-10-19 after Judgment Day (V2): a correct reply to the owner written in English, which rule 6 must judge by the language of the reply. Trait (a) is direct second-person address woven through every sentence, (b) a cause tied to the choice made, (c) an image and a principle, (d) a close on that principle. A rubric that asks for voseo in every language fails it on (a).",
+  "message": "You were right to push on this, and here is why it matters to you. The landing guard you approved measures only the files a unit touches, so when your hook change rode in on a docs commit, the guard never looked at it. I could have added the hook folder to the list of paths it watches, but that only moves the blind spot to the next folder you create. So I made the guard read the hook registry instead: whatever you register gets measured, wherever it lives. Think of it as checking the guest list instead of counting the doors. That holds for any gate you own: a check that lists what it watches will always miss the next thing you add, so let it derive the list from the source of truth."
+}

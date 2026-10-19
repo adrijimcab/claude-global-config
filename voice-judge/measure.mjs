@@ -1,20 +1,35 @@
 #!/usr/bin/env node
 /**
- * Measures the voice judge against a real model: every fixture of `fixtures/` goes through the rubric of
- * `prompt.mjs` N times, by the same model call and the same verdict reader the gate uses (`../judge-gate/`), and
- * the pass/fail matrix is printed with the cost and latency of the runs. The judge is a model call, so the
- * selftest can only pin its text; this script is the measurement of what the text DOES. It is a tool, not a
- * gate: it calls a model (cost, latency, nondeterminism), so no selftest runs it. Usage:
- * `node voice-judge/measure.mjs [--runs N] [--model haiku] [--only id,id] [--rubric path/to/prompt.mjs]`. Exit 1 when a fixture with an
- * expectation (`pass` or `fail`) did not get it in every run. A `?` is an answer that is no rubric verdict: the
- * gate would pass it as a malfunction.
+ * Measures the voice judge against a real model: every fixture of `fixtures/` goes through a rubric N times, by the
+ * same model call and the same verdict reader the gate uses (`../judge-gate/`), and the pass/fail matrix is printed
+ * with the cost and latency of the runs. The judge is a model call, so the selftest can only pin its text; this
+ * script is the measurement of what the text DOES. It is a tool, not a gate: it calls a model (cost, latency,
+ * nondeterminism), so no selftest runs a model through it; the selftest pins its pure parts (the rubric it loads,
+ * the summary it prints). Usage:
+ * `node voice-judge/measure.mjs [--runs N] [--model haiku] [--only id,id] [--rubric path/to/prompt.mjs]
+ * [--rates [--prefix held-] [--parallel 6]]`. Every output starts with the path of the rubric it ran.
  *
- * @es Mide el juez de voz contra un modelo real: cada fixture de `fixtures/` pasa N veces por la rúbrica de
- * `prompt.mjs`, con la misma llamada al modelo y el mismo lector de veredictos que usa la compuerta, y se imprime
- * la matriz pasa/falla con el costo y la latencia de las corridas. El juez es una llamada a un modelo, así que
- * el selftest solo fija su texto; este script mide qué HACE ese texto. Es una herramienta, no un gate. Sale con
- * 1 si un fixture con expectativa no la cumplió en todas las corridas. Un `?` es una respuesta que no es
- * veredicto de rúbrica: la compuerta la dejaría pasar como fallo de funcionamiento.
+ * CLASSES. A fixture's `expect` is `pass` or `fail` (labelled by the rubric as written), `owner-accepted` (a real
+ * reply the owner accepted, whose rubric label is the owner's to adjudicate: excluded from recall and precision,
+ * and the share the rubric blocks is printed apart as the false-positive rate the owner cares about) or `borderline`
+ * (informational: judged and printed, never counted). A fixture with `pinsRule4: true` pins rule 4: a block whose
+ * reason cites tuteo or usted on it is a rule-4 false positive, whatever its label.
+ *
+ * Exit 1 in the matrix view when a fixture with an expectation did not get it in every run, or a pinned fixture got
+ * a rule-4 reason; in the `--rates` view when a run misses the ship bar on the held-out set. A `?` is an answer that
+ * is no rubric verdict: the gate would pass it as a malfunction.
+ *
+ * @es Mide el juez de voz contra un modelo real: cada fixture de `fixtures/` pasa N veces por una rúbrica, con la
+ * misma llamada al modelo y el mismo lector de veredictos que usa la compuerta, y se imprime la matriz pasa/falla
+ * con el costo y la latencia. Es una herramienta, no un gate: el selftest no le hace llamar a un modelo, pero fija
+ * sus partes puras (la rúbrica que carga y el resumen que imprime). Toda salida empieza por la ruta de la rúbrica.
+ * CLASES: `pass` o `fail` (etiquetadas por la rúbrica tal como está escrita), `owner-accepted` (respuestas reales
+ * que el dueño aceptó, cuya etiqueta adjudica él: fuera de recall y precisión, y la proporción que la rúbrica bloquea
+ * se imprime aparte como la tasa de falsos positivos que le importa) y `borderline` (informativas: se juzgan y se
+ * imprimen, nunca se cuentan). Un fixture con `pinsRule4: true` fija la regla 4: un bloqueo cuyo motivo cita tuteo
+ * o usted sobre él es un falso positivo de la regla 4. Sale con 1 si un fixture con expectativa no la cumplió, si
+ * un fixture fijado recibió un motivo de la regla 4, o, con `--rates`, si una corrida no alcanza la barra en el
+ * conjunto reservado. Un `?` no es veredicto de rúbrica: la compuerta lo dejaría pasar como fallo de funcionamiento.
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -23,59 +38,168 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { askModel } from '../judge-gate/model.mjs';
 import { readVerdict } from '../judge-gate/verdict.mjs';
-import { MARKER, PROMPT } from './prompt.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-/** The rubric with the hook input a Stop payload would carry. @es La rúbrica con la entrada que llevaría un payload de Stop. */
-export const promptFor = (message, rubric = PROMPT) => rubric.replace('$ARGUMENTS', () => JSON.stringify({ hook_event_name: 'Stop', session_id: 'measure', stop_hook_active: false, last_assistant_message: message }));
+/** The rubric measured when `--rubric` is absent. @es La rúbrica medida cuando falta `--rubric`. */
+export const DEFAULT_RUBRIC = path.join(HERE, 'prompt.mjs');
 
 /**
- * The rubric the runs use: the current one, or the `PROMPT` export of the module `--rubric <path>` names, so two
- * rubric versions are measured on the same fixtures by the same code. @es La rúbrica de las corridas: la actual, o
- * el export `PROMPT` del módulo que nombra `--rubric <path>`, para medir dos versiones sobre los mismos fixtures.
+ * The prefix of the held-out fixtures, never used to tune a rubric: the ship bar is computed on them and only them.
+ * @es El prefijo de los fixtures reservados, nunca usados para ajustar una rúbrica: la barra se calcula solo sobre ellos.
  */
-let activeRubric = PROMPT;
+export const HELD_OUT_PREFIX = 'held-';
 
-/** The verdict in the model's answer: `true` pass, `false` block, `null` no rubric verdict. @es El veredicto: `true` pasa, `false` bloquea, `null` no es veredicto de rúbrica. */
-export function verdictOf(answer) {
-  const { kind } = readVerdict(answer, MARKER);
+/**
+ * The path of the rubric module the runs use: `DEFAULT_RUBRIC`, or the value of `--rubric`, which must be present
+ * and must not be another flag. @es La ruta del módulo de rúbrica: `DEFAULT_RUBRIC`, o el valor de `--rubric`, que
+ * debe estar y no puede ser otra opción.
+ */
+export function rubricPathOf(argv) {
+  if (!argv.includes('--rubric')) return DEFAULT_RUBRIC;
 
-  return kind === 'pass' ? true : kind === 'block' ? false : null;
+  const value = argv[argv.indexOf('--rubric') + 1];
+
+  if (value === undefined || value === '' || value.startsWith('--')) {
+    throw new Error('--rubric needs the path of a rubric module after it @es --rubric necesita a continuación la ruta de un módulo de rúbrica');
+  }
+
+  return path.resolve(value);
+}
+
+/**
+ * The rubric module at `file`: its `PROMPT` (a string holding `$ARGUMENTS`) and its `MARKER` (a non-empty string),
+ * both required, so a wrong module is an error and never a silent run of another rubric.
+ * @es El módulo de rúbrica en `file`: su `PROMPT` (un string con `$ARGUMENTS`) y su `MARKER` (un string no vacío),
+ * ambos obligatorios, para que un módulo equivocado sea un error y nunca una corrida silenciosa de otra rúbrica.
+ */
+export async function loadRubric(file) {
+  let module;
+
+  try {
+    module = await import(pathToFileURL(file).href);
+  } catch (error) {
+    throw new Error(`the rubric module ${file} cannot be loaded: ${error?.message ?? error} @es el módulo de rúbrica ${file} no se puede cargar`);
+  }
+  if (typeof module.PROMPT !== 'string' || !module.PROMPT.includes('$ARGUMENTS')) {
+    throw new Error(`the rubric module ${file} exports no PROMPT string holding $ARGUMENTS @es el módulo de rúbrica ${file} no exporta un PROMPT string con $ARGUMENTS`);
+  }
+  if (typeof module.MARKER !== 'string' || module.MARKER === '') {
+    throw new Error(`the rubric module ${file} exports no MARKER string @es el módulo de rúbrica ${file} no exporta un MARKER string`);
+  }
+
+  return { path: file, prompt: module.PROMPT, marker: module.MARKER };
+}
+
+/** The rubric with the hook input a Stop payload would carry. @es La rúbrica con la entrada que llevaría un payload de Stop. */
+export const promptFor = (message, prompt) => prompt.replace('$ARGUMENTS', () => JSON.stringify({ hook_event_name: 'Stop', session_id: 'measure', stop_hook_active: false, last_assistant_message: message }));
+
+/**
+ * The verdict in the model's answer and the reason of a block: `true` pass, `false` block, `null` no rubric verdict.
+ * @es El veredicto de la respuesta y el motivo de un bloqueo: `true` pasa, `false` bloquea, `null` no es veredicto.
+ */
+export function judgedOf(answer, marker) {
+  const read = readVerdict(answer, marker);
+
+  if (read.kind === 'pass') return { verdict: true, reason: '' };
+  if (read.kind === 'block') return { verdict: false, reason: read.reason };
+
+  return { verdict: null, reason: '' };
+}
+
+/**
+ * Whether a block reason cites rule 4: tuteo, usted, a tú form or rule 4 by number.
+ * @es Si un motivo de bloqueo cita la regla 4: tuteo, usted, una forma de tú o la regla 4 por número.
+ */
+export const citesRule4 = (reason) => /tuteo|usted|(^|[^\p{L}])tú([^\p{L}]|$)|rule 4\b|regla 4\b/iu.test(reason);
+
+/** The share of `part` in `whole`, as a percentage with one decimal. @es La proporción de `part` en `whole`, en porcentaje. */
+const percent = (part, whole) => (whole === 0 ? 'n/a' : `${((100 * part) / whole).toFixed(1)}%`);
+
+/** A verdict as the matrix prints it. @es Un veredicto tal como lo imprime la matriz. */
+const shown = (verdict) => (verdict === null ? '?' : verdict ? 'pass' : 'FAIL');
+
+/**
+ * One run over `fixtures`, read through `judgedFor(fixture)`: recall on `fail`, precision on `pass`, the blocked
+ * share of `owner-accepted`, every `borderline` verdict and the rule-4 false positives of the pinned fixtures.
+ * @es Una corrida sobre `fixtures`: recall sobre `fail`, precisión sobre `pass`, la proporción bloqueada de
+ * `owner-accepted`, cada veredicto `borderline` y los falsos positivos de la regla 4 de los fixtures fijados.
+ */
+export function summarise(fixtures, judgedFor) {
+  const of = (expect) => fixtures.filter((fixture) => fixture.expect === expect);
+  const red = of('fail');
+  const green = of('pass');
+  const accepted = of('owner-accepted');
+
+  return {
+    red: red.length,
+    missedRed: red.filter((fixture) => judgedFor(fixture).verdict !== false).map((fixture) => fixture.id),
+    green: green.length,
+    blockedGreen: green.filter((fixture) => judgedFor(fixture).verdict !== true).map((fixture) => fixture.id),
+    accepted: accepted.length,
+    blockedAccepted: accepted.filter((fixture) => judgedFor(fixture).verdict === false).map((fixture) => ({ id: fixture.id, reason: judgedFor(fixture).reason })),
+    borderline: of('borderline').map((fixture) => ({ id: fixture.id, verdict: judgedFor(fixture).verdict })),
+    pinned: fixtures.filter((fixture) => fixture.pinsRule4 === true).length,
+    rule4FalsePositives: fixtures.filter((fixture) => fixture.pinsRule4 === true && judgedFor(fixture).verdict === false && citesRule4(judgedFor(fixture).reason)).map((fixture) => ({ id: fixture.id, reason: judgedFor(fixture).reason })),
+    malfunction: fixtures.filter((fixture) => judgedFor(fixture).verdict === null).length,
+  };
+}
+
+/**
+ * Whether a summary of the held-out set meets the ship bar: at least one labelled fixture of each side, recall 90%
+ * and precision 95%. @es Si el resumen del conjunto reservado alcanza la barra: al menos un fixture etiquetado de
+ * cada lado, recall 90% y precisión 95%.
+ */
+export function meetsShipBar(summary) {
+  const share = (part, whole) => (whole === 0 ? 0 : part / whole);
+
+  return share(summary.red - summary.missedRed.length, summary.red) >= 0.9 && share(summary.green - summary.blockedGreen.length, summary.green) >= 0.95;
+}
+
+/** The lines `--rates` prints for one run's `summary` under `label`. @es Las líneas que imprime `--rates` para el resumen de una corrida. */
+export function ratesLines(label, summary) {
+  const caught = summary.red - summary.missedRed.length;
+  const letThrough = summary.green - summary.blockedGreen.length;
+
+  return [
+    `${label} recall ${percent(caught, summary.red)} (${caught}/${summary.red}) precision ${percent(letThrough, summary.green)} (${letThrough}/${summary.green}) malfunction=${summary.malfunction}`,
+    ...summary.missedRed.map((id) => `    missed red    ${id}`),
+    ...summary.blockedGreen.map((id) => `    blocked green ${id}`),
+    `${label} owner-accepted blocked ${percent(summary.blockedAccepted.length, summary.accepted)} (${summary.blockedAccepted.length}/${summary.accepted}), the false-positive rate for the owner to adjudicate`,
+    ...summary.blockedAccepted.map(({ id, reason }) => `    blocked owner-accepted ${id}: ${reason}`),
+    `${label} borderline verdicts (${summary.borderline.length}, never counted)`,
+    ...summary.borderline.map(({ id, verdict }) => `    borderline ${shown(verdict).padEnd(4)} ${id}`),
+    `${label} rule-4 false positives ${summary.rule4FalsePositives.length}/${summary.pinned} pinned`,
+    ...summary.rule4FalsePositives.map(({ id, reason }) => `    rule-4 false positive ${id}: ${reason}`),
+  ];
 }
 
 /** One judged run; the cost and latency of the call travel with the verdict. @es Una corrida juzgada; costo y latencia viajan con el veredicto. */
-async function judge(message, model) {
+async function judge(message, model, rubric) {
   try {
-    const { answer, costUsd, durationMs } = await askModel(promptFor(message, activeRubric), { timeoutMs: 120000, model });
+    const { answer, costUsd, durationMs } = await askModel(promptFor(message, rubric.prompt), { timeoutMs: 120000, model });
+    const judged = judgedOf(answer, rubric.marker);
 
-    const verdict = verdictOf(answer);
+    if (judged.verdict === null) console.error(`? not a rubric verdict: ${String(answer).replace(/\s+/g, ' ').slice(0, 200)}`);
 
-    if (verdict === null) console.error(`? not a rubric verdict: ${String(answer).replace(/\s+/g, ' ').slice(0, 200)}`);
-
-    return { verdict, costUsd, durationMs };
+    return { ...judged, costUsd, durationMs };
   } catch (error) {
     console.error(`? model call failed: ${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 200)}`);
 
-    return { verdict: null, costUsd: 0, durationMs: 0 };
+    return { verdict: null, reason: '', costUsd: 0, durationMs: 0 };
   }
 }
 
-/** The share of `part` in `whole`, as a percentage with one decimal. @es La proporción de `part` en `whole`, en porcentaje con un decimal. */
-const percent = (part, whole) => (whole === 0 ? 'n/a' : `${((100 * part) / whole).toFixed(1)}%`);
-
 /**
- * The calibration view: `--rates` runs every fixture `runs` times, `--parallel` calls at a time, and prints for each
- * run the RECALL on the fixtures expected to fail (the share the judge blocked) and the PRECISION on the fixtures
- * expected to pass (the share it let through), for the real labelled set (`real-*`) and for all fixtures. A `?` is
- * counted as neither: it is a malfunction, reported apart. Exit 1 when a run misses the ship bar (recall 90,
- * precision 95) on the real set. @es La vista de calibración: ejecuta cada fixture `runs` veces, `--parallel`
- * llamadas a la vez, e imprime por corrida el RECALL sobre los que deben fallar y la PRECISIÓN sobre los que deben
- * pasar, del conjunto real etiquetado (`real-*`) y de todos. Un `?` no cuenta como ninguno: es un mal funcionamiento.
+ * The calibration view: `--rates` runs the fixtures `runs` times, `parallel` calls at a time, and prints for each run
+ * the held-out summary (the ship bar is computed on it and only on it) and, when the run holds other fixtures, the
+ * summary of all of them. Exit 1 when a run misses the ship bar on the held-out set.
+ * @es La vista de calibración: ejecuta los fixtures `runs` veces, `parallel` llamadas a la vez, e imprime por corrida
+ * el resumen del conjunto reservado (la barra se calcula solo sobre él) y, si la corrida trae otros, el de todos.
  */
-async function rates(fixtures, runs, model, parallel, prefix) {
+async function rates(fixtures, runs, model, parallel, rubric) {
   const jobs = fixtures.flatMap((fixture) => Array.from({ length: runs }, (_, run) => ({ fixture, run })));
-  const verdicts = new Map();
+  const results = new Map();
   let next = 0;
   let cost = 0;
 
@@ -85,51 +209,54 @@ async function rates(fixtures, runs, model, parallel, prefix) {
 
       next += 1;
 
-      const result = await judge(job.fixture.message, model);
+      const result = await judge(job.fixture.message, model, rubric);
 
       cost += result.costUsd;
-      verdicts.set(`${job.fixture.id}#${job.run}`, result.verdict);
+      results.set(`${job.fixture.id}#${job.run}`, result);
     }
   }));
 
-  let ships = true;
+  const heldOut = fixtures.filter((fixture) => fixture.id.startsWith(HELD_OUT_PREFIX));
+  let ships = heldOut.length > 0;
 
   for (let run = 0; run < runs; run += 1) {
-    const line = (label, subset) => {
-      const red = subset.filter((fixture) => fixture.expect === 'fail');
-      const green = subset.filter((fixture) => fixture.expect === 'pass');
-      const caught = red.filter((fixture) => verdicts.get(`${fixture.id}#${run}`) === false);
-      const letThrough = green.filter((fixture) => verdicts.get(`${fixture.id}#${run}`) === true);
-      const unknown = subset.filter((fixture) => verdicts.get(`${fixture.id}#${run}`) === null).length;
+    const judgedFor = (fixture) => results.get(`${fixture.id}#${run}`);
+    const held = summarise(heldOut, judgedFor);
 
-      console.log(`run ${run + 1} ${label.padEnd(5)} recall ${percent(caught.length, red.length)} (${caught.length}/${red.length}) precision ${percent(letThrough.length, green.length)} (${letThrough.length}/${green.length}) malfunction=${unknown}`);
-      for (const fixture of red) if (verdicts.get(`${fixture.id}#${run}`) !== false) console.log(`    missed red    ${fixture.id}`);
-      for (const fixture of green) if (verdicts.get(`${fixture.id}#${run}`) !== true) console.log(`    blocked green ${fixture.id}`);
-
-      return { recall: caught.length / Math.max(1, red.length), precision: letThrough.length / Math.max(1, green.length) };
-    };
-    const real = line('set', fixtures.filter((fixture) => fixture.id.startsWith(prefix)));
-
-    line('all', fixtures);
-    if (real.recall < 0.9 || real.precision < 0.95) ships = false;
+    for (const text of ratesLines(`run ${run + 1} held`, held)) console.log(text);
+    if (heldOut.length < fixtures.length) for (const text of ratesLines(`run ${run + 1} all `, summarise(fixtures, judgedFor))) console.log(text);
+    if (!meetsShipBar(held)) ships = false;
   }
 
-  console.log(`cost=$${cost.toFixed(4)} ship-bar(real set, every run: recall>=90% and precision>=95%)=${ships ? 'MET' : 'NOT MET'}`);
+  console.log(`rubric=${rubric.path} cost=$${cost.toFixed(4)} ship-bar(held-out set, every run: recall>=90% and precision>=95%)=${ships ? 'MET' : 'NOT MET'}${heldOut.length === 0 ? ' (no held-out fixture in this run)' : ''}`);
 
   return ships ? 0 : 1;
 }
 
-async function main(argv) {
+/** The command line: exit 0, 1 (an expectation missed, or the ship bar missed) or 2 (a wrong `--rubric`). @es La línea de comandos. */
+export async function main(argv) {
   const option = (name, fallback) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : fallback);
+  let rubric;
+
+  try {
+    rubric = await loadRubric(rubricPathOf(argv));
+  } catch (error) {
+    console.error(String(error?.message ?? error));
+
+    return 2;
+  }
+  console.log(`rubric=${rubric.path}`);
+
   const runs = Number(option('--runs', '3'));
   const model = option('--model', 'haiku');
   const only = option('--only', '')?.split(',').filter(Boolean);
   const fixtures = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json')).map((name) => JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8'))).filter((fixture) => only.length === 0 || only.includes(fixture.id));
-  const prefix = option('--prefix', 'real-');
 
-  if (argv.includes('--rubric')) activeRubric = (await import(pathToFileURL(path.resolve(option('--rubric', ''))).href)).PROMPT;
+  if (argv.includes('--rates')) {
+    const prefix = option('--prefix', HELD_OUT_PREFIX);
 
-  if (argv.includes('--rates')) return rates(argv.includes('--prefix') ? fixtures.filter((fixture) => fixture.id.startsWith(prefix)) : fixtures, runs, model, Number(option('--parallel', '6')), prefix);
+    return rates(fixtures.filter((fixture) => fixture.id.startsWith(prefix)), runs, model, Number(option('--parallel', '6')), rubric);
+  }
 
   let wrong = 0;
   let cost = 0;
@@ -138,20 +265,23 @@ async function main(argv) {
   for (const fixture of fixtures) {
     const results = [];
 
-    for (let run = 0; run < runs; run += 1) results.push(await judge(fixture.message, model));
+    for (let run = 0; run < runs; run += 1) results.push(await judge(fixture.message, model, rubric));
 
     const verdicts = results.map((result) => result.verdict);
     const wanted = fixture.expect === 'pass' ? true : fixture.expect === 'fail' ? false : undefined;
-    const met = wanted === undefined ? 'n/a' : verdicts.every((verdict) => verdict === wanted) ? 'OK' : 'MISS';
+    const rule4 = fixture.pinsRule4 === true ? results.filter((result) => result.verdict === false && citesRule4(result.reason)) : [];
+    const labelMet = wanted === undefined || verdicts.every((verdict) => verdict === wanted);
+    const met = !labelMet || rule4.length > 0 ? 'MISS' : wanted === undefined && fixture.pinsRule4 !== true ? 'n/a' : 'OK';
 
     cost += results.reduce((sum, result) => sum + result.costUsd, 0);
     latencies.push(...results.map((result) => result.durationMs));
     if (met === 'MISS') wrong += 1;
-    console.log(`${met.padEnd(4)} ${fixture.id.padEnd(40)} expect=${fixture.expect.padEnd(10)} ${verdicts.map((verdict) => (verdict === null ? '?' : verdict ? 'pass' : 'FAIL')).join(' ')}`);
+    console.log(`${met.padEnd(4)} ${fixture.id.padEnd(40)} expect=${fixture.expect.padEnd(14)} ${verdicts.map(shown).join(' ')}`);
+    for (const result of rule4) console.log(`    rule-4 false positive: ${result.reason}`);
   }
 
   latencies.sort((left, right) => left - right);
-  console.log(`runs=${latencies.length} cost=$${cost.toFixed(4)} (mean $${(cost / Math.max(1, latencies.length)).toFixed(5)}/run) latency median=${latencies[Math.floor(latencies.length / 2)] ?? 0}ms max=${latencies.at(-1) ?? 0}ms`);
+  console.log(`rubric=${rubric.path} runs=${latencies.length} cost=$${cost.toFixed(4)} (mean $${(cost / Math.max(1, latencies.length)).toFixed(5)}/run) latency median=${latencies[Math.floor(latencies.length / 2)] ?? 0}ms max=${latencies.at(-1) ?? 0}ms`);
 
   return wrong === 0 ? 0 : 1;
 }

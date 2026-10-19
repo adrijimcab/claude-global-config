@@ -1,6 +1,0 @@
-{
-  "id": "held-v8-green-5f411d3c-10181521",
-  "expect": "pass",
-  "source": "5f411d3c 2026-10-18T15:21:50.125Z (held-out set of rubric v8, never used to tune it; real final reply to the owner that meets the v8 pass test: short; concedes with the reasoning; states the principle about where scalability comes from)",
-  "message": "Tenés razón, y el texto que escribí lo desdibujaba. Al meter la escalabilidad dentro de YAGNI, YAGNI terminaba diciendo «construí para casos futuros», que es justo lo que prohíbe. La escalabilidad para proyectos futuros no sale de aflojar YAGNI: sale de SOLID. El principio abierto/cerrado y la inversión de dependencias existen para eso: interfaces estables que un consumidor nuevo extiende sin modificar el kit. Lo corrijo así: YAGNI vuelve a quedar puro, y tu regla «PARA TODO» pasa a SOLID."
-}

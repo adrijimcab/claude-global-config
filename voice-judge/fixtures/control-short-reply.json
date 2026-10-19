@@ -1,6 +1,6 @@
 {
   "id": "control-short-reply",
   "expect": "fail",
-  "source": "synthetic control RELABELLED 2026-10-19 for rubric v8: a short status closed by a bolted-on offer, the exact register the owner rejects; it has no why, no energy and no stance, and the v8 pass test applies to short replies too (the v7 label was pass)",
+  "source": "synthetic control RELABELLED 2026-10-19 for rubric v8: a short status closed by a bolted-on offer, the exact register the owner rejects; it has no why, no energy and no stance, and the v8 pass test applies to short replies too (the v7 label was pass). RE-CHECKED 2026-10-19 against rule 6 as revised after Judgment Day (V1): still fail, on trait (a) alone. Its status content keeps rule 5 from passing it, and as a short operational reply with no decision it needs only (a), but its only address to him is the offer bolted onto its last sentence.",
   "message": "Listo, ya quedó guardado. Avisame si querés que lo suba también."
 }

@@ -1,6 +1,0 @@
-{
-  "id": "held-v8-border-5f411d3c-10121550",
-  "expect": "borderline",
-  "source": "5f411d3c 2026-10-12T15:50:00.481Z (held-out set of rubric v8, never used to tune it; real final reply to the owner; first labelled green, re-read against the v8 four-trait test and found short of it (it carries the why but no rhetorical question, emphasis, image or principle, so trait (c) is not met), so it is excluded from precision and recall)",
-  "message": "Sí, esperá: todavía no aterrizó. Lo acabo de mirar y `master` sigue en `b44c92d`. Si reiniciás ahora, la sesión nueva arranca sin esa última lección, y el aterrizaje que está corriendo depende de esta sesión: cortarla a mitad lo deja colgado.\n\nSon unos minutos. Apenas termine, cierro su worktree y te aviso para que reinicies tranquilo."
-}

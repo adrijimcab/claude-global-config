@@ -1,6 +1,6 @@
 {
   "id": "real-v8-red-5f411d3c-10041627",
   "expect": "fail",
-  "source": "5f411d3c 2026-10-04T16:27:20.790Z (tuning set of rubric v8; real final reply to the owner that the owner rejects, the v8 pass test fails: short status with one \"autorizada por vos\"; a log line, no mentor)",
+  "source": "5f411d3c 2026-10-04T16:27:20.790Z (tuning set of rubric v8; real final reply to the owner that the owner rejects, the v8 pass test fails: short status with one \"autorizada por vos\"; a log line, no mentor) RE-CHECKED 2026-10-19 against rule 6 as revised after Judgment Day (V1): still fail, on trait (a). It is a short operational reply with no decision, so it needs only (a), and its one second-person word sits in a parenthetical on the closing line, a token bolted onto it.",
   "message": "Los seis commits ya hechos están en master y en origin, que están en la misma punta (`2b2dd1c`). Ahora instalo las cuatro herramientas con winget (tarea 7.1, autorizada por vos)."
 }
