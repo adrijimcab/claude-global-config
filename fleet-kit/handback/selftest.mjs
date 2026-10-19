@@ -7,7 +7,7 @@
  * resultado de cobertura, la config sin cobertura, el límite de bucle y el camino completo de `evaluate`.
  */
 
-import { rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { journal } from '../lib/hook-io.mjs';
@@ -107,6 +107,21 @@ try {
 
   writeFileSync(refusalsFile, `${record('w1')}{"agentId":"w1"\n${record('w1')}`);
   check('a corrupt line in the middle is skipped, the records around it count', counted('w1'), 2);
+
+  // J-2: a torn last line must not swallow the next record: the append starts a line of its own.
+  // @es J-2: una última línea rota no debe tragarse el registro siguiente: lo añadido empieza su propia línea.
+  writeFileSync(refusalsFile, `${record('w1')}{"agentId":"w1","ki`);
+  journal('handback', 'refusals.jsonl', { agentId: 'w9' });
+  journal('handback', 'refusals.jsonl', { agentId: 'w9' });
+  check('J-2: two records appended after a torn line both count, and the torn one stays skipped', [counted('w9'), counted('w1')], [2, 1]);
+  check('J-2: the appends add exactly one line break before the first record, and none before the second', readFileSync(refusalsFile, 'utf8').split('\n').length, 5);
+
+  writeFileSync(refusalsFile, '');
+  journal('handback', 'refusals.jsonl', { agentId: 'w8' });
+  check('J-2: an empty journal gets no leading blank line', readFileSync(refusalsFile, 'utf8').startsWith('{'), true);
+  rmSync(refusalsFile);
+  journal('handback', 'refusals.jsonl', { agentId: 'w8' });
+  check('J-2: a journal that does not exist yet starts with its record', [readFileSync(refusalsFile, 'utf8').startsWith('{'), counted('w8')], [true, 1]);
   rmSync(refusalsFile);
   check('no journal at all counts zero', counted('w1'), 0);
 } finally {

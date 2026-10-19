@@ -5,6 +5,7 @@ import { runCampaign } from '../testing/campaign.mjs';
 
 const D = 'handback/decision.mjs';
 const G = 'handback/guard.mjs';
+const IO = 'lib/hook-io.mjs';
 
 runCampaign('handback/selftest.mjs', [
   ['uncommitted work is not refused', D, "if (entries.length > 0) return { kind: 'uncommitted'", "if (false) return { kind: 'uncommitted'"],
@@ -22,5 +23,12 @@ runCampaign('handback/selftest.mjs', [
   ['the damage note has no Spanish half', G, ' @es Nota: el journal de negativas tenía ${skipped} ${sustantivo}; omitidas, sin contar.', ''],
   ['the damage note is always singular', G, "skipped === 1 ? 'line' : 'lines'", "'line'"],
   ['the damage note reports a fixed count', G, 'held ${skipped} unreadable', 'held 1 unreadable'],
-  ['the attempt ignores the journal count', G, 'reason(refusal, count + 1, skipped)', 'reason(refusal, 1, skipped)']
+  ['the attempt ignores the journal count', G, 'reason(refusal, count + 1, skipped)', 'reason(refusal, 1, skipped)'],
+
+  // --- J-2: an append after a torn line starts a line of its own
+  ['a torn last line swallows the next record', IO, "${endsTorn(target) ? '\\n' : ''}", ''],
+  ['an empty journal reads as torn', IO, '  if (size === 0) return false;\n', ''],
+  ['a missing journal reads as torn', IO, '    return false;\n  }\n\n  if (size === 0)', '    return true;\n  }\n\n  if (size === 0)'],
+  ['the first byte is read instead of the last', IO, 'readSync(fd, last, 0, 1, size - 1);', 'readSync(fd, last, 0, 1, 0);'],
+  ['a journal that ends in a line break reads as torn', IO, 'return last[0] !== 0x0a;', 'return true;']
 ]);
