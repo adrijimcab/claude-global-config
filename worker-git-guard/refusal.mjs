@@ -131,6 +131,30 @@ export const MESSAGES = {
       'rechazado, ejecutá `git status --porcelain` antes del siguiente.'
     ]
   },
+  commitUntracked: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: the pathspec of this `git commit` covers untracked files ({command}).',
+      '',
+      'WHY. `git commit -- <dir>` silently leaves out an untracked file under `<dir>` and exits 0, so the commit',
+      'lands without a file the committed code imports and does not build on its own (Discovery: 26b7227b imported',
+      'a file that only landed in 0235cc85). Untracked files under the pathspec ({total} in all, at most 10 shown):',
+      '{paths}',
+      '',
+      'USE INSTEAD: run `git add -- {paths}` first, in its own command, or name the files precisely in the',
+      'pathspec of the commit.'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: el pathspec de este `git commit` cubre ficheros sin seguimiento ({command}).',
+      '',
+      'POR QUÉ. `git commit -- <dir>` deja fuera en silencio un fichero sin seguimiento bajo `<dir>` y sale con 0, así',
+      'que el commit aterriza sin un fichero que el código commiteado importa y no compila solo (Discovery: 26b7227b',
+      'importaba un fichero que solo aterrizó en 0235cc85). Ficheros sin seguimiento bajo el pathspec ({total} en total, se muestran 10 como máximo):',
+      '{paths}',
+      '',
+      'USAR EN SU LUGAR: ejecutá antes `git add -- {paths}`, en su propio comando, o nombrá los ficheros con',
+      'precisión en el pathspec del commit.'
+    ]
+  },
   pushNoVerify: {
     en: [
       'WORKER-GIT GUARD REFUSED this command: a delegated worker may not skip the push hooks ({command}).',
@@ -254,9 +278,10 @@ export const MESSAGES = {
 /**
  * @param {string} family A key of `MESSAGES`.
  * @param {string} command The offending invocation's source text.
+ * @param {Record<string, string>} [details] Further placeholders of the family (the untracked paths).
  * @returns {string} The rendered refusal, English then ` @es ` Spanish.
  * @es La negativa renderizada, inglés y luego español marcado con ` @es `.
  */
-export function refusalText(family, command) {
-  return render(MESSAGES[family], { command });
+export function refusalText(family, command, details = {}) {
+  return render(MESSAGES[family], { command, ...details });
 }

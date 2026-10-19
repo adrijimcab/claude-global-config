@@ -20,15 +20,20 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { messageProblems } from '../bilingual-output/message.mjs';
 import { payloadFor } from '../hook-payloads/payloads.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
 import { evaluate } from './guard.mjs';
 import { MESSAGES } from './refusal.mjs';
+import { GIT_TIMEOUT_MS, listUntracked, untrackedUnderCommits } from './untracked-pathspec.mjs';
+
+// The guard journals what it could not check; a selftest must never write the live journal. @es El guard anota lo que no pudo comprobar; un selftest nunca escribe el journal vivo.
+const STATE_ROOT = isolateState('worker-git-guard');
 
 const GUARD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'guard.mjs');
 const CWD = realpathSync.native(os.tmpdir());
@@ -244,6 +249,172 @@ check('the message table has no bilingual problems', messageProblems(MESSAGES).l
 check("a non-shell tool is not this guard's business", verdictOf({ ...asSubagent('Bash', 'git reset'), tool_name: 'Read' }) === undefined);
 check('a payload with no command passes', verdictOf({ ...asSubagent('Bash', 'x'), tool_input: {} }) === undefined);
 check('malformed JSON passes (fails open)', evaluate('{not json') === undefined);
+
+// --- FAMILY 13: a commit whose pathspec covers an UNTRACKED file (Discovery report: 26b7227b imported a file
+// that landed only in 0235cc85; `git commit -- <dir>` silently leaves out an untracked file under <dir>) ------
+const SCRATCH = mkdtempSync(path.join(realpathSync.native(os.tmpdir()), 'wgg-untracked-'));
+
+process.once('exit', () => rmSync(SCRATCH, { recursive: true, force: true }));
+
+/** Runs git in `directory` for the fixture, never through a shell. @es Corre git en `directory` para el fixture, sin shell. */
+function git(directory, ...args) {
+  const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8', windowsHide: true });
+
+  if (result.status !== 0) throw new Error(`fixture git ${args.join(' ')} failed: ${result.stderr}`);
+}
+
+/** A file written under `repo`, its folders created. @es Un fichero escrito bajo `repo`, con sus carpetas. */
+function put(repo, relative, content = 'x\n') {
+  mkdirSync(path.dirname(path.join(repo, relative)), { recursive: true });
+  writeFileSync(path.join(repo, relative), content);
+}
+
+const REPO = path.join(SCRATCH, 'repo');
+const NOT_A_REPO = path.join(SCRATCH, 'plain');
+
+mkdirSync(REPO);
+mkdirSync(NOT_A_REPO);
+git(REPO, 'init', '-q');
+git(REPO, 'config', 'user.email', 'selftest@example.invalid');
+git(REPO, 'config', 'user.name', 'selftest');
+put(REPO, '.gitignore', '*.log\n');
+put(REPO, 'mixed/old.txt');
+put(REPO, 'clean/tracked.txt');
+put(REPO, 'ignoring/tracked.txt');
+git(REPO, 'add', '--', '.gitignore', 'mixed/old.txt', 'clean/tracked.txt', 'ignoring/tracked.txt');
+git(REPO, 'commit', '-q', '-m', 'init', '--no-verify');
+put(REPO, 'mixed/new.txt');
+put(REPO, 'ignoring/noise.log');
+put(REPO, 'solo.txt');
+for (let number = 1; number <= 12; number += 1) put(REPO, `many/f${String(number).padStart(2, '0')}.txt`);
+
+/** A subagent payload that runs in `cwd`. @es Un payload de subagente que corre en `cwd`. */
+const inDirectory = (tool, command, cwd) => ({ ...asSubagent(tool, command), cwd });
+const untrackedReason = (command, cwd = REPO, tool = 'Bash') => evaluate(JSON.stringify(inDirectory(tool, command, cwd)))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+const untrackedVerdict = (command, cwd = REPO, tool = 'Bash') => verdictOf(inDirectory(tool, command, cwd));
+const journalLines = () => {
+  try {
+    return readFileSync(path.join(STATE_ROOT, 'worker-git-guard', 'unchecked.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  } catch {
+    return [];
+  }
+};
+
+check('a directory pathspec over an untracked file is refused', untrackedVerdict('git commit -m x -- mixed') === 'deny');
+check('the refusal lists the untracked path and says to git add it first, in both halves', (() => { const text = untrackedReason('git commit -m x -- mixed'); const english = text.slice(0, text.indexOf('  @es ')); const spanish = text.slice(text.indexOf('  @es ')); return english.includes('mixed/new.txt') && english.includes('git add -- mixed/new.txt') && spanish.includes('mixed/new.txt') && spanish.includes('git add -- mixed/new.txt') && text.includes('REFUSED') && text.includes('RECHAZÓ'); })());
+check('the refusal also offers naming the files precisely', untrackedReason('git commit -m x -- mixed').includes('name'));
+check('the refusal does not list the tracked file', !untrackedReason('git commit -m x -- mixed').includes('mixed/old.txt'));
+check('a fully tracked directory passes', untrackedVerdict('git commit -m x -- clean') === undefined);
+check('an ignored untracked file passes', untrackedVerdict('git commit -m x -- ignoring') === undefined);
+check('a named untracked file is refused too', untrackedVerdict('git commit -m x -- solo.txt') === 'deny');
+check('a glob pathspec over an untracked file is refused', untrackedVerdict('git commit -m x -- "mixed/*.txt"') === 'deny');
+check('a second path of the pathspec is checked, not only the first', untrackedVerdict('git commit -m x -- clean mixed') === 'deny');
+check('an untracked file elsewhere in the repo is not in this pathspec, so it passes', untrackedVerdict('git commit -m x -- clean/tracked.txt') === undefined);
+check('PowerShell is checked too', untrackedVerdict('git commit -m "x" -- mixed', REPO, 'PowerShell') === 'deny');
+check('a message that only mentions the directory is not a pathspec', untrackedVerdict('git commit -m mixed -- clean') === undefined);
+check('--dry-run stages and commits nothing, so it passes', untrackedVerdict('git commit --dry-run -m x -- mixed') === undefined);
+check('the main session is unaffected', verdictOf({ ...asMain('Bash', 'git commit -m x -- mixed'), cwd: REPO }) === undefined);
+check('the refusal lists at most 10 paths and counts the rest', (() => { const text = untrackedReason('git commit -m x -- many'); const [english] = text.split('  @es '); return english.includes('many/f10.txt') && !english.includes('many/f11.txt') && english.includes('12 in all') && text.includes('12 en total'); })());
+check('git -C resolves the repository from a directory that is not one', untrackedVerdict(`git -C "${REPO}" commit -m x -- mixed`, NOT_A_REPO) === 'deny');
+check('git -C to a clean directory from a directory that is not a repo passes', untrackedVerdict(`git -C "${REPO}" commit -m x -- clean`, NOT_A_REPO) === undefined);
+check('a relative git -C is resolved against the payload cwd', untrackedVerdict('git -C repo commit -m x -- mixed', SCRATCH) === 'deny');
+check('a cd in the line moves where the pathspec is read', untrackedVerdict(`cd "${REPO}" && git commit -m x -- mixed`, NOT_A_REPO) === 'deny');
+check('the first untracked commit of a chain is the one refused', untrackedReason(`git commit -m a -- clean && git commit -m b -- mixed`).includes('mixed/new.txt'));
+
+const before = journalLines().length;
+const outsideAnyRepo = untrackedVerdict('git commit -m x -- mixed', NOT_A_REPO);
+const unchecked = journalLines().slice(before);
+
+check('a git failure (not a repository) is allowed', outsideAnyRepo === undefined);
+check('a git failure is journaled as unchecked, with the reason and the directory', unchecked.length === 1 && unchecked[0].verdict === 'unchecked' && typeof unchecked[0].reason === 'string' && unchecked[0].reason.length > 0 && unchecked[0].cwd === NOT_A_REPO, JSON.stringify(unchecked));
+check('a timeout of git is a failure to check: allowed and journaled', (() => {
+  const start = journalLines().length;
+  const timedOut = () => ({ error: 'git ls-files timed out after 5000 ms' });
+  const output = evaluate(JSON.stringify(inDirectory('Bash', 'git commit -m x -- mixed', REPO)), undefined, timedOut);
+
+  return output === undefined && journalLines().slice(start).some((entry) => entry.verdict === 'unchecked' && entry.reason?.includes('timed out') === true);
+})());
+check('a runner that throws fails open, journaled', (() => {
+  const start = journalLines().length;
+
+  try {
+    const output = evaluate(JSON.stringify(inDirectory('Bash', 'git commit -m x -- mixed', REPO)), undefined, () => { throw new Error('boom'); });
+
+    return output === undefined && journalLines().slice(start).some((entry) => entry.verdict === 'unchecked' && entry.reason?.includes('boom') === true);
+  } catch {
+    return false; // the throw escaped the guard: it did not fail open
+  }
+})());
+check('the journal of a miss names the directory git was asked in, not the payload cwd', (() => {
+  const start = journalLines().length;
+
+  untrackedVerdict(`git -C "${NOT_A_REPO}" commit -m x -- mixed`, REPO);
+
+  return journalLines().slice(start).some((entry) => entry.verdict === 'unchecked' && entry.cwd === NOT_A_REPO);
+})());
+check('a commit the lexical rules refuse gets THEIR message even when its pathspec covers untracked files', (() => {
+  const start = journalLines().length;
+  const text = untrackedReason('git commit -n -m x -- mixed');
+
+  return text.includes('commitlint') && !text.includes('untracked') && journalLines().length === start;
+})());
+check('the runner asks git for untracked, non-ignored files of exactly the pathspec, once, in the repository', (() => {
+  const calls = [];
+  const spy = (directory, pathspecs) => { calls.push({ directory, pathspecs }); return { files: [] }; };
+
+  evaluate(JSON.stringify(inDirectory('Bash', `git -C "${REPO}" commit -m x -- clean mixed`, NOT_A_REPO)), undefined, spy);
+
+  return calls.length === 1 && calls[0].directory === REPO && calls[0].pathspecs.join('|') === 'clean|mixed';
+})());
+check('a deny is not written to the unchecked journal (the dispatcher records it)', (() => {
+  const start = journalLines().length;
+
+  untrackedVerdict('git commit -m x -- many');
+
+  return journalLines().length === start;
+})());
+check('a commit refused by the lexical rules never reaches git (no journal line)', (() => {
+  const start = journalLines().length;
+
+  untrackedVerdict('git commit -m x', NOT_A_REPO);
+
+  return journalLines().length === start;
+})());
+
+put(REPO, 'spaced/a b.txt');
+check('a path with whitespace is quoted in the git add the refusal proposes', untrackedReason('git commit -m x -- spaced').includes('git add -- "spaced/a b.txt"'));
+
+// The module on its own, through its two ports (the git runner and the process runner). @es El módulo solo, por sus dos puertos.
+const NO_FILES = () => ({ files: [] });
+const directoriesAsked = (script, dialect = 'bash', cwd = REPO) => { const asked = []; untrackedUnderCommits(script, dialect, cwd, (directory) => { asked.push(directory); return { files: [] }; }); return asked; };
+
+check('module: a commit with no pathspec is never sent to git (ls-files would list the whole repo)', directoriesAsked('git commit -m x').length === 0);
+check('module: a line with no commit is never sent to git', directoriesAsked('git status -- mixed').length === 0);
+check('module: a --dry-run is never sent to git, and neither is its abbreviation --dr', directoriesAsked('git commit --dry-run -- mixed').length === 0 && directoriesAsked('git commit --dr -- mixed').length === 0);
+check('module: an option that only starts like --dry-run (--d) is not a dry run', directoriesAsked('git commit --d -- mixed').length === 1);
+check('module: a path named like an option, after --, is still a pathspec to check', directoriesAsked('git commit -m x -- --dry-run').length === 1);
+check('module: one git call per commit that has a pathspec', directoriesAsked('git commit -m a -- one && git commit -m b -- two').length === 2);
+check('module: two -C options apply in order', directoriesAsked(`git -C "${SCRATCH}" -C repo commit -m x -- mixed`, 'bash', NOT_A_REPO).join('|') === REPO);
+check('module: a directory the line moves to with an unfollowable cd is reported unchecked, git is not asked', (() => { const found = untrackedUnderCommits('cd "$SOMEWHERE" && git commit -m x -- d', 'bash', REPO, NO_FILES); return found.offender === undefined && found.unchecked.length === 1 && found.unchecked[0].reason.includes('cannot be followed') && found.unchecked[0].text.includes('git commit'); })());
+check('module: an offender stops the walk; the misses before it are still reported', (() => { let call = 0; const found = untrackedUnderCommits('git commit -m a -- x && git commit -m b -- y && git commit -m c -- z', 'bash', REPO, () => { call += 1; return call === 1 ? { error: 'boom' } : { files: ['y/n.txt'] }; }); return call === 2 && found.offender?.files[0] === 'y/n.txt' && found.unchecked.length === 1 && found.unchecked[0].reason === 'boom'; })());
+check('module: no untracked files and no error is a clean answer', (() => { const found = untrackedUnderCommits('git commit -m a -- x', 'bash', REPO, NO_FILES); return found.offender === undefined && found.unchecked.length === 0; })());
+
+/** What `listUntracked` does with a process answer and which call it makes. @es Qué hace `listUntracked` con una respuesta y qué llamada hace. */
+function listWith(answer) {
+  const seen = {};
+  const run = (command, args, options) => { seen.command = command; seen.args = args; seen.options = options; return answer; };
+
+  return { result: listUntracked('/some/dir', ['a', 'b c'], run), seen };
+}
+
+const asked = listWith({ status: 0, stdout: 'one\0two words\0', stderr: '' });
+
+check('listUntracked: runs git directly with the exact argument array', asked.seen.command === 'git' && asked.seen.args.join('\n') === ['ls-files', '--others', '--exclude-standard', '-z', '--', 'a', 'b c'].join('\n'));
+check('listUntracked: runs in the given directory, without a shell, with a short timeout', asked.seen.options.cwd === '/some/dir' && !asked.seen.options.shell && asked.seen.options.timeout === GIT_TIMEOUT_MS && GIT_TIMEOUT_MS > 0 && GIT_TIMEOUT_MS <= 10000);
+check('listUntracked: the NUL separated answer is split into paths, empty entries dropped', asked.result.files?.join('|') === 'one|two words');
+check('listUntracked: a spawn timeout is an error that says it timed out', listWith({ error: Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' }) }).result.error?.includes('timed out'));
+check('listUntracked: a spawn failure is an error that says git could not run', listWith({ error: Object.assign(new Error('spawnSync git ENOENT'), { code: 'ENOENT' }) }).result.error?.includes('could not run') && !listWith({ error: Object.assign(new Error('x'), { code: 'ENOENT' }) }).result.error.includes('timed out'));
+check('listUntracked: a non-zero exit is an error carrying the first line of stderr', (() => { const { result } = listWith({ status: 128, stdout: '', stderr: 'fatal: not a git repository\nsecond line' }); return result.error?.includes('128') && result.error.includes('fatal: not a git repository') && !result.error.includes('second line') && result.files === undefined; })());
 
 // --- THE SHIM -----------------------------------------------------------------------------------
 const run = (input) => spawnSync(process.execPath, [GUARD], { input, encoding: 'utf8', windowsHide: true });
