@@ -171,7 +171,64 @@ check('hook: a run is counted', fires(), before + 1);
 check('hook: evaluate journals through the same path', journal().some((record) => record.inputDigest === digestInput(`s6\n${reasonB}`)), true);
 check('hook: a BOM-prefixed payload is read', [evaluate(`﻿${JSON.stringify(stopPayload(withB, { session_id: 's7' }))}`), journal().some((record) => record.inputDigest === digestInput(`s7\n${reasonB}`))], [undefined, true]);
 check('hook: an unreadable payload is not counted', [evaluate('{ no json'), fires()], [undefined, before + 2]);
-check('hook: a missing transcript fails open', evaluate(JSON.stringify(stopPayload(path.join(WORK, 'missing.jsonl')))), undefined);
+check('hook: a missing transcript fails open', (() => {
+  try {
+    return evaluate(JSON.stringify(stopPayload(path.join(WORK, 'missing.jsonl'))));
+  } catch (error) {
+    return `threw ${error.message}`;
+  }
+})(), undefined);
+
+// --- J-1: each judge is counted and journaled on its own, so one broken judge never costs the other its record.
+// @es J-1: cada juez se cuenta y registra por su cuenta: un juez roto nunca le cuesta el registro al otro.
+{
+  const ISOLATED = mkdtempSync(path.join(tmpdir(), 'premise-judge-j1-'));
+  const saved = process.env.HOOK_STATE_DIR;
+  const voiceReason = 'VOICE-JUDGE: write as the mentor, with the why';
+  const both = transcript([feedback(reasonA), feedback(voiceReason)]);
+  const records = (mechanism) => {
+    try {
+      return readFileSync(journalPath(mechanism), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line));
+    } catch {
+      return [];
+    }
+  };
+  const count = (mechanism) => {
+    try {
+      return JSON.parse(readFileSync(firesPath(mechanism), 'utf8')).count;
+    } catch {
+      return 0;
+    }
+  };
+
+  process.env.HOOK_STATE_DIR = ISOLATED;
+
+  try {
+    // The premise judge's journal is a directory: it can be neither read back nor appended to.
+    // @es El journal del juez de premisas es un directorio: no se puede releer ni ampliar.
+    mkdirSync(journalPath(MECHANISM), { recursive: true });
+    check('J-1: a judge whose journal is broken does not cost the other judge its block', [blocksOf(stopPayload(both, { session_id: 'j1' })), records('voice-judge').map((record) => record.reason)], [1, [voiceReason]]);
+
+    // The premise judge's counter is corrupt: that run is not counted, the voice judge's is, and the blocks are still journaled.
+    // @es El contador del juez de premisas está corrupto: esa corrida no se cuenta, la del de voz sí, y los bloqueos se registran igual.
+    rmSync(journalPath(MECHANISM), { recursive: true, force: true });
+    writeFileSync(firesPath(MECHANISM), '{not json');
+    check('J-1: a judge whose counter cannot count still lets the hook count the other judge and journal both blocks', [evaluate(JSON.stringify(stopPayload(both, { session_id: 'j2' }))), count('voice-judge'), records(MECHANISM).map((record) => record.reason), records('voice-judge').length], [undefined, 1, [reasonA], 2]);
+
+    // The premise judge's counter is held by another process: the hook neither waits long nor loses the blocks.
+    // @es El contador del juez de premisas lo tiene otro proceso: el hook ni espera mucho ni pierde los bloqueos.
+    rmSync(firesPath(MECHANISM), { force: true });
+    writeFileSync(`${firesPath(MECHANISM)}.lock`, '');
+
+    const started = Date.now();
+    const verdict = evaluate(JSON.stringify(stopPayload(both, { session_id: 'j3' })));
+
+    check('J-1: a busy counter costs the hook at most about 200 ms and no block', [verdict, Date.now() - started < 1_500, count('voice-judge'), records(MECHANISM).length, records('voice-judge').length], [undefined, true, 2, 2, 3]);
+  } finally {
+    process.env.HOOK_STATE_DIR = saved;
+    rmSync(ISOLATED, { recursive: true, force: true });
+  }
+}
 
 const alone = spawnSync(process.execPath, [path.join(HERE, 'journal-guard.mjs')], { input: JSON.stringify(stopPayload(withB, { session_id: 's8' })), encoding: 'utf8', env: { ...process.env, HOOK_STATE_DIR: STATE } });
 
