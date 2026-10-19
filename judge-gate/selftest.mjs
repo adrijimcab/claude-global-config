@@ -136,6 +136,42 @@ check('gate: more than 2 blocks stay capped', (await afterBlocks(5)).outcome, 'p
 check('gate: the premise judge is capped the same way', (await afterBlocks(2, premise)).outcome, 'pass-continued-capped');
 check('gate: the premise judge is judged after 1 block', (await gate(payload({ stop_hook_active: true }), answering(JSON.stringify({ ok: false, reason: `${premise.marker} x` })), premise, false, () => 1)).outcome, 'block');
 
+// --- PREFILTER AND APPENDIX: a judge may carry a cheap code test that decides whether the model is asked at
+// all, and a fixed text the gate adds to its block. @es PREFILTRO Y APÉNDICE.
+const seenByPrefilter = [];
+const withPrefilter = (answer, extra = {}) => ({ ...voice, prefilter: (parsed) => { seenByPrefilter.push(parsed); return answer; }, ...extra });
+
+asked.length = 0;
+seenByPrefilter.length = 0;
+const filteredOut = await gate(payload(), blockingAnswer, withPrefilter(false));
+
+check('prefilter: a message the prefilter rejects passes as pass-prefilter with no model call', [filteredOut.outcome, filteredOut.costUsd, filteredOut.durationMs, asked.length], ['pass-prefilter', 0, 0, 0]);
+check('prefilter: it receives the parsed hook input', [seenByPrefilter.length, seenByPrefilter[0]?.last_assistant_message], [1, message]);
+check('prefilter: a rejected continued stop is marked continued', (await gate(payload({ stop_hook_active: true }), blockingAnswer, withPrefilter(false), false, () => 0)).continued, true);
+
+asked.length = 0;
+check('prefilter: a message the prefilter accepts is judged', [(await gate(payload(), blockingAnswer, withPrefilter(true))).outcome, asked.length], ['block', 1]);
+asked.length = 0;
+
+const prefilterThrew = await gate(payload(), blockingAnswer, withPrefilter(false, { prefilter: () => { throw new Error('store down'); } }));
+
+check('prefilter: a prefilter that throws is a malfunction that passes, with no model call', [prefilterThrew.outcome, prefilterThrew.why, asked.length], ['malfunction', 'store down', 0]);
+
+seenByPrefilter.length = 0;
+await gate(payload({ last_assistant_message: '   ' }), blockingAnswer, withPrefilter(true));
+await gate(payload(), blockingAnswer, withPrefilter(true), true);
+await gate(payload({ stop_hook_active: true }), blockingAnswer, withPrefilter(true), false, () => 2);
+check('prefilter: it is never asked for a nested run, an empty message or a capped stop', seenByPrefilter.length, 0);
+
+const appended = await gate(payload({ session_id: 'sess-9' }), blockingAnswer, withPrefilter(true, { appendix: (parsed) => `DISMISS ${parsed.session_id}` }));
+
+check('appendix: a block carries the judge reason and then the fixed text built from the input', appended.reason, `${goodBlock}\n\nDISMISS sess-9`);
+check('appendix: a pass carries no reason', (await gate(payload(), answering('{"ok": true}'), withPrefilter(true, { appendix: () => 'X' }))).reason, undefined);
+
+const appendixThrew = await gate(payload(), blockingAnswer, withPrefilter(true, { appendix: () => { throw new Error('boom'); } }));
+
+check('appendix: an appendix that throws is a malfunction that passes', [appendixThrew.outcome, appendixThrew.why, appendixThrew.reason], ['malfunction', 'boom', undefined]);
+
 const countFailed = await gate(payload({ stop_hook_active: true }), blockingAnswer, voice, false, () => { throw new Error('log unreadable'); }).catch((error) => ({ outcome: 'threw', why: error.message }));
 
 check('gate: a failure reading the count passes as a malfunction', [countFailed.outcome, countFailed.why?.includes('log unreadable'), countFailed.reason], ['malfunction', true, undefined]);
