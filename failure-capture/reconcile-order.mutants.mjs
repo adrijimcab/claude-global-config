@@ -26,7 +26,7 @@ const MUTANTS = [
   ['the spool entry is removed and the incident logged while the ledgers are still unwritten', COMMAND, '    for (const ledger of touched) writeLedger(ledger);\n\n    for (const { full, entry } of consumed) {', '    for (const { full, entry } of consumed) {\n      appendFileSync(incidentsFile(), `${JSON.stringify(entry)}\\n`, \'utf8\');\n      unlinkSync(full);\n    }\n\n    for (const ledger of touched) writeLedger(ledger);\n\n    for (const { full, entry } of []) {'],
 
   // --- the ledger is replaced, never overwritten in place
-  ['the ledger is overwritten in place, so a crash mid-write leaves it truncated', LEDGERS, "    writeFileSync(temp, lines.join('\\n'), 'utf8');\n    renameSync(temp, ledger.file);", "    writeFileSync(ledger.file, lines.join('\\n'), 'utf8');"],
+  ['the ledger is overwritten in place, so a crash mid-write leaves it truncated', LEDGERS, '    writeFileSync(temp, data);\n    renameSync(temp, file);', '    writeFileSync(file, data);'],
   ['a failed write leaves its temporary file behind', LEDGERS, "    rmSync(temp, { force: true });\n    throw error;", '    throw error;'],
   ['a failed write is swallowed, so the caller believes the ledger is on disk', LEDGERS, "    rmSync(temp, { force: true });\n    throw error;", "    rmSync(temp, { force: true });\n    return;"]
 ];
