@@ -82,7 +82,21 @@ const MUTANTS = [
   ['the default home is not the Claude home', R, 'const options = { home: claudeHome(),', "const options = { home: path.resolve('.claude'),"],
   ['the date of the archive is not the given one', R, "options[argument.slice(2)] = argument === '--home' ? path.resolve(value) : value;", "options[argument.slice(2)] = argument === '--home' ? path.resolve(value) : options.date;"],
   ['the archive lives outside the home', R, 'const archive = path.join(options.home, ARCHIVE_FOLDER, options.date);', 'const archive = path.join(options.home, options.date);'],
-  ['nothing to do still reports a plan to apply', R, "  if (moving === 0) {\n    speaker.say('nothing-to-do');\n\n    return 0;\n  }\n", '']
+  ['nothing to do still reports a plan to apply', R, "  if (moving === 0 && redactions.length === 0) {\n    speaker.say('nothing-to-do');\n\n    return 0;\n  }\n", ''],
+  // --- E7: the text an old journal must not hold ---
+  ['text left to replace is nothing to do', R, 'if (moving === 0 && redactions.length === 0) {', 'if (moving === 0) {'],
+  ['the text is never replaced', R, '  if (!applyRedactions(redactions, speaker)) return 1;\n', ''],
+  ['a failed replacement is ignored', R, '  if (!applyRedactions(redactions, speaker)) return 1;', '  applyRedactions(redactions, speaker);'],
+  ['the text is replaced after the moves', R, '  if (!applyRedactions(redactions, speaker)) return 1;\n\n  const { count, failed } = applyPlan(plan, archive, speaker);', '  const { count, failed } = applyPlan(plan, archive, speaker);\n  if (!applyRedactions(redactions, speaker)) return 1;'],
+  ['the archives are not searched', R, 'const archived = dates.map((date) => path.join(archiveRoot, date, mechanism, file));', 'const archived = [];'],
+  ['the live journal is not searched', R, 'const live = stateDirsUnder(home).filter((entry) => entry.mechanism === mechanism).map(({ directory }) => path.join(directory, file));', 'const live = [];'],
+  ['a same-named file of any mechanism is replaced', R, '.filter((entry) => entry.mechanism === mechanism)', '.filter(() => true)'],
+  ['the replaced line keeps its text', R, 'return JSON.stringify({ ...rest, [digestField]: digestInput(text) });', 'return JSON.stringify({ ...record, [digestField]: digestInput(text) });'],
+  ['a field that is no text is replaced', R, "typeof record?.[field] !== 'string'", 'record?.[field] === undefined'],
+  ['every line counts as pending', R, '.filter((line) => redactedLine(line, field, digestField) !== line).length', '.length'],
+  ['a file with nothing pending is still planned', R, 'return pending === 0 ? [] :', 'return false ? [] :'],
+  ['a file is rewritten in place, not through a temporary', R, '      writeFileSync(`${source}.tmp`, text);\n      renameSync(`${source}.tmp`, source);', '      writeFileSync(source, text);'],
+  ['the replacement is not planned in a dry run', R, '  for (const { source, field, digestField, pending } of redactions) speaker.say(', '  for (const { source, field, digestField, pending } of []) speaker.say(']
 ];
 
 const survivors = runMutants({

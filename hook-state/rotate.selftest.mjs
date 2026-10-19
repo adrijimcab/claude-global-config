@@ -24,8 +24,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { digestInput } from './journal.mjs';
 import { isolateState } from './locations.mjs';
-import { ARCHIVE, JOURNAL, KEEP, KINDS, LOCK, UNKNOWN, classify, dismissalsIn, liveSessions, main, pathMatches, processAlive } from './rotate.mjs';
+import { ARCHIVE, JOURNAL, KEEP, KINDS, LOCK, REDACTIONS, UNKNOWN, classify, dismissalsIn, liveSessions, main, pathMatches, processAlive, redactedLine } from './rotate.mjs';
 
 isolateState('rotate');
 
@@ -228,6 +229,58 @@ try {
   const locked = rotate(['--home', live, '--apply']);
   check('apply with a state lock is refused with exit 2 and names it', [locked.code, locked.err.join('\n').includes(path.join(live, 'failure-capture', 'state', 'ledger.lock'))], [2, true]);
   check('the lock is planned as kept', rotate(['--home', live]).out.join('\n').includes('KEEP     failure-capture/ledger.lock: a lock'), true);
+
+  // --- E7: the command text of old eval-guard denials is replaced by its sha256, once, live and archived ---
+  // @es E7: el texto de orden de los rechazos viejos de eval-guard se sustituye por su sha256, una vez, vivo y archivado.
+  const OLD_TEXT = "node -e \"console.log('\\\\b')\" // denial-secret-4471";
+  const OLD_DENIAL = JSON.stringify({ at: 'x', flag: '-e', command: OLD_TEXT });
+  const NEW_DENIAL = JSON.stringify({ at: 'y', flag: '-e', commandDigest: digestInput('other') });
+  const ARCHIVED_DENIAL = JSON.stringify({ at: 'z', command: 'archived denial-secret-4471' });
+  const redactHome = makeHome(scratch, 'redact');
+  const liveDenials = path.join(redactHome, 'eval-guard', 'state', 'denials.jsonl');
+  const oldArchive = path.join(redactHome, 'state-archive', '2026-10-01', 'eval-guard', 'denials.jsonl');
+
+  put(redactHome, 'eval-guard/state/denials.jsonl', `${OLD_DENIAL}\n${NEW_DENIAL}\n{torn\n`);
+  put(redactHome, 'state-archive/2026-10-01/eval-guard/denials.jsonl', `${ARCHIVED_DENIAL}\n`);
+  put(redactHome, 'backlog-guard/state/denials.jsonl', `${OLD_DENIAL}\n`);
+
+  const beforeRedaction = treeOf(redactHome);
+  const plannedRedaction = rotate(['--home', redactHome]);
+
+  check('a dry run plans the replacement of the live and the archived text, and changes nothing', [plannedRedaction.out.filter((line) => line.startsWith('REPLACE')).length, plannedRedaction.out.join('\n').includes(`REPLACE  ${liveDenials}: 1 line(s)`), plannedRedaction.out.join('\n').includes(`REPLACE  ${oldArchive}: 1 line(s)`), treeOf(redactHome)], [2, true, true, beforeRedaction]);
+  check('every replacement line is bilingual', plannedRedaction.out.filter((line) => line.startsWith('REPLACE')).every((line) => line.includes(' @es SUSTITUIR ')), true);
+
+  const appliedRedaction = rotate(['--home', redactHome, '--apply']);
+  const rotatedDenials = readFileSync(path.join(redactHome, 'state-archive', DATE, 'eval-guard', 'denials.jsonl'), 'utf8');
+
+  check('apply exits 0 and says what it replaced', [appliedRedaction.code, appliedRedaction.out.some((line) => line.startsWith(`Replaced the \`command\` text by its sha256 in 1 line(s) of ${liveDenials}`))], [0, true]);
+  check('the rotated journal holds the digest and never the text', [rotatedDenials.includes('denial-secret-4471'), rotatedDenials.split('\n')[0]], [false, JSON.stringify({ at: 'x', flag: '-e', commandDigest: digestInput(OLD_TEXT) })]);
+  check('an entry already in digest form and a torn line are kept as they were', rotatedDenials.split('\n').slice(1), [NEW_DENIAL, '{torn', '']);
+  check('a same-named file of another mechanism is not touched', readFileSync(path.join(redactHome, 'backlog-guard', 'state', 'denials.jsonl'), 'utf8'), `${OLD_DENIAL}\n`);
+  check('an archive of an earlier rotation is replaced too', readFileSync(oldArchive, 'utf8'), `${JSON.stringify({ at: 'z', commandDigest: digestInput('archived denial-secret-4471') })}\n`);
+
+  const afterRedaction = treeOf(redactHome);
+  const secondRedaction = rotate(['--home', redactHome, '--apply']);
+
+  check('a second run replaces nothing and changes nothing', [secondRedaction.out.some((line) => line.startsWith('REPLACE') || line.startsWith('Replaced')), treeOf(redactHome)], [false, afterRedaction]);
+  check('a line is replaced only when its field holds text', [redactedLine('{"command":3}', 'command', 'commandDigest'), redactedLine('not json', 'command', 'commandDigest'), redactedLine('null', 'command', 'commandDigest'), redactedLine('{"other":"x"}', 'command', 'commandDigest')], ['{"command":3}', 'not json', 'null', '{"other":"x"}']);
+  check('the redaction table names the eval-guard denial journal', REDACTIONS, [['eval-guard', 'denials.jsonl', 'command', 'commandDigest']]);
+
+  const failingRedaction = makeHome(scratch, 'redact-fails');
+
+  put(failingRedaction, 'eval-guard/state/denials.jsonl', `${OLD_DENIAL}\n`);
+  mkdirSync(path.join(failingRedaction, 'eval-guard', 'state', 'denials.jsonl.tmp'));
+  const failedRedaction = rotate(['--home', failingRedaction, '--apply']);
+
+  check('a replacement that fails exits 1, names the file and moves nothing', [failedRedaction.code, failedRedaction.err.join('\n').includes(`FAILED on ${path.join(failingRedaction, 'eval-guard', 'state', 'denials.jsonl')}`), existsSync(path.join(failingRedaction, 'collision-guard', 'state', 'refusals.jsonl'))], [1, true, true]);
+  check('a home with only text to replace still applies', (() => {
+    const onlyText = path.join(scratch, 'only-text');
+
+    put(onlyText, 'state-archive/2026-10-01/eval-guard/denials.jsonl', `${OLD_DENIAL}\n`);
+    const result = rotate(['--home', onlyText, '--apply']);
+
+    return [result.code, readFileSync(path.join(onlyText, 'state-archive', '2026-10-01', 'eval-guard', 'denials.jsonl'), 'utf8').includes('denial-secret-4471')];
+  })(), [0, false]);
 
   // --- a move that fails ---
   const broken = makeHome(scratch, 'broken');
