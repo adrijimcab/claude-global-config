@@ -218,7 +218,10 @@ function attemptsOf(turn) {
 
         if (identified && byId.has(block.id)) continue;
 
-        const attempt = { tool: block.name, id: block.id, label: labelOf(block.name, block.input), at: entry.timestamp, outcome: 'unknown', reason: undefined };
+        // `batch` is the model message the call came in: calls of one message were issued side by side, so
+        // none of them can be a retry of another. @es `batch` es el mensaje del modelo de la llamada: las de
+        // un mismo mensaje salieron a la vez, y ninguna puede ser el reintento de otra.
+        const attempt = { tool: block.name, id: block.id, label: labelOf(block.name, block.input), at: entry.timestamp, batch: entry.message?.id, outcome: 'unknown', reason: undefined };
 
         attempts.push(attempt);
         byId.set(block.id, attempt);

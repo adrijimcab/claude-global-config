@@ -337,13 +337,23 @@ const cases = [
   ],
 
   // --- Calls that share one model message were all issued before any result came back, so none of them
-  // --- can be a retry of another: a success listed first in the batch never pays a refusal after it.
+  // --- can be a retry of another: a launch pays only a refusal from an EARLIER batch, in either order.
   // @es Las llamadas de un mismo mensaje del modelo salieron todas antes de cualquier resultado: ninguna
-  // puede ser el reintento de otra, y un éxito listado antes en el lote no paga un rechazo posterior.
+  // puede ser el reintento de otra, y un lanzamiento solo paga un rechazo de un lote ANTERIOR.
   [
     'one parallel batch: a success to agent X listed BEFORE the refusal to X still leaves that refusal owed',
     1,
     [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), batchCall('m1', 'p2', 'SendMessage', { to: 'aX', message: 'go' }), result('p1', LAUNCHED, false), result('p2', REFUSAL, true)],
+  ],
+  [
+    'one parallel batch: a refusal to agent X listed BEFORE a success to X is still owed',
+    1,
+    [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), batchCall('m1', 'p2', 'SendMessage', { to: 'aX', message: 'go' }), result('p1', REFUSAL, true), result('p2', LAUNCHED, false)],
+  ],
+  [
+    'a refusal in batch m1 is paid by a success in the LATER batch m2',
+    0,
+    [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), result('p1', REFUSAL, true), batchCall('m2', 'p2', 'SendMessage', { to: 'aX', message: 'go' }), result('p2', LAUNCHED, false)],
   ],
 ];
 

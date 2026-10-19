@@ -21,14 +21,15 @@
  * ORDER IS PART OF THE CHECK. A success BEFORE a refusal cannot be its retry, and an abandonment
  * recorded before a refusal cannot excuse it. Both are settled by timestamp, for the same reason the
  * engram-persistence guard reads only the transcript written since its last satisfaction: a stale
- * receipt that can cover new work is not a receipt.
+ * receipt that can cover new work is not a receipt. Calls of ONE model message were all issued before
+ * any result came back, so a success never pays a refusal from its own batch, whichever is listed first.
  *
  * @es La decisión: de las delegaciones que el turno intentó, cuáles no llegaron a lanzarse. Un rechazo
  * abre una DEUDA; un lanzamiento posterior, o un abandono registrado, PAGA una. Se empareja por CUENTA
  * y ORDEN, no por contenido: comparar descripciones es un guard de identidad sobre lenguaje natural, y
  * ya medimos que no distingue `a11y` de `accessibility`. Se paga la deuda MÁS RECIENTE primero porque
  * un reintento sigue a su propio rechazo casi al instante (medido: 23 segundos). El ORDEN cuenta: un
- * éxito anterior al rechazo no puede ser su reintento.
+ * éxito anterior al rechazo no puede ser su reintento, ni uno del mismo mensaje del modelo (mismo lote).
  */
 
 /** Milliseconds for a timestamp, or `undefined` when it cannot be read as one. @es Milisegundos de una marca de tiempo. */
@@ -38,6 +39,20 @@ function instant(value) {
   const at = Date.parse(value);
 
   return Number.isNaN(at) ? undefined : at;
+}
+
+/**
+ * Pays the newest debt `launch` can answer. Calls that share one model message (`batch`) were all issued
+ * before any result came back, so a launch never pays a refusal from its own batch, in either order; it
+ * pays only one from an EARLIER batch. An attempt with no known batch is paid by order alone.
+ * @es Paga la deuda más reciente que `launch` puede responder. Las llamadas de un mismo mensaje del modelo
+ * salieron todas antes de cualquier resultado: un lanzamiento nunca paga un rechazo de su propio lote, en
+ * ningún orden; solo uno de un lote ANTERIOR. Sin lote conocido, decide solo el orden.
+ */
+function payNewestFromEarlierBatch(owed, launch) {
+  const debt = owed.findLastIndex((refused) => refused.batch === undefined || refused.batch !== launch.batch);
+
+  if (debt !== -1) owed.splice(debt, 1);
 }
 
 /**
@@ -56,7 +71,7 @@ export function unlaunchedDelegations(attempts, abandonments = []) {
   // real refusal. @es Un intento sin resultado no encaja en ninguna rama: ni abre deuda ni la paga.
   for (const attempt of attempts) {
     if (attempt.outcome === 'refused') owed.push(attempt);
-    else if (attempt.outcome === 'launched') owed.pop();
+    else if (attempt.outcome === 'launched') payNewestFromEarlierBatch(owed, attempt);
   }
 
   const recorded = [...abandonments].sort((left, right) => (instant(left.at) ?? 0) - (instant(right.at) ?? 0));

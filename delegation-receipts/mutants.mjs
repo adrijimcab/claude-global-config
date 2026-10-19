@@ -65,8 +65,14 @@ const MUTANTS = [
   ['calls with no id are folded into one attempt', 'delegation-receipts/turn-delegations.mjs', "const identified = typeof block.id === 'string' && block.id !== '';", 'const identified = true;'],
   ['calls whose id is the empty string are folded into one attempt', 'delegation-receipts/turn-delegations.mjs', " && block.id !== '';", ';'],
   ['a refusal never opens a debt', 'delegation-receipts/unlaunched.mjs', 'owed.push(attempt);', 'undefined;'],
-  ['a launch no longer pays a debt, so every retried turn is refused', 'delegation-receipts/unlaunched.mjs', "else if (attempt.outcome === 'launched') owed.pop();", 'else undefined;'],
-  ['an attempt with no result PAYS a debt', 'delegation-receipts/unlaunched.mjs', "if (attempt.outcome === 'launched') owed.pop();", "if (attempt.outcome !== 'refused') owed.pop();"],
+  ['a launch no longer pays a debt, so every retried turn is refused', 'delegation-receipts/unlaunched.mjs', "else if (attempt.outcome === 'launched') payNewestFromEarlierBatch(owed, attempt);", 'else undefined;'],
+  ['an attempt with no result PAYS a debt', 'delegation-receipts/unlaunched.mjs', "if (attempt.outcome === 'launched') payNewestFromEarlierBatch(", "if (attempt.outcome !== 'refused') payNewestFromEarlierBatch("],
+  // --- ONE BATCH: calls of one model message cannot be each other's retry. @es UN LOTE: las llamadas de un mismo mensaje no son reintento entre sí.
+  ['a launch pays a refusal from its OWN batch', 'delegation-receipts/unlaunched.mjs', 'refused.batch === undefined || refused.batch !== launch.batch', 'true'],
+  ['a refusal with no batch is never paid', 'delegation-receipts/unlaunched.mjs', 'refused.batch === undefined || ', ''],
+  ['a launch with nothing it may pay removes the newest debt anyway', 'delegation-receipts/unlaunched.mjs', 'if (debt !== -1) owed.splice(debt, 1);', 'owed.splice(debt, 1);'],
+  ['a launch pays the OLDEST payable debt instead of the newest', 'delegation-receipts/unlaunched.mjs', 'const debt = owed.findLastIndex(', 'const debt = owed.findIndex('],
+  ['the model message of a call is no longer recorded, so every batch looks alike', 'delegation-receipts/turn-delegations.mjs', 'batch: entry.message?.id,', 'batch: undefined,'],
 
 
   // --- THE RECORDED ESCAPE, whose whole value is that it is narrow and written down.
