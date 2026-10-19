@@ -22,7 +22,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { KINDS, appendRecord, createIdGenerator, digestInput, firesPath, incrementFires, journalPath } from './journal.mjs';
+import * as journal from './journal.mjs';
+
+const { KINDS, appendRecord, createIdGenerator, digestInput, firesPath, incrementFires, journalPath } = journal;
+// Read through the namespace so a module without it fails a check, not the import. @es Por el espacio de nombres.
+const uncountedPath = (mechanism) => journal.uncountedPath?.(mechanism) ?? '';
 
 // Child mode of the concurrency proof: this same file, run with the flag, increments one counter N times.
 // @es Modo hijo de la prueba de concurrencia: este mismo fichero, con la bandera, incrementa un contador N veces.
@@ -63,6 +67,18 @@ function thrown(action) {
 
   return undefined;
 }
+
+/** The value of `action`, or `threw: <message>`: the counter must never throw, so a throw fails a check. @es El valor, o `threw: <mensaje>`. */
+function notThrown(action) {
+  try {
+    return action();
+  } catch (error) {
+    return `threw: ${error.message}`;
+  }
+}
+
+/** The not-counted records of a mechanism. @es Los registros de disparos no contados de un mecanismo. */
+const uncounted = (mechanism) => (existsSync(uncountedPath(mechanism)) ? readFileSync(uncountedPath(mechanism), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)) : []);
 
 const lines = (mechanism) => (existsSync(journalPath(mechanism)) ? readFileSync(journalPath(mechanism), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)) : []);
 const GOOD = { blockId: 'blk-1', toolUseId: 'toolu_1', inputDigest: digestInput('input') };
@@ -165,54 +181,78 @@ try {
     child.on('close', resolve);
   })));
 
+  const raced = uncounted('guard-race');
+
   check('every concurrent child finished cleanly', exits, Array(CHILDREN).fill(0));
-  check('no concurrent increment was lost', JSON.parse(readFileSync(firesPath('guard-race'), 'utf8')).count, CHILDREN * PER_CHILD);
-  check('nothing but the counter is left beside it (no temp, no lock)', readdirSync(path.dirname(firesPath('guard-race'))), ['fires.json']);
+  check('no concurrent increment was lost in silence: each one is counted or recorded as not counted', JSON.parse(readFileSync(firesPath('guard-race'), 'utf8')).count + raced.length, CHILDREN * PER_CHILD);
+  check('every increment not counted in the race was refused only by the busy lock', raced.every((record) => /stayed locked/.test(record.reason)), true);
+  check('nothing but the counter (and its not-counted record) is left beside it: no temp, no lock', readdirSync(path.dirname(firesPath('guard-race'))).filter((name) => name !== 'fires-uncounted.jsonl'), ['fires.json']);
 
   // A fixed temp name is a collision waiting to happen: a leftover under that name must not block an increment.
   // @es Un nombre temporal fijo es una colisión esperando: un resto con ese nombre no debe bloquear un incremento.
   mkdirSync(`${firesPath('guard-t')}.tmp`, { recursive: true });
   check('a leftover at the old fixed temp name does not block the increment', incrementFires('guard-t'), 1);
 
+  // J-1: no failure of the counter aborts its caller. The call returns null, and the record says why.
+  // @es J-1: ningún fallo del contador aborta a quien lo llama. La llamada devuelve null y el registro dice por qué.
+  check('the not-counted record lives at <stateDir>/fires-uncounted.jsonl', uncountedPath('guard-f'), path.join(stateRoot, 'guard-f', 'fires-uncounted.jsonl'));
+
   // A failed publish must not leave its temp behind (the rename fails over a non-empty directory).
   // @es Una publicación fallida no deja su temporal (el renombrado falla sobre un directorio no vacío).
   const blocked = firesPath('guard-u');
   mkdirSync(path.join(blocked, 'inside'), { recursive: true });
-  check('a rename that fails is reported', typeof thrown(() => incrementFires('guard-u', { readFile: () => '{"count":1}' })), 'string');
-  check('and leaves no temp and no lock behind', readdirSync(path.dirname(blocked)).sort(), ['fires.json']);
+  check('a rename that fails does not throw, and is recorded as not counted', [notThrown(() => incrementFires('guard-u', { readFile: () => '{"count":1}' })), uncounted('guard-u').length], [null, 1]);
+  check('and leaves no temp and no lock behind', readdirSync(path.dirname(blocked)).sort(), ['fires-uncounted.jsonl', 'fires.json']);
 
-  // A lock that stays held: the fire is not counted, the call says so in both languages, the holder's lock stays.
-  // @es Un lock que sigue ocupado: la corrida no se cuenta, la llamada lo dice en ambos idiomas, el lock ajeno queda.
+  // A lock that stays held: the fire is not counted, the record says so in both languages, the holder's lock stays.
+  // @es Un lock que sigue ocupado: la corrida no se cuenta, el registro lo dice en ambos idiomas, el lock ajeno queda.
   mkdirSync(path.dirname(firesPath('guard-v')), { recursive: true });
   writeFileSync(`${firesPath('guard-v')}.lock`, '');
   let busyWaits = 0;
-  const busy = thrown(() => incrementFires('guard-v', { lock: { attempts: 2, wait: () => { busyWaits += 1; } } }));
 
+  check('a counter locked by another process returns null, never throws', notThrown(() => incrementFires('guard-v', { lock: { attempts: 2, wait: () => { busyWaits += 1; } } })), null);
   check('the lock options of the caller are honoured (two attempts, two waits)', busyWaits, 2);
-  check('a counter locked by another process is refused, bilingual', [/fires\.json/.test(busy ?? ''), /@es /.test(busy ?? '')], [true, true]);
+  check('the not-counted record names the mechanism and the busy counter, bilingual', ((record) => [record?.mechanism, record?.counted, /fires\.json/.test(record?.reason ?? ''), /stayed locked/.test(record?.reason ?? ''), / @es /.test(record?.reason ?? ''), / @es /.test(record?.message ?? ''), typeof record?.at])(uncounted('guard-v')[0]), ['guard-v', false, true, true, true, true, 'string']);
   check('and nothing was counted, the other lock stays', [existsSync(firesPath('guard-v')), existsSync(`${firesPath('guard-v')}.lock`)], [false, true]);
+
+  let defaultWaits = 0;
+
+  notThrown(() => incrementFires('guard-v', { lock: { wait: () => { defaultWaits += 1; } } }));
+  check('J-1: the default wait budget of the counter is thirteen attempts', defaultWaits, 13);
+
+  const started = Date.now();
+
+  notThrown(() => incrementFires('guard-v'));
+  const spent = Date.now() - started;
+
+  check('J-1: with the real pause, a busy counter gives up after about 200 ms (more than 150, less than 350)', [spent > 150, spent < 350], [true, true]);
 
   mkdirSync(path.dirname(firesPath('guard-x')), { recursive: true });
   writeFileSync(firesPath('guard-x'), '{not json');
-  check('a corrupt counter is refused, bilingual, and not overwritten', [/fires\.json/.test(thrown(() => incrementFires('guard-x')) ?? '') && /@es /.test(thrown(() => incrementFires('guard-x')) ?? ''), readFileSync(firesPath('guard-x'), 'utf8')], [true, '{not json']);
+  check('a corrupt counter is not counted, recorded bilingual, and not overwritten', [notThrown(() => incrementFires('guard-x')), /fires\.json/.test(uncounted('guard-x').at(-1)?.reason ?? '') && /@es /.test(uncounted('guard-x').at(-1)?.reason ?? ''), readFileSync(firesPath('guard-x'), 'utf8')], [null, true, '{not json']);
   writeFileSync(firesPath('guard-x'), '{"count":"two"}');
-  check('a counter whose count is not a number is refused', /fires\.json/.test(thrown(() => incrementFires('guard-x')) ?? ''), true);
+  check('a counter whose count is not a number is refused', [notThrown(() => incrementFires('guard-x')), /not a valid counter/.test(uncounted('guard-x').at(-1)?.reason ?? '')], [null, true]);
   writeFileSync(firesPath('guard-x'), '{"count":-1}');
-  check('a negative counter is refused', /fires\.json/.test(thrown(() => incrementFires('guard-x')) ?? ''), true);
+  check('a negative counter is refused', [notThrown(() => incrementFires('guard-x')), uncounted('guard-x').length], [null, 3]);
   writeFileSync(firesPath('guard-x'), 'null');
-  check('a counter file holding null is refused as a counter', /fires\.json/.test(thrown(() => incrementFires('guard-x')) ?? ''), true);
+  check('a counter file holding null is refused as a counter', [notThrown(() => incrementFires('guard-x')), uncounted('guard-x').length], [null, 4]);
 
   rmSync(firesPath('guard-x'));
   mkdirSync(firesPath('guard-x'));
-  check('a counter that cannot be read for a reason other than absence is not read as zero', /EISDIR/.test(thrown(() => incrementFires('guard-x')) ?? ''), true);
+  check('a counter that cannot be read for a reason other than absence is not read as zero', [notThrown(() => incrementFires('guard-x')), uncounted('guard-x').at(-1)?.code], [null, 'EISDIR']);
 
   // The read failure is injected: a directory in place of the counter also fails the WRITE, which hides whether the read refused.
   // @es El fallo de lectura se inyecta: un directorio en lugar del contador también hace fallar la ESCRITURA, y eso oculta si la lectura rechazó.
   const denied = () => {
     throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
   };
-  check('a counter that cannot be read (injected EACCES) is refused with that error', thrown(() => incrementFires('guard-y', { readFile: denied })), 'permission denied');
+  check('a counter that cannot be read (injected EACCES) is recorded with that error', [notThrown(() => incrementFires('guard-y', { readFile: denied })), uncounted('guard-y').at(-1)?.reason, uncounted('guard-y').at(-1)?.code], [null, 'permission denied', 'EACCES']);
   check('a counter that cannot be read is not replaced by one', existsSync(firesPath('guard-y')), false);
+
+  // A state directory that cannot even be made: nothing can be recorded there, and still nothing throws.
+  // @es Un directorio de estado que ni se puede crear: no se puede registrar nada allí, y aun así nada lanza.
+  writeFileSync(path.join(stateRoot, 'guard-w'), 'a file where the directory should be');
+  check('J-1: a counter whose directory cannot be made returns null, never throws', notThrown(() => incrementFires('guard-w')), null);
   const absent = () => {
     throw Object.assign(new Error('no such file'), { code: 'ENOENT' });
   };

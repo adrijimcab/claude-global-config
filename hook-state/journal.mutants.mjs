@@ -70,7 +70,8 @@ const MUTANTS = [
   ['the journal file has another name', J, "'journal.jsonl'", "'journal.json'"],
   ['every mechanism shares one journal', J, "path.join(stateDir(mechanism), 'journal.jsonl')", "path.join(stateDir('shared'), 'journal.jsonl')"],
   ['an append replaces the journal', J, 'appendFileSync(journalPath(mechanism), `${JSON.stringify(record)}\\n`);', 'writeFileSync(journalPath(mechanism), `${JSON.stringify(record)}\\n`);'],
-  ['a record has no line end', J, '`${JSON.stringify(record)}\\n`', '`${JSON.stringify(record)}`'],
+  ['a record has no line end', J, 'appendFileSync(journalPath(mechanism), `${JSON.stringify(record)}\\n`);', 'appendFileSync(journalPath(mechanism), `${JSON.stringify(record)}`);'],
+  ['a not-counted record has no line end', J, 'appendFileSync(uncountedPath(mechanism), `${JSON.stringify(record)}\\n`);', 'appendFileSync(uncountedPath(mechanism), `${JSON.stringify(record)}`);'],
   ['the state directory is not created before an append', J, 'mkdirSync(stateDir(mechanism), { recursive: true });\n  appendFileSync(', 'appendFileSync('],
   ['an append counts a fire', J, 'appendFileSync(journalPath(mechanism), `${JSON.stringify(record)}\\n`);', 'appendFileSync(journalPath(mechanism), `${JSON.stringify(record)}\\n`); incrementFires(mechanism);'],
 
@@ -82,7 +83,7 @@ const MUTANTS = [
   ['a corrupt counter is read as valid', J, 'parsed = JSON.parse(text);', 'parsed = { count: 0 };'],
   ['a counter that is not an integer is accepted', J, '!Number.isSafeInteger(parsed?.count)', 'false'],
   ['a negative counter is accepted', J, '|| parsed.count < 0', ''],
-  ['the counter is not created before a write', J, 'mkdirSync(stateDir(mechanism), { recursive: true });\n\n  const outcome', 'const outcome'],
+  ['the counter is not created before a write', J, 'mkdirSync(stateDir(mechanism), { recursive: true });\n\n    const outcome', 'const outcome'],
   ['the temp file of the counter is left behind', J, 'renameSync(temp, file);', "writeFileSync(file, readFileSync(temp, 'utf8'));"],
   ['an increment writes a journal line', J, 'renameSync(temp, file);', "renameSync(temp, file);\n      appendFileSync(journalPath(mechanism), '{}\\n');"],
 
@@ -90,11 +91,27 @@ const MUTANTS = [
   ['the increment runs without the lock', J, 'const outcome = withLock(`${file}.lock`, () => {', 'const outcome = ((_lockFile, work) => ({ held: true, value: work() }))(`${file}.lock`, () => {'],
   ['the lock has another name per call', J, 'withLock(`${file}.lock`,', 'withLock(`${file}.${process.pid}.lock`,'],
   ['the temp name is fixed again', J, "const temp = `${file}.${process.pid}.tmp`;", 'const temp = `${file}.tmp`;'],
-  ['a failed publish leaves its temp behind', J, '      rmSync(temp, { force: true });\n\n      throw error;', '      throw error;'],
-  ['a failed publish is swallowed', J, '      rmSync(temp, { force: true });\n\n      throw error;', '      rmSync(temp, { force: true });'],
+  ['a failed publish leaves its temp behind', J, '        rmSync(temp, { force: true });\n\n        throw error;', '        throw error;'],
+  ['a failed publish is swallowed', J, '        rmSync(temp, { force: true });\n\n        throw error;', '        rmSync(temp, { force: true });'],
   ['a counter locked by another process is silently not counted', J, 'if (!outcome.held) throw new Error(bilingual(\'fires-busy\', { file }));', 'if (!outcome.held) return 0;'],
   ['the busy refusal is English only', J, "bilingual('fires-busy', { file })", "'fires.json is locked'"],
-  ['the lock options of the caller are ignored', J, '  }, lock);', '  });']
+  ['the lock options of the caller are ignored', J, '{ ...FIRES_LOCK, ...lock }', '{ ...FIRES_LOCK }'],
+
+  // --- J-1: the counter never aborts its caller, and a run not counted is recorded ---
+  ['the short wait budget of the counter is not applied', J, '{ ...FIRES_LOCK, ...lock }', 'lock'],
+  ['the counter waits forty attempts', J, 'attempts: 13, wait: pauseFor(15)', 'attempts: 40, wait: pauseFor(15)'],
+  ['the counter pauses 50 ms between attempts', J, 'attempts: 13, wait: pauseFor(15)', 'attempts: 13, wait: pauseFor(50)'],
+  ['a run that cannot be counted aborts the caller', J, '    recordUncounted(mechanism, error);\n\n    return null;', '    throw error;'],
+  ['a run that cannot be counted is not recorded', J, '    recordUncounted(mechanism, error);\n', ''],
+  ['a run not counted returns zero, as if counted', J, '    return null;', '    return 0;'],
+  ['the not-counted record says it was counted', J, 'counted: false', 'counted: true'],
+  ['the not-counted record loses its reason', J, "reason: error instanceof Error ? error.message : String(error)", "reason: ''"],
+  ['the not-counted record loses its code', J, 'code: error?.cause?.code ?? error?.code', 'code: undefined'],
+  ['the not-counted record loses its mechanism', J, 'counted: false, reason', 'counted: false, mechanism: undefined, reason'],
+  ['the not-counted message is English only', J, "message: bilingual('fires-uncounted', { mechanism })", "message: 'not counted'"],
+  ['the not-counted record has another name', J, "'fires-uncounted.jsonl'", "'fires-uncounted.json'"],
+  ['the not-counted record replaces the earlier ones', J, 'appendFileSync(uncountedPath(mechanism),', 'writeFileSync(uncountedPath(mechanism),'],
+  ['a not-counted record that cannot be written aborts the caller', J, '  } catch {\n    // Nowhere left', '  } catch (error) {\n    throw error; // Nowhere left']
 ];
 
 const survivors = runMutants({
