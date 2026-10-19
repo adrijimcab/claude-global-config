@@ -33,6 +33,9 @@ const MUTANTS = [
   ['the already-dismissed message loses its once-only half', T, '; a dismissal is recorded once.', '.'],
   ['a dismiss message id is renamed', T, "'already-dismissed': {", "'already-dismissed-x': {"],
   ['a message id is renamed', T, "'bad-mechanism': {", "'bad-mechanisms': {"],
+  ['the lock fault no longer says it is not contention', T, '. This is a fault, not another writer holding it.', '.'],
+  ['the ceiling break message no longer names the reused pid', T, ': a reused pid must not wedge the lock.', '.'],
+  ['the lock fault message loses its Spanish half', T, "es: 'No se pudo crear el lock {file} ({code}): {detail}. Es un fallo, no otro escritor que lo tiene.'", "es: ''"],
   ['the table is consumed by printing instead of by rendering a line', T, 'line: bilingual', 'say: bilingual']
 ];
 

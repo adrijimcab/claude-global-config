@@ -1,69 +1,281 @@
 /**
- * The exclusive right to read-modify-write one state file: a lock file created atomically (`wx`). A caller that
- * finds it held waits a bounded number of attempts and then gives up without running its work, and never
- * removes a lock it did not take. A lock older than the stale limit (by the lock file's own modification time,
- * which exists the instant the file does) belonged to a process that died holding it and is broken, so a crashed
- * writer cannot wedge every later one. The work held under it is a few milliseconds, so the stale limit is
- * orders of magnitude above it; two processes that both find the same dead lock at the same instant are the
- * one residual race, and it needs a crash first.
+ * The one lock of every state writer: the exclusive right to read-modify-write one file, taken by the hook-state
+ * counters (`journal.mjs`) and, through the thin adapter `failure-capture/ledger-lock.mjs`, by the ledger writers.
  *
- * Lives in `hook-state/` because the counters that need it live here and every mechanism already depends on
- * this folder; `failure-capture/ledger-lock.mjs` solves the same problem for the ledgers one layer up.
+ * TAKING is one atomic step: the lock file is created exclusively WITH its owner token (`pid:random`) in it
+ * (`writeFileSync` with flag `wx`). A taker that finds it held waits a bounded number of attempts and then
+ * stands aside without running its work. RELEASING removes the lock only while it still holds the token this
+ * process wrote, so a holder whose lock was broken never removes the lock of the one who took it next.
  *
- * @es El derecho exclusivo a leer-modificar-escribir un fichero de estado: un fichero de lock creado de forma
- * atómica (`wx`). Quien lo encuentra ocupado espera un número acotado de intentos y se rinde sin ejecutar su
- * trabajo, y nunca borra un lock que no tomó. Un lock más viejo que el límite (por la fecha de modificación del
- * propio fichero, que existe desde que existe el fichero) era de un proceso muerto y se rompe, para que un
- * escritor caído no bloquee a los demás. El trabajo bajo el lock dura milisegundos, así que el límite está muy
- * por encima; dos procesos que encuentran el mismo lock muerto en el mismo instante son la única carrera
- * residual, y exige una caída previa. Vive en `hook-state/` porque aquí viven los contadores que lo necesitan
- * y todo mecanismo ya depende de esta carpeta; `failure-capture/ledger-lock.mjs` resuelve lo mismo para los ledgers.
+ * A lock is STALE only when it is older than the stale age (by its own modification time, which exists the
+ * instant the file does) AND its owner is gone: the token names no pid (an empty or unreadable lock, left by a
+ * crash between the create and the write) or its pid no longer exists. A lock younger than the stale age is live
+ * whatever it holds, so a lock still being written is never taken for an old one. Past the absolute ceiling (ten
+ * times the stale age by default) a lock is stale even when its pid still answers, because that pid may have been
+ * reused by an unrelated process, which would otherwise wedge the lock forever; every break is journaled beside
+ * the lock (`<lock>.breaks.jsonl`), with its reason, and a ceiling break says so.
+ *
+ * BREAKING is done by one breaker at a time, the holder of `<lock>.breaker`, which is a lock of the same kind:
+ * created with its token, judged stale by the same rule, and removed only after re-reading it. Under the breaker
+ * the stale lock is re-read and removed only if it still holds the token AND has the identity (modification time
+ * and inode) that were judged: a fresh lock, even an empty one with the same empty token, is never removed in its
+ * place. The residual, stated: the re-read and the removal are two system calls, and a file replaced between
+ * them is removed; that needs a stale lock, a crashed breaker and another process completing a break inside the
+ * gap of two system calls.
+ *
+ * FAILURES. `EEXIST` is contention. On Windows `EPERM` and `EBUSY` mean the file is being deleted or is open
+ * elsewhere, and are retried; if they persist through EVERY attempt the result is a fault ("could not be
+ * created"), never "another writer holds it". Any other failure, and any failure of the breaker path that is not
+ * contention, is thrown as a `LockFault`. Every message is bilingual (`message-table.mjs`).
+ *
+ * @es El único lock de todo escritor de estado: el derecho exclusivo a leer-modificar-escribir un fichero, que
+ * toman los contadores de hook-state y, por el adaptador `failure-capture/ledger-lock.mjs`, los escritores de
+ * ledgers. TOMARLO es un solo paso atómico: el fichero se crea en exclusiva CON el token del dueño (`pid:azar`)
+ * dentro. Quien lo encuentra ocupado espera un número acotado de intentos y se aparta sin ejecutar su trabajo.
+ * SOLTARLO borra el lock solo si aún tiene el token que escribió este proceso. Un lock está CADUCADO solo si es
+ * más viejo que la edad límite Y su dueño ya no está: el token no nombra pid (vacío o ilegible) o su pid ya no
+ * existe; uno más joven que la edad límite está vivo tenga lo que tenga. Pasado el techo absoluto (diez veces la
+ * edad límite) un lock caduca aunque su pid responda, porque ese pid pudo reutilizarlo otro proceso; cada rotura
+ * se registra junto al lock con su motivo. ROMPERLO lo hace un solo rompedor a la vez, el dueño de
+ * `<lock>.breaker`, que es un lock del mismo tipo; bajo él el lock caducado se relee y se borra solo si conserva
+ * el token Y la identidad (fecha e inodo) que se juzgaron. Lo residual: releer y borrar son dos llamadas al
+ * sistema. FALLOS: `EEXIST` es contienda; `EPERM` y `EBUSY` (Windows) se reintentan, y si persisten en TODOS los
+ * intentos es un fallo, nunca «otro escritor lo tiene»; cualquier otro fallo es un `LockFault`. Todo mensaje es bilingüe.
  */
 
-import { closeSync, openSync, rmSync, statSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { appendFileSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 
-/** A lock older than this belonged to a dead process. @es Un lock más viejo que esto era de un proceso muerto. */
-export const STALE_AFTER_MS = 30_000;
+import { bilingual } from './message-table.mjs';
 
-/** Sleeps the thread 5 ms; callers are synchronous by design. @es Duerme el hilo 5 ms; los llamantes son síncronos por diseño. */
-const pause = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+/** A lock older than this, with its owner gone, belonged to a dead process. @es Un lock más viejo que esto y sin dueño era de un proceso muerto. */
+export const STALE_AFTER_MS = 60_000;
 
-/** Whether the lock is older than the limit; one that vanished meanwhile is not. @es Si el lock es más viejo que el límite; uno que desapareció no lo es. */
-function isStale(lockFile, staleAfterMs, now) {
+/** The absolute ceiling, in stale ages: past it a lock is stale whatever its pid says. @es El techo absoluto, en edades límite. */
+export const CEILING_FACTOR = 10;
+
+/** A wait that sleeps the thread `ms`; the callers are synchronous by design. @es Una espera que duerme el hilo `ms`; los llamantes son síncronos por diseño. */
+export const pauseFor = (ms) => () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/** The failures that mean a file is being deleted or is open elsewhere (Windows). @es Los fallos de un fichero que se está borrando o está abierto en otro sitio (Windows). */
+const DELETE_PENDING = new Set(['EPERM', 'EBUSY']);
+
+/** The failures of a removal that only mean someone else got there first. @es Los fallos de un borrado que solo significan que otro llegó antes. */
+const ALREADY_GOING = new Set(['ENOENT', ...DELETE_PENDING]);
+
+/** A failure of the lock itself, never "another writer holds it". @es Un fallo del propio lock, nunca «otro escritor lo tiene». */
+export class LockFault extends Error {
+  constructor(message, options) {
+    super(message, options);
+    this.name = 'LockFault';
+  }
+}
+
+/** The token of each lock this process took, by lock file. @es El token de cada lock que tomó este proceso. */
+const taken = new Map();
+
+/** A fresh owner token of this process. @es Un token de dueño nuevo de este proceso. */
+const newToken = () => `${String(process.pid)}:${randomBytes(6).toString('hex')}`;
+
+/** A fault of `file`, bilingual, carrying the failure as its cause. @es Un fallo de `file`, bilingüe, con la causa. */
+const fault = (id, file, error) => new LockFault(bilingual(id, { file, code: String(error?.code ?? 'unknown'), detail: error instanceof Error ? error.message : String(error) }), { cause: error });
+
+/** Whether a process with this pid exists; one we may not signal exists all the same. @es Si existe un proceso con este pid; uno al que no podemos enviar señal existe igual. */
+function processExists(pid) {
   try {
-    return now() - statSync(lockFile).mtimeMs > staleAfterMs;
+    process.kill(pid, 0);
+
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+/** Creates `file` holding `token`, exclusively, in one step. @es Crea `file` con `token`, en exclusiva, en un paso. */
+const createWithToken = (file, token) => writeFileSync(file, token, { flag: 'wx' });
+
+/** Removes a file. @es Quita un fichero. */
+const removeFile = (file) => rmSync(file, { force: true });
+
+/**
+ * A lock file as it is now: its token (`undefined` when unreadable) and its identity, or `undefined` when gone.
+ * @es Un lock tal como está ahora: su token (`undefined` si es ilegible) y su identidad, o `undefined` si no está.
+ */
+function readLock(file) {
+  let stats;
+
+  try {
+    stats = statSync(file);
   } catch {
-    return false;
+    return undefined;
+  }
+
+  let token;
+
+  try {
+    token = readFileSync(file, 'utf8');
+  } catch {
+    token = undefined;
+  }
+
+  return { token, mtimeMs: stats.mtimeMs, identity: `${String(stats.mtimeMs)}:${String(stats.ino)}` };
+}
+
+/** The pid a token names, or `undefined`. @es El pid que nombra un token, o `undefined`. */
+function pidOf(token) {
+  const pid = Number.parseInt(String(token).split(':')[0], 10);
+
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+}
+
+/**
+ * The lock `file` as judged stale, `{ token, identity, ageMs, pid, reason }`, or `undefined` when it is live or gone.
+ * The file is read BEFORE the clock, so what is judged is what was read.
+ * @es El lock `file` juzgado caducado, o `undefined` si está vivo o no está. Se lee ANTES que el reloj.
+ */
+function staleOf(file, { staleAfterMs, ceilingMs, now, isAlive }) {
+  const found = readLock(file);
+
+  if (found === undefined) return undefined;
+
+  const ageMs = now() - found.mtimeMs;
+
+  if (ageMs <= staleAfterMs) return undefined;
+
+  const pid = pidOf(found.token);
+  const stale = (reason) => ({ ...found, ageMs, pid, reason });
+
+  if (pid === undefined) return stale('no-owner');
+  if (!isAlive(pid)) return stale('dead-owner');
+
+  return ageMs > ceilingMs ? stale('ceiling') : undefined;
+}
+
+/**
+ * Removes `file` only if it still holds the token AND the identity that were judged; returns whether it did. A
+ * removal another process got to first is no failure; any other is a fault.
+ * @es Quita `file` solo si conserva el token Y la identidad juzgados; devuelve si lo hizo.
+ */
+function removeIfStill(file, judged, remove) {
+  const now = readLock(file);
+
+  if (now === undefined || now.token !== judged.token || now.identity !== judged.identity) return false;
+
+  try {
+    remove(file);
+  } catch (error) {
+    if (ALREADY_GOING.has(error?.code)) return false;
+
+    throw fault('lock-break-fault', file, error);
+  }
+
+  return true;
+}
+
+/** Removes `file` if it still holds `token`. @es Quita `file` si aún tiene `token`. */
+function releaseToken(file, token, remove) {
+  if (readLock(file)?.token !== token) return;
+
+  try {
+    remove(file);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw fault('lock-release-fault', file, error);
+  }
+}
+
+/** Journals one break beside the lock. @es Registra una rotura junto al lock. */
+function recordBreak(lockFile, file, judged, { ceilingMs }) {
+  const ageMs = Math.round(judged.ageMs);
+  const message = bilingual(`lock-broken-${judged.reason}`, { file, ageMs, pid: judged.pid, ceilingMs });
+
+  appendFileSync(`${lockFile}.breaks.jsonl`, `${JSON.stringify({ at: new Date().toISOString(), file, reason: judged.reason, token: judged.token, pid: judged.pid, ageMs, ceilingMs, message })}\n`);
+}
+
+/**
+ * Breaks the stale lock that was judged, holding the breaker; a breaker left by a dead breaker is judged and
+ * removed by the same rule, so a crashed breaker cannot wedge the lock.
+ * @es Rompe el lock caducado juzgado, con el breaker; un breaker de un rompedor muerto se juzga y quita con la misma regla.
+ */
+function breakStale(lockFile, judged, settings) {
+  const breaker = `${lockFile}.breaker`;
+  const token = newToken();
+
+  try {
+    settings.create(breaker, token);
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      const dead = staleOf(breaker, settings);
+
+      if (dead !== undefined && removeIfStill(breaker, dead, settings.remove)) recordBreak(lockFile, breaker, dead, settings);
+
+      return;
+    }
+
+    if (DELETE_PENDING.has(error?.code)) return;
+
+    throw fault('lock-break-fault', breaker, error);
+  }
+
+  try {
+    if (removeIfStill(lockFile, judged, settings.remove)) recordBreak(lockFile, lockFile, judged, settings);
+  } finally {
+    releaseToken(breaker, token, settings.remove);
   }
 }
 
 /**
- * Takes the lock, or returns false once `attempts` are spent. Every option is injectable so a proof never sleeps.
- * @es Toma el lock, o devuelve false al agotar los intentos. Toda opción es inyectable para que una prueba no duerma.
+ * Takes the lock, or returns false once `attempts` are spent with the lock held. Every option is injectable so a
+ * proof never sleeps: `create(file, token)` and `remove(file)` replace the file operations, `isAlive(pid)` the
+ * process probe, `now()` the clock and `wait()` the pause between attempts.
+ * @throws {LockFault} when the lock cannot be created (not contention), or the breaker path fails.
+ * @es Toma el lock, o devuelve false al agotar los intentos con el lock ocupado. Toda opción es inyectable.
  */
-export function takeLock(lockFile, { attempts = 400, staleAfterMs = STALE_AFTER_MS, now = Date.now, wait = pause } = {}) {
+export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_MS, ceilingMs = staleAfterMs * CEILING_FACTOR, now = Date.now, wait = pauseFor(50), isAlive = processExists, create = createWithToken, remove = removeFile } = {}) {
+  const settings = { staleAfterMs, ceilingMs, now, isAlive, create, remove };
+  const token = newToken();
+  let held = false;
+  let pending;
+
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      closeSync(openSync(lockFile, 'wx'));
+      create(lockFile, token);
+      taken.set(lockFile, token);
 
       return true;
     } catch (error) {
-      // Only "it already exists" is contention worth waiting for; a missing or unwritable directory will not clear.
-      // @es Solo «ya existe» es contienda que vale la pena esperar; un directorio ausente o sin permiso no se arregla.
-      if (error?.code !== 'EEXIST') throw error;
+      if (error?.code === 'EEXIST') held = true;
+      else if (DELETE_PENDING.has(error?.code)) pending = error;
+      else throw fault('lock-create-fault', lockFile, error);
 
-      if (isStale(lockFile, staleAfterMs, now)) rmSync(lockFile, { force: true });
-      else wait();
+      const judged = staleOf(lockFile, settings);
+
+      if (judged !== undefined) breakStale(lockFile, judged, settings);
+
+      wait();
     }
   }
+
+  if (!held && pending !== undefined) throw fault('lock-create-fault', lockFile, pending);
 
   return false;
 }
 
 /**
+ * Removes the lock this process took, only while it still holds this process's token.
+ * @es Quita el lock que tomó este proceso, solo mientras aún tenga su token.
+ */
+export function releaseLock(lockFile) {
+  const mine = taken.get(lockFile);
+
+  taken.delete(lockFile);
+
+  if (mine !== undefined) releaseToken(lockFile, mine, removeFile);
+}
+
+/**
  * Runs `work` holding the lock and releases it whether `work` returns or throws.
  * @returns `{ held: true, value }`, or `{ held: false }` when the lock could not be taken: `work` did not run and the holder's lock is untouched.
- * @es Ejecuta `work` con el lock y lo suelta tanto si vuelve como si lanza. Con el lock ocupado, `work` no corre y el lock del dueño queda intacto.
+ * @es Ejecuta `work` con el lock y lo suelta tanto si vuelve como si lanza. Con el lock ocupado, `work` no corre.
  */
 export function withLock(lockFile, work, options) {
   if (!takeLock(lockFile, options)) return { held: false };
@@ -71,6 +283,6 @@ export function withLock(lockFile, work, options) {
   try {
     return { held: true, value: work() };
   } finally {
-    rmSync(lockFile, { force: true });
+    releaseLock(lockFile);
   }
 }
