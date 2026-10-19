@@ -1,0 +1,6 @@
+{
+  "id": "dismissed-c4d7f854-10181731",
+  "expect": "pass",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The phrase was 'no hace falta hacer nada': it says no action is needed while a running worker finishes; no new pending item exists.)",
+  "message": "El worker de la tabla sigue vivo. Dejó corriendo en segundo plano los gates o la mutación de los templates de footer, y va a entregar cuando eso termine. Por ahora no hace falta hacer nada: espero su reporte, igual que el de la segunda ola de integración y el del contrato HTTP."
+}

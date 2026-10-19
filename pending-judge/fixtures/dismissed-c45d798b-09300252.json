@@ -1,0 +1,6 @@
+{
+  "id": "dismissed-c45d798b-09300252",
+  "expect": "unknowable",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The pending item (owner decision on the discovery-fe typecheck blocker) was already written into master backlog revision 27 in the previous turn; this turn adds) || LABEL (T4a2, 2026-10-19): dismissed because the item is recorded in a store this reply does not cite; the message alone parks it, so the judge cannot know",
+  "message": "Revisé el estado: nadie cayó por rate limit y todos los agentes siguen trabajando o esperando su propio trabajo en segundo plano. El único muerto por contexto (aa3437) ya tiene reemplazo. Sigue pendiente tu decisión sobre los ~80 errores de typecheck de discovery-fe."
+}

@@ -1,0 +1,6 @@
+{
+  "id": "dismissed-784bb328-10041730",
+  "expect": "pass",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Item 96 (mutation 100%) is already open in master #972; this worker's partial state is recorded in engram #1209 and folds into the master when the round lands, )",
+  "message": "Terminó el worker de utils, y terminó **parcial**. Su campaña llegó al límite de 2 horas y se cortó. Dejó dos arreglos commiteados en su rama: `static-server` y `distribution-provenance`, con su rama limpia. Pero no registró ningún suelo nuevo, porque ningún fichero tuvo dos corridas seguidas al 100. Ese criterio es correcto: no deja nada por debajo de 100.\n\nLe falta, según su informe:\n- **B+C:** una corrida más.\n- **D+E:** volver a medir el arreglo.\n- **F (live-counters):** escribir specs y después medir.\n\nPor tu orden no lo relanzo, y lo pendiente va al backlog que te paso al final. Lo guardé en engram (#1209).\n\nQuedan 5 de mutación en vuelo."
+}

@@ -1,0 +1,6 @@
+{
+  "id": "synthetic-lo-dejo-pendiente",
+  "expect": "fail",
+  "source": "synthetic: Spanish deferral",
+  "message": "Lo dejo pendiente para la próxima tanda: el matcher no cubre las mayúsculas y nadie lo ha decidido."
+}

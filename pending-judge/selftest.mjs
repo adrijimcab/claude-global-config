@@ -9,9 +9,10 @@
  * sobre un transcript y ficheros de estado reales.
  */
 
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { isolateState } from '../hook-state/locations.mjs';
 
@@ -24,6 +25,7 @@ const { decide, MAX_BLOCKS_PER_TURN } = await import('../judge-gate/gate.mjs');
 const { JUDGES } = await import('../judge-gate/judges.mjs');
 const { blocksThisTurn, lastBlockTimeThisTurn, recordOutcome } = await import('../judge-gate/outcome-log.mjs');
 const { dismissalsFile } = await import('../backlog-guard/dismissals.mjs');
+const { findCandidate } = await import('../backlog-guard/announcement.mjs');
 
 let passed = 0;
 const failures = [];
@@ -103,6 +105,21 @@ check('appendix: it states the cap', text.includes('at most twice per turn') && 
 check('appendix: with no marker the dismissal is recorded under the judge', appendix({ session_id: 's', last_assistant_message: 'ok' }).includes('--marker "pending-judge"'), true);
 check('appendix: with no session it still builds', appendix({}).includes('--session unknown'), true);
 check('appendix: a non-object input still builds', appendix(undefined).includes('--session unknown'), true);
+
+// --- THE FIXTURES of `measure.mjs`: well formed, and every one the judge must block is REACHED by the prefilter
+// --- (the pipeline's recall is the prefilter's AND the judge's; the judge's half is measured, this half is exact).
+// @es LOS FIXTURES de `measure.mjs`: bien formados, y cada uno que el juez debe bloquear LLEGA por el prefiltro.
+{
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
+  const fixtures = readdirSync(dir).filter((name) => name.endsWith('.json')).map((name) => ({ name, ...JSON.parse(readFileSync(path.join(dir, name), 'utf8')) }));
+  const blocks = fixtures.filter((fixture) => fixture.expect === 'fail');
+
+  check('fixtures: there are real and synthetic ones, of the three kinds', [fixtures.length >= 100, blocks.length >= 25, fixtures.some((fixture) => fixture.expect === 'pass'), fixtures.some((fixture) => fixture.expect === 'unknowable'), fixtures.some((fixture) => String(fixture.source).startsWith('real')), fixtures.some((fixture) => String(fixture.source).startsWith('synthetic') || String(fixture.source).startsWith('JUDGES'))], [true, true, true, true, true, true]);
+  check('fixtures: every one is well formed, named by its file', fixtures.every((fixture) => fixture.name === `${fixture.id}.json` && ['fail', 'pass', 'unknowable'].includes(fixture.expect) && typeof fixture.source === 'string' && typeof fixture.message === 'string' && fixture.message.trim() !== ''), true);
+  check('fixtures: the ids are unique', new Set(fixtures.map((fixture) => fixture.id)).size, fixtures.length);
+  check('fixtures: the prefilter reaches EVERY fixture the judge must block', blocks.filter((fixture) => findCandidate(fixture.message) === undefined).map((fixture) => fixture.id), []);
+  check('fixtures: the sentences the judges of 2026-10-19 confirmed are all there and all reach the judge', ['judges-post-posed-not-yet', 'judges-enclitic-verlo', 'judges-enclitic-darle', 'judges-enclitic-irse', 'judges-enclitic-avisarme', 'judges-enclitic-pasarte'].map((id) => { const found = fixtures.find((fixture) => fixture.id === id); return [found?.expect, found === undefined ? false : findCandidate(found.message) !== undefined]; }), Array(6).fill(['fail', true]));
+}
 
 // --- THE WHOLE JUDGE THROUGH THE REAL GATE, model injected, real transcript and state. @es TODO POR LA COMPUERTA REAL.
 const scratch = mkdtempSync(path.join(tmpdir(), 'pending-judge-selftest-'));

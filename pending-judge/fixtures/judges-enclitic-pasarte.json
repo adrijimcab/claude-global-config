@@ -1,0 +1,6 @@
+{
+  "id": "judges-enclitic-pasarte",
+  "expect": "fail",
+  "source": "synthetic: built from the sentences the two final judges of T4a confirmed on 2026-10-19",
+  "message": "Quedó un defecto en el parser de transcripts. Queda por pasarte el informe completo."
+}

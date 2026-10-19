@@ -1,0 +1,6 @@
+{
+  "id": "dismissed-5f411d3c-10111412",
+  "expect": "pass",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The reply reports a decision about b100's backlog storage (owned by session b100-am-ui-f8, recommendation sent to it); this session announced no new pending ite)",
+  "message": "**Mi decisión es no agregar el aviso que propuso b100-f8.** Al llegar a 50.000 bytes, el backlog de b100 tuvo que mandar parte de su contenido a un registro aparte, y proponía avisar cuando estuviera al 90 % de ese límite. El aviso no arregla nada: el registro iba a seguir creciendo y el aviso dispararía de nuevo cada pocas revisiones.\n\n**Le recomendé lo mismo que ya hicimos en `~/.claude`:** pasar su backlog a un documento versionado en su repo de tooling, y dejar en engram solo un puntero corto. Si quiere que lo haga yo, me tiene que dar el visto bueno y lo coordino con las sesiones."
+}

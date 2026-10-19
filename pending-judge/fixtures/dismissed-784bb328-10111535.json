@@ -1,0 +1,6 @@
+{
+  "id": "dismissed-784bb328-10111535",
+  "expect": "pass",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Turn only relays a narrowed shared-resource pause; it names the incoming backlog-guard test, not pending work. The old guard version is still live until land/ba)",
+  "message": "La sesión de la config global achicó la pausa, y está bien que lo haga: frenar todo era más de lo necesario. Su integración todavía está corriendo el runner completo (`~/.claude` sigue en `cc3a517`), pero lo único que choca con ella son las escrituras en `~/.claude`.\n\nDesde ya:\n- **Libre otra vez:** lanzar agentes y todo el trabajo del proyecto.\n- **Pausado hasta su «resume»:** commitear en `~/.claude` y correr `capture.mjs`, porque escribe en vivo el ledger de lecciones que su integración va a mover. Si en ese rato aparece una lección, la anoto y la registro después del «resume».\n\nEsta sesión no tiene nada pendiente en ninguno de los dos frentes, así que no cambia nada de lo que hago. Lo que sigue en pie es la prueba del guard de backlog nuevo, que hago apenas llegue su «resume»."
+}

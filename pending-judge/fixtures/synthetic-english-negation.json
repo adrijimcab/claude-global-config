@@ -1,0 +1,6 @@
+{
+  "id": "synthetic-english-negation",
+  "expect": "pass",
+  "source": "synthetic: a plain negation",
+  "message": "Nothing is left pending; the work is in commit 0aeeb88."
+}

@@ -1,0 +1,6 @@
+{
+  "id": "judges-enclitic-darle",
+  "expect": "fail",
+  "source": "synthetic: built from the sentences the two final judges of T4a confirmed on 2026-10-19",
+  "message": "Queda por darle una vuelta al matcher de enclíticos, hoy deja pasar algunos casos."
+}

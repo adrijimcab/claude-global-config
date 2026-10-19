@@ -1,0 +1,6 @@
+{
+  "id": "synthetic-recorded-document",
+  "expect": "pass",
+  "source": "synthetic: a cited record",
+  "message": "El defecto del parser queda pendiente; lo dejé anotado en odd/tasks/backlog-1-6.md, tarea T4a2."
+}

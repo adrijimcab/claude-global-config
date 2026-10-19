@@ -1,0 +1,6 @@
+{
+  "id": "refused-c45d798b-09301701",
+  "expect": "fail",
+  "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading",
+  "message": "develop quedó pusheado: origin pasó de `222f1f6c` a `fa01d299`, con toda la tanda, los contadores y el deck.\n\n**Limpieza:**\n- **Cerrados:** el integrador, `int-stc`, a6c741a8, aaa37ba1 y el worktree del guard del backlog. De este último descarté a propósito cuatro payloads de prueba, ya cubiertos por su selftest.\n- **Pendientes:** los worktrees de ad29a95, aa3437, aad6e241, harness-audit-2, abc818eb y la demo, más algunas ramas sueltas. `close.mjs` los rechaza porque tienen rutas con contenido distinto al de develop. Lo más probable es que sean versiones que evolucionaron durante la integración, pero no borro sin leer. Un lector de solo lectura las está clasificando una por una; con eso adjudico o rescato lo que falte y cierro.\n\n**En paralelo:** el guard de `gate-run` (ítem 47) ya está en construcción, porque el integrador terminó y la herramienta quedó libre."
+}

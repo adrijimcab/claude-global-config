@@ -1,0 +1,6 @@
+{
+  "id": "refused-be82f4de-10111819",
+  "expect": "pass",
+  "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"lo anoto\"); to be confirmed by reading || LABEL (T4a2, 2026-10-19): read: the refusal was never dismissed, but the reply reports work in flight, a plan, a measurement, or cites its record; it parks no unrecorded item",
+  "message": "La sesión de master ya está construyendo el control de `land.mjs`.\n\n- **Lo que comprobé:** la rama `feat/land-integration-branch` existe en su propio worktree. Todavía está en `03383e3`, el commit base, sin commits nuevos; el trabajo recién arranca.\n- **Lo que hará, según master:**\n  - Rechazará el aterrizaje cuando la rama destino no sea la primera de integración del proyecto, sea que la lea de `.claude/fleet-kit.json` o del módulo propio de b100.\n  - Si el proyecto no tiene esa config, se comportará como hoy, pero dejará una nota.\n  - Si la config está rota, también rechazará.\n- **Cómo lo prueba:** con los tres casos que le pedí, más el del módulo de b100 y el de la config mal formada.\n\nCuando aterrice, me pasa el commit y lo anoto en el ítem 312 del backlog. Mientras tanto sigue f14 y espero el \"PAUSE\"."
+}

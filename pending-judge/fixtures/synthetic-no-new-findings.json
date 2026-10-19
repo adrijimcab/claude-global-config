@@ -1,0 +1,6 @@
+{
+  "id": "synthetic-no-new-findings",
+  "expect": "pass",
+  "source": "synthetic: a plain negation",
+  "message": "No hay hallazgos nuevos en esta tanda; el único punto abierto ya estaba en el backlog."
+}

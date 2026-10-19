@@ -1,0 +1,6 @@
+{
+  "id": "synthetic-brief-to-worker",
+  "expect": "pass",
+  "source": "synthetic: a brief addressed to a worker",
+  "message": "MEASURED: el matcher lee solo minúsculas.\nHYPOTHESIS: ninguna.\nROUTE: tracked-odd backlog-1-6\nTarea: queda por revisar el matcher; leé el documento hasta Log y reportá."
+}

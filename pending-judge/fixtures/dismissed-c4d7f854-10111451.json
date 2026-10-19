@@ -1,0 +1,6 @@
+{
+  "id": "dismissed-c4d7f854-10111451",
+  "expect": "pass",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (No new finding: the turn only reports a late notification of an already handed-off worker and a check that showed no change; both pending waits (FR design re-ru)",
+  "message": "Llegó un aviso tardío del worker viejo de F0.3. Terminó trabajo que había dejado corriendo en segundo plano: las campañas de mutantes que pasaron a manos de `di-1700002-discovery-fe-f4`. Revisé el repo del tooling y no cambió nada:\n\n- `master` solo tiene mis commits del backlog encima.\n- `ungated-landing-guard/` no tiene cambios sin commitear.\n\nNo hago nada con eso: esas campañas son de la otra sesión. Sigo esperando dos cosas:\n- **El diseño de FR corregido.** Cuando llegue, ajusto las specs.\n- **El «pushed» de la otra sesión,** que desbloquea la subida del tooling."
+}

@@ -1,0 +1,6 @@
+{
+  "id": "judges-enclitic-avisarme",
+  "expect": "fail",
+  "source": "synthetic: built from the sentences the two final judges of T4a confirmed on 2026-10-19",
+  "message": "Queda por avisarme del resultado del worker. Además hay un hallazgo del timeout que todavía no está registrado en ningún lado."
+}

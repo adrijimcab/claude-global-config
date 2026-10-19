@@ -1,0 +1,6 @@
+{
+  "id": "dismissed-784bb328-10111215",
+  "expect": "pass",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The turn only stored the owner's pasted closing report verbatim as observation 1300; every pending item in it is already in master 972 REV100, no new finding ap)",
+  "message": "Guardado en engram, textual y completo: observación **#1300**, `topic_key` `backlog/1.0.0-final-report-batch3-close`, proyecto b100-am-ui.\n\n- Lo dejé como registro propio, enlazado al maestro #972, y no pisé el maestro: ese sigue siendo la fuente del detalle medido de cada ítem.\n- Le agregué una nota arriba: las cifras son las del cierre (2026-10-06) y hay que volver a medirlas antes de citarlas como estado actual.\n- Un detalle del texto que pegaste: dice «borrar Desktml\\x», que parece una ruta cortada. Lo guardé tal cual; si me pasás la ruta correcta, lo corrijo en el registro."
+}

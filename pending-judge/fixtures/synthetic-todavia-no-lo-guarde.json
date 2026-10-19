@@ -1,0 +1,6 @@
+{
+  "id": "synthetic-todavia-no-lo-guarde",
+  "expect": "fail",
+  "source": "synthetic: not-yet",
+  "message": "Detecté que el censo cuenta dos veces los diarios rotados. Todavía no lo guardé."
+}
