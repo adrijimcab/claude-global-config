@@ -19,14 +19,25 @@ const BLIND = "forbids: [...EXECUTION_TOOLS, 'Write', 'Edit', 'NotebookEdit', 'W
 const MUTANTS = [
   // --- reading the declaration.
   ['a token merely containing a tool name counts', C, 'declaration.declared.includes(tool)', 'declaration.declared.some((token) => token.includes(tool))'],
-  ['tools: [] no longer means every tool', C, "const all = tools === '[]';", 'const all = false;'],
+  ['tools: [] no longer means every tool', C, "const all = toolValues.length === 1 && toolValues[0] === '[]';", 'const all = false;'],
+  ['a repeated `tools: []` is read as every tool', C, "const all = toolValues.length === 1 && toolValues[0] === '[]';", "const all = toolValues[0] === '[]';"],
   ['tools: [] stops reaching a tool it does not name', C, '(declaration.all || declaration.declared.includes(tool))', '(declaration.declared.includes(tool))'],
-  ['a missing tools line passes', C, "if (tools === undefined) return { problem:", "if (tools === undefined) return { all: true, declared: [], disallowed: [], ignored:"],
+  ['a missing tools line passes', C, 'if (toolValues.length === 0) return { problem:', 'if (toolValues.length === 0) return { all: true, declared: [], disallowed: [], ignored:'],
+  ['a repeated key is read as one', C, 'if (values.length > 1) return { tokens, problem:', 'if (false) return { tokens, problem:'],
+  ['an empty value (YAML null or a block list) is read as an empty list', C, 'if (values.length === 1 && last.length === 0) return { tokens, problem:', 'if (false) return { tokens, problem:'],
+  ['a token the reader does not understand is kept', C, 'return unsure === undefined ? { tokens } :', 'return true ? { tokens } :'],  ['a name made of any character is a tool name', C, "if (name.length === 0 || ![...name].every((character) => NAME_CHARACTERS.includes(character))) return undefined;", 'if (name.length === 0) return undefined;'],
+  ['a scope with no tool name is a tool', C, 'if (name.length === 0 || ![...name]', 'if (![...name]'],
+  ['an unclosed scope is a tool', C, "return token.endsWith(')') && ", 'return '],
+  ['a quote or comment inside a scope is a tool', C, " && ![...scope].some((character) => SCOPE_STOPS.includes(character)) ? name : undefined;", ' ? name : undefined;'],
+  ['a scoped token keeps its scope in the name', C, 'const name = open === -1 ? token : token.slice(0, open);', 'const name = token;'],
+  ['declared tokens keep their scope', C, 'declared: tools.tokens.map(toolNameOf)', 'declared: tools.tokens'],
+  ['a problem in tools: is ignored', C, 'const problem = tools.problem ?? disallowed.problem;', 'const problem = disallowed.problem;'],
+  ['a problem in disallowedTools: is ignored', C, 'const problem = tools.problem ?? disallowed.problem;', 'const problem = tools.problem;'],
   ['a missing frontmatter passes', C, "if (frontmatter === undefined) return { problem:", "if (frontmatter === undefined) return { all: true, declared: [], disallowed: [], ignored:"],
   ['the frontmatter is not bounded, so a body line counts', C, 'const closing = lines.indexOf(\'---\', 1);', 'const closing = -1;'],
   ['a frontmatter that never closes is read as bounded', C, 'return closing === -1 ? undefined : lines.slice(1, closing);', 'return closing === -1 ? lines.slice(1) : lines.slice(1, closing);'],
   ['a trailing carriage return is kept in a line', C, 'text.split(\'\\n\').map((line) => line.trimEnd())', 'text.split(\'\\n\')'],
-  ['disallowedTools is not read', C, "disallowed: tokensOf(valueOf(frontmatter, 'disallowedTools') ?? '')", 'disallowed: []'],
+  ['disallowedTools is not read', C, "const disallowed = plainListOf(frontmatter, 'disallowedTools');", 'const disallowed = { tokens: [] };'],
   ['a disallowed tool is still reached', C, 'return !declaration.disallowed.includes(tool) && (', 'return ('],
 
   // --- MUST: what a profile demands.

@@ -16,7 +16,9 @@
  * refuses it. A role file that no profile claims is a finding, so a new role forces the question instead of
  * slipping past it. `tools: []` means every tool: it satisfies a must and breaks a must-not, unless
  * `disallowedTools:` closes the tool. A tool counts only as a whole token: `BashOutput` reads shell output
- * and runs nothing. A tool a profile needs may not be named in `disallowedTools:` at all.
+ * and runs nothing. A tool a profile needs may not be named in `disallowedTools:` at all. Only a plain comma
+ * list (or the literal `[]`) is read: a flow list, a quoted value, a block list, an empty value or a repeated
+ * key is a problem, never a narrow toolset, because YAML reads each of them differently from a comma split.
  *
  * NO REGEX (M5): `split`, `trim`, `startsWith`, `includes` on literals.
  *
@@ -32,6 +34,9 @@
  * hallazgo. `tools: []` significa todas las herramientas: cumple un DEBE y rompe un NO DEBE, salvo que
  * `disallowedTools:` cierre la herramienta. Una herramienta cuenta solo como token entero: `BashOutput`
  * lee salida y no ejecuta nada. Una herramienta que el perfil necesita no puede ir en `disallowedTools:`.
+ * Solo se lee una lista simple separada por comas (o el literal `[]`): una lista entre corchetes, un valor
+ * entre comillas, una lista en bloque, un valor vacío o una clave repetida son un problema, nunca un conjunto
+ * estrecho, porque YAML lee cada uno distinto de un corte por comas.
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -83,37 +88,86 @@ function frontmatterOf(text) {
   return closing === -1 ? undefined : lines.slice(1, closing);
 }
 
-/** The value of `key:` in the frontmatter, or `undefined` when the line is absent. @es El valor de `key:`, o `undefined` si falta. */
-function valueOf(frontmatter, key) {
-  const line = frontmatter.find((candidate) => candidate.startsWith(`${key}:`));
-
-  return line === undefined ? undefined : line.slice(key.length + 1).trim();
+/**
+ * Every value of `key:` in the frontmatter, one per line that declares it. YAML keeps the LAST of repeated
+ * keys, so a reader that kept the first would judge a toolset the harness never loads.
+ * @es Cada valor de `key:` del frontmatter, uno por línea que lo declara. YAML se queda con la ÚLTIMA clave
+ * repetida, así que leer la primera juzgaría un conjunto que el harness nunca carga.
+ */
+function valuesOf(frontmatter, key) {
+  return frontmatter.filter((candidate) => candidate.startsWith(`${key}:`)).map((line) => line.slice(key.length + 1).trim());
 }
 
-/** The tokens of a comma list. @es Los tokens de una lista separada por comas. */
-function tokensOf(value) {
-  return value.split(',').map((token) => token.trim()).filter((token) => token.length > 0);
+/** The characters a tool name is made of. @es Los caracteres de un nombre de herramienta. */
+const NAME_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+
+/** Characters that change what YAML reads inside a scope: quotes, brackets, braces, a comment. @es Caracteres que cambian lo que YAML lee dentro de un ámbito. */
+const SCOPE_STOPS = '()[]{}#\'"';
+
+/**
+ * The tool a token names (`Bash` for `Bash(npm:*)`), or `undefined` when the token is not a plain name with an
+ * optional scope: quotes, brackets, a comment, a space or an unclosed scope make the reading unsure.
+ * @es La herramienta que nombra un token (`Bash` para `Bash(npm:*)`), o `undefined` si no es un nombre simple
+ * con ámbito opcional: comillas, corchetes, un comentario, un espacio o un ámbito sin cerrar vuelven dudosa la lectura.
+ */
+export function toolNameOf(token) {
+  const open = token.indexOf('(');
+  const name = open === -1 ? token : token.slice(0, open);
+
+  if (name.length === 0 || ![...name].every((character) => NAME_CHARACTERS.includes(character))) return undefined;
+  if (open === -1) return name;
+
+  const scope = token.slice(open + 1, -1);
+
+  return token.endsWith(')') && ![...scope].some((character) => SCOPE_STOPS.includes(character)) ? name : undefined;
 }
 
 /**
- * What one role file declares: `all` (`tools: []`), the `declared` tools and the `disallowed` ones, or a
- * `problem` naming why it cannot be read.
- * @es Qué declara un fichero de rol: `all` (`tools: []`), las herramientas `declared` y las `disallowed`, o un `problem`.
+ * The tokens of `key:` read as a plain comma list, or a `problem`: a repeated key, an empty value (YAML null or a
+ * block list on the next lines), or a token that is not a plain tool name (a flow list, a quoted value, a comment).
+ * @es Los tokens de `key:` leídos como lista simple separada por comas, o un `problem`: una clave repetida, un valor
+ * vacío (null de YAML o una lista en bloque en las líneas siguientes) o un token que no es un nombre simple.
+ */
+function plainListOf(frontmatter, key) {
+  const values = valuesOf(frontmatter, key);
+  const last = values.at(-1) ?? '';
+  const tokens = last.split(',').map((token) => token.trim()).filter((token) => token.length > 0);
+
+  if (values.length > 1) return { tokens, problem: `declares \`${key}:\` ${values.length} times, and YAML keeps only the last @es declara \`${key}:\` ${values.length} veces, y YAML se queda solo con la última` };
+  if (values.length === 1 && last.length === 0) return { tokens, problem: `has an empty \`${key}:\` (null, or a block list), which this reader does not read @es tiene \`${key}:\` vacío (null, o una lista en bloque), que este lector no lee` };
+
+  const unsure = tokens.find((token) => toolNameOf(token) === undefined);
+
+  return unsure === undefined ? { tokens } : { tokens, problem: `declares \`${key}:\` in a shape this reader does not read (${unsure}); only a plain comma list is read @es declara \`${key}:\` con una forma que este lector no lee (${unsure}); solo se lee una lista simple separada por comas` };
+}
+
+/**
+ * What one role file declares: `all` (`tools: []`), the `declared` tool names (scope dropped: `Bash(npm:*)`
+ * reaches Bash) and the `disallowed` tokens as written (a scoped `Bash(rm:*)` closes only part of Bash, so it
+ * never closes `Bash`), or a `problem` naming why it cannot be read. Every shape other than a plain comma list
+ * or the literal `[]` is a problem: a failed reading is never a clean one.
+ * @es Qué declara un fichero de rol: `all` (`tools: []`), los nombres `declared` (sin ámbito: `Bash(npm:*)`
+ * alcanza Bash) y los tokens `disallowed` tal como se escriben (un `Bash(rm:*)` con ámbito cierra solo parte de
+ * Bash, así que nunca cierra `Bash`), o un `problem`. Toda forma que no sea una lista simple o el literal `[]`
+ * es un problema: una lectura fallida nunca es una limpia.
  */
 export function declarationOf(text) {
   const frontmatter = frontmatterOf(text);
   if (frontmatter === undefined) return { problem: 'has no frontmatter, so its tools cannot be read @es no tiene frontmatter, así que no se leen sus herramientas' };
 
-  const tools = valueOf(frontmatter, 'tools');
-  if (tools === undefined) return { problem: 'declares no `tools:` line, so its capability is unverifiable @es no declara `tools:`, así que su capacidad no es verificable' };
+  const toolValues = valuesOf(frontmatter, 'tools');
+  if (toolValues.length === 0) return { problem: 'declares no `tools:` line, so its capability is unverifiable @es no declara `tools:`, así que su capacidad no es verificable' };
 
-  const all = tools === '[]';
+  const all = toolValues.length === 1 && toolValues[0] === '[]';
+  const tools = all ? { tokens: [] } : plainListOf(frontmatter, 'tools');
+  const disallowed = plainListOf(frontmatter, 'disallowedTools');
+  const problem = tools.problem ?? disallowed.problem;
 
-  return { all, declared: all ? [] : tokensOf(tools), disallowed: tokensOf(valueOf(frontmatter, 'disallowedTools') ?? '') };
+  return problem === undefined ? { all, declared: tools.tokens.map(toolNameOf), disallowed: disallowed.tokens } : { problem };
 }
 
 /** Whether the declaration lets the role use `tool`. @es Si la declaración deja al rol usar `tool`. */
-function reaches(declaration, tool) {
+export function reaches(declaration, tool) {
   return !declaration.disallowed.includes(tool) && (declaration.all || declaration.declared.includes(tool));
 }
 

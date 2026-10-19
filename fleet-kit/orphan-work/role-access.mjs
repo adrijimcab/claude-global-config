@@ -6,24 +6,31 @@
  * approved branch waited to land. The refusal exists so a fresh agent does not REDO parked work; a role that
  * cannot write cannot redo anything, so it passes and the parked-work note is shown as information.
  *
- * THE DECISION is read from the role's own definition, never from a name list: `<agents>/<role>.md`
- * frontmatter `tools:` (project `.claude/agents` first, then the install's `agents/`, as Claude Code
- * resolves them). A role is read-only when it declares a toolset (`tools: []` means EVERY tool) and that
- * toolset reaches none of `WRITE_TOOLS`, `disallowedTools:` counted. A role with no file, no `tools:` line or
- * no `subagent_type` (general-purpose) is a writer: a failed reading is never a clean one.
+ * THE DECISION FAILS CLOSED. It is read from the role's own definition, never from a name list:
+ * `<agents>/<role>.md` frontmatter `tools:` (project `.claude/agents` first, then the install's `agents/`, as
+ * Claude Code resolves them), through the shared reader of `agent-toolset-check`, which reads only a plain
+ * comma list (a flow list, quotes, a block list, an empty value or a repeated key is a problem). A role is
+ * read-only only when that reading succeeds and the toolset reaches none of `WRITE_TOOLS` (a scoped
+ * `Bash(npm:*)` reaches Bash; `disallowedTools:` counted) and no MCP tool: an MCP server can write anywhere it
+ * is wired to, and `tools: []` reaches every one, so it is always a writer. A role with no file, an unreadable
+ * file, an unread shape, or no `subagent_type` (general-purpose) is a writer: a failed reading is never a
+ * clean one, and the reason it failed travels with the verdict.
  *
  * @es Si el rol que lanza una delegación puede ESCRIBIR: lo único que decide si el trabajo aparcado rechaza el
- * lanzamiento o solo se muestra. Se lee de la definición del rol (`tools:` del frontmatter, proyecto primero y
- * luego la instalación), nunca de una lista de nombres: es de solo lectura si declara un conjunto de
- * herramientas (`tools: []` = TODAS) que no alcanza ninguna de `WRITE_TOOLS`. Sin fichero, sin `tools:` o sin
- * `subagent_type` (general-purpose) es escritor: una lectura fallida nunca es una limpia.
+ * lanzamiento o solo se muestra. LA DECISIÓN FALLA CERRADA. Se lee de la definición del rol (`tools:` del
+ * frontmatter, proyecto primero y luego la instalación) con el lector compartido de `agent-toolset-check`, que
+ * solo lee una lista simple separada por comas. Es de solo lectura únicamente si esa lectura funciona y el
+ * conjunto no alcanza ninguna de `WRITE_TOOLS` (un `Bash(npm:*)` con ámbito alcanza Bash) ni ninguna herramienta
+ * MCP: un servidor MCP puede escribir donde esté conectado, y `tools: []` las alcanza todas, así que siempre
+ * escribe. Sin fichero, con un fichero ilegible, con una forma no leída o sin `subagent_type` (general-purpose)
+ * es escritor: una lectura fallida nunca es una limpia, y el motivo del fallo viaja con el veredicto.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { declarationOf, EXECUTION_TOOLS } from '../../agent-toolset-check/check.mjs';
+import { declarationOf, EXECUTION_TOOLS, reaches } from '../../agent-toolset-check/check.mjs';
 
 /**
  * The tools that change files, directly or through a command: a role with Bash or PowerShell can commit or
@@ -32,6 +39,9 @@ import { declarationOf, EXECUTION_TOOLS } from '../../agent-toolset-check/check.
  * hacer commit o redirigir a un fichero, así que cuenta como escritor (decisión del 2026-10-19).
  */
 export const WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit', ...EXECUTION_TOOLS];
+
+/** The prefix every MCP tool name carries. @es El prefijo que lleva todo nombre de herramienta MCP. */
+export const MCP_PREFIX = 'mcp__';
 
 /**
  * Built-in types that have no definition file. Source: the harness's own `Agent` tool listing, which states
@@ -53,27 +63,42 @@ export const agentDirectories = (mainCheckout) => [path.join(mainCheckout, '.cla
 /** Whether `role` is a plain file stem, so it cannot walk out of an agents folder. @es Si `role` es un nombre de fichero simple. */
 const isPlainName = (role) => role.length > 0 && path.basename(role) === role && !role.includes('.');
 
+/**
+ * The declaration of the first definition file of `role`, `undefined` when none exists, or a `problem` when the
+ * file exists but cannot be read (a folder, no permission): an unreadable file is never an absent one.
+ * @es La declaración del primer fichero de definición de `role`, `undefined` si no hay ninguno, o un `problem`
+ * si el fichero existe pero no se puede leer (una carpeta, sin permiso): ilegible nunca es ausente.
+ */
 function declarationFor(role, directories) {
   const file = directories.map((directory) => path.join(directory, `${role}.md`)).find((candidate) => existsSync(candidate));
 
-  return file === undefined ? undefined : declarationOf(readFileSync(file, 'utf8'));
+  if (file === undefined) return undefined;
+
+  try {
+    return declarationOf(readFileSync(file, 'utf8'));
+  } catch (error) {
+    return { problem: `cannot be read (${error instanceof Error ? error.message : String(error)}) @es no se puede leer (${error instanceof Error ? error.message : String(error)})` };
+  }
 }
 
 /**
- * Whether the role named by `payload.tool_input.subagent_type` cannot write.
- * @es Si el rol que nombra `subagent_type` no puede escribir.
+ * What the role named by `payload.tool_input.subagent_type` may do: `readOnly`, and when its definition could not
+ * be read, the `problem` that made it a writer, prefixed with the file it came from.
+ * @es Lo que puede hacer el rol que nombra `subagent_type`: `readOnly` y, si su definición no se pudo leer, el
+ * `problem` que lo volvió escritor.
+ * @returns {{ readOnly: boolean, problem?: string }}
  */
-export function launchesReadOnlyRole(payload, directories) {
+export function launchAccess(payload, directories) {
   const role = payload?.tool_input?.subagent_type;
 
-  if (typeof role !== 'string' || !isPlainName(role)) return false;
+  if (typeof role !== 'string' || !isPlainName(role)) return { readOnly: false };
 
   const declaration = declarationFor(role, directories);
 
-  if (declaration === undefined) return READ_ONLY_BUILT_INS.has(role);
-  if (declaration.problem !== undefined) return false;
+  if (declaration === undefined) return { readOnly: READ_ONLY_BUILT_INS.has(role) };
+  if (declaration.problem !== undefined) return { readOnly: false, problem: `role ${role} ${declaration.problem}` };
 
-  const reaches = (tool) => !declaration.disallowed.includes(tool) && (declaration.all || declaration.declared.includes(tool));
+  const reachesMcp = declaration.all || declaration.declared.some((tool) => tool.startsWith(MCP_PREFIX));
 
-  return !WRITE_TOOLS.some(reaches);
+  return { readOnly: !reachesMcp && !WRITE_TOOLS.some((tool) => reaches(declaration, tool)) };
 }

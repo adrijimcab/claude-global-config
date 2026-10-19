@@ -127,6 +127,39 @@ check('a missing agents directory is a gap', toolsetGaps(path.join(tmpdir(), 'ag
 check('declarationOf separates all / declared / problem', declarationOf(role(['tools: []'])).all === true && declarationOf(role(['tools: Bash'])).all === false && declarationOf(role(['tools: Bash'])).declared?.includes('Bash') && declarationOf('x').problem !== undefined);
 check('declarationOf reads disallowedTools', declarationOf(role(['tools: []', 'disallowedTools: Bash, Write'])).disallowed?.join() === 'Bash,Write');
 
+// --- only a plain comma list is read: every other YAML shape is a problem, never a narrow toolset.
+// @es Solo se lee una lista simple separada por comas: cualquier otra forma YAML es un problema, nunca un conjunto estrecho.
+const UNREAD_SHAPES = {
+  'a flow list': ['tools: [Read, Bash]'],
+  'a flow list with spaces inside': ['tools: [ Read ]'],
+  'a quoted tool': ['tools: Read, "Bash"'],
+  'a single-quoted value': ["tools: 'Read, Bash'"],
+  'a bare tools key (YAML null inherits every tool)': ['tools:'],
+  'a block list': ['tools:', '  - Read', '  - Bash'],
+  'a repeated key (YAML keeps the last)': ['tools: Read', 'tools: Read, Bash'],
+  'a repeated key whose first value is every tool': ['tools: []', 'tools: Read'],
+  'a scope with no tool name': ['tools: Read, (git:*)'],
+  'a comment after the list': ['tools: Read # and Bash'],
+  'two tools without a comma': ['tools: Read Bash'],
+  'an unclosed scope': ['tools: Read, Bash(git'],
+  'a quote inside a scope': ['tools: Read, Bash("rm")'],
+  'a flow disallowedTools': ['tools: []', 'disallowedTools: [Write, Edit]'],
+  'an empty disallowedTools': ['tools: Read', 'disallowedTools:'],
+  'a repeated disallowedTools': ['tools: Read', 'disallowedTools: Bash', 'disallowedTools: Write'],
+};
+for (const [shape, lines] of Object.entries(UNREAD_SHAPES)) {
+  check(`${shape} is a problem, never a declaration`, declarationOf(role(lines)).problem !== undefined);
+  const judged = gapsOf({ 'jd-judge-a': role(lines) });
+  check(`${shape} makes a blind reviewer a gap that says the shape is unread`, judged.length === 1 && judged[0].role === 'jd-judge-a' && (judged[0].problem.includes('does not read') || judged[0].problem.includes('times')));
+}
+check('the repeated-key problem names the count', declarationOf(role(['tools: Read', 'tools: Bash'])).problem?.includes('2 times'));
+check('the unread token is named', declarationOf(role(['tools: Read, "Bash"'])).problem?.includes('"Bash"'));
+check('a scoped tool reaches its tool: a blind reviewer with Bash(git:*) is a gap', gapsOf({ 'jd-judge-b': role(['tools: Read, Bash(git:*)']) }).length === 1);
+check('a scoped command runner satisfies an executor', gapsOf({ 'review-risk': role(['tools: Read, Bash(npm:*)']) }).length === 0);
+check('a scoped disallowedTools closes only part of the tool, never the whole', gapsOf({ 'jd-judge-a': role(['tools: Read, Bash', 'disallowedTools: Bash(rm:*)']) }).length === 1);
+check('a scope token yields its plain name', declarationOf(role(['tools: Read, Bash(npm run *)'])).declared?.join() === 'Read,Bash');
+check('an MCP tool name is a plain token', declarationOf(role(['tools: Read, mcp__plugin_engram_engram__mem_search'])).declared?.includes('mcp__plugin_engram_engram__mem_search'));
+
 // --- the policy and its profiles: positive rules only, no exemption left.
 check('every role is classified by a known profile, never by free text', Object.values(ROLE_POLICY).every((value) => Object.hasOwn(PROFILES, value)));
 check('every profile constrains something: none is an exemption in disguise', Object.values(PROFILES).every((profile) => profile.requires.length > 0 || profile.forbids.length > 0));
