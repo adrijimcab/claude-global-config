@@ -21,14 +21,22 @@ import path from 'node:path';
 const LONGEST_NAME = 100;
 
 /**
+ * The characters `encodeURIComponent` leaves raw that must not reach a file name, each spelled as its %XX: the dot
+ * (so `.` and `..` are not names), `*` (forbidden on Windows) and `'`, `(`, `)`, `!`, `~` (risky in a path or a shell).
+ * @es Los caracteres que `encodeURIComponent` deja crudos y que no deben llegar a un nombre de fichero, cada uno como
+ * su %XX: el punto (para que `.` y `..` no sean nombres), `*` (prohibido en Windows) y `'`, `(`, `)`, `!`, `~`.
+ */
+const SPELLED_OUT = ['.', '*', "'", '(', ')', '!', '~'];
+
+/**
  * A file name for any session or scope id: the id URI-encoded (so `|`, `/`, `\` and `:` can never reach the
- * path), its dots spelled out (so `.` and `..` are not names), or the hash of an id too long to be one.
+ * path), with every character of `SPELLED_OUT` spelled as its %XX, or the hash of an id too long to be one.
  * @es Un nombre de fichero para cualquier id de sesión o alcance: el id codificado como URI (así `|`, `/`, `\` y
- * `:` nunca llegan a la ruta), con sus puntos escritos aparte (para que `.` y `..` no sean nombres), o el hash
- * de un id demasiado largo.
+ * `:` nunca llegan a la ruta), con cada carácter de `SPELLED_OUT` escrito como su %XX, o el hash de un id
+ * demasiado largo.
  */
 export function fileNameOf(id) {
-  const spelled = encodeURIComponent(String(id)).split('.').join('%2E');
+  const spelled = SPELLED_OUT.reduce((name, character) => name.split(character).join(`%${character.charCodeAt(0).toString(16).toUpperCase()}`), encodeURIComponent(String(id)));
 
   return spelled.length <= LONGEST_NAME ? spelled : createHash('sha256').update(String(id)).digest('hex');
 }

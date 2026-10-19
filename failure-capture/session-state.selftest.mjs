@@ -52,6 +52,20 @@ const check = (name, condition, detail) => (condition === true ? (passed += 1) :
   check('different ids have different names, ids too long for a name included', new Set(names).size === names.length, names.join(' '));
   check('no name is longer than a file name may reasonably be', names.every((name) => name.length <= 120), names.map((name) => name.length).join(' '));
   check('the same id always has the same name', fileNameOf('sesion-a|orchestrator') === fileNameOf('sesion-a|orchestrator'));
+
+  // J-4: the characters `encodeURIComponent` leaves raw that Windows forbids (`*`) or that are risky in a path or a
+  // shell (`'`, `(`, `)`, `!`, `~`) are encoded too, each one, to its own %XX. @es Los caracteres que
+  // `encodeURIComponent` deja crudos y que Windows prohíbe (`*`) o son arriesgados se codifican también, cada uno.
+  const risky = { '*': '%2A', "'": '%27', '(': '%28', ')': '%29', '!': '%21', '~': '%7E' };
+
+  for (const [character, encoded] of Object.entries(risky)) {
+    const name = fileNameOf(`s${character}x`);
+
+    check(`J-4: "${character}" never reaches a file name, it is spelled ${encoded}`, name === `s${encoded}x`, name);
+  }
+
+  check('J-4: every risky character together still gives one distinct, safe name', fileNameOf("a*'()!~b") === 'a%2A%27%28%29%21%7Eb', fileNameOf("a*'()!~b"));
+  check('J-4: a dot is still spelled %2E', fileNameOf('a.b') === 'a%2Eb', fileNameOf('a.b'));
 }
 
 // --- a constructed world with a copy of the real loop -------------------------------------------------

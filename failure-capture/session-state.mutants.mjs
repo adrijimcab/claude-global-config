@@ -18,8 +18,15 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const STATE = 'failure-capture/session-state.mjs';
 
 const MUTANTS = [
-  ['an id is used as the file name as it is, so a separator reaches the path', STATE, "encodeURIComponent(String(id)).split('.').join('%2E')", 'String(id)'],
-  ['dots are not spelled out, so ".." names the parent directory', STATE, ".split('.').join('%2E')", ''],
+  ['an id is used as the file name as it is, so a separator reaches the path', STATE, 'encodeURIComponent(String(id)));', 'String(id));'],
+  ['dots are not spelled out, so ".." names the parent directory', STATE, "const SPELLED_OUT = ['.', '*',", "const SPELLED_OUT = ['*',"],
+  ['J-4: "*" (forbidden on Windows) reaches the file name', STATE, "['.', '*', \"'\",", "['.', \"'\","],
+  ['J-4: "~" reaches the file name', STATE, "'!', '~'];", "'!'];"],
+  ['J-4: "\'" reaches the file name', STATE, "'*', \"'\", '('", "'*', '('"],
+  ['J-4: "(" and ")" reach the file name', STATE, "'(', ')', ", ''],
+  ['J-4: "!" reaches the file name', STATE, "')', '!', '~'", "')', '~'"],
+  ['J-4: a character is spelled in lower-case hex', STATE, '.toString(16).toUpperCase()', '.toString(16)'],
+  ['J-4: a character is spelled without its percent sign', STATE, '`%${character.charCodeAt(0)', '`${character.charCodeAt(0)'],
   ['an id too long for a name is used as it is', STATE, 'spelled.length <= LONGEST_NAME ? spelled : createHash', 'true ? spelled : createHash'],
   ['every long id hashes to the same name', STATE, ".update(String(id))", ".update('')"],
   ['every session shares one stamp file', STATE, '`${fileNameOf(session)}.json`', "'stamp.json'"],
