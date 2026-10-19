@@ -76,6 +76,7 @@ const survivors = runMutants({
   paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'],
   selftest: 'failure-capture/ledger-lock.selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);

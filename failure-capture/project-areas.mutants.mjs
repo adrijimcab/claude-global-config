@@ -90,7 +90,7 @@ const PURE = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest, mutants });
+const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest, mutants, crashKills: 'fail' });
 const survivors = campaign('failure-capture/project-areas.selftest.mjs', END_TO_END) + campaign('failure-capture/ledger-route.selftest.mjs', PURE);
 
 process.exit(survivors === 0 ? 0 : 1);

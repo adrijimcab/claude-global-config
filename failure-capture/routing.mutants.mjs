@@ -147,7 +147,7 @@ const PURE_MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest, mutants });
+const campaign = (selftest, mutants) => runMutants({ fleetRoot, paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest, mutants, crashKills: 'fail' });
 const survivors = campaign('failure-capture/routing.selftest.mjs', MUTANTS) + campaign('failure-capture/areas.selftest.mjs', AREA_MUTANTS) + campaign('failure-capture/rule-block.selftest.mjs', BLOCK_MUTANTS) + campaign('failure-capture/ledger-route.selftest.mjs', PURE_MUTANTS);
 
 process.exit(survivors === 0 ? 0 : 1);
