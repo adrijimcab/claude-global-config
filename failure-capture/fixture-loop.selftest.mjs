@@ -51,6 +51,11 @@ try {
   equal('the parity engine modules the promotion imports are copied beside the loop', ['anchors-file.mjs', 'contract-presence.mjs', 'parity.mjs', 'refusal-text.mjs'].every((name) => engine.includes(name)), true);
   equal('...without the engine selftest or its mutant campaign', engine.some((name) => name.includes('selftest') || name.includes('mutants')), false);
 
+  const copiedBeside = (name) => (existsSync(path.join(everything, '..', name)) ? mjsOf(path.join(everything, '..', name)) : []);
+
+  equal('the authored-writes journal modules are copied beside the loop, and only they', copiedBeside('config-sync-guard'), ['authored-writes.mjs', 'touched-paths.mjs', 'transcript-writes.mjs']);
+  equal('the state-location module and its message table are copied beside the loop, and only they', copiedBeside('hook-state'), ['locations.mjs', 'message-table.mjs']);
+
   const filtered = loopAt('filtered');
 
   equal('a filtered provisioning is accepted too', attempt(() => provisionLoop(filtered, (file) => file === 'capture.mjs')), 'ok');
