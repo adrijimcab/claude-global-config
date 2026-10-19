@@ -195,7 +195,8 @@ function isId(value) {
 
 /**
  * Pairs each delegation call in a turn to its result: by id, or, for an id-less result, to the oldest
- * id-less call still unanswered. An attempt whose result never arrived is reported as `unknown`: the turn
+ * id-less call of ANY tool still unanswered (the queue holds them all, in order; only the delegation ones
+ * are attempts). An attempt whose result never arrived is reported as `unknown`: the turn
  * was interrupted mid-flight, which is not evidence of a refusal.
  * @es Empareja cada llamada con su resultado: por id o, si el resultado no tiene id, con la llamada sin id
  * más antigua sin responder. Sin resultado, `unknown`: no es prueba de rechazo.
@@ -220,7 +221,16 @@ function attemptsOf(turn) {
     if (!Array.isArray(content)) continue;
 
     for (const block of content) {
-      if (block?.type === 'tool_use' && DELEGATION_TOOLS.has(block.name)) {
+      // An id-less call of ANY other tool still takes its place in the queue, as `null`: its id-less result
+      // answers it, and must not be taken for the result of a delegation call that follows or precedes it.
+      // @es Una llamada sin id de CUALQUIER otra herramienta ocupa igual su lugar en la cola, como `null`:
+      // su resultado sin id la responde, y no debe confundirse con el de una delegación.
+      if (block?.type === 'tool_use' && !DELEGATION_TOOLS.has(block.name)) {
+        if (!isId(block.id)) unanswered.push(null);
+        continue;
+      }
+
+      if (block?.type === 'tool_use') {
         // One call is one attempt, however many records repeat it. @es Una llamada es un intento, aunque varios registros la repitan.
         // Only a non-empty string id can name the same call twice: a block without one is its own attempt.
         // @es Solo un id de texto no vacío identifica la misma llamada dos veces: un bloque sin id es un intento propio.
@@ -243,7 +253,7 @@ function attemptsOf(turn) {
 
       const attempt = isId(block.tool_use_id) ? byId.get(block.tool_use_id) : unanswered.shift();
 
-      if (attempt === undefined) continue;
+      if (attempt === undefined || attempt === null) continue;
 
       // THE CLASSIFICATION, and it is the whole mechanism: a delegation either came back with an agent
       // or came back with an error. `is_error` is set by the harness for a hook denial, a permission

@@ -330,6 +330,35 @@ const cases = [
     [...PROLOGUE, prompt('delega dos'), agentCall(undefined, 'First errand'), agentCall(undefined, 'Second errand'), result(undefined, REFUSAL, true), result(undefined, LAUNCHED, false)],
   ],
   [
+    // The queue holds EVERY id-less call, of any tool, and results pair to it in the same order. An id-less
+    // result names no tool, so the order is the only evidence: the first result answers the Agent call, which
+    // is never owed. @es La cola guarda TODA llamada sin id, de cualquier herramienta, y los resultados se
+    // emparejan en el mismo orden: un resultado sin id no nombra herramienta, solo el orden es evidencia.
+    'an id-less Agent call then an id-less Bash call: the first result is the Agent call\'s, so nothing is owed',
+    0,
+    [...PROLOGUE, prompt('delega y corre'), agentCall(undefined, 'First errand'), call(undefined, 'Bash', { command: 'ls' }), result(undefined, 'ok', false), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'an id-less Agent call then an id-less Bash call, the Bash result refused: the Bash call took the refusal, nothing is owed',
+    0,
+    [...PROLOGUE, prompt('delega y corre'), agentCall(undefined, 'First errand'), call(undefined, 'Bash', { command: 'ls' }), result(undefined, LAUNCHED, false), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'an id-less Bash call before an id-less Agent call: the first result is the Bash one, the refusal is the Agent one',
+    1,
+    [...PROLOGUE, prompt('corre y delega'), call(undefined, 'Bash', { command: 'ls' }), agentCall(undefined, 'First errand'), result(undefined, 'ok', false), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'a Bash call WITH an id takes no place in the id-less queue, so the id-less refusal is the Agent call\'s',
+    1,
+    [...PROLOGUE, prompt('corre y delega'), call('b1', 'Bash', { command: 'ls' }), agentCall(undefined, 'First errand'), result('b1', 'ok', false), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'an id-less Bash call answered ok never launches the id-less Agent call that follows it',
+    1,
+    [...PROLOGUE, prompt('corre y delega'), call(undefined, 'Bash', { command: 'ls' }), result(undefined, 'ok', false), agentCall(undefined, 'First errand'), result(undefined, REFUSAL, true)],
+  ],
+  [
     'an empty-string result id answers the oldest unanswered id-less call',
     2,
     [...PROLOGUE, prompt('delega dos'), batchCall('m1', '', 'Agent', { description: 'First errand', prompt: 'x' }), batchCall('m1', '', 'Agent', { description: 'Second errand', prompt: 'x' }), result('', REFUSAL, true), result('', REFUSAL, true)],
