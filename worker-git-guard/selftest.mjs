@@ -150,6 +150,12 @@ expect('deny', asSubagent('PowerShell', 'git commit -m x -- @files'), 'PowerShel
 expect('deny', asSubagent('PowerShell', 'git commit -m x -- $env:FILES'), 'PowerShell, an environment variable names no specific path');
 expect('deny', asSubagent('PowerShell', 'git commit -m x -- $files'), 'PowerShell, a variable names no specific path');
 expect('allow', asSubagent('PowerShell', 'git commit -m x -- src/a.ts'), 'PowerShell, a literal path');
+expect('allow', asSubagent('PowerShell', 'git commit -m x -- $dir\\a.ts'), 'PowerShell, a variable with a literal part after a backslash');
+denied('git commit -m x -- $(cat lists/a.txt)');
+denied('git commit -m x -- `cat list`');
+denied('git commit -Ka -m x -- a');
+denied('git commit -qn -m x -- a');
+denied('GIT_INDEX_FILE=/tmp/i git status; git read-tree HEAD');
 
 // --- C9: an alias defined on the line with -c alias.<name>=... is expanded (judge B) ---------------
 for (const form of ['git -c alias.ci="commit -a" ci -m x', 'git -c alias.ci="commit -am x" ci -- a', "git -c alias.x='!git reset --hard' x", 'git -c alias.r=reset r --hard', 'git -c alias.a=b -c alias.b=reset a', 'git -c alias.CI="commit --no-verify" ci -m x -- a', 'git -c alias.ci=commit ci -m x', 'git -c alias.ci="-C sub reset" ci', "git -c alias.s='!f() { git switch main; }; f' s"]) denied(form);
@@ -444,6 +450,8 @@ check('C12: an add in another directory is resolved there', untrackedVerdict('cd
 check('C12: PowerShell && counts too', untrackedVerdict('git add -- mixed/new.txt && git commit -m "x" -- mixed', REPO, 'PowerShell') === undefined);
 check('C12: an add joined by ; is not the same chain, refused', untrackedVerdict('git add -- mixed/new.txt; git commit -m x -- mixed') === 'deny');
 check('C12: an add joined by || is not the same chain, refused', untrackedVerdict('git add -- mixed/new.txt || git commit -m x -- mixed') === 'deny');
+check('C12: an add of another directory does not cover this one', untrackedVerdict('git add -- clean && git commit -m x -- mixed') === 'deny');
+check('C12: an add on another drive does not cover this one', untrackedVerdict('git add -- Z:/elsewhere && git commit -m x -- mixed') === 'deny');
 check('C12: an add AFTER the commit does not count', untrackedVerdict('git commit -m x -- mixed && git add -- mixed/new.txt') === 'deny');
 check('C12: a dry-run add stages nothing, refused', untrackedVerdict('git add -n -- mixed/new.txt && git commit -m x -- mixed') === 'deny');
 check('C12: a glob add is not read as literal paths, refused', untrackedVerdict('git add -- "mixed/*.txt" && git commit -m x -- mixed') === 'deny');
@@ -472,7 +480,9 @@ check('C10: a relative pathspec file is read from the directory the commit runs 
 check('C10: a pathspec file naming the whole tree is refused as a commit without paths', untrackedReason(`git commit -m x --pathspec-from-file=${spec('dot.lst')}`).includes('must name its paths'));
 check('C10: an empty pathspec file is refused as a commit without paths', untrackedReason(`git commit -m x --pathspec-from-file=${spec('empty.lst')}`).includes('must name its paths'));
 check('C10: a missing pathspec file is refused, naming it, in both halves', (() => { const text = untrackedReason(`git commit -m x --pathspec-from-file=${spec('missing.lst')}`); return text.includes('cannot be read') && text.includes('no se puede leer') && text.split('missing.lst').length >= 4; })());
-check('C10: standard input is refused', untrackedReason('git commit -m x --pathspec-from-file=-').includes('cannot be read'));
+put(REPO, '-', 'clean\n');
+check('C10: standard input is refused, even beside a file named -', untrackedReason('git commit -m x --pathspec-from-file=-').includes('cannot be read'));
+check('C10: an absolute pathspec file after a cd the line cannot follow is still read', untrackedVerdict(`cd "$X" && git commit -m x --pathspec-from-file=${spec('clean.lst')}`) === undefined);
 check('C10: a relative pathspec file after a cd the line cannot follow is refused', untrackedReason('cd "$X" && git commit -m x --pathspec-from-file=specs/clean.lst').includes('cannot be read'));
 check('C10: --no-pathspec-from-file undoes it, so the commit has no paths', untrackedVerdict(`git commit -m x --pathspec-from-file=${spec('clean.lst')} --no-pathspec-from-file`) === 'deny');
 check('C10: the file port is injectable and called with the resolved path', (() => { const asked = []; untrackedUnderCommits('git commit -m x --pathspec-from-file=l.txt', 'bash', REPO, () => ({ files: [] }), (file) => { asked.push(file); return 'clean\n'; }); return asked.length === 1 && asked[0] === path.join(REPO, 'l.txt'); })());

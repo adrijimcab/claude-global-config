@@ -62,9 +62,6 @@ const PATHSPEC_SEPARATOR = '--';
 /** The `--pathspec-from-file` value that means standard input, which the guard cannot read. @es El valor que significa la entrada estándar. */
 const STANDARD_INPUT = '-';
 
-/** Characters that make an added path a pattern rather than a literal path. @es Caracteres que hacen de una ruta añadida un patrón. */
-const PATTERN_CHARACTERS = '*?[:$';
-
 /**
  * The default adapter: asks git, in `directory`, for the untracked and not ignored files under `pathspecs`. The
  * arguments go as an array, never through a shell.
@@ -120,14 +117,18 @@ function addedPaths(invocation) {
 
   const words = separator === -1 ? invocation.args.filter((word) => !word.startsWith('-')) : invocation.args.slice(separator + 1);
 
-  return words.filter((word) => ![...PATTERN_CHARACTERS].some((character) => word.includes(character))).map((word) => path.resolve(directory, word));
+  return words.map((word) => path.resolve(directory, word));
 }
 
-/** Whether `file` is `added` itself or lies under it. @es Si `file` es `added` o está debajo. */
+/**
+ * Whether `file` is `added` itself or lies under it. A glob or a magic pathspec, resolved as a literal path,
+ * names no real file, so it never covers one.
+ * @es Si `file` es `added` o está debajo. Un glob o un pathspec mágico, resuelto como ruta literal, no cubre nada.
+ */
 function isUnder(added, file) {
   const relative = path.relative(added, file);
 
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  return !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
 /**
