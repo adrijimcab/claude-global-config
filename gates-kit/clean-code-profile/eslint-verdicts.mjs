@@ -13,7 +13,7 @@
  * declara por gate.
  */
 
-import { landingEvidence, settle, unmeasured, ev, ABSENT } from './verdict-parts.mjs';
+import { landingEvidence, reasonParams, settle, unmeasured, ev, ABSENT } from './verdict-parts.mjs';
 import { reach } from './landing-reach.mjs';
 
 const SEVERITIES = { off: 0, warn: 1, error: 2, 0: 0, 1: 1, 2: 2 };
@@ -39,7 +39,7 @@ function sampleOrVerdict(gate, facts, found) {
 
   if (facts.eslintConfig.file === undefined) return { done: settle({ gate, meets: false, present: false, found, evidence: [ev('no-eslint-config', { searched: facts.eslintConfig.searched.join(', ') }), ...landingEvidence(found, 'eslint', facts.landing, facts.root)] }) };
   if (sample === undefined) return { done: { id: gate.id, verdict: ABSENT, evidence: [ev('no-sample', { kind: gate.sample })], landingGuard: false } };
-  if (sample.error !== undefined) return { done: unmeasured(gate, [ev('eslint-not-runnable', { file: sample.file, reason: sample.error })]) };
+  if (sample.error !== undefined) return { done: unmeasured(gate, [ev('eslint-not-runnable', { file: sample.file, ...reasonParams(sample.error) })]) };
 
   return { sample };
 }

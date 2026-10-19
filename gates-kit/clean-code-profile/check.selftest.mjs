@@ -187,7 +187,7 @@ check('npm run is not an npm audit', stateOf(workspace, 'dependency-audit') === 
 
 const unreadable = await gradeFixture('enforced-angular', () => ({ error: 'boom' }), () => ({ file: 'tsconfig.json', error: 'no compiler' }));
 
-check('an ESLint that cannot run leaves its rules unmeasured, with the reason', stateOf(unreadable, 'complexity') === 'unmeasured' && unreadable.byId.complexity.evidence[0].params.reason === 'boom');
+check('an ESLint that cannot run leaves its rules unmeasured, with the reason', stateOf(unreadable, 'complexity') === 'unmeasured' && unreadable.byId.complexity.evidence[0].params.reasonEn === 'boom');
 check('a compiler that cannot run leaves strict TypeScript unmeasured', stateOf(unreadable, 'strict-typescript') === 'unmeasured');
 check('lint-on-landing is graded without running ESLint', stateOf(unreadable, 'lint-on-landing') === 'enforced');
 check('a tsconfig that is not strict is absent', stateOf(await gradeFixture('enforced-angular', answering(STRONG_SCRIPT), () => ({ file: 'tsconfig.json', strict: false })), 'strict-typescript') === 'absent');
@@ -252,6 +252,40 @@ async function gradeGenerated(root, options = {}) {
 
   check('a generated project lives outside the repository, under the system temp directory', (inside.startsWith('..') || path.isAbsolute(inside)) && path.relative(tmpdir(), root).startsWith('..') === false);
   check('a generated project sees no fleet-kit of its surroundings', landingPath.fleetKitUnitScript(root) === undefined);
+}
+
+// A tool that cannot run prints its reason with exactly one @es: a bilingual reason split into its halves, an
+// English-only one in both. @es Una herramienta que no puede correr imprime su motivo con exactamente un @es.
+{
+  /** The printed line of the evidence `id` of gate `gate`, or `missing`/`threw:`. @es La línea impresa de una evidencia. */
+  const printedOf = (verdicts, gate, id) => {
+    const entry = verdicts.find((verdict) => verdict.id === gate)?.evidence.find((item) => item.id === id);
+
+    if (entry === undefined) return 'missing';
+    try {
+      return makeSpeaker(MESSAGES).line(entry.id, entry.params);
+    } catch (error) {
+      return `threw: ${error.message}`;
+    }
+  };
+  const verdictsOf = (graded) => Object.values(graded.byId);
+  /** One @es, the English reason only in the English half, the Spanish one only in the Spanish half. @es Un @es y cada motivo en su mitad. */
+  const splitRight = (line, english, spanish) => esMarkers(line) === 1 && halves(line)[0].includes(english) && !halves(line)[0].includes(spanish) && halves(line)[1].includes(spanish) && !halves(line)[1].includes(english);
+  /** One @es and the same English-only reason in both halves. @es Un @es y el mismo motivo en ambas mitades. */
+  const bothHalves = (line, reason) => esMarkers(line) === 1 && halves(line).every((half) => half.includes(reason));
+
+  const bilingualTools = verdictsOf(await gradeFixture('enforced-angular', () => ({ error: 'eslint boom @es eslint pum' }), () => ({ file: 'tsconfig.json', error: 'tsc boom @es tsc pum' })));
+  const englishTools = verdictsOf(await gradeFixture('enforced-angular', () => ({ error: 'eslint boom' }), () => ({ file: 'tsconfig.json', error: 'tsc boom' })));
+
+  check('an ESLint reason that is bilingual is split into its halves, with one @es', splitRight(printedOf(bilingualTools, 'complexity', 'eslint-not-runnable'), 'eslint boom', 'eslint pum'));
+  check('an ESLint reason in English only goes into both halves, with one @es', bothHalves(printedOf(englishTools, 'complexity', 'eslint-not-runnable'), 'eslint boom'));
+  check('a compiler reason that is bilingual is split into its halves, with one @es', splitRight(printedOf(bilingualTools, 'strict-typescript', 'tsc-not-runnable'), 'tsc boom', 'tsc pum'));
+  check('a compiler reason in English only goes into both halves, with one @es', bothHalves(printedOf(englishTools, 'strict-typescript', 'tsc-not-runnable'), 'tsc boom'));
+
+  const cruiser = async (message) => (await gradeGenerated(generated({ 'package.json': '{}', '.dependency-cruiser.cjs': `throw new Error(${JSON.stringify(message)});\n` }))).verdicts ?? [];
+
+  check('a dependency-cruiser reason that is bilingual is split into its halves, with one @es', splitRight(printedOf(await cruiser('cruiser boom @es cruiser pum'), 'circular-dependencies', 'depcruise-unreadable'), 'cruiser boom', 'cruiser pum'));
+  check('a dependency-cruiser reason in English only goes into both halves, with one @es', bothHalves(printedOf(await cruiser('cruiser boom'), 'circular-dependencies', 'depcruise-unreadable'), 'cruiser boom'));
 }
 
 const NOT_JSON = '{ "scripts": ';

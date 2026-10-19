@@ -10,12 +10,10 @@
  * aplica la regla única de `verdict-parts.mjs`. Los números con que comparan vienen de `profile.mjs`, no de aquí.
  */
 
-import { halvesOf } from '../../bilingual-output/message.mjs';
-
 import { AUDIT_LEVELS_AT_LEAST_HIGH, JSCPD } from './profile.mjs';
 import { reach } from './landing-reach.mjs';
 import { forbids, forbidsCycles } from './layering-probe.mjs';
-import { ev, landingEvidence, settle, unmeasured } from './verdict-parts.mjs';
+import { ev, landingEvidence, reasonParams, settle, unmeasured } from './verdict-parts.mjs';
 import { commandsOf } from './shell-commands.mjs';
 
 /** A path relative to the project, for evidence. @es Una ruta relativa al proyecto, para evidencia. */
@@ -35,7 +33,7 @@ export function strictTypescript(gate, facts) {
   const found = reach(facts.landing, 'tsc');
   const tsc = facts.tsc;
 
-  if (tsc.error !== undefined) return unmeasured(gate, [ev('tsc-not-runnable', { file: tsc.file, reason: tsc.error })]);
+  if (tsc.error !== undefined) return unmeasured(gate, [ev('tsc-not-runnable', { file: tsc.file, ...reasonParams(tsc.error) })]);
   if (tsc.missing) return settle({ gate, meets: false, present: false, found, evidence: [ev('no-tsconfig', {}), ...landingEvidence(found, 'tsc', facts.landing, facts.root)] });
 
   const reason = tsc.strict ? ev('strict-on', { file: tsc.file }) : ev('strict-off', { file: tsc.file });
@@ -48,7 +46,7 @@ function depcruiseOrVerdict(gate, facts, found) {
   const config = facts.depcruise;
 
   if (config === undefined) return { done: settle({ gate, meets: false, present: found.other.length > 0, found, evidence: [ev('no-depcruise-config', {}), ...landingEvidence(found, 'dependency-cruiser', facts.landing, facts.root)] }) };
-  if (config.error !== undefined) return { done: unmeasured(gate, [ev('depcruise-unreadable', { file: relative(facts, config.file), reason: config.error })]) };
+  if (config.error !== undefined) return { done: unmeasured(gate, [ev('depcruise-unreadable', { file: relative(facts, config.file), ...reasonParams(config.error) })]) };
 
   return { config };
 }
@@ -141,11 +139,7 @@ export function deadCode(gate, facts) {
   else if (configured) evidence.push(ev('knip-script', {}));
   else evidence.push(ev('no-knip', {}));
 
-  if (config !== undefined && config.ignoreEntries === undefined) {
-    const { en: reasonEn, es: reasonEs } = halvesOf(config.reason);
-
-    evidence.push(ev('knip-ignore-unmeasured', { file: relative(facts, config.file), reasonEn, reasonEs }));
-  }
+  if (config !== undefined && config.ignoreEntries === undefined) evidence.push(ev('knip-ignore-unmeasured', { file: relative(facts, config.file), ...reasonParams(config.reason) }));
   if (config?.ignoreEntries > 0) evidence.push(ev('knip-ignore-debt', { count: config.ignoreEntries, file: relative(facts, config.file) }));
 
   return settle({ gate, meets: configured, present: configured, found, evidence: [...evidence, ...landingEvidence(found, 'knip', facts.landing, facts.root)] });
