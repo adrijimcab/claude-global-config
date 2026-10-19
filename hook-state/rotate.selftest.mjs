@@ -19,13 +19,20 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isolateState } from './locations.mjs';
-import { ARCHIVE, JOURNAL, KEEP, KINDS, LOCK, UNKNOWN, classify, dismissalsIn, liveSessions, main, pathMatches, processAlive } from './rotate.mjs';
+import * as rotation from './rotate.mjs';
+
+const { ARCHIVE, JOURNAL, KEEP, KINDS, LOCK, UNKNOWN, classify, dismissalsIn, liveSessions, main, pathMatches, processAlive } = rotation;
+// Read through the namespace so a module without them fails a check, not the import. @es Por el espacio de nombres.
+const PRUNE = rotation.PRUNE ?? 'no-prune-kind';
+const REMOVE = rotation.REMOVE ?? 'no-remove-kind';
+const HOUR = 60 * 60 * 1000;
+const WEEK = 7 * 24 * HOUR;
 
 isolateState('rotate');
 
@@ -145,7 +152,12 @@ try {
   check('*.json does not match a .jsonl file', classify('engram-persistence', 'notes.jsonl').kind, UNKNOWN);
   check('*.json does not match a file named only .json', classify('engram-persistence', '.json').kind, UNKNOWN);
   check('a lock is a lock', classify('failure-capture', 'ledger.lock').kind, LOCK);
-  check('the file of a writer breaking a stale lock is a lock too, and the per-session files are kept', [classify('failure-capture', 'ledger.lock.breaker').kind, classify('failure-capture', 'stamps/sesion-a.json').kind, classify('failure-capture', 'guard-state/sesion-a.json').kind], [LOCK, KEEP, KEEP]);
+  check('the file of a writer breaking a stale lock is a lock too, and the per-session files are pruned by a week', [classify('failure-capture', 'ledger.lock.breaker').kind, classify('failure-capture', 'stamps/sesion-a.json'), classify('failure-capture', 'guard-state/sesion-a.json').kind, classify('failure-capture', 'guard-state/sesion-a.json').maxAgeMs], [LOCK, { kind: PRUNE, reason: classify('failure-capture', 'stamps/sesion-a.json').reason, maxAgeMs: WEEK }, PRUNE, WEEK]);
+  check('J-3: the temporary files of the per-session writers are pruned by an hour, before their directory\'s rule', [classify('failure-capture', 'stamps/s.json.123-ab12cd34.tmp').maxAgeMs, classify('failure-capture', 'guard-state/s.json.9-ff.tmp').maxAgeMs], [HOUR, HOUR]);
+  check('J-3: the temporary file of a fires counter or a rotated journal, of any mechanism, is pruned by an hour', [classify('guard-anything', 'fires.json.4242.tmp').kind, classify('guard-anything', 'journal.jsonl.tmp').maxAgeMs], [PRUNE, HOUR]);
+  check('J-3: the obsolete shared state files of failure-capture are removed, and only those', [classify('failure-capture', 'last-capture.json').kind, classify('failure-capture', 'guard-state.json').kind, classify('delegation-receipts', 'guard-state.json').kind], [REMOVE, REMOVE, KEEP]);
+  check('the breaker of any lock is a lock, its break journal and the not-counted runs are archived', [classify('guard-anything', 'fires.json.lock.breaker').kind, classify('guard-anything', 'fires.json.lock.breaks.jsonl').kind, classify('failure-capture', 'ledger.lock.breaks.jsonl').kind, classify('guard-anything', 'fires-uncounted.jsonl').kind], [LOCK, ARCHIVE, ARCHIVE, ARCHIVE]);
+  check('only a PRUNE rule carries an age', ['maxAgeMs' in classify('failure-capture', 'last-capture.json'), 'maxAgeMs' in classify('collision-guard', 'refusals.jsonl')], [false, false]);
   check('the hook journal of any mechanism is a journal', [classify('guard-anything', 'journal.jsonl').kind, classify('collision-guard', 'journal.jsonl').kind], [JOURNAL, JOURNAL]);
   check('the fires counter of any mechanism is archived', classify('guard-anything', 'fires.json').kind, ARCHIVE);
   check('the lock of a fires counter increment is a lock, so it refuses an apply', classify('guard-anything', 'fires.json.lock').kind, LOCK);
@@ -156,7 +168,7 @@ try {
   check('a file no rule names is unknown, with no reason', classify('collision-guard', 'surprise.txt'), { kind: UNKNOWN, reason: '' });
   check('a known kind carries its reason', classify('stash-watch', 'noticed.json').reason.length > 0, true);
   check('pathMatches compares whole paths', [pathMatches('a/b', 'a/b'), pathMatches('a/b', 'a/b/c'), pathMatches('a/b', 'a'), pathMatches('a/*', 'a/x'), pathMatches('a/**', 'a')], [true, false, false, true, false]);
-  check('every rule has a known kind, a reason and a pattern', KINDS.filter(([, pattern, kind, reason]) => ![ARCHIVE, JOURNAL, KEEP, LOCK].includes(kind) || reason === '' || pattern === ''), []);
+  check('every rule has a known kind, a reason and a pattern, and a PRUNE rule a positive age', KINDS.filter(([, pattern, kind, reason, maxAgeMs]) => ![ARCHIVE, JOURNAL, KEEP, LOCK, PRUNE, REMOVE].includes(kind) || reason === '' || pattern === '' || (kind === PRUNE) !== (Number.isFinite(maxAgeMs) && maxAgeMs > 0)), []);
   check('only dismissals are carried', dismissalsIn(`${DECISION}\n${DISMISSAL}\n{torn\n${REPORT}\nnull`), [DISMISSAL]);
 
   // --- the sessions ---
@@ -188,7 +200,7 @@ try {
   check('an unknown file and a link are reported, never guessed', [said.includes('UNKNOWN  mystery/weird.bin'), said.includes('UNKNOWN  brief-audience/refusals.jsonl')], [true, true]);
   check('a directory that is not a plain name is not a mechanism', said.includes('.hidden'), false);
   check('a state directory that is a link is never entered, so nothing behind it is planned', [said.includes('linked-mechanism'), said.includes('linked-state')], [false, false]);
-  check('the summary counts every action', said.includes('5 to archive, 7 kept, 2 unknown.'), true);
+  check('the summary counts every action', said.includes('5 to archive, 0 to remove, 7 kept, 2 unknown.'), true);
   check('the dry run says how to apply it, bilingual', said.includes('Run again with --apply') && dry.out.every((line) => line.includes(' @es ')), true);
   check('a dry run with no blocker announces no refusal', said.includes('REFUSED'), false);
 
@@ -216,6 +228,39 @@ try {
   put(home, 'collision-guard/state/refusals.jsonl', '{"raw":"later"}\n');
   check('a later rotation the same day appends', [rotate(['--home', home, '--apply']).code, readFileSync(path.join(archive, 'collision-guard', 'refusals.jsonl'), 'utf8')], [0, '{"raw":"test data"}\n{"raw":"later"}\n']);
   check('...and the appended source is gone from the state', existsSync(path.join(home, 'collision-guard', 'state', 'refusals.jsonl')), false);
+
+  // --- J-3: what only matters while recent is pruned by its age, and the obsolete is removed ---
+  // @es J-3: lo que solo importa mientras es reciente se poda por su edad, y lo obsoleto se borra.
+  const pruned = path.join(scratch, 'prune');
+  const aged = (relative, ageMs) => {
+    put(pruned, relative, '{}');
+    utimesSync(path.join(pruned, relative), (NOW - ageMs) / 1000, (NOW - ageMs) / 1000);
+  };
+
+  aged('failure-capture/state/last-capture.json', 0);
+  aged('failure-capture/state/guard-state.json', 0);
+  aged('failure-capture/state/stamps/old-session.json', WEEK + HOUR);
+  aged('failure-capture/state/stamps/live-session.json', WEEK - HOUR);
+  aged('failure-capture/state/guard-state/old-scope.json', WEEK + HOUR);
+  aged('failure-capture/state/stamps/s.json.12-ab.tmp', 2 * HOUR);
+  aged('failure-capture/state/guard-state/s.json.12-ab.tmp', (HOUR * 3) / 4);
+  aged('guard-x/state/fires.json.4242.tmp', 2 * HOUR);
+  aged('guard-x/state/fires-uncounted.jsonl', 0);
+  aged('guard-x/state/fires.json.lock.breaks.jsonl', 0);
+
+  const prunePlan = rotate(['--home', pruned]).out.join('\n');
+
+  check('J-3: the plan removes the obsolete, the old per-session files and the old temp files, and says why', ['REMOVE   failure-capture/last-capture.json: obsolete', 'REMOVE   failure-capture/guard-state.json: obsolete', 'REMOVE   failure-capture/stamps/old-session.json: past its age', 'REMOVE   failure-capture/guard-state/old-scope.json: past its age', 'REMOVE   failure-capture/stamps/s.json.12-ab.tmp: past its age', 'REMOVE   guard-x/fires.json.4242.tmp: past its age'].map((line) => prunePlan.includes(line)), [true, true, true, true, true, true]);
+  check('J-3: NEAR MISS: a per-session file younger than a week and a temp file younger than an hour are kept', ['KEEP     failure-capture/stamps/live-session.json: operative', 'KEEP     failure-capture/guard-state/s.json.12-ab.tmp: operative'].map((line) => prunePlan.includes(line)), [true, true]);
+  check('J-3: the summary counts the removals apart', prunePlan.includes('2 to archive, 6 to remove, 2 kept, 0 unknown.'), true);
+
+  const pruneApplied = rotate(['--home', pruned, '--apply']);
+  const left = (relative) => existsSync(path.join(pruned, relative));
+
+  check('J-3: --apply removes them, so a live install cleans up through rotate', [pruneApplied.code, ...['failure-capture/state/last-capture.json', 'failure-capture/state/guard-state.json', 'failure-capture/state/stamps/old-session.json', 'failure-capture/state/guard-state/old-scope.json', 'failure-capture/state/stamps/s.json.12-ab.tmp', 'guard-x/state/fires.json.4242.tmp'].map(left)], [0, false, false, false, false, false, false]);
+  check('J-3: ...keeps the young ones, archives the break journal and the not-counted runs', [left('failure-capture/state/stamps/live-session.json'), left('failure-capture/state/guard-state/s.json.12-ab.tmp'), existsSync(path.join(pruned, 'state-archive', DATE, 'guard-x', 'fires-uncounted.jsonl')), existsSync(path.join(pruned, 'state-archive', DATE, 'guard-x', 'fires.json.lock.breaks.jsonl'))], [true, true, true, true]);
+  check('J-3: ...says each removal, bilingual, and counts it in the total', [pruneApplied.out.filter((line) => line.startsWith('Removed ') && line.includes(' @es Borrado ')).length, pruneApplied.out.at(-1).startsWith('Rotated 8 file(s)')], [6, true]);
+  check('J-3: a second apply has nothing left to remove', rotate(['--home', pruned, '--apply']).out.at(-1).startsWith('Nothing to rotate'), true);
 
   // --- refusals ---
   const live = makeHome(scratch, 'live');
