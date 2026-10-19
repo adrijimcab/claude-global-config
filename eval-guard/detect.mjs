@@ -469,13 +469,12 @@ export function invocations(items) {
 
     if (item.kind === 'operator') {
       const closed = close();
-      const next = items[at + 1];
-      const glued = next?.kind === 'operator' && next.start === item.start + 1;
 
-      // `|` pipes the command before it; the second `|` of `||` closes nothing, so it pipes nothing.
-      // @es `|` encauza la orden anterior; el segundo `|` de `||` no cierra nada, así que no encauza nada.
+      // `|` pipes the command before it; the second `|` of `||` closes nothing, so it pipes nothing, and the `&`
+      // of `|&` resets nothing, so the pipe holds. Only a command word takes what is piped.
+      // @es `|` encauza la orden anterior; el segundo `|` de `||` no cierra nada, así que no encauza nada, y el `&`
+      // de `|&` no reinicia nada, así la tubería se mantiene. Solo una palabra de orden toma lo encauzado.
       if (item.raw === '|') {
-        if (glued && next.raw === '&') at += 1;
         pipedFrom = closed !== undefined ? [closed] : compound ?? [];
       } else if (item.raw === '{' || item.raw === '(') {
         compoundStarts.push(groups.length);

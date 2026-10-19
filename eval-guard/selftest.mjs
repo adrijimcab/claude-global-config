@@ -214,7 +214,19 @@ const boundaryCases = [
   ['allow', delegated(lines("python3 -Wignore tool.py <<'EOF'", "open('o', 'w')", 'EOF')), 'an attached option value skips no word'],
   ['allow', delegated(lines("ruby -e 'p 1' <<'EOF'", WRITE, 'EOF')), 'ruby -e: the heredoc is data'],
   ['allow', delegated(lines("bash <<'EOF'", 'echo x >&-', 'echo x | tee /dev/null', 'echo x | tee -a', 'sed --expression p file.txt', 'sed -n p file.txt', 'EOF')), 'a closed descriptor, tee into a sink or nothing, sed without -i'],
-  ['allow', delegated(lines("pwsh - <<'EOF'", 'Show-Out-File', 'Out-FileReport', 'EOF')), 'a cmdlet name inside a longer word']
+  ['allow', delegated(lines("pwsh - <<'EOF'", 'Show-Out-File', 'Out-FileReport', 'EOF')), 'a cmdlet name inside a longer word'],
+  // Inline code glued to its option leaves no script word behind, so only the option says where the script is.
+  // @es El código inline pegado a su opción no deja palabra de script, así que solo la opción dice dónde está el script.
+  ['allow', delegated(lines("node -e1 <<'EOF'", WRITE, 'EOF')), 'node -e with glued code: the heredoc is data'],
+  ['allow', delegated(lines("node --eval=1 <<'EOF'", WRITE, 'EOF')), 'node --eval=code: the heredoc is data'],
+  ['allow', delegated(lines("python3 -cpass <<'EOF'", "open('o', 'w')", 'EOF')), 'python -c with glued code: the heredoc is data'],
+  ['allow', delegated(lines("python3 -mjson.tool <<'EOF'", "open('o', 'w')", 'EOF')), 'python -m with a glued module: the heredoc is data'],
+  ['allow', delegated(lines("ruby -e1 <<'EOF'", WRITE, 'EOF')), 'ruby -e with glued code: the heredoc is data'],
+  ['allow', delegated(lines("bash -cexit <<'EOF'", 'echo x > out.txt', 'EOF')), 'bash -c with glued code: the heredoc is data'],
+  ['deny', delegated(lines("timeout -- 5 node - <<'EOF'", WRITE, 'EOF')), 'timeout -- still has its duration before the program', 'writes a file'],
+  ['allow', delegated(lines("@'", WRITE, "'@ | node -")), 'in Bash, @\' is a quote: nothing is piped into node as a script'],
+  ['allow', delegated(lines("@'abc", WRITE, "'@ | node -"), 'PowerShell'), 'a PowerShell @\' with text after it on its line opens no here-string'],
+  ['deny', delegated(lines("bash <<'EOF'", "bash <<'X'", 'echo x > out.txt', 'X', 'EOF')), 'a nested shell heredoc that redirects into a file', 'writes a file']
 ];
 
 // E4: PowerShell here-strings are PowerShell syntax only, opened at a token start, never swallowing an unterminated rest.

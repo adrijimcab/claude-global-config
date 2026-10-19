@@ -100,11 +100,8 @@ export function programIndex(words, position) {
     while (at < words.length) {
       const word = words[at];
 
-      if (!word.quoted && word.raw === '--') {
-        at += 1;
-        break;
-      }
-
+      // `--` is skipped like any flag, so `timeout -- 5 node` still counts its duration.
+      // @es `--` se salta como cualquier flag, así `timeout -- 5 node` sigue contando su duración.
       if (isOption(word)) {
         const option = word.raw.includes('=') ? word.raw.slice(0, word.raw.indexOf('=')) : word.raw;
 
