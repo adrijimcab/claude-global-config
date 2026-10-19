@@ -14,10 +14,9 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const MUTANTS = [
   // --- decide.mjs: which repo a commit lands in.
-  ['a `-C` value no longer overrides the directory `cd` resolved, so `-C` into a declared repo goes unseen', 'commit-pathspec-guard/decide.mjs', 'directory = resolveAgainst(directory, gitOptions[index + 1]);', ''],
-  ['the fused `-C=value` form is no longer read, so that spelling of `-C` escapes detection', 'commit-pathspec-guard/decide.mjs', "if (option.startsWith('-C=')) directory = resolveAgainst(directory, option.slice('-C='.length));", ''],
+  ['a `-C` value no longer overrides the directory `cd` resolved, so `-C` into a declared repo goes unseen', 'commit-pathspec-guard/decide.mjs', 'const repo = repoAt(invocationDirectory(invocation));', 'const repo = repoAt(invocation.directory);'],
   ['a non-`commit` git subcommand is treated as a commit too, so `git status`/`add` inside a declared repo are refused', 'commit-pathspec-guard/decide.mjs', "if (invocation.subcommand !== 'commit') continue;", "if (invocation.subcommand !== 'status') continue;"],
-  ['a commit outside any declared repo falls back to the FIRST declared repo, so b100-am-ui itself gets refused too', 'commit-pathspec-guard/decide.mjs', 'const repo = repoAt(gitOptionDirectory(invocation.gitOptions, invocation.directory));', 'const repo = repoAt(gitOptionDirectory(invocation.gitOptions, invocation.directory)) ?? declaredRepos()[0];'],
+  ['a commit outside any declared repo falls back to the FIRST declared repo, so b100-am-ui itself gets refused too', 'commit-pathspec-guard/decide.mjs', 'const repo = repoAt(invocationDirectory(invocation));', 'const repo = repoAt(invocationDirectory(invocation)) ?? declaredRepos()[0];'],
 
   // --- decide.mjs: the pathspec test itself.
   ['`--` is no longer required to be FOLLOWED by a path, so a trailing bare `--` counts as a pathspec', 'commit-pathspec-guard/decide.mjs', 'if (separatorAt !== -1 && separatorAt < args.length - 1) return true;', 'if (separatorAt !== -1) return true;'],
@@ -47,7 +46,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['commit-pathspec-guard', 'shell-command', 'cherry-pick-guard', 'config-sync-guard', 'mutation-proof', 'hook-payloads'],
+  paths: ['commit-pathspec-guard', 'company-remote', 'shell-command', 'cherry-pick-guard', 'config-sync-guard', 'mutation-proof', 'hook-payloads'],
   selftest: 'commit-pathspec-guard/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

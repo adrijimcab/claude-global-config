@@ -102,7 +102,22 @@ for (const form of ['git clean -n', 'git clean --dry-run', 'git clean -nd', 'git
 
 // --- FAMILY 5: commit --no-verify / -n ----------------------------------------------------------
 for (const form of ['git commit --no-verify -m x', 'git commit -n -m x', 'git commit -nm x', 'git commit -anm x', 'git commit -q --no-verify -m "wip: x"', 'git commit -m x --no-verify', 'git commit -m x -n', 'git commit --no-verif -m x', 'git commit --no-v -m x']) denied(form);
-for (const form of ['git commit -m "no-verify words" -- p.txt', 'git commit -m"no" -- p.txt', 'git commit -m -n -- p.txt', 'git commit --amend -m x -- p.txt', 'git commit -m x -- a.txt', 'git commit -m x -- a.txt -n', 'git commit -F msg.txt -- p.txt', 'git commit -Fn -- p.txt', 'git commit -C HEAD -- p.txt', 'git commit --message --no-verify -- p.txt', 'git commit --no-edit -- p.txt', 'git commit --no- -m x -- p.txt', 'git commit -m "-n" -- p.txt']) allowed(form);
+for (const form of ['git commit -m "no-verify words" -- p.txt', 'git commit -m"no" -- p.txt', 'git commit -m -n -- p.txt', 'git commit --amend -m x -- p.txt', 'git commit -m x -- a.txt', 'git commit -m x -- a.txt -n', 'git commit -F msg.txt -- p.txt', 'git commit -Fn -- p.txt', 'git commit -C HEAD -- p.txt', 'git commit --message --no-verify -- p.txt', 'git commit --no-edit -- p.txt', 'git commit -m "-n" -- p.txt']) allowed(form);
+// An AMBIGUOUS abbreviation that could be --no-verify counts as it (git rejects the command anyway, measured
+// 2026-10-19: "ambiguous option: no-"). @es Una abreviatura AMBIGUA que podría ser --no-verify cuenta como tal.
+for (const form of ['git commit --no- -m x -- p.txt', 'git commit --no-v -m x -- p.txt']) denied(form);
+
+// --- C2: git's last-wins rule for negatable options (both judges, 2026-10-19) ----------------------
+for (const form of ['git commit --dry-run --no-dry-run -m x', 'git commit --dry-run -m x --no-dry-run -a', 'git commit --dr --no-dr -m x', 'git commit --no-verify --verify -n -m x -- a', 'git commit --verify --no-verify -m x -- a', 'git push --verify --no-verify', 'git restore --staged --no-staged x', 'git clean -f --no-force -f']) denied(form);
+for (const form of ['git commit --no-dry-run --dry-run -m x', 'git commit --no-verify --verify -m x -- a', 'git commit -n --verify -m x -- a', 'git commit -n --veri -m x -- a', 'git push --no-verify --verify', 'git restore --no-staged --staged x', 'git clean -f --no-force']) allowed(form);
+
+// --- C6: commit -S and -u take only an ATTACHED optional value, so they never eat the next word ---------
+for (const form of ['git commit -S -n -m x -- a', 'git commit -u -n -m x -- a', 'git commit -S -a -m x', 'git commit -m x -U 3 -a']) denied(form);
+for (const form of ['git commit -S -m x -- a.txt', 'git commit -S -- a.txt', 'git commit -Skey -m x -- a', 'git commit -uno -m x -- a', 'git commit -Sn -m x -- a', 'git commit -m x -U -n -- a', 'git restore -U 3 -S x']) allowed(form);
+
+// --- C7: long options that take a value are matched by their abbreviations too (judge B) --------------
+for (const form of ['git commit --mes -- -a', 'git commit --mes -- -n', 'git commit --messag x', 'git commit --fil msg.txt', 'git commit --fil -- -a', 'git push --push-o -- --no-verify']) denied(form);
+for (const form of ['git commit --mes x -- a', 'git commit --mes=x -- a', 'git commit --fil msg.txt -- a', 'git commit --tem t.txt -m x -- a']) allowed(form);
 
 // --- FAMILY 12: commit must name its paths after -- (Discovery -11 report: a rejected commit left files staged,
 // the next commit swept them in under the wrong message, twice) -----------------------------------
@@ -124,13 +139,38 @@ allowed('git -C C:/some/worktree commit -m x -- a');
 allowed('bash -c "git commit -m x -- a"');
 allowed('echo git commit -am x');
 
+// --- C1: commit -i/--include commits everything staged plus the named paths (both judges) ------------
+for (const form of ['git commit -i -m x -- a', 'git commit -im x -- a', 'git commit --include -m x -- a', 'git commit --inc -m x -- a', 'git commit -m x -i -- a', 'git commit -qi -m x -- a']) denied(form);
+for (const form of ['git commit --include --no-include -m x -- a', 'git commit -o -m x -- a', 'git commit -m -i -- a']) allowed(form);
+
+// --- C3: a pathspec that names no specific path is the same sweep (both judges) ---------------------
+for (const form of ['git commit -m x -- .', 'git commit -m x -- ./', 'git commit -m x -- :/', 'git commit -m x -- "*"', 'git commit -m x -- "**"', 'git commit -m x -- ":(glob)**"', 'git commit -m x -- ":(top)"', 'git commit -m x -- ..', 'git commit -m x -- a .', 'git commit -m x -- ":!a.txt"', 'git commit -m x -- ":(exclude)a.txt"', 'git commit -m x -- $FILES', 'git commit -m x -- "$@"', 'git commit -m x -- ${FILES}', 'git commit -m x -- $(git ls-files)', 'git commit -m x -- $FILES $MORE']) denied(form);
+for (const form of ['git commit -m x -- src', 'git commit -m x -- ./src/a.ts', 'git commit -m x -- ":(top)src"', 'git commit -m x -- "src/*.ts"', 'git commit -m x -- a ":!b"', 'git commit -m x -- $FILES a.txt', 'git commit -m x -- $DIR/a.txt', 'git commit -m x -- .gitignore', 'git commit -m x -- @files']) allowed(form);
+expect('deny', asSubagent('PowerShell', 'git commit -m x -- @files'), 'PowerShell, a splatted array names no specific path');
+expect('deny', asSubagent('PowerShell', 'git commit -m x -- $env:FILES'), 'PowerShell, an environment variable names no specific path');
+expect('deny', asSubagent('PowerShell', 'git commit -m x -- $files'), 'PowerShell, a variable names no specific path');
+expect('allow', asSubagent('PowerShell', 'git commit -m x -- src/a.ts'), 'PowerShell, a literal path');
+
+// --- C9: an alias defined on the line with -c alias.<name>=... is expanded (judge B) ---------------
+for (const form of ['git -c alias.ci="commit -a" ci -m x', 'git -c alias.ci="commit -am x" ci -- a', "git -c alias.x='!git reset --hard' x", 'git -c alias.r=reset r --hard', 'git -c alias.a=b -c alias.b=reset a', 'git -c alias.CI="commit --no-verify" ci -m x -- a', 'git -c alias.ci=commit ci -m x', 'git -c alias.ci="-C sub reset" ci', "git -c alias.s='!f() { git switch main; }; f' s"]) denied(form);
+for (const form of ['git -c alias.ci="commit -m x" ci -- a.txt', 'git -c alias.st=status st', 'git -c alias.commit=reset commit -m x -- a', "git -c alias.x='!echo git reset' x", 'git -c alias.ci=commit -c alias.ci=status ci']) allowed(form);
+
 // --- FAMILY 6: push --no-verify -----------------------------------------------------------------
 for (const form of ['git push --no-verify', 'git push origin main --no-verify', 'git push --no-verify https://example.invalid/r.git', 'git push --no-verif']) denied(form);
 for (const form of ['git push', 'git push origin main', 'git push -n', 'git push --dry-run', 'git push origin feat/no-verify']) allowed(form);
 
 // --- FAMILY 7: read-tree that writes the tree or discards the index (b100 report) ----------------
 for (const form of ['git read-tree --reset -u HEAD', 'git read-tree -u HEAD', 'git read-tree -m -u HEAD', 'git read-tree -mu HEAD', 'git read-tree -um HEAD', 'git read-tree --reset HEAD', 'git read-tree --res HEAD', 'git read-tree --prefix sub/ -u HEAD', 'git read-tree -u -- HEAD']) denied(form);
-for (const form of ['git read-tree HEAD', 'git read-tree -m HEAD', 'git read-tree --empty', 'git read-tree --prefix=sub/ HEAD', 'git read-tree --prefix -u HEAD', 'git read-tree --index-output /tmp/i HEAD', 'git read-tree --index-output -u HEAD', 'git read-tree --exclude-per-directory -u HEAD','git read-tree --re HEAD', 'GIT_INDEX_FILE=/tmp/idx git read-tree HEAD']) allowed(form);
+// C4: every read-tree into the LIVE index replaces it (a bare tree) or empties it (--empty, no tree; measured
+// 2026-10-19: a bare `git read-tree` emptied a scratch index). An ambiguous --re may be --reset.
+for (const form of ['git read-tree HEAD', 'git read-tree -m HEAD', 'git read-tree --empty', 'git read-tree', 'git read-tree --prefix=sub/ HEAD', 'git read-tree --prefix -u HEAD', 'git read-tree --exclude-per-directory -u HEAD', 'git read-tree --re HEAD', 'git read-tree --dry-run --no-dry-run HEAD', 'git read-tree -n -u HEAD', 'GIT_INDEX_FILE= git read-tree HEAD', 'GIT_INDEX_FILE=/tmp/i git read-tree --reset HEAD', 'git read-tree -h HEAD']) denied(form);
+// C4 and C11: a temporary GIT_INDEX_FILE on the line, --index-output (measured: the live index stays byte-identical),
+// -n/--dry-run, and -h leave the live index alone.
+for (const form of ['git read-tree --index-output /tmp/i HEAD', 'git read-tree --index-output=/tmp/i HEAD', 'git read-tree --index-output -u HEAD', 'GIT_INDEX_FILE=/tmp/idx git read-tree HEAD', 'GIT_INDEX_FILE=/tmp/idx git read-tree --empty', 'env GIT_INDEX_FILE=/tmp/idx git read-tree -m HEAD', 'git read-tree -n HEAD', 'git read-tree --dry-run HEAD', 'git read-tree --dry -m HEAD', 'git read-tree -h']) allowed(form);
+expect('allow', asSubagent('PowerShell', '$env:GIT_INDEX_FILE="C:\\t\\i"; git read-tree HEAD'), 'PowerShell, $env:GIT_INDEX_FILE= earlier on the line');
+expect('allow', asSubagent('PowerShell', '$env:git_index_file = "C:\\t\\i"; git read-tree HEAD'), 'PowerShell, $env: name in any case, spaced');
+expect('deny', asSubagent('PowerShell', 'git read-tree HEAD; $env:GIT_INDEX_FILE="C:\\t\\i"'), 'PowerShell, $env: set only AFTER the read-tree');
+expect('deny', asSubagent('PowerShell', '$env:OTHER="x"; git read-tree HEAD'), 'PowerShell, another variable');
 
 // --- FAMILY 8: checkout-index that overwrites files ---------------------------------------------
 for (const form of ['git checkout-index -f a.txt', 'git checkout-index --force a.txt', 'git checkout-index -a', 'git checkout-index --all', 'git checkout-index -fa', 'git checkout-index -qaf', 'git checkout-index --fo a', 'git checkout-index --al', 'git checkout-index -u -a']) denied(form);
@@ -138,7 +178,9 @@ for (const form of ['git checkout-index a.txt', 'git checkout-index -q a.txt', '
 
 // --- FAMILY 9: update-index --force-remove ------------------------------------------------------
 for (const form of ['git update-index --force-remove a.txt', 'git update-index --force-r a.txt', 'git update-index --add --force-remove a.txt']) denied(form);
-for (const form of ['git update-index --refresh', 'git update-index --really-refresh', 'git update-index --add a.txt', 'git update-index --remove a.txt', 'git update-index --cacheinfo 100644,abc,a.txt', 'git update-index --force-write-index', 'git update-index --force-untracked-cache', 'git update-index --no-force-remove a', 'git update-index --force-w', 'git update-index --force-']) allowed(form);
+for (const form of ['git update-index --refresh', 'git update-index --really-refresh', 'git update-index --add a.txt', 'git update-index --remove a.txt', 'git update-index --cacheinfo 100644,abc,a.txt', 'git update-index --force-write-index', 'git update-index --force-untracked-cache', 'git update-index --no-force-remove a', 'git update-index --force-w']) allowed(form);
+// `--force-` is ambiguous and one candidate is --force-remove (git rejects it anyway). @es Ambigua, y una candidata es --force-remove.
+for (const form of ['git update-index --force-', 'git update-index --force-remove a --no-force-remove b']) denied(form);
 
 // --- FAMILY 10: update-ref -d -------------------------------------------------------------------
 for (const form of ['git update-ref -d refs/heads/x', 'git update-ref -d refs/heads/x abc', 'git update-ref -m why -d refs/heads/x', 'git update-ref -dm why refs/heads/x', 'git update-ref --no-deref -d HEAD', 'git update-ref refs/heads/x abc', 'git update-ref HEAD abc', 'git update-ref -m why refs/heads/x abc', 'git update-ref -m -d refs/heads/x abc', 'git update-ref refs/heads/x abc old', 'git update-ref refs/heads/x -- -d', 'git update-ref -- refs/heads/x abc', 'git update-ref --stdin', 'git update-ref --stdin -z', 'git update-ref --std', 'git update-ref -z --stdin --batch-updates']) denied(form);
@@ -164,7 +206,7 @@ expect('deny', asSubagent('PowerShell', 'git -C C:\\wt checkout-index -a'), 'Pow
 expect('deny', asSubagent('PowerShell', '$env:GIT_INDEX_FILE="x"; git.exe update-index --force-remove a'), 'PowerShell, env then git.exe');
 expect('deny', asSubagent('PowerShell', '& git update-ref -d refs/heads/x'), 'PowerShell, call operator');
 expect('deny', asSubagent('PowerShell', "git read-tree '--reset' -u HEAD"), 'PowerShell, single-quoted option');
-expect('allow', asSubagent('PowerShell', 'git read-tree HEAD'), 'PowerShell, bare read-tree');
+expect('deny', asSubagent('PowerShell', 'git read-tree HEAD'), 'PowerShell, bare read-tree on the live index');
 expect('allow', asMain('Bash', 'git read-tree --reset -u HEAD'), 'main session, read-tree');
 denied('git read-tree "--reset" -u HEAD');
 denied("git read-tree '--reset' -u HEAD");
@@ -217,10 +259,20 @@ check('clean refusal names the dry run', reasonOf('git clean -fd').includes('--d
 check('commit refusal names commitlint and the pre-commit hook', reasonOf('git commit -nm x').includes('commitlint') && reasonOf('git commit -nm x').includes('pre-commit'));
 check('push refusal names the pre-push hook', reasonOf('git push --no-verify').includes('pre-push'));
 
-check('read-tree refusal names the safe route in both halves', ['git read-tree -u HEAD'].every((c) => { const t = reasonOf(c); return t.includes('commit your work in progress') && t.includes('commiteá tu trabajo a medias') && t.includes('GIT_INDEX_FILE'); }));
+check('read-tree refusal names the safe route in both halves', ['git read-tree -u HEAD'].every((c) => { const t = reasonOf(c); return t.includes('commit your work in progress') && t.includes('haga commit de su trabajo a medias') && t.includes('GIT_INDEX_FILE=<tmp> git read-tree <tree>') && t.includes('--index-output=<fichero>') && t.includes('--dry-run'); }));
+check('read-tree refusal names the live index in both halves', reasonOf('git read-tree HEAD').includes('live index') && reasonOf('git read-tree HEAD').includes('índice vivo'));
 check('checkout-index refusal names the safe route', reasonOf('git checkout-index -f a').includes('commit your work in progress'));
 check('update-index refusal names the safe route', reasonOf('git update-index --force-remove a').includes('commit your work in progress'));
-check('update-ref refusal says to commit or ask the orchestrator, and names rev-parse for reads', reasonOf('git update-ref -d refs/heads/x').includes('ask the orchestrator') && reasonOf('git update-ref -d refs/heads/x').includes('git rev-parse <ref>') && reasonOf('git update-ref -d refs/heads/x').includes('pedile al orquestador'));
+check('update-ref refusal says to commit or ask the orchestrator, and names rev-parse for reads', reasonOf('git update-ref -d refs/heads/x').includes('ask the orchestrator') && reasonOf('git update-ref -d refs/heads/x').includes('git rev-parse <ref>') && reasonOf('git update-ref -d refs/heads/x').includes('pida ayuda al orquestador'));
+
+// C5: the Spanish halves use a neutral register: no voseo imperative or pronoun anywhere in the table.
+const VOSEO = ['ejecutá', 'commiteá', 'arreglá', 'informá', 'nombrá', 'devolvé', 'agregá', 'usá', 'pedile', 'tené', 'muevas', ' vos', ' tu ', ' tus '];
+const spanishLines = Object.values(MESSAGES).flatMap((message) => message.es).join('\n');
+
+check('C5: no Spanish refusal uses a voseo form', VOSEO.every((form) => !spanishLines.includes(form)), VOSEO.filter((form) => spanishLines.includes(form)).join(', '));
+check('C5: the Spanish halves use the neutral imperative', spanishLines.includes('ejecute') && spanishLines.includes('haga commit') && spanishLines.includes('pida') && spanishLines.includes('use `git rev-parse'));
+check('C1: the commit-without-paths refusal names -i/--include in both halves', reasonOf('git commit -i -m x -- a').split('-i`/`--include').length === 3);
+check('C3: the commit-without-paths refusal names the whole-tree and variable forms in both halves', reasonOf('git commit -m x -- .').split('`$FILES`').length === 3);
 check('symbolic-ref refusal names the allowed read', reasonOf('git symbolic-ref HEAD refs/heads/x').includes('--short HEAD') && reasonOf('git symbolic-ref HEAD refs/heads/x').includes('orchestrator creates the branches'));
 
 const noPathsReason = reasonOf('git add a b && git commit -m x');
@@ -383,6 +435,52 @@ check('a commit refused by the lexical rules never reaches git (no journal line)
 
 put(REPO, 'spaced/a b.txt');
 check('a path with whitespace is quoted in the git add the refusal proposes', untrackedReason('git commit -m x -- spaced').includes('git add -- "spaced/a b.txt"'));
+
+// --- C12: an earlier `git add` of the same && chain stages what it names, so it no longer counts as untracked ------
+check('C12: git add -- <the untracked file> && git commit -- <its directory> passes', untrackedVerdict('git add -- mixed/new.txt && git commit -m x -- mixed') === undefined);
+check('C12: git add -- <the directory> && git commit -- <it> passes', untrackedVerdict('git add -- mixed && git commit -m x -- mixed') === undefined);
+check('C12: an add without -- also counts', untrackedVerdict('git add mixed/new.txt && git commit -m x -- mixed') === undefined);
+check('C12: an add in another directory is resolved there', untrackedVerdict('cd mixed && git add -- new.txt && cd .. && git commit -m x -- mixed') === undefined);
+check('C12: PowerShell && counts too', untrackedVerdict('git add -- mixed/new.txt && git commit -m "x" -- mixed', REPO, 'PowerShell') === undefined);
+check('C12: an add joined by ; is not the same chain, refused', untrackedVerdict('git add -- mixed/new.txt; git commit -m x -- mixed') === 'deny');
+check('C12: an add joined by || is not the same chain, refused', untrackedVerdict('git add -- mixed/new.txt || git commit -m x -- mixed') === 'deny');
+check('C12: an add AFTER the commit does not count', untrackedVerdict('git commit -m x -- mixed && git add -- mixed/new.txt') === 'deny');
+check('C12: a dry-run add stages nothing, refused', untrackedVerdict('git add -n -- mixed/new.txt && git commit -m x -- mixed') === 'deny');
+check('C12: a glob add is not read as literal paths, refused', untrackedVerdict('git add -- "mixed/*.txt" && git commit -m x -- mixed') === 'deny');
+check('C12: an add of some files leaves the others untracked, and only those are listed', (() => { const text = untrackedReason('git add -- many/f01.txt && git commit -m x -- many'); return text.includes('11 in all') && !text.includes('many/f01.txt') && text.includes('many/f02.txt'); })());
+
+// --- C10: --pathspec-from-file names explicit paths; its contents are checked like the words after -- -------------
+const SPECS = path.join(SCRATCH, 'specs');
+
+mkdirSync(SPECS);
+writeFileSync(path.join(SPECS, 'mixed.lst'), 'mixed\n');
+writeFileSync(path.join(SPECS, 'clean.lst'), 'clean\n');
+writeFileSync(path.join(SPECS, 'crlf.lst'), 'clean\r\nmixed\r\n');
+writeFileSync(path.join(SPECS, 'dot.lst'), '.\n');
+writeFileSync(path.join(SPECS, 'empty.lst'), '');
+writeFileSync(path.join(SPECS, 'nul.lst'), 'clean\0mixed\0');
+put(REPO, 'specs/clean.lst', 'clean\n');
+
+const spec = (name) => path.join(SPECS, name).split('\\').join('/');
+
+check('C10: a pathspec file is allowed lexically when it names tracked paths', untrackedVerdict(`git commit -m x --pathspec-from-file=${spec('clean.lst')}`) === undefined);
+check('C10: a pathspec file over an untracked file is refused, listing it', untrackedReason(`git commit -m x --pathspec-from-file=${spec('mixed.lst')}`).includes('mixed/new.txt'));
+check('C10: the separate-word form and an abbreviation are read too', untrackedVerdict(`git commit -m x --pathspec-from-file ${spec('mixed.lst')}`) === 'deny' && untrackedVerdict(`git commit -m x --pathspec-f ${spec('mixed.lst')}`) === 'deny');
+check('C10: CRLF lines are read as paths', untrackedVerdict(`git commit -m x --pathspec-from-file=${spec('crlf.lst')}`) === 'deny');
+check('C10: --pathspec-file-nul splits on NUL', untrackedVerdict(`git commit -m x --pathspec-file-nul --pathspec-from-file=${spec('nul.lst')}`) === 'deny');
+check('C10: a relative pathspec file is read from the directory the commit runs in', untrackedVerdict('git commit -m x --pathspec-from-file=specs/clean.lst') === undefined && untrackedVerdict(`git -C "${REPO}" commit -m x --pathspec-from-file=specs/clean.lst`, NOT_A_REPO) === undefined);
+check('C10: a pathspec file naming the whole tree is refused as a commit without paths', untrackedReason(`git commit -m x --pathspec-from-file=${spec('dot.lst')}`).includes('must name its paths'));
+check('C10: an empty pathspec file is refused as a commit without paths', untrackedReason(`git commit -m x --pathspec-from-file=${spec('empty.lst')}`).includes('must name its paths'));
+check('C10: a missing pathspec file is refused, naming it, in both halves', (() => { const text = untrackedReason(`git commit -m x --pathspec-from-file=${spec('missing.lst')}`); return text.includes('cannot be read') && text.includes('no se puede leer') && text.split('missing.lst').length >= 4; })());
+check('C10: standard input is refused', untrackedReason('git commit -m x --pathspec-from-file=-').includes('cannot be read'));
+check('C10: a relative pathspec file after a cd the line cannot follow is refused', untrackedReason('cd "$X" && git commit -m x --pathspec-from-file=specs/clean.lst').includes('cannot be read'));
+check('C10: --no-pathspec-from-file undoes it, so the commit has no paths', untrackedVerdict(`git commit -m x --pathspec-from-file=${spec('clean.lst')} --no-pathspec-from-file`) === 'deny');
+check('C10: the file port is injectable and called with the resolved path', (() => { const asked = []; untrackedUnderCommits('git commit -m x --pathspec-from-file=l.txt', 'bash', REPO, () => ({ files: [] }), (file) => { asked.push(file); return 'clean\n'; }); return asked.length === 1 && asked[0] === path.join(REPO, 'l.txt'); })());
+
+// --- C9 and C13 through the untracked check ---------------------------------------------------------------------
+check('C9: a commit reached through a line alias is checked for untracked files', untrackedVerdict('git -c alias.ci="commit -m x" ci -- mixed') === 'deny');
+check('C13: a relative -C after a cd the line cannot follow is unchecked, never asked in the process cwd', (() => { const found = untrackedUnderCommits('cd "$X" && git -C repo commit -m x -- mixed', 'bash', SCRATCH, () => ({ files: ['mixed/new.txt'] })); return found.offender === undefined && found.unchecked.length === 1; })());
+check('C13: an absolute -C after a cd the line cannot follow is still checked', untrackedVerdict(`cd "$X" && git -C "${REPO}" commit -m x -- mixed`, NOT_A_REPO) === 'deny');
 
 // The module on its own, through its two ports (the git runner and the process runner). @es El módulo solo, por sus dos puertos.
 const NO_FILES = () => ({ files: [] });

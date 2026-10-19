@@ -13,9 +13,10 @@
  * WHAT IS REFUSED. Decided by `forbidden-invocations.mjs` over the parsed command, so a command that is only
  * mentioned (echo, commit message, heredoc) is data and passes. Stash is `worker-stash-guard`'s.
  *
- * A SECOND QUESTION, asked only of a commit the lexical rules allow: does its `-- <paths>` cover an UNTRACKED
- * file, which git leaves out of the commit in silence? `untracked-pathspec.mjs` asks git once; this file only
- * composes the two decisions and journals (`state/unchecked.jsonl`) every commit it could not check.
+ * A SECOND QUESTION, asked only of a commit the lexical rules allow: does its `-- <paths>` (or its
+ * `--pathspec-from-file`) cover an UNTRACKED file, which git leaves out of the commit in silence, and can that file
+ * be read? `untracked-pathspec.mjs` asks git once and reads the file; this file only composes the two decisions and
+ * journals (`state/unchecked.jsonl`) every commit it could not check.
  *
  * FAILS OPEN on every malfunction of its own: a guard that cannot decide must not silence a safe command.
  *
@@ -24,8 +25,9 @@
  * pasa. INCIDENTES MEDIDOS (informes de otras sesiones, engram #1543 ítems 25, 25b, 31). CAUSA RAÍZ: una lista
  * de prefijos permitidos deriva por shell y compara texto, no significado; este guard analiza la invocación.
  * Quién es worker lo decide `hook-caller/identify-caller.mjs`; qué se rechaza, `forbidden-invocations.mjs`.
- * SEGUNDA PREGUNTA, solo para un commit que las reglas léxicas permiten: ¿su `-- <rutas>` cubre un fichero SIN
- * SEGUIMIENTO, que git deja fuera del commit en silencio? `untracked-pathspec.mjs` pregunta a git una vez; este
+ * SEGUNDA PREGUNTA, solo para un commit que las reglas léxicas permiten: ¿su `-- <rutas>` (o su
+ * `--pathspec-from-file`) cubre un fichero SIN SEGUIMIENTO, que git deja fuera del commit en silencio, y ese
+ * fichero se puede leer? `untracked-pathspec.mjs` pregunta a git una vez y lee el fichero; este
  * fichero solo compone las dos decisiones y anota (`state/unchecked.jsonl`) cada commit que no pudo comprobar. Falla ABIERTO.
  */
 
@@ -84,7 +86,10 @@ function untrackedRefusal(payload, command, dialect, cwd, list) {
 
   if (found.offender === undefined) return undefined;
 
-  const { text, files } = found.offender;
+  const { family, text, files, file } = found.offender;
+
+  if (family !== 'commitUntracked') return refusalText(family, text, { file: file ?? '' });
+
   const listed = files.slice(0, LISTED_PATHS).map(shellWord);
 
   return refusalText('commitUntracked', text, { paths: listed.join(' '), total: files.length });
