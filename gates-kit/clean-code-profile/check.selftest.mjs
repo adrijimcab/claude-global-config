@@ -23,6 +23,7 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { inspect } from 'node:util';
 
@@ -201,10 +202,15 @@ check('the stack comes from @angular/core', enforced.facts.stack === 'angular');
 check('the stack can be forced', (await collectFacts(fixture('absent-node'), { stack: 'angular', showConfig: strictTsc })).stack === 'angular');
 
 // --- inputs the checker cannot read: unmeasured, never a crash read as a strict failure -------------------------
-// Projects are generated under `fixtures/` (git-ignored by nothing, removed on every exit): a committed file that
-// is invalid JSON on purpose would break every other JSON tool that walks the repository.
-// @es Los proyectos se generan bajo `fixtures/` y se borran en toda salida: un fichero versionado con JSON inválido
-// a propósito rompería cualquier otra herramienta JSON que recorra el repositorio.
+// Projects are generated in a fresh directory of the system temp directory (`mkdtemp`, removed on every exit),
+// never inside the repository: a file that is invalid JSON on purpose would break every other JSON tool that walks
+// the repository, and a run killed before its exit would leave it there. Nothing needs them in the repository: the
+// only walk upward (`fleetKitUnitScript`, four levels) reads a fleet-kit each project writes into itself.
+// @es Los proyectos se generan en un directorio nuevo del directorio temporal del sistema (`mkdtemp`, borrado en toda
+// salida), nunca dentro del repositorio: un fichero con JSON inválido a propósito rompería cualquier otra
+// herramienta JSON que recorra el repositorio, y una ejecución matada antes de salir lo dejaría ahí. Nada los
+// necesita en el repositorio: el único recorrido hacia arriba (`fleetKitUnitScript`, cuatro niveles) lee un
+// fleet-kit que cada proyecto escribe dentro de sí.
 const generatedRoots = [];
 
 /** A speaker sink that records its lines. @es Un sumidero de speaker que guarda sus líneas. */
@@ -218,7 +224,7 @@ process.once('exit', () => generatedRoots.forEach((root) => rmSync(root, { recur
 
 /** A generated project holding `files` (path to text), as its root. @es Un proyecto generado con `files`, como su raíz. */
 function generated(files) {
-  const root = mkdtempSync(path.join(here, 'fixtures', '.generated-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'clean-code-check-'));
 
   generatedRoots.push(root);
   for (const [name, text] of Object.entries(files)) {
@@ -238,6 +244,14 @@ async function gradeGenerated(root, options = {}) {
   } catch (error) {
     return { threw: String(error.message) };
   }
+}
+
+{
+  const root = generated({});
+  const inside = path.relative(path.resolve(here, '..', '..'), root);
+
+  check('a generated project lives outside the repository, under the system temp directory', (inside.startsWith('..') || path.isAbsolute(inside)) && path.relative(tmpdir(), root).startsWith('..') === false);
+  check('a generated project sees no fleet-kit of its surroundings', landingPath.fleetKitUnitScript(root) === undefined);
 }
 
 const NOT_JSON = '{ "scripts": ';
