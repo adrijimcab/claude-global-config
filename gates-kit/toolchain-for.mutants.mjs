@@ -27,6 +27,7 @@ const MUTANTS = [
   ['the Angular 19 to 21 toolchains accept Node 22.12', F, "ANGULAR_19_21_TOOLCHAIN_NODE = '^22.13.0 || ^24.0.0 || >=26.0.0'", "ANGULAR_19_21_TOOLCHAIN_NODE = '^22.12.0 || ^24.0.0 || >=26.0.0'"],
   ['the Angular 19 to 21 toolchains accept Node 25', F, "ANGULAR_19_21_TOOLCHAIN_NODE = '^22.13.0 || ^24.0.0 || >=26.0.0'", "ANGULAR_19_21_TOOLCHAIN_NODE = '^22.13.0 || >=24.0.0'"],
   ['the Nest toolchain accepts Node 22.12', F, "toolchain: '^20.19.0 || ^22.13.0 || >=24.0.0'", "toolchain: '^20.19.0 || ^22.12.0 || >=24.0.0'"],
+  ['the Nest toolchain range carries a broken third alternative', F, "toolchain: '^20.19.0 || ^22.13.0 || >=24.0.0'", "toolchain: '^20.19.0 || ^22.13.0 || >=24.banana'"],
   ['the Node toolchain accepts Node 22.13', F, "toolchain: '^22.18.0 || >=24.11.0'", "toolchain: '^22.13.0 || >=24.11.0'"],
   ['Angular 18 is a supported major', F, 'ANGULAR_MAJORS = [19, 20, 21, 22]', 'ANGULAR_MAJORS = [18, 19, 20, 21, 22]'],
   ['a major given as a string is read as a number', F, '!Number.isInteger(major) || !ANGULAR_MAJORS.includes(major)', '!ANGULAR_MAJORS.includes(Number(major))'],
