@@ -76,6 +76,7 @@ export const KINDS = Object.freeze([
   ['brief-audience', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['brief-feasibility', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['brief-provenance', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
+  ['brief-provenance', 'undecided.jsonl', ARCHIVE, 'briefs the dependency-claim face allowed without deciding, with the reason'],
   ['brief-tenancy', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['collision-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['collision-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],

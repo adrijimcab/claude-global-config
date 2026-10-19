@@ -1,26 +1,39 @@
 /**
- * The dependency NAMES a brief's project declares: `dependencies`, `devDependencies` and
- * `peerDependencies` of its root `package.json` and of the workspace `package.json` files that are cheap
- * to find (a plain workspace directory, or a `dir/*` entry listed one level deep). Nothing else is read:
- * no network, and never the contents of `node_modules`.
+ * The THIRD-PARTY dependency NAMES a brief's project declares: the keys of `dependencies`,
+ * `devDependencies` and `peerDependencies` (plain objects only) of its root `package.json` and of the
+ * workspace `package.json` files that are cheap to find (a plain workspace directory, or a `dir/*` entry
+ * listed one level deep). A workspace-local package (`workspace:*` or `file:` value) is the project's own
+ * code, not a dependency, and is left out. Nothing else is read: no network, never the contents of
+ * `node_modules`.
  *
  * WHERE THE PROJECT COMES FROM. The checkout paths of the brief's `TENANCY:` lines (the path the brief
  * itself declares as the worker's tree); when it declares none, the `cwd` of the hook payload. Neither
- * known: the face has nothing to read and says so.
+ * known: the face has nothing to read and says so. A checkout whose root holds no `package.json` (the npm
+ * project nested one folder down) is read from the `package.json` files one level below it, `node_modules`
+ * and dot-folders excepted, as a union.
  *
- * NEVER FAILS CLOSED, NEVER SILENT. A missing or unreadable `package.json` is reported in `undecided`
- * with its reason; the caller journals it and allows. The reading goes through a port (`files`), so the
- * proof can hand it a constructed project without touching a disk.
+ * CONTAINED. Nothing outside the checkout is read: a workspace entry is normalised, and one that climbs out
+ * (`..`) or is absolute is not followed but recorded as undecided.
  *
- * @es Los NOMBRES de dependencia que declara el proyecto de un brief: `dependencies`, `devDependencies` y
- * `peerDependencies` del `package.json` raíz y de los de workspace baratos de hallar (directorio plano, o
- * entrada `dir/*` a un nivel). Nada más: sin red, y jamás el contenido de `node_modules`. EL PROYECTO sale
- * de las rutas de las líneas `TENANCY:` del brief; si no hay, del `cwd` del payload. NUNCA FALLA CERRADO
- * NI CALLA: un `package.json` ausente o ilegible va a `undecided` con su motivo, y quien llama lo registra
- * y permite. La lectura pasa por un puerto (`files`) para probarla sin disco.
+ * NEVER FAILS CLOSED, NEVER SILENT. A root without any manifest, a manifest that does not parse (a UTF-8
+ * BOM is stripped first) or is not an object, and an escaping workspace entry are each reported in
+ * `undecided` with the file and the reason; the caller journals them and allows. A workspace entry with no
+ * manifest is routine and reported nowhere. The reading goes through a port (`files`), so the proof can
+ * hand it a constructed project.
+ *
+ * @es Los NOMBRES de dependencias DE TERCEROS que declara el proyecto de un brief: claves de
+ * `dependencies`, `devDependencies` y `peerDependencies` (solo objetos planos) del `package.json` raíz y de
+ * los de workspace baratos de hallar. Un paquete local del workspace (`workspace:*` o `file:`) es código
+ * propio y queda fuera. EL PROYECTO sale de las rutas `TENANCY:` del brief o, si no hay, del `cwd` del
+ * payload; si su raíz no tiene `package.json`, se leen los de un nivel más abajo (salvo `node_modules` y
+ * carpetas con punto), en unión. CONTENIDO: nada fuera del checkout; una entrada de workspace que sale
+ * (`..`) o es absoluta no se sigue y queda como no decidida. NUNCA FALLA CERRADO NI CALLA: cada manifiesto
+ * ausente en la raíz, ilegible (se quita antes el BOM) o no objeto, y cada entrada que escapa, va a
+ * `undecided` con su fichero y motivo.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 
 import { namedCheckouts } from '../brief-tenancy/named-checkouts.mjs';
 import { tenancyLines } from '../brief-tenancy/tenancy-declaration.mjs';
@@ -28,10 +41,16 @@ import { tenancyLines } from '../brief-tenancy/tenancy-declaration.mjs';
 /** The sections of a manifest whose keys are package names. @es Las secciones cuyas claves son nombres de paquete. */
 const SECTIONS = ['dependencies', 'devDependencies', 'peerDependencies'];
 
+/** The value prefixes that name a package of the project's own tree. @es Los prefijos de valor de un paquete del propio árbol. */
+const LOCAL_PREFIXES = ['workspace:', 'file:'];
+
+/** The folder one level down that is never read as a nested project. @es La carpeta que nunca se lee como proyecto anidado. */
+const INSTALLED = 'node_modules';
+
 /** The real file system, as the port the reading needs. @es El sistema de ficheros real, como puerto. */
 export const diskFiles = Object.freeze({
-  read: (path) => readFileSync(path, 'utf8'),
-  list: (path) => readdirSync(path)
+  read: (file) => readFileSync(file, 'utf8'),
+  list: (directory) => readdirSync(directory)
 });
 
 /** The project directories a brief points at, in order. @es Los directorios de proyecto a los que apunta un brief. */
@@ -45,8 +64,52 @@ export function projectDirectories(text, payload) {
   return typeof cwd === 'string' && cwd.length > 0 ? [cwd] : [];
 }
 
-/** The workspace directories a manifest names, relative to its own directory. @es Los directorios de workspace que nombra un manifiesto. */
-function workspaceDirectories(manifest, directory, files) {
+const messageOf = (error) => (error instanceof Error ? error.message : String(error));
+
+/**
+ * One manifest: `{ missing: true }` when it cannot be read, `{ manifest }` when it parses to an object, or
+ * `{ reason }` when it does not.
+ * @es Un manifiesto: ausente, leído como objeto, o con el motivo por el que no lo es.
+ */
+function readManifest(file, files) {
+  let raw;
+
+  try {
+    raw = files.read(file);
+  } catch {
+    return { missing: true };
+  }
+
+  let manifest;
+
+  try {
+    manifest = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
+  } catch (error) {
+    return { reason: messageOf(error) };
+  }
+
+  return manifest !== null && typeof manifest === 'object' ? { manifest } : { reason: 'package.json is not a JSON object' };
+}
+
+/** Whether a dependency value points inside the project's own tree. @es Si un valor de dependencia apunta al propio árbol. */
+const isLocal = (value) => typeof value === 'string' && LOCAL_PREFIXES.some((prefix) => value.startsWith(prefix));
+
+/** Adds the third-party names of one manifest. @es Añade los nombres de terceros de un manifiesto. */
+function addNames(manifest, names) {
+  for (const section of SECTIONS) {
+    const entries = manifest[section];
+
+    if (entries === null || typeof entries !== 'object' || Array.isArray(entries)) continue;
+
+    for (const [name, value] of Object.entries(entries)) if (!isLocal(value)) names.add(name);
+  }
+}
+
+/** Whether a normalised workspace entry leaves its directory. @es Si una entrada normalizada sale de su directorio. */
+const escapes = (entry) => entry === '..' || entry.startsWith('../') || path.win32.isAbsolute(entry);
+
+/** The workspace directories a manifest names, inside its own directory. @es Los directorios de workspace que nombra un manifiesto. */
+function workspaceDirectories(manifest, directory, context) {
   const entries = Array.isArray(manifest.workspaces) ? manifest.workspaces : manifest.workspaces?.packages;
 
   if (!Array.isArray(entries)) return [];
@@ -56,17 +119,24 @@ function workspaceDirectories(manifest, directory, files) {
   for (const entry of entries) {
     if (typeof entry !== 'string') continue;
 
-    if (entry.endsWith('/*')) {
-      const parent = `${directory}/${entry.slice(0, -2)}`;
+    const normalized = path.posix.normalize(entry.split('\\').join('/'));
+
+    if (escapes(normalized)) {
+      context.undecided.push({ file: `${directory}/package.json`, reason: `workspace entry "${entry}" leaves the checkout, so it is not read` });
+      continue;
+    }
+
+    if (normalized.endsWith('/*')) {
+      const parent = `${directory}/${normalized.slice(0, -2)}`;
 
       try {
-        for (const child of files.list(parent)) found.push(`${parent}/${child}`);
+        for (const child of context.files.list(parent)) found.push(`${parent}/${child}`);
       } catch {
         /* a glob that lists nothing contributes nothing; the root manifest still decides */
       }
     } else {
       // Any other shape is tried as a plain directory; one that does not exist is routine (see `collect`).
-      found.push(`${directory}/${entry}`);
+      found.push(`${directory}/${normalized}`);
     }
   }
 
@@ -74,49 +144,65 @@ function workspaceDirectories(manifest, directory, files) {
 }
 
 /**
- * Reads one `package.json` into `names`, or records why it could not in `undecided`.
- * @es Lee un `package.json` en `names`, o anota en `undecided` por qué no pudo.
+ * Reads one `package.json` into the names, its workspaces too when `withWorkspaces`; a manifest that exists
+ * but cannot be used goes to `undecided`.
+ * @returns whether a manifest file was there.
+ * @es Lee un `package.json` en los nombres (y sus workspaces si `withWorkspaces`); uno que existe pero no
+ * sirve va a `undecided`. Devuelve si el fichero estaba.
  */
-function collect(directory, files, names, undecided, isRoot) {
+function collect(directory, context, withWorkspaces) {
   const file = `${directory}/package.json`;
-  let manifest;
+  const read = readManifest(file, context.files);
+
+  if (read.missing) return false;
+
+  if (read.manifest === undefined) {
+    context.undecided.push({ file, reason: read.reason });
+
+    return true;
+  }
+
+  addNames(read.manifest, context.names);
+
+  if (withWorkspaces) for (const child of workspaceDirectories(read.manifest, directory, context)) collect(child, context, false);
+
+  return true;
+}
+
+/** Reads one checkout: its root manifest, or else the manifests one level down. @es Lee un checkout: su manifiesto raíz o los de un nivel más abajo. */
+function collectCheckout(directory, context) {
+  if (collect(directory, context, true)) return;
+
+  let children = [];
 
   try {
-    manifest = JSON.parse(files.read(file));
-  } catch (error) {
-    // A workspace entry without a manifest is routine; a project root without one is the face's blind spot.
-    if (isRoot) undecided.push({ file, reason: error instanceof Error ? error.message : String(error) });
-
-    return;
+    children = context.files.list(directory);
+  } catch {
+    /* an unlistable checkout has no nested project; it is reported just below */
   }
 
-  if (manifest === null || typeof manifest !== 'object') {
-    if (isRoot) undecided.push({ file, reason: 'package.json is not a JSON object' });
+  let found = false;
 
-    return;
+  for (const child of children) {
+    if (child === INSTALLED || child.startsWith('.')) continue;
+
+    if (collect(`${directory}/${child}`, context, true)) found = true;
   }
 
-  for (const section of SECTIONS) {
-    const entries = manifest[section];
-
-    if (entries !== null && typeof entries === 'object') for (const name of Object.keys(entries)) names.add(name);
-  }
-
-  if (isRoot) for (const child of workspaceDirectories(manifest, directory, files)) collect(child, files, names, undecided, false);
+  if (!found) context.undecided.push({ file: `${directory}/package.json`, reason: 'no package.json in the checkout nor one level below it' });
 }
 
 /**
  * The dependency names of every given project directory.
  *
- * @returns `{ names, undecided }` — `undecided` lists each root manifest that could not be read, with its reason.
- * @es Los nombres de dependencia de cada directorio; `undecided` lista cada manifiesto raíz que no se
- * pudo leer, con su motivo.
+ * @returns `{ names, undecided }` — `undecided` lists each manifest or entry that could not be used, with its reason.
+ * @es Los nombres de dependencia de cada directorio; `undecided` lista cada manifiesto o entrada que no se
+ * pudo usar, con su motivo.
  */
 export function dependencyNamesOf(directories, files = diskFiles) {
-  const names = new Set();
-  const undecided = [];
+  const context = { files, names: new Set(), undecided: [] };
 
-  for (const directory of directories) collect(directory, files, names, undecided, true);
+  for (const directory of directories) collectCheckout(directory, context);
 
-  return { names, undecided };
+  return { names: context.names, undecided: context.undecided };
 }

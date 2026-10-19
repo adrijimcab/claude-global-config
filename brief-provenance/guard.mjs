@@ -61,10 +61,21 @@ import { briefOf, inspectBrief } from './provenance.mjs';
 /** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
 const stateDirectory = () => stateDir('brief-provenance');
 
-function journal(entry) {
+/** The journal of refusals: every line in it is a brief this guard denied. @es El diario de rechazos. */
+const REFUSALS = 'refusals.jsonl';
+
+/**
+ * The journal of the dependency-claim face's undecided readings. Kept apart from the refusals because an
+ * undecided brief was ALLOWED: in the refusal journal it would read as a block.
+ * @es El diario de las lecturas no decididas de la cara de dependencias, aparte de los rechazos porque un
+ * brief no decidido se PERMITIÓ: en el diario de rechazos se leería como un bloqueo.
+ */
+const UNDECIDED = 'undecided.jsonl';
+
+function journal(entry, file = REFUSALS) {
   try {
     mkdirSync(stateDirectory(), { recursive: true });
-    appendFileSync(join(stateDirectory(), 'refusals.jsonl'), `${JSON.stringify(entry)}\n`, 'utf8');
+    appendFileSync(join(stateDirectory(), file), `${JSON.stringify(entry)}\n`, 'utf8');
   } catch {
     /* the journal is evidence, never a precondition: its failure must not change the decision */
   }
@@ -136,10 +147,12 @@ function reason(refusal) {
  * line makes a claim about an installed dependency (`guard-built-on-an-unmeasured-premise`, recorded 3
  * times). The decision is `dependency-claim.mjs`, the project's dependency names come from
  * `dependency-names.mjs`. When the project or its `package.json` cannot be read the face does not decide:
- * it journals why (`dependency-claim-undecided`) and allows, never failing closed and never silent.
+ * it journals why (`dependency-claim-undecided`, in `undecided.jsonl`, never among the refusals) and
+ * allows, never failing closed and never silent.
  * @es La segunda cara: un brief que SÍ declara su procedencia debe citar la fuente cuando una línea
  * MEASURED afirma algo sobre una dependencia instalada. Si no se puede leer el proyecto o su
- * `package.json`, la cara no decide: registra por qué y permite, sin fallar cerrada ni callar.
+ * `package.json`, la cara no decide: registra por qué (en `undecided.jsonl`, nunca entre los rechazos) y
+ * permite, sin fallar cerrada ni callar.
  */
 function dependencyClaimOutput(brief, payload) {
   const entry = { at: new Date().toISOString(), session: payload?.session_id, tool: brief.toolName };
@@ -148,7 +161,7 @@ function dependencyClaimOutput(brief, payload) {
 
   if (directories.length === 0) undecided.push({ file: null, reason: 'no project directory: the brief has no TENANCY path and the payload has no cwd' });
 
-  if (undecided.length > 0) journal({ ...entry, kind: 'dependency-claim-undecided', undecided });
+  if (undecided.length > 0) journal({ ...entry, kind: 'dependency-claim-undecided', undecided }, UNDECIDED);
 
   const claims = unsourcedDependencyClaims(brief.text, names);
 
