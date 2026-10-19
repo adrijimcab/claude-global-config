@@ -318,6 +318,22 @@ const cases = [
     2,
     [...PROLOGUE, prompt('delega dos'), agentCall('', 'First errand'), result('', REFUSAL, true), agentCall('', 'Second errand'), result('', REFUSAL, true)],
   ],
+  [
+    // An id-less result answers the OLDEST unanswered id-less call. @es Un resultado sin id responde a la llamada sin id MÁS ANTIGUA sin responder.
+    'two PARALLEL refused calls with no id are two attempts, each answered by its own result',
+    2,
+    [...PROLOGUE, prompt('delega dos'), batchCall('m1', undefined, 'Agent', { description: 'First errand', prompt: 'x' }), batchCall('m1', undefined, 'Agent', { description: 'Second errand', prompt: 'x' }), result(undefined, REFUSAL, true), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'two PARALLEL calls with no id and no batch: the first result answers the first call, so the later launch pays it',
+    0,
+    [...PROLOGUE, prompt('delega dos'), agentCall(undefined, 'First errand'), agentCall(undefined, 'Second errand'), result(undefined, REFUSAL, true), result(undefined, LAUNCHED, false)],
+  ],
+  [
+    'an empty-string result id answers the oldest unanswered id-less call',
+    2,
+    [...PROLOGUE, prompt('delega dos'), batchCall('m1', '', 'Agent', { description: 'First errand', prompt: 'x' }), batchCall('m1', '', 'Agent', { description: 'Second errand', prompt: 'x' }), result('', REFUSAL, true), result('', REFUSAL, true)],
+  ],
 
   [
     'a call and its result repeated later in the turn are ONE attempt, and one retry pays it',

@@ -188,14 +188,24 @@ export function delegationsInFinalTurn(transcriptPath) {
   return undefined;
 }
 
+/** Whether `value` can name a call: a non-empty string. @es Si `value` puede nombrar una llamada: un texto no vacío. */
+function isId(value) {
+  return typeof value === 'string' && value !== '';
+}
+
 /**
- * Pairs each delegation call in a turn to its result. An attempt whose result never arrived is reported
- * as `unknown`: the turn was interrupted mid-flight, which is not evidence of a refusal.
- * @es Empareja cada llamada con su resultado. Sin resultado, `unknown`: no es prueba de rechazo.
+ * Pairs each delegation call in a turn to its result: by id, or, for an id-less result, to the oldest
+ * id-less call still unanswered. An attempt whose result never arrived is reported as `unknown`: the turn
+ * was interrupted mid-flight, which is not evidence of a refusal.
+ * @es Empareja cada llamada con su resultado: por id o, si el resultado no tiene id, con la llamada sin id
+ * más antigua sin responder. Sin resultado, `unknown`: no es prueba de rechazo.
  */
 function attemptsOf(turn) {
   const attempts = [];
   const byId = new Map();
+  // Id-less calls still waiting for a result, oldest first: an id-less result answers the oldest of them.
+  // @es Llamadas sin id que aún esperan resultado, de la más antigua a la más reciente.
+  const unanswered = [];
 
   for (const entry of turn) {
     // Only the two record types that ARE the conversation. MEASURED on the b100 transcript of 2026-10-18:
@@ -214,7 +224,7 @@ function attemptsOf(turn) {
         // One call is one attempt, however many records repeat it. @es Una llamada es un intento, aunque varios registros la repitan.
         // Only a non-empty string id can name the same call twice: a block without one is its own attempt.
         // @es Solo un id de texto no vacío identifica la misma llamada dos veces: un bloque sin id es un intento propio.
-        const identified = typeof block.id === 'string' && block.id !== '';
+        const identified = isId(block.id);
 
         if (identified && byId.has(block.id)) continue;
 
@@ -224,13 +234,14 @@ function attemptsOf(turn) {
         const attempt = { tool: block.name, id: block.id, label: labelOf(block.name, block.input), at: entry.timestamp, batch: entry.message?.id, outcome: 'unknown', reason: undefined };
 
         attempts.push(attempt);
-        byId.set(block.id, attempt);
+        if (identified) byId.set(block.id, attempt);
+        else unanswered.push(attempt);
         continue;
       }
 
       if (block?.type !== 'tool_result') continue;
 
-      const attempt = byId.get(block.tool_use_id);
+      const attempt = isId(block.tool_use_id) ? byId.get(block.tool_use_id) : unanswered.shift();
 
       if (attempt === undefined) continue;
 

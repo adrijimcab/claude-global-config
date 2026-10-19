@@ -34,7 +34,7 @@ const MUTANTS = [
   ['every result is read as a refusal, so a clean turn is refused', 'delegation-receipts/turn-delegations.mjs', "attempt.outcome = block.is_error === true ? 'refused' : 'launched';", "attempt.outcome = 'refused';"],
   ['a success with no is_error field is read as a refusal', 'delegation-receipts/turn-delegations.mjs', 'attempt.outcome = block.is_error === true ? ', 'attempt.outcome = block.is_error !== false ? '],
   ['SendMessage stops counting, so the retry resume-before-fresh demands is invisible', 'delegation-receipts/turn-delegations.mjs', "new Set(['Agent', 'Task', 'SendMessage'])", "new Set(['Agent', 'Task'])"],
-  ['a result is paired to an attempt by position instead of by id', 'delegation-receipts/turn-delegations.mjs', 'const attempt = byId.get(block.tool_use_id);', 'const attempt = attempts[attempts.length - 1];'],
+  ['a result is paired to an attempt by position instead of by id', 'delegation-receipts/turn-delegations.mjs', 'const attempt = isId(block.tool_use_id) ? byId.get(block.tool_use_id) : unanswered.shift();', 'const attempt = attempts[attempts.length - 1];'],
 
   // --- THE TURN'S SCOPE: which receipts belong to the turn that is ending.
   ['the turn boundary is never recognised', 'delegation-receipts/turn-delegations.mjs', 'if (opensTurn(entry)) {', 'if (false) {'],
@@ -62,8 +62,11 @@ const MUTANTS = [
   ['request-blob copies of the conversation are read as the conversation', 'delegation-receipts/turn-delegations.mjs', "if (entry?.type !== 'assistant' && entry?.type !== 'user') continue;", ''],
   ['only assistant records are read, so every tool result is lost', 'delegation-receipts/turn-delegations.mjs', "if (entry?.type !== 'assistant' && entry?.type !== 'user') continue;", "if (entry?.type !== 'assistant') continue;"],
   ['a call repeated in two records is counted as two attempts', 'delegation-receipts/turn-delegations.mjs', 'if (identified && byId.has(block.id)) continue;', ''],
-  ['calls with no id are folded into one attempt', 'delegation-receipts/turn-delegations.mjs', "const identified = typeof block.id === 'string' && block.id !== '';", 'const identified = true;'],
-  ['calls whose id is the empty string are folded into one attempt', 'delegation-receipts/turn-delegations.mjs', " && block.id !== '';", ';'],
+  ['calls with no id are folded into one attempt', 'delegation-receipts/turn-delegations.mjs', 'const identified = isId(block.id);', 'const identified = true;'],
+  ['the empty string counts as an id', 'delegation-receipts/turn-delegations.mjs', "return typeof value === 'string' && value !== '';", "return typeof value === 'string';"],
+  ['an id-less result answers the NEWEST unanswered call', 'delegation-receipts/turn-delegations.mjs', 'unanswered.shift()', 'unanswered.pop()'],
+  ['id-less calls are never queued, so their results are lost', 'delegation-receipts/turn-delegations.mjs', 'else unanswered.push(attempt);', ''],
+  ['an id-less result is looked up by its missing id', 'delegation-receipts/turn-delegations.mjs', 'isId(block.tool_use_id) ? byId.get(block.tool_use_id) : unanswered.shift()', 'byId.get(block.tool_use_id)'],
   ['a refusal never opens a debt', 'delegation-receipts/unlaunched.mjs', 'owed.push(attempt);', 'undefined;'],
   ['a launch no longer pays a debt, so every retried turn is refused', 'delegation-receipts/unlaunched.mjs', "else if (attempt.outcome === 'launched') payNewestFromEarlierBatch(owed, attempt);", 'else undefined;'],
   ['an attempt with no result PAYS a debt', 'delegation-receipts/unlaunched.mjs', "if (attempt.outcome === 'launched') payNewestFromEarlierBatch(", "if (attempt.outcome !== 'refused') payNewestFromEarlierBatch("],
