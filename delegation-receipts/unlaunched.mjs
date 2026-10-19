@@ -41,33 +41,6 @@ function instant(value) {
 }
 
 /**
- * The refused attempts and the launches that answer them when both were issued in ONE parallel batch
- * to the SAME agent. Calls of one batch have no meaningful order, so a refusal and the success beside
- * it settle each other whichever is listed first; the ledger below would otherwise pay only when the
- * success follows. Both halves need a known target and a known batch: without them nothing is paired
- * here and the ordinary order rule decides.
- * @es Los rechazos y los lanzamientos que los responden cuando ambos salieron en UN mismo lote paralelo
- * hacia el MISMO agente. Las llamadas de un lote no tienen orden con sentido: se saldan entre sí en
- * cualquier orden. Sin destino o lote conocidos no se empareja nada y manda la regla de orden.
- */
-function pairedInOneBatch(attempts) {
-  const paired = new Set();
-
-  for (const refused of attempts) {
-    if (refused.outcome !== 'refused' || refused.target === undefined || refused.batch === undefined) continue;
-
-    const answer = attempts.find((candidate) => candidate.outcome === 'launched' && !paired.has(candidate) && candidate.batch === refused.batch && candidate.target === refused.target);
-
-    if (answer === undefined) continue;
-
-    paired.add(refused);
-    paired.add(answer);
-  }
-
-  return paired;
-}
-
-/**
  * The attempts still unaccounted for when the turn ends, oldest first.
  *
  * @param attempts Delegation attempts in the order made, each `{ tool, label, at, outcome }` where
@@ -77,14 +50,11 @@ function pairedInOneBatch(attempts) {
  */
 export function unlaunchedDelegations(attempts, abandonments = []) {
   const owed = [];
-  const paired = pairedInOneBatch(attempts);
 
   // An attempt whose result never arrived matches NEITHER branch: it says nothing either way, so it
   // neither opens a debt nor pays one. Reading it as a payment would let an interrupted call excuse a
   // real refusal. @es Un intento sin resultado no encaja en ninguna rama: ni abre deuda ni la paga.
   for (const attempt of attempts) {
-    if (paired.has(attempt)) continue;
-
     if (attempt.outcome === 'refused') owed.push(attempt);
     else if (attempt.outcome === 'launched') owed.pop();
   }

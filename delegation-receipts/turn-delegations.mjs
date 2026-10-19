@@ -212,20 +212,13 @@ function attemptsOf(turn) {
     for (const block of content) {
       if (block?.type === 'tool_use' && DELEGATION_TOOLS.has(block.name)) {
         // One call is one attempt, however many records repeat it. @es Una llamada es un intento, aunque varios registros la repitan.
-        if (byId.has(block.id)) continue;
+        // Only a non-empty string id can name the same call twice: a block without one is its own attempt.
+        // @es Solo un id de texto no vacío identifica la misma llamada dos veces: un bloque sin id es un intento propio.
+        const identified = typeof block.id === 'string' && block.id !== '';
 
-        const attempt = {
-          tool: block.name,
-          id: block.id,
-          label: labelOf(block.name, block.input),
-          at: entry.timestamp,
-          // The agent a SendMessage addresses and the model message the call came in: together they say
-          // which calls were issued side by side to the same agent. @es A quién va un SendMessage y en qué mensaje del modelo vino.
-          target: typeof block.input?.to === 'string' ? block.input.to : undefined,
-          batch: entry.message?.id,
-          outcome: 'unknown',
-          reason: undefined
-        };
+        if (identified && byId.has(block.id)) continue;
+
+        const attempt = { tool: block.name, id: block.id, label: labelOf(block.name, block.input), at: entry.timestamp, outcome: 'unknown', reason: undefined };
 
         attempts.push(attempt);
         byId.set(block.id, attempt);

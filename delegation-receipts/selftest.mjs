@@ -300,9 +300,23 @@ const cases = [
     [...PROLOGUE, prompt('reanuda a los cinco'), ...parallelResumes('m1', ['r1', 'r2', 'r3', 'r4', 'r5'], FIVE_AGENTS, 'refused', { blobs: true }), ...parallelResumes('m2', ['s1', 's2', 's3', 's4'], FIVE_AGENTS.slice(0, 4), 'launched')],
   ],
   [
-    'one call recorded in two assistant entries is ONE attempt',
+    // Each record of the call is answered by its own refusal copy: counted twice, it would owe two.
+    // @es Cada registro de la llamada recibe su copia del rechazo: contada dos veces, debería dos.
+    'one call recorded in two assistant entries, each answered by a refusal, is ONE debt',
     1,
-    [...PROLOGUE, prompt('reanuda'), resumeCall('t1', 'a42240d'), resumeCall('t1', 'a42240d'), result('t1', REFUSAL, true)],
+    [...PROLOGUE, prompt('reanuda'), resumeCall('t1', 'a42240d'), result('t1', REFUSAL, true), resumeCall('t1', 'a42240d'), result('t1', REFUSAL, true)],
+  ],
+  [
+    // Without an id nothing says two blocks are the same call, so each is its own attempt.
+    // @es Sin id nada dice que dos bloques sean la misma llamada: cada uno es un intento propio.
+    'two refused calls that carry NO id are two attempts, not one',
+    2,
+    [...PROLOGUE, prompt('delega dos'), agentCall(undefined, 'First errand'), result(undefined, REFUSAL, true), agentCall(undefined, 'Second errand'), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'two refused calls whose id is the EMPTY string are two attempts, not one',
+    2,
+    [...PROLOGUE, prompt('delega dos'), agentCall('', 'First errand'), result('', REFUSAL, true), agentCall('', 'Second errand'), result('', REFUSAL, true)],
   ],
 
   [
@@ -322,51 +336,14 @@ const cases = [
     })(),
   ],
 
-  // --- A refusal and its success to the SAME agent inside one parallel batch, in either order.
-  // @es Un rechazo y su éxito al MISMO agente dentro de un mismo lote paralelo, en cualquier orden.
+  // --- Calls that share one model message were all issued before any result came back, so none of them
+  // --- can be a retry of another: a success listed first in the batch never pays a refusal after it.
+  // @es Las llamadas de un mismo mensaje del modelo salieron todas antes de cualquier resultado: ninguna
+  // puede ser el reintento de otra, y un éxito listado antes en el lote no paga un rechazo posterior.
   [
-    'one parallel batch: the success to agent X is listed BEFORE the refusal to X',
-    0,
+    'one parallel batch: a success to agent X listed BEFORE the refusal to X still leaves that refusal owed',
+    1,
     [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), batchCall('m1', 'p2', 'SendMessage', { to: 'aX', message: 'go' }), result('p1', LAUNCHED, false), result('p2', REFUSAL, true)],
-  ],
-  [
-    'one parallel batch: the refusal to agent X is listed BEFORE the success to X',
-    0,
-    [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), batchCall('m1', 'p2', 'SendMessage', { to: 'aX', message: 'go' }), result('p1', REFUSAL, true), result('p2', LAUNCHED, false)],
-  ],
-  [
-    'one parallel batch: a success to agent X does NOT pay the refusal to a different agent Y',
-    1,
-    [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), batchCall('m1', 'p2', 'SendMessage', { to: 'aY', message: 'go' }), result('p1', LAUNCHED, false), result('p2', REFUSAL, true)],
-  ],
-  [
-    'one parallel batch: two refusals to agent X and ONE success to X leave one refusal owed',
-    1,
-    [
-      ...PROLOGUE,
-      prompt('reanuda'),
-      batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }),
-      batchCall('m1', 'p2', 'SendMessage', { to: 'aX', message: 'go' }),
-      batchCall('m1', 'p3', 'SendMessage', { to: 'aX', message: 'go' }),
-      result('p1', REFUSAL, true),
-      result('p2', REFUSAL, true),
-      result('p3', LAUNCHED, false),
-    ],
-  ],
-  [
-    'one parallel batch of Agent calls (no addressee): a success does NOT pay a sibling refusal listed before it by identity',
-    1,
-    [...PROLOGUE, prompt('delega dos'), batchCall('m1', 'p1', 'Agent', { description: 'A', prompt: 'x' }), batchCall('m1', 'p2', 'Agent', { description: 'B', prompt: 'x' }), result('p1', LAUNCHED, false), result('p2', REFUSAL, true)],
-  ],
-  [
-    'calls with no batch id: a success to X before the refusal to X is still not its retry',
-    1,
-    [...PROLOGUE, prompt('reanuda'), resumeCall('p1', 'aX'), result('p1', LAUNCHED, false), resumeCall('p2', 'aX'), result('p2', REFUSAL, true)],
-  ],
-  [
-    'two DIFFERENT batches: a success to X sent BEFORE the refusal to X in a later batch cannot pay it',
-    1,
-    [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), result('p1', LAUNCHED, false), batchCall('m2', 'p2', 'SendMessage', { to: 'aX', message: 'go' }), result('p2', REFUSAL, true)],
   ],
 ];
 
