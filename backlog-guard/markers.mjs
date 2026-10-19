@@ -35,17 +35,17 @@
  * («lo sumo al checkpoint-37»), a conditional offer, a measurement («queda por debajo de los 200 ms»),
  * a negation («no hace falta hacer nada», «nada pendiente de integrar»). So the verbs «sumo / agrego» are
  * markers only with their destination («a la lista», «como pendiente»); «anoto / apunto» stay bare, since
- * no dismissal is on record for them; «queda por» needs an infinitive after it; and a negator voids only a
- * marker that STATES something is pending («queda», «falta», «pendiente»): negating it says nothing is.
- * A negated RECORDING verb («todavía no lo anoto en el backlog») says the item is not recorded yet, so it
- * still fires. «lo dejo pendiente», «queda pendiente» and «quedan pendientes» were added: they announce
- * pending work and none of them fired before.
+ * no dismissal is on record for them; «queda por» needs an infinitive after it; and a plain negation
+ * («no», «nada», «no hay», «not») voids any marker it directly precedes, while a NOT-YET negation
+ * («todavía no lo anoto en el backlog») voids nothing: the item is not recorded yet, so it still fires.
+ * «lo dejo pendiente», «queda pendiente» and «quedan pendientes» were added: they announce pending work
+ * and none of them fired before.
  * @es FORMAS DE FRASE, NO VERBOS SUELTOS (2026-10-18, por datos): los descartes de `lo sumo`, `lo agrego`,
  * `queda por`, `falta hacer`, `falta integrar` y `pendiente de integrar` eran frases que NO son un ítem
  * pendiente nuevo. Por eso `sumo / agrego` solo son marcador con su destino; `anoto / apunto` siguen
- * sueltos, sin descartes registrados; `queda por` pide un infinitivo; y un negador anula solo un marcador
- * que AFIRMA que algo está pendiente («queda», «falta», «pendiente»). Un verbo de REGISTRO negado («todavía
- * no lo anoto en el backlog») dice que el ítem aún no está registrado, y sigue disparando. Se añadieron
+ * sueltos, sin descartes registrados; `queda por` pide un infinitivo; y una negación simple («no», «nada»,
+ * «no hay», «not») anula cualquier marcador que precede, mientras una de TODAVÍA NO («todavía no lo anoto en
+ * el backlog») no anula nada: el ítem aún no está registrado, y sigue disparando. Se añadieron
  * `lo dejo pendiente`, `queda pendiente` y `quedan pendientes`, que anuncian trabajo pendiente y antes no disparaban.
  *
  * @es Marcadores de trabajo pendiente — la mitad de LOCALIZACIÓN del mecanismo backlog-guard. Localizan
@@ -149,10 +149,20 @@ const INFINITIVE_FRAMES = Object.freeze(['queda por', 'quedan por']);
 const INFINITIVE_ENDINGS = Object.freeze(['ar', 'er', 'ir']);
 
 /**
- * Object pronouns an infinitive may carry attached («revisarlo», «hacerla», «integrarse»). The empty one is
- * the bare infinitive. @es Pronombres que un infinitivo puede llevar pegados; el vacío es el infinitivo solo.
+ * Object pronouns an infinitive may carry attached («revisarlo», «hacerla», «moverse»). «me», «te» and «nos»
+ * are left out: they let «firme», «parte» and «internos» read as infinitives.
+ * @es Pronombres que un infinitivo puede llevar pegados. Se excluyen «me», «te» y «nos»: dejarían pasar
+ * «firme», «parte» e «internos» como infinitivos.
  */
-const ENCLITICS = Object.freeze(['', 'lo', 'la', 'los', 'las', 'le', 'les', 'se', 'me', 'te', 'nos']);
+const ENCLITICS = Object.freeze(['lo', 'la', 'los', 'las', 'le', 'les', 'se']);
+
+/**
+ * The shortest stem an enclitic may attach to. Four characters lets the noun «charla» («char» + «la») pass as
+ * an infinitive; the price is that «usarlo», «leerlo» and «unirse» after «queda por» stay silent.
+ * @es La raíz más corta a la que se pega un enclítico. Con cuatro, el sustantivo «charla» pasaría por
+ * infinitivo; el costo es que «usarlo», «leerlo» y «unirse» tras «queda por» no disparan.
+ */
+const MIN_ENCLITIC_STEM = 5;
 
 /** Markdown emphasis and code marks that may wrap a word. @es Marcas de markdown que pueden envolver una palabra. */
 const WORD_WRAPPERS = '*_`';
@@ -161,21 +171,22 @@ const WORD_WRAPPERS = '*_`';
 const WORD_STOPS = ` \n\r\t.,;:!?()—–/"'«»“”‘’${WORD_WRAPPERS}`;
 
 /**
- * The start of every marker that STATES something is pending: negating one says nothing is («no hace falta
- * hacer», «nada pendiente de integrar», «ya no falta integrar», «no pending tasks»). A negated RECORDING
- * marker is the opposite case and is never voided: «todavía no lo anoto en el backlog» says the item is not
- * recorded yet, so it is still pending.
- * @es El comienzo de cada marcador que AFIRMA que algo está pendiente: negarlo dice que nada lo está. Un
- * marcador de REGISTRO negado es el caso contrario y nunca se anula: «todavía no lo anoto» dice que sigue pendiente.
+ * Plain negations that, standing right before ANY marker, turn it into its opposite: «no hace falta hacer»,
+ * «no hay hallazgo nuevo», «no va al backlog», «no new finding». The text before the marker must END with one
+ * of these (the haystack is lowercase).
+ * @es Negaciones simples que, justo delante de CUALQUIER marcador, lo vuelven su contrario. El texto previo debe
+ * TERMINAR en una de estas.
  */
-const STATE_MARKER_STARTS = Object.freeze(['queda', 'falta', 'pendiente', 'pending', 'lo dej']);
+const VOIDING_PREFIXES = Object.freeze(['no ', 'nada ', 'no hace ', 'no hay ', 'not ', 'no new ']);
 
 /**
- * Negators that, standing right before a STATE marker, turn it into its opposite. The text before the marker
- * must END with one of these (the haystack is lowercase).
- * @es Negadores que, justo delante de un marcador de ESTADO, lo vuelven su contrario. El texto previo debe TERMINAR en uno de estos.
+ * NOT-YET negations, which void nothing: «todavía no lo anoto en el backlog» says the item is still
+ * unrecorded, so it is still pending. Only those ending in a plain negation need listing («not yet» ends in
+ * «yet», which voids nothing on its own).
+ * @es Negaciones de TODAVÍA NO, que no anulan nada: «todavía no lo anoto» dice que el ítem sigue sin registrar.
+ * Solo hace falta listar las que terminan en una negación simple.
  */
-const VOIDING_PREFIXES = Object.freeze(['no ', 'nada ', 'no hace ', 'no hay ']);
+const NOT_YET_PREFIXES = Object.freeze(['todavía no ', 'todavia no ', 'aún no ', 'aun no ', 'still not ']);
 
 /**
  * Returns the first pending-work marker present in `message`, or `undefined`. Pure, no regex.
@@ -192,39 +203,40 @@ export function findPendingMarker(message) {
 }
 
 /**
- * Whether `marker` appears in `haystack` as an ANNOUNCEMENT: at least one occurrence that is not a negated
- * STATE marker and, for the «queda por» frames, that an infinitive follows.
- * @es Si `marker` aparece en `haystack` como ANUNCIO: al menos una aparición que no sea un marcador de ESTADO
- * negado y, en los marcos «queda por», que un infinitivo sigue.
+ * Whether `marker` appears in `haystack` as an ANNOUNCEMENT: at least one occurrence that no plain negation
+ * voids and, for the «queda por» frames, that an infinitive follows.
+ * @es Si `marker` aparece en `haystack` como ANUNCIO: al menos una aparición que ninguna negación simple anula
+ * y, en los marcos «queda por», que un infinitivo sigue.
  */
 function announcesAt(haystack, marker) {
   for (let at = haystack.indexOf(marker); at !== -1; at = haystack.indexOf(marker, at + 1)) {
-    if (!(statesPending(marker) && isNegatedBefore(haystack, at)) && (!INFINITIVE_FRAMES.includes(marker) || infinitiveFollows(haystack, at + marker.length))) return true;
+    if (!isNegatedBefore(haystack, at) && (!INFINITIVE_FRAMES.includes(marker) || infinitiveFollows(haystack, at + marker.length))) return true;
   }
 
   return false;
 }
 
-/** Whether `marker` states something is pending, so a negator voids it. @es Si `marker` afirma que algo está pendiente, y un negador lo anula. */
-function statesPending(marker) {
-  return STATE_MARKER_STARTS.some((start) => marker.startsWith(start));
-}
-
-/** Whether a negator stands right before `at`. @es Si un negador está justo antes de `at`. */
+/** Whether a plain negation, and not a NOT-YET one, stands right before `at`. @es Si justo antes de `at` hay una negación simple y no una de TODAVÍA NO. */
 function isNegatedBefore(haystack, at) {
   const before = haystack.slice(0, at);
 
-  // The prefix is whole words: «uno » ends in «no » but negates nothing. @es El prefijo son palabras enteras: «uno » acaba en «no » y no niega nada.
-  return VOIDING_PREFIXES.some((prefix) => {
-    const previous = before[before.length - prefix.length - 1] ?? ' ';
+  return endsWithWords(before, VOIDING_PREFIXES) && !endsWithWords(before, NOT_YET_PREFIXES);
+}
 
-    return before.endsWith(prefix) && previous.toLowerCase() === previous.toUpperCase();
+/** Whether `text` ends with one of `prefixes` as whole words. @es Si `text` termina en uno de `prefixes` como palabras enteras. */
+function endsWithWords(text, prefixes) {
+  // Whole words: «uno » ends in «no » but negates nothing. @es Palabras enteras: «uno » acaba en «no » y no niega nada.
+  return prefixes.some((prefix) => {
+    const previous = text[text.length - prefix.length - 1] ?? ' ';
+
+    return text.endsWith(prefix) && previous.toLowerCase() === previous.toUpperCase();
   });
 }
 
 /**
  * Whether the word starting after `from` is an infinitive, bare or with an attached pronoun: ends in -ar, -er
- * or -ir, optionally followed by one of `ENCLITICS`. Whitespace and markdown wrappers before it are skipped.
+ * or -ir, or is a stem of at least `MIN_ENCLITIC_STEM` characters ending so, followed by one of `ENCLITICS`.
+ * Whitespace and markdown wrappers before it are skipped.
  * @es Si la palabra que sigue a `from` es un infinitivo, solo o con pronombre pegado. Se saltan los espacios y
  * las marcas de markdown que la preceden.
  */
@@ -239,5 +251,10 @@ function infinitiveFollows(haystack, from) {
 
   const word = haystack.slice(start, end);
 
-  return INFINITIVE_ENDINGS.some((ending) => ENCLITICS.some((pronoun) => word.endsWith(ending + pronoun)));
+  return endsAsInfinitive(word) || ENCLITICS.some((pronoun) => word.endsWith(pronoun) && word.length - pronoun.length >= MIN_ENCLITIC_STEM && endsAsInfinitive(word.slice(0, -pronoun.length)));
+}
+
+/** Whether `word` ends in -ar, -er or -ir. @es Si `word` acaba en -ar, -er o -ir. */
+function endsAsInfinitive(word) {
+  return INFINITIVE_ENDINGS.some((ending) => word.endsWith(ending));
 }

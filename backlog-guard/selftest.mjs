@@ -525,10 +525,10 @@ const FALSE_POSITIVES = [
   ['«ya no falta integrar» (orchestrator report of «falta integrar»)', 'Ya no falta integrar nada de la tanda.'],
   ['«no hay» in front of a marker', 'No hay pendiente de integrar nada en la tanda.'],
   ['«queda por» followed by a noun, plural', 'Quedan por debajo del umbral dos mediciones.'],
-  // A negated STATE marker says nothing is pending. The text opens with the negator, so only the start-of-text
-  // rule can void it: no other marker of the list appears in it.
-  // @es Un marcador de ESTADO negado dice que nada está pendiente; el texto abre con el negador, y solo la regla
-  // del inicio del texto puede anularlo.
+  // A negated marker says nothing is pending. The text opens with the negator, so only the start-of-text rule
+  // can void it: no other marker of the list appears in it.
+  // @es Un marcador negado dice que nada está pendiente; el texto abre con el negador, y solo la regla del
+  // inicio del texto puede anularlo.
   ['a negator at the very start of the text is a negator', 'Nada pendiente de integrar tras el aterrizaje.'],
   ['«nothing pending» in English', 'No pending tasks for this batch.'],
   ['«no lo dejo pendiente» says it is closed now', 'No lo dejo pendiente: lo cierro en esta tanda.'],
@@ -557,8 +557,8 @@ const TRUE_POSITIVES = [
   // points at a record, and a false positive costs one dismissal where a false negative loses an item.
   // @es Un encabezado sobre trabajo pendiente sigue siendo un anuncio: nada en su frase ni en sus vecinas apunta a un registro.
   ['«lo que queda pendiente» as a heading with no record beside it', 'Lo que queda pendiente, sin apuro: un runner de selftests.', 'queda pendiente'],
-  // A negated RECORDING verb says the item is NOT recorded yet: it is still pending.
-  // @es Un verbo de REGISTRO negado dice que el ítem AÚN no está registrado: sigue pendiente.
+  // A NOT-YET negation says the item is NOT recorded yet: it is still pending.
+  // @es Una negación de TODAVÍA NO dice que el ítem AÚN no está registrado: sigue pendiente.
   ['«todavía no lo anoto en el backlog» says it is not recorded yet', 'Todavía no lo anoto en el backlog.', 'lo anoto'],
   ['«aún no paso al backlog» says it is not recorded yet', 'Aún no paso al backlog el defecto del parser.', 'paso al backlog'],
   // The bare verbs «anoto / apunto»: no dismissal on record justifies narrowing them.
@@ -593,13 +593,50 @@ const INFINITIVE_SHAPES = [
   ['an enclitic infinitive in -arle', 'queda por avisarle al dueño', 'queda por'],
   ['an enclitic infinitive in -arlas', 'quedan por revisarlas mañana', 'quedan por'],
   ['an enclitic infinitive in -arles', 'queda por avisarles a los dos', 'queda por'],
-  ['an enclitic infinitive in -arme', 'queda por avisarme cuando cierre', 'queda por'],
-  ['an enclitic infinitive in -arte', 'queda por pasarte el informe', 'queda por'],
-  ['an enclitic infinitive in -arnos', 'queda por avisarnos cuando cierre', 'queda por'],
-  ['a noun after the frame still does not fire', 'queda por **debajo** del umbral', undefined]
+  ['a noun after the frame still does not fire', 'queda por **debajo** del umbral', undefined],
+  // Only lo, la, los, las, le, les and se attach, and only to a stem of five or more characters ending in an
+  // infinitive: «me», «te» and «nos» would let «firme», «parte» and «internos» through, and a four-character
+  // stem lets the noun «charla» through. @es Solo se pegan lo, la, los, las, le, les y se, a una raíz de cinco
+  // o más caracteres acabada en infinitivo.
+  ['the enclitic «resolverlo»', 'queda por resolverlo mañana', 'queda por'],
+  ['the enclitic «integrarla»', 'queda por integrarla mañana', 'queda por'],
+  ['the enclitic «hacerlo»', 'queda por hacerlo mañana', 'queda por'],
+  ['the enclitic «revisarlas»', 'quedan por revisarlas mañana', 'quedan por'],
+  ['the enclitic «moverse»', 'queda por moverse la rama', 'queda por'],
+  ['the noun «parte» is not an enclitic infinitive', 'queda por parte del equipo', undefined],
+  ['the noun «suerte» is not an enclitic infinitive', 'queda por suerte poco', undefined],
+  ['the word «firme» is not an enclitic infinitive', 'queda por firme el acuerdo', undefined],
+  ['the noun «perla» is not an enclitic infinitive', 'queda por perla del día', undefined],
+  ['the word «internos» is not an enclitic infinitive', 'quedan por internos dos cambios', undefined],
+  ['the name «Carlos» is not an enclitic infinitive', 'queda por carlos la revisión', undefined],
+  ['the noun «charla» is not an enclitic infinitive', 'queda por charla con el equipo', undefined],
+  ['a long stem before a pronoun must itself be an infinitive', 'queda por escuela del barrio', undefined]
 ];
 
 for (const [label, text, marker] of INFINITIVE_SHAPES) check(`infinitive shape: ${label}`, findPendingMarker(text), marker);
+
+// A plain negation voids ANY marker it directly precedes; a NOT-YET negation («todavía no», «aún no», «not yet»,
+// «still not») voids nothing, because it says the item is still unrecorded. Judged on the marker reader itself,
+// so no record cue of the sentence can hide the result.
+// @es Una negación simple anula CUALQUIER marcador que precede; una negación de TODAVÍA NO no anula nada, porque
+// dice que el ítem sigue sin registrar.
+const NEGATIONS = [
+  ['«no hay hallazgo nuevo»', 'no hay hallazgo nuevo en la tanda.', undefined],
+  ['«no new finding»', 'no new finding in this batch.', undefined],
+  ['«no va al backlog»', 'no va al backlog: ya lo resuelvo', undefined],
+  ['«no lo sumo a la lista»', 'no lo sumo a la lista, lo cierro en esta tanda', undefined],
+  ['«no paso al backlog»', 'no paso al backlog el defecto, lo arreglo ya', undefined],
+  ['«not to the backlog»', 'this goes not to the backlog but to the fix', undefined],
+  ['«no new» before a marker', 'no new pending tasks here', undefined],
+  ['«todavía no lo anoto»', 'todavía no lo anoto en el backlog.', 'lo anoto'],
+  ['«aún no paso al backlog»', 'aún no paso al backlog el defecto del parser.', 'paso al backlog'],
+  ['«aun no» without the accent', 'aun no paso al backlog el defecto.', 'paso al backlog'],
+  ['«todavia no» without the accent', 'todavia no lo anoto en el backlog.', 'lo anoto'],
+  ['«not yet» before a marker', 'i am not yet flagging this for the owner', 'flagging this for'],
+  ['«still not» before a marker', 'i am still not flagging this for the owner', 'flagging this for']
+];
+
+for (const [label, text, marker] of NEGATIONS) check(`negation: ${label}`, findPendingMarker(text), marker);
 check('the bare word backlog does not block', findAnnouncement('Revisé el backlog y no cambió nada.'), undefined);
 check('a quoted announcement does not block', findAnnouncement('La regla dice "lo anoto" y la cumplí.'), undefined);
 check('an item already recorded in the same sentence does not block', findAnnouncement('Lo anoto: ya está en el backlog.'), undefined);
