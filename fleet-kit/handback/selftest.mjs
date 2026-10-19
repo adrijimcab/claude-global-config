@@ -7,12 +7,14 @@
  * resultado de cobertura, la config sin cobertura, el límite de bucle y el camino completo de `evaluate`.
  */
 
+import { rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { journal } from '../lib/hook-io.mjs';
+import { kitStateRoot } from '../lib/state.mjs';
 import { baseConfig, cleanup, git, makeRepository, suite, tempDir, writeConfig, writeFile } from '../testing/fixtures.mjs';
 import { handbackRefusal, registeredWorktree } from './decision.mjs';
-import { evaluate } from './guard.mjs';
+import { evaluate, refusalsSoFar } from './guard.mjs';
 
 const { check, finish } = suite();
 const root = tempDir('handback');
@@ -72,6 +74,41 @@ try {
   for (let attempt = 0; attempt < 4; attempt += 1) decisions.push((await evaluate(JSON.stringify(payload)))?.hookSpecificOutput.permissionDecision ?? 'allow');
   check('evaluate refuses three times, then lets the handback through', decisions, ['deny', 'deny', 'deny', 'allow']);
   check('a malformed payload fails open', await evaluate('{'), undefined);
+
+  // A writer stopped mid-line leaves a torn last line; it must neither turn the guard off nor spend a budget.
+  // @es Un escritor detenido a mitad de línea deja la última línea rota; no debe apagar la guardia ni gastar presupuesto.
+  const refusalsFile = path.join(kitStateRoot(), 'handback', 'refusals.jsonl');
+  const record = (agentId) => `${JSON.stringify({ agentId, kind: 'uncommitted' })}\n`;
+  // A throw is a failed check, never a crash of the proof. @es Un lanzamiento es un check fallido, nunca una caída de la prueba.
+  const counted = (agentId) => {
+    try {
+      return refusalsSoFar(agentId);
+    } catch (error) {
+      return `threw ${error.name}`;
+    }
+  };
+
+  writeFileSync(refusalsFile, `${record('w1')}${record('w1')}${record('other')}{"agentId":"w1","ki`);
+  check('a torn last line is not counted and does not throw', counted('w1'), 2);
+  const overTorn = (await evaluate(JSON.stringify(payload)))?.hookSpecificOutput;
+
+  check('the guard still refuses over a torn journal (third refusal)', overTorn?.permissionDecision, 'deny');
+  check('the reason says, bilingual, that one unreadable line was skipped', [/held 1 unreadable line;/.test(overTorn?.permissionDecisionReason ?? ''), /@es /.test(overTorn?.permissionDecisionReason ?? '')], [true, true]);
+
+  check('the attempt number counts the two readable refusals around the damage', /3 of 3/.test(overTorn?.permissionDecisionReason ?? ''), true);
+
+  writeFileSync(refusalsFile, `${record('w1')}\n\n${record('w1')}`);
+  const overClean = (await evaluate(JSON.stringify(payload)))?.hookSpecificOutput;
+
+  check('a journal with only blank lines (no damage) adds no note', [overClean?.permissionDecision, /unreadable/.test(overClean?.permissionDecisionReason ?? '')], ['deny', false]);
+
+  writeFileSync(refusalsFile, `x\n${record('w1')}y\n${record('w1')}`);
+  check('the count of skipped lines is the real one (two)', /held 2 unreadable lines;/.test((await evaluate(JSON.stringify(payload)))?.hookSpecificOutput.permissionDecisionReason ?? ''), true);
+
+  writeFileSync(refusalsFile, `${record('w1')}{"agentId":"w1"\n${record('w1')}`);
+  check('a corrupt line in the middle is skipped, the records around it count', counted('w1'), 2);
+  rmSync(refusalsFile);
+  check('no journal at all counts zero', counted('w1'), 0);
 } finally {
   cleanup(root);
 }

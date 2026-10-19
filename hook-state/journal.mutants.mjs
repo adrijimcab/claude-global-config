@@ -82,9 +82,19 @@ const MUTANTS = [
   ['a corrupt counter is read as valid', J, 'parsed = JSON.parse(text);', 'parsed = { count: 0 };'],
   ['a counter that is not an integer is accepted', J, '!Number.isSafeInteger(parsed?.count)', 'false'],
   ['a negative counter is accepted', J, '|| parsed.count < 0', ''],
-  ['the counter is not created before a write', J, 'mkdirSync(stateDir(mechanism), { recursive: true });\n  writeFileSync(', 'writeFileSync('],
-  ['the temp file of the counter is left behind', J, 'renameSync(`${file}.tmp`, file);', "writeFileSync(file, readFileSync(`${file}.tmp`, 'utf8'));"],
-  ['an increment writes a journal line', J, 'renameSync(`${file}.tmp`, file);', "renameSync(`${file}.tmp`, file);\n  appendFileSync(journalPath(mechanism), '{}\\n');"]
+  ['the counter is not created before a write', J, 'mkdirSync(stateDir(mechanism), { recursive: true });\n\n  const outcome', 'const outcome'],
+  ['the temp file of the counter is left behind', J, 'renameSync(temp, file);', "writeFileSync(file, readFileSync(temp, 'utf8'));"],
+  ['an increment writes a journal line', J, 'renameSync(temp, file);', "renameSync(temp, file);\n      appendFileSync(journalPath(mechanism), '{}\\n');"],
+
+  // --- the concurrency contract of the counter (audit R2) ---
+  ['the increment runs without the lock', J, 'const outcome = withLock(`${file}.lock`, () => {', 'const outcome = ((_lockFile, work) => ({ held: true, value: work() }))(`${file}.lock`, () => {'],
+  ['the lock has another name per call', J, 'withLock(`${file}.lock`,', 'withLock(`${file}.${process.pid}.lock`,'],
+  ['the temp name is fixed again', J, "const temp = `${file}.${process.pid}.tmp`;", 'const temp = `${file}.tmp`;'],
+  ['a failed publish leaves its temp behind', J, '      rmSync(temp, { force: true });\n\n      throw error;', '      throw error;'],
+  ['a failed publish is swallowed', J, '      rmSync(temp, { force: true });\n\n      throw error;', '      rmSync(temp, { force: true });'],
+  ['a counter locked by another process is silently not counted', J, 'if (!outcome.held) throw new Error(bilingual(\'fires-busy\', { file }));', 'if (!outcome.held) return 0;'],
+  ['the busy refusal is English only', J, "bilingual('fires-busy', { file })", "'fires.json is locked'"],
+  ['the lock options of the caller are ignored', J, '  }, lock);', '  });']
 ];
 
 const survivors = runMutants({
