@@ -2,183 +2,125 @@
  * Which git commands a shell line RUNS that a delegated worker may not run: the ones that move HEAD, discard
  * work, or skip the commit and push hooks.
  *
- * WHAT COUNTS. An invocation reported by `shell-command/git-invocations.mjs`, so a command that is only
- * MENTIONED (inside `echo`, a quoted `-m` message, a heredoc, a comment) is data and never counted, while one
- * inside `$(...)`, `bash -c`, a chain or a subshell, or behind `git -C <dir>`, is counted.
+ * WHAT COUNTS. An invocation reported by `line-invocations.mjs` (over `shell-command/git-invocations.mjs`), so a
+ * command that is only MENTIONED (inside `echo`, a quoted `-m` message, a heredoc, a comment) is data and never
+ * counted, while one inside `$(...)`, `bash -c`, a chain or a subshell, behind `git -C <dir>`, or behind an alias
+ * the line defines with `git -c alias.<name>=...`, is counted.
  *
  * THE FAMILIES (each with the nearest form that stays allowed):
  *   reset         every form.                                  Allowed: `restore --staged`.
  *   checkout      `checkout` and `switch`, every form.
  *   restore       any form that touches the working tree.      Allowed: `--staged` without `--worktree`/`-W`.
  *   clean         any force flag (`-f`, `--force`, `-fd`, ...).  Allowed: `-n` / `--dry-run` alone.
- *   commitNoVerify `commit --no-verify` or `-n`, also in a short cluster (`-nm`, `-anm`).
- *   commitNoPaths `commit` with `-a`/`--all` or with no path after `--`.  Allowed: `commit -m <msg> -- <path>...`,
- *                 and `commit --dry-run` (it commits and stages nothing).
- *   pushNoVerify  `push --no-verify`, to any remote.
- *   readTree     `read-tree` with `-u` or `--reset`.          Allowed: bare `read-tree <tree>` (index only).
+ *   commitNoVerify `commit --no-verify` or `-n`, also in a short cluster (`-nm`, `-anm`), unless a later
+ *                 `--verify` undoes it.
+ *   commitNoPaths `commit` with `-a`/`--all` or `-i`/`--include`, with no path after `--`, or with a pathspec that
+ *                 names no specific path (`pathspec-scope.mjs`: `.`, `:/`, `*`, only exclusions, only `$FILES`).
+ *                 Allowed: `commit -m <msg> -- <path>...`, `commit --pathspec-from-file=<f>` (its contents are
+ *                 checked by `untracked-pathspec.mjs`), and `commit --dry-run` (it commits and stages nothing).
+ *   pushNoVerify  `push --no-verify`, to any remote, unless a later `--verify` undoes it.
+ *   readTree     `read-tree` with `-u` or `--reset`, and every `read-tree` that writes the LIVE index (a bare
+ *                 `read-tree <tree>` replaces it, `--empty` or no tree empties it: the loss of `reset`).
+ *                 Allowed: `-n`/`--dry-run`, `--index-output=<file>` (git writes that file and leaves the live
+ *                 index alone, measured 2026-10-19), a command line that sets `GIT_INDEX_FILE` (an environment
+ *                 prefix, or `$env:GIT_INDEX_FILE = ...` earlier on the same PowerShell line), and `-h`.
  *   checkoutIndex `checkout-index` with `-f`/`--force` or `-a`/`--all`. Allowed: `checkout-index <file>`.
  *   updateIndex   `update-index --force-remove`.               Allowed: `--refresh`, `--add`, `--cacheinfo`.
  *   updateRef     every `update-ref` write: `-d`, `<ref> <sha>`, `--stdin`.  Allowed: `update-ref -h`; read refs with `rev-parse`.
  *   symbolicRef   `symbolic-ref <name> <ref>` or `-d`.         Allowed: reading, `symbolic-ref [--short] HEAD`.
  * The plumbing families do what `reset`/`restore`/`checkout` do (b100 integration worker's report, 2026-10:
- * `git read-tree --reset -u HEAD`
- * cleared a conflicted index and the working tree). `read-tree --reset` is refused even into a temporary
- * `GIT_INDEX_FILE`, because the line does not prove the variable; read the tree there without `--reset`.
- * `symbolic-ref` is the `checkout`/`switch` reasoning: a worker's branch is fixed by its TENANCY, and
- * repointing HEAD sends the next commit to another branch.
+ * `git read-tree --reset -u HEAD` cleared a conflicted index and the working tree). `read-tree --reset` and `-u`
+ * stay refused even into a temporary `GIT_INDEX_FILE`. `symbolic-ref` is the `checkout`/`switch` reasoning: a
+ * worker's branch is fixed by its TENANCY, and repointing HEAD sends the next commit to another branch.
  *
  * WHY COMMIT NAMES ITS PATHS (Discovery -11 report: commitlint rejected a worker's commit twice, f615bf9b on
  * 2026-10-18 and d417d169 on 2026-10-19; the files it had staged stayed in the index and the next commit swept
- * them in under the wrong message, and history rewriting is denied). `git commit -- <paths>` commits only the
- * named paths even when others are staged. The rule is lexical, with no git call.
+ * them in under the wrong message, and history rewriting is denied). Under git's default `--only` mode,
+ * `git commit -- <paths>` commits only the named paths even when others are staged; `-i`/`--include` turns that
+ * mode off and commits everything staged plus the named paths, so it is refused like `-a`. The rule is lexical,
+ * with no git call.
  *
- * HOW OPTIONS ARE READ. Words after a bare `--` are paths, never options. A short cluster (`-anm`) is walked
- * character by character and STOPS at the first option that takes a value, because the rest of the cluster
- * (or the next word) is that value: `-m"no"` is the message `no`, not `-n`; `-m -n` is the message `-n`.
- * `--no-verify` is also matched by git's unambiguous abbreviations (`--no-verif`), since git accepts them.
+ * HOW OPTIONS ARE READ: `git-options.mjs`, git's own option tables, so an abbreviation (`--mes`, `--no-verif`) is
+ * the option it abbreviates, an optional value (`-S`, `-u` of commit) never eats the next word, and the last of
+ * `--dry-run`/`--no-dry-run` or `--no-verify`/`--verify` wins. `update-index` is the exception: it applies each
+ * option to the paths after it, so any `--force-remove` counts.
  *
  * LEFT OUT, stated: `stash` (worker-stash-guard owns it), `commit --amend`, `rebase` and every other
- * subcommand; git aliases, which the line does not show; `update-index --index-info`, allowed on purpose: it
- * writes index entries only, never working files. `update-ref --stdin` is refused because its commands arrive
- * unseen.
+ * subcommand; aliases defined in git configuration, which the line does not show; `update-index --index-info`,
+ * allowed on purpose: it writes index entries only, never working files. `update-ref --stdin` is refused because
+ * its commands arrive unseen.
  *
  * @es Qué comandos de git EJECUTA una línea que un worker delegado no puede ejecutar: los que mueven HEAD,
  * descartan trabajo u omiten los hooks de commit y push. Una MENCIÓN (echo, mensaje, heredoc, comentario) es
- * dato; lo que corre en `$(...)`, `bash -c`, cadenas, subshells o tras `git -C` cuenta. Un cúmulo corto
- * (`-anm`) se recorre carácter a carácter y PARA en la primera opción con valor: `-m"no"` es el mensaje `no`,
- * no `-n`. Tras un `--` suelto todo son rutas. Quedan fuera `stash` (lo cubre worker-stash-guard), `--amend`,
- * `rebase` y los demás subcomandos. Las familias de plomería (`read-tree -u/--reset`, `checkout-index -f/-a`,
+ * dato; lo que corre en `$(...)`, `bash -c`, cadenas, subshells, tras `git -C` o tras un alias definido en la línea
+ * con `git -c alias.<nombre>=...` cuenta. Las opciones se leen con las tablas de git (`git-options.mjs`): una
+ * abreviatura es la opción que abrevia, un valor opcional (`-S`, `-u` de commit) no consume la palabra siguiente y
+ * gana el último de `--dry-run`/`--no-dry-run` y de `--no-verify`/`--verify`; en `update-index` cuenta cualquier
+ * `--force-remove`. Quedan fuera `stash` (lo cubre worker-stash-guard), `--amend`, `rebase`, los demás subcomandos
+ * y los alias de la configuración. Las familias de plomería (`read-tree -u/--reset`, `checkout-index -f/-a`,
  * `update-index --force-remove`, toda escritura de `update-ref`, `symbolic-ref` de escritura) hacen lo que `reset`,
- * `restore` y `checkout` (informe del worker de integración de b100, 2026-10); leer (`read-tree <árbol>`, `--refresh`, `symbolic-ref HEAD`) sigue
- * permitido (las referencias se leen con `rev-parse`; `update-ref -h` también). `update-index --index-info`
- * se permite a propósito: escribe solo entradas del índice, nunca ficheros del árbol. `update-ref --stdin` se
- * rechaza porque sus comandos llegan sin verse. Un `commit` debe nombrar sus rutas tras `--` (informe de
- * Discovery -11: un commit rechazado por commitlint dejó archivos en el índice y el siguiente commit los
- * arrastró bajo otro mensaje, dos veces); se rechaza `commit` sin rutas y `-a`/`--all`; `--dry-run` se permite.
+ * `restore` y `checkout` (informe del worker de integración de b100, 2026-10). Un `read-tree` que escribe el índice
+ * VIVO (un `read-tree <árbol>` simple lo reemplaza; `--empty` o sin árbol lo vacía) se rechaza; se permiten
+ * `-n`/`--dry-run`, `--index-output=<fichero>` (git escribe ese fichero y no toca el índice vivo, medido el
+ * 2026-10-19), una línea que fija `GIT_INDEX_FILE` y `-h`. Leer (`--refresh`, `symbolic-ref HEAD`, `rev-parse`)
+ * sigue permitido; `update-index --index-info` se permite a propósito (escribe solo entradas del índice) y
+ * `update-ref --stdin` se rechaza porque sus comandos llegan sin verse. Un `commit` debe nombrar sus rutas tras `--`
+ * (informe de Discovery -11: un commit rechazado por commitlint dejó archivos en el índice y el siguiente commit
+ * los arrastró bajo otro mensaje, dos veces): se rechazan `commit` sin rutas, `-a`/`--all`, `-i`/`--include` (que
+ * desactiva el modo `--only` por defecto y commitea todo el índice además de las rutas) y un pathspec que no nombra
+ * rutas concretas; se permiten `--pathspec-from-file` y `--dry-run`.
  */
 
-import { gitInvocations } from '../shell-command/git-invocations.mjs';
+import { anyMayBe, finalValue, mayBe, optionsOf, surely } from './git-options.mjs';
+import { lineInvocations } from './line-invocations.mjs';
+import { namesSpecificPaths } from './pathspec-scope.mjs';
 
-const NO_VERIFY = '--no-verify';
-
-/** The shortest abbreviation of `--no-verify` git still resolves uniquely. @es La abreviatura más corta que git resuelve. */
-const NO_VERIFY_MIN_LENGTH = '--no-v'.length;
-
-/** Short options that take a value, per subcommand. @es Opciones cortas con valor, por subcomando. */
-const SHORT_WITH_VALUE = {
-  commit: new Set(['m', 'F', 'C', 'c', 't', 'S', 'u']),
-  clean: new Set(['e']),
-  restore: new Set(['s']),
-  push: new Set(['o']),
-  'read-tree': new Set(),
-  'checkout-index': new Set(),
-  'update-index': new Set(),
-  'update-ref': new Set(['m']),
-  'symbolic-ref': new Set(['m'])
-};
-
-/** Long options that take a SEPARATE value word, per subcommand. @es Opciones largas con valor separado. */
-const LONG_WITH_VALUE = {
-  commit: new Set(['--message', '--file', '--author', '--date', '--template', '--reuse-message', '--reedit-message', '--fixup', '--squash', '--cleanup', '--trailer', '--pathspec-from-file']),
-  clean: new Set(['--exclude']),
-  restore: new Set(['--source']),
-  push: new Set(['--repo', '--receive-pack', '--exec', '--push-option']),
-  'read-tree': new Set(['--index-output', '--prefix', '--exclude-per-directory']),
-  'checkout-index': new Set(['--prefix', '--stage']),
-  'update-index': new Set(),
-  'update-ref': new Set(),
-  'symbolic-ref': new Set()
-};
-
-/**
- * The options an invocation really carries, with option values and paths already removed.
- * @param {string} subcommand A key of `SHORT_WITH_VALUE`.
- * @param {string[]} args The words after the subcommand.
- * @returns {{ longs: string[], shorts: string[], positionals: string[], afterDashes: string[] }} Long options
- *   (`--x`, without any `=value`), short flags, the words that are neither (names, paths), including every
- *   word after `--`, and those words after `--` alone.
- * @es Las opciones que la invocación lleva de verdad, sin valores de opción; y las palabras que no son opción.
- */
-function optionsOf(subcommand, args) {
-  const longs = [];
-  const shorts = [];
-  const positionals = [];
-  let afterDashes = [];
-
-  for (let index = 0; index < args.length; index += 1) {
-    const word = args[index];
-
-    if (word === '--') {
-      afterDashes = args.slice(index + 1);
-      positionals.push(...afterDashes);
-      break;
-    }
-
-    if (word.startsWith('--')) {
-      const name = word.split('=')[0];
-
-      longs.push(name);
-      if (!word.includes('=') && LONG_WITH_VALUE[subcommand].has(name)) index += 1;
-    } else if (word.length > 1 && word.startsWith('-')) {
-      for (let at = 1; at < word.length; at += 1) {
-        const flag = word[at];
-
-        shorts.push(flag);
-        if (SHORT_WITH_VALUE[subcommand].has(flag)) {
-          if (at === word.length - 1) index += 1; // the value is the next word
-          break; // the rest of the cluster is the value
-        }
-      }
-    } else {
-      positionals.push(word);
-    }
-  }
-
-  return { longs, shorts, positionals, afterDashes };
-}
-
-/** Whether a long option is `--no-verify` or an unambiguous abbreviation. @es Si es `--no-verify` o una abreviatura. */
-const isNoVerify = (name) => name.length >= NO_VERIFY_MIN_LENGTH && NO_VERIFY.startsWith(name);
-
-/**
- * Whether `name` is `full` or an abbreviation git still resolves to it, `minLength` being the shortest prefix
- * unique among that subcommand's options.
- * @es Si `name` es `full` o una abreviatura que git resuelve a ella; `minLength` es el prefijo único más corto.
- */
-const isOption = (name, full, minLength) => name.length >= minLength && full.startsWith(name);
+/** The variable that sends the index git writes to another file. @es La variable que manda el índice a otro fichero. */
+const INDEX_FILE_VARIABLE = 'GIT_INDEX_FILE';
 
 /**
  * The family of a `commit`: `--no-verify`/`-n` first; then a commit that can sweep in what is already staged,
- * which is one with `-a`/`--all` or with no path after `--`. A `--dry-run` writes no commit and stages nothing,
- * so it is allowed.
+ * which is one with `-a`/`--all` or `-i`/`--include`, or with no specific path after `--`. A `--dry-run` writes no
+ * commit and stages nothing, so it is allowed; a `--pathspec-from-file` names its paths in a file.
  * @es La familia de un `commit`: primero `--no-verify`/`-n`; luego el que puede arrastrar lo que ya está en el
- * índice (`-a`/`--all`, o sin rutas tras `--`). `--dry-run` no commitea ni agrega al índice: se permite.
+ * índice (`-a`/`--all`, `-i`/`--include`, o sin rutas concretas tras `--`). `--dry-run` no hace commit ni agrega
+ * al índice: se permite; `--pathspec-from-file` nombra sus rutas en un fichero.
  */
-function commitFamily(args) {
-  const { longs, shorts, afterDashes } = optionsOf('commit', args);
+function commitFamily(args, dialect) {
+  const { events, afterDashes } = optionsOf('commit', args);
 
-  if (longs.some(isNoVerify) || shorts.includes('n')) return 'commitNoVerify';
-  if (longs.some((name) => isOption(name, '--dry-run', '--dr'.length))) return undefined;
+  if (mayBe(events, 'verify', false)) return 'commitNoVerify';
+  if (surely(events, 'dry-run')) return undefined;
+  if (mayBe(events, 'all') || mayBe(events, 'include')) return 'commitNoPaths';
+  if (afterDashes.length === 0) return finalValue(events, 'pathspec-from-file') === undefined ? 'commitNoPaths' : undefined;
 
-  return shorts.includes('a') || longs.includes('--all') || afterDashes.length === 0 ? 'commitNoPaths' : undefined;
+  return namesSpecificPaths(afterDashes, dialect) ? undefined : 'commitNoPaths';
 }
 
-/** `read-tree` that writes the working tree (`-u`) or discards the index (`--reset`). @es `read-tree` que escribe el árbol o descarta el índice. */
-function readTreeDiscards(args) {
-  const { longs, shorts } = optionsOf('read-tree', args);
+/**
+ * Whether a `read-tree` may run: never with `-u` (it writes the working tree) or `--reset`; otherwise only when it
+ * writes no live index (a dry run, `--index-output`, a `GIT_INDEX_FILE` the line sets) or only prints its usage.
+ * @es Si un `read-tree` puede correr: nunca con `-u` ni `--reset`; si no, solo cuando no escribe el índice vivo.
+ */
+function readTreeWrites(args, environment) {
+  const { events } = optionsOf('read-tree', args);
 
-  return shorts.includes('u') || longs.some((name) => isOption(name, '--reset', '--res'.length));
+  if (mayBe(events, '-u') || mayBe(events, 'reset')) return true;
+  if (args.length === 1 && args[0] === '-h') return false;
+  if (surely(events, 'dry-run') || finalValue(events, 'index-output') !== undefined) return false;
+
+  return (environment.get(INDEX_FILE_VARIABLE) ?? '').length === 0;
 }
 
 /** `checkout-index` that overwrites files (`-f`) or writes every indexed file (`-a`). @es `checkout-index` que sobrescribe ficheros. */
 function checkoutIndexOverwrites(args) {
-  const { longs, shorts } = optionsOf('checkout-index', args);
+  const { events } = optionsOf('checkout-index', args);
 
-  return shorts.includes('f') || shorts.includes('a') || longs.some((name) => isOption(name, '--force', '--f'.length) || isOption(name, '--all', '--a'.length));
+  return mayBe(events, 'force') || mayBe(events, 'all');
 }
 
 /** `update-index --force-remove`, which drops a path from the index even when the file exists. @es `update-index --force-remove`. */
-const updateIndexForceRemoves = (args) => optionsOf('update-index', args).longs.some((name) => isOption(name, '--force-remove', '--force-r'.length));
+const updateIndexForceRemoves = (args) => anyMayBe(optionsOf('update-index', args).events, 'force-remove');
 
 /**
  * Every `update-ref` that WRITES: `-d` (delete), `<ref> <sha>` (two names, moves a ref) or `--stdin` (its
@@ -187,9 +129,9 @@ const updateIndexForceRemoves = (args) => optionsOf('update-index', args).longs.
  * muestra, por eso se rechaza). `-h` y el comando solo imprimen el uso.
  */
 function updateRefWrites(args) {
-  const { longs, shorts, positionals } = optionsOf('update-ref', args);
+  const { events, positionals } = optionsOf('update-ref', args);
 
-  return shorts.includes('d') || positionals.length >= 2 || longs.some((name) => isOption(name, '--stdin', '--s'.length));
+  return mayBe(events, '-d') || positionals.length >= 2 || mayBe(events, 'stdin');
 }
 
 /**
@@ -197,13 +139,13 @@ function updateRefWrites(args) {
  * @es `symbolic-ref` que ESCRIBE (dos nombres) o borra; con un solo nombre solo lee.
  */
 function symbolicRefWrites(args) {
-  const { longs, shorts, positionals } = optionsOf('symbolic-ref', args);
+  const { events, positionals } = optionsOf('symbolic-ref', args);
 
-  return positionals.length >= 2 || shorts.includes('d') || longs.some((name) => isOption(name, '--delete', '--d'.length));
+  return positionals.length >= 2 || mayBe(events, 'delete');
 }
 
 /** The family an invocation belongs to, or `undefined` when it is allowed. @es La familia, o `undefined` si se permite. */
-function familyOf({ subcommand, args }) {
+function familyOf({ subcommand, args, environment }, dialect) {
   switch (subcommand) {
     case 'reset':
       return 'reset';
@@ -211,23 +153,18 @@ function familyOf({ subcommand, args }) {
     case 'switch':
       return 'checkout';
     case 'restore': {
-      const { longs, shorts } = optionsOf('restore', args);
-      const staged = longs.includes('--staged') || shorts.includes('S');
-      const worktree = longs.includes('--worktree') || shorts.includes('W');
+      const { events } = optionsOf('restore', args);
 
-      return !staged || worktree ? 'restore' : undefined;
+      return surely(events, 'staged') && !mayBe(events, 'worktree') ? undefined : 'restore';
     }
-    case 'clean': {
-      const { longs, shorts } = optionsOf('clean', args);
-
-      return longs.includes('--force') || shorts.includes('f') ? 'clean' : undefined;
-    }
+    case 'clean':
+      return mayBe(optionsOf('clean', args).events, 'force') ? 'clean' : undefined;
     case 'commit':
-      return commitFamily(args);
+      return commitFamily(args, dialect);
     case 'push':
-      return optionsOf('push', args).longs.some(isNoVerify) ? 'pushNoVerify' : undefined;
+      return mayBe(optionsOf('push', args).events, 'verify', false) ? 'pushNoVerify' : undefined;
     case 'read-tree':
-      return readTreeDiscards(args) ? 'readTree' : undefined;
+      return readTreeWrites(args, environment) ? 'readTree' : undefined;
     case 'checkout-index':
       return checkoutIndexOverwrites(args) ? 'checkoutIndex' : undefined;
     case 'update-index':
@@ -249,7 +186,7 @@ function familyOf({ subcommand, args }) {
  * @es Las invocaciones prohibidas, en orden de ejecución.
  */
 export function forbiddenInvocations(script, dialect, cwd) {
-  return gitInvocations(script, dialect, cwd)
-    .map((invocation) => ({ family: familyOf(invocation), text: invocation.text }))
+  return lineInvocations(script, dialect, cwd)
+    .map((invocation) => ({ family: familyOf(invocation, dialect), text: invocation.text }))
     .filter((found) => found.family !== undefined);
 }
