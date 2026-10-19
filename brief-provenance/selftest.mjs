@@ -317,7 +317,7 @@ const cases = [
   ['deny', claim('MEASURED: eslint reports nothing, preexit 0', WORDS), 'a word that ends in exit is not the exit word', 'eslint'],
   ['allow', claim('MEASURED: `npx eslint src` reports nothing', WORDS), 'a backticked command is a run receipt'],
   ['deny', claim('MEASURED: `eslint` reports nothing', WORDS), 'a backticked single word is not a command', 'eslint'],
-  ['deny', claim('MEASURED: `eslint` and `tsc` report nothing', WORDS), 'the prose between two code spans is not a command', 'eslint'],
+  ['deny', claim('MEASURED: `eslint` and then `tsc` report nothing', WORDS), 'the prose between two code spans is not a command', 'eslint'],
   ['deny', claim('MEASURED: eslint reports nothing after `npx eslint src', WORDS), 'an unclosed backtick quotes no command', 'eslint'],
   ['deny', claim('MEASURED: eslint reports nothing, see ` eslint `', WORDS), 'a single word padded with blanks is not a command', 'eslint'],
   ['allow', claim('MEASURED: typescript 5.8.0, read in package.json.', WORDS), 'a manifest ending the sentence is still cited'],
