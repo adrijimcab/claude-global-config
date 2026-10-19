@@ -32,4 +32,21 @@ export function replay() {
   return result;
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) console.log(JSON.stringify(replay()));
+/** `reachJudge` of `total` with its percentage, `n/a` for an empty label. @es La llegada sobre el total con su porcentaje, `n/a` si está vacío. */
+const rate = ({ total, reachJudge }) => `${String(reachJudge)}/${String(total)} (${total === 0 ? 'n/a' : `${((100 * reachJudge) / total).toFixed(1)}%`})`;
+
+/**
+ * The reach rate of each label, one bilingual line each: the dismissed turns are the model-call cost, the genuine
+ * announcements are the recall. @es La tasa de llegada de cada etiqueta: los descartados son el costo, los genuinos el recall.
+ */
+export const describeReplay = (counts) => [
+  `dismissed turns that reach the judge: ${rate(counts.allow)} @es turnos descartados que llegan al juez: ${rate(counts.allow)}`,
+  `genuine announcements that reach the judge: ${rate(counts.block)} @es anuncios genuinos que llegan al juez: ${rate(counts.block)}`,
+];
+
+if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+  const counts = replay();
+
+  console.log(JSON.stringify(counts));
+  for (const line of describeReplay(counts)) console.log(line);
+}

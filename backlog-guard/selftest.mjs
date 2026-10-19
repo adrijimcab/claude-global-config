@@ -32,7 +32,7 @@ import { findCandidate } from './announcement.mjs';
 import { findPendingMarker, PENDING_MARKERS } from './markers.mjs';
 import { proseOutsideQuotes } from './prose.mjs';
 import { hasMasterDocumentCommit } from './backlog-document-save.mjs';
-import { replay } from './replay.mjs';
+import { describeReplay, replay } from './replay.mjs';
 import { hasMasterBacklogSave, isMasterBacklogTopicKey, topicKeyValuesIn } from './master-save.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
@@ -552,6 +552,30 @@ const NEEDS_NO_JUDGE = [
 
 for (const [label, text] of NEEDS_NO_JUDGE) check(`prefilter stays silent: ${label}`, findCandidate(text), undefined);
 
+// THE PREFILTER IS A SUPERSET of the deleted lexical guard: every phrase that guard caught at the base commit,
+// read from that commit's own text (`fixtures/deleted-markers-0aeeb88.json`), still reaches the pending judge,
+// alone and inside a sentence. @es EL PREFILTRO ES UN SUPERCONJUNTO de la guardia léxica eliminada: cada frase
+// que atrapaba en el commit base, leída del texto de ese commit, sigue llegando al juez, sola y dentro de una frase.
+{
+  const deleted = JSON.parse(readFileSync(path.join(HERE, 'fixtures', 'deleted-markers-0aeeb88.json'), 'utf8'));
+
+  check('the deleted list is the base commit one, whole', [deleted.commit, deleted.path, deleted.markers.length, deleted.markers.includes('worth your attention'), deleted.markers.includes('flagging this for')], ['0aeeb88', 'backlog-guard/markers.mjs', 55, true, true]);
+  check('every phrase the deleted guard caught still reaches the judge, alone', deleted.markers.filter((phrase) => findCandidate(phrase) === undefined), []);
+  check('every phrase the deleted guard caught still reaches the judge, inside a sentence', deleted.markers.filter((phrase) => findCandidate(`Nota: ${phrase} acá.`) === undefined), []);
+  check('every phrase the deleted guard caught still owes the judge when nothing was saved', deleted.markers.filter((phrase) => verdict(stopPayload(`Nota: ${phrase} acá.`), { tail: '' }).result !== 'deny'), []);
+}
+
+// MARKERS MATCH WHOLE WORDS: a marker inside a longer word costs no model call («bug» in «debug», «to do» in «to
+// document»); a stem marker (written with a trailing `*`) takes its endings. @es LOS MARCADORES SON PALABRAS ENTERAS.
+check('a marker inside a longer word is not a marker: bug in debug', findCandidate('Corrí el debug del parser y quedó verde.'), undefined);
+check('a marker that runs into a longer word is not a marker: to do in to document', findCandidate('I went on to document the parser.'), undefined);
+check('a whole-word marker still fires: to do', findCandidate('Things to do: the parser.'), 'to do');
+check('a stem marker takes its endings: bugs, hallazgos, pendientes, queued', [findCandidate('Two bugs.'), findCandidate('Dos hallazgos.'), findCandidate('Quedan pendientes.'), findCandidate('A queued commit.')], ['bug', 'hallazgo', 'pendiente', 'queue']);
+check('a marker at the very start and the very end of the text fires', [findCandidate('bug'), findCandidate('see the backlog')], ['bug', 'backlog']);
+check('a digit glued to a marker is part of the word', findCandidate('the 2bug3 token'), undefined);
+check('a later whole-word occurrence fires after an earlier one inside a word', findCandidate('The debug run found a bug.'), 'bug');
+check('no stem marker is written without its root', PENDING_MARKERS.filter((marker) => marker === '*' || marker.includes('**')), []);
+
 // No lexical intent logic may return: the finder is the same function for a negated and a plain sentence.
 // @es La lógica léxica de intención no debe volver: el buscador trata igual una frase negada y una afirmada.
 check('a negated sentence reaches the judge exactly as the plain one does', findCandidate('No hay hallazgo nuevo.') !== undefined && findCandidate('Hay un hallazgo nuevo.') !== undefined, true);
@@ -568,6 +592,13 @@ check('findCandidate of a non-string is undefined', findCandidate(undefined), un
   // dismissed turns that reach it too are the model calls the judge resolves (cost, not error).
   // @es El RECALL del prefiltro es el sentido de hacerlo amplio: ningún anuncio genuino puede no llegar al juez.
   check('all 4 genuine announcements reach the judge', counts.block, { total: 4, reachJudge: 4 });
+  // The cost side, pinned: how many dismissed turns still cost a model call. @es El lado del costo, fijado.
+  check('the dismissed turns that reach the judge are pinned', counts.allow, { total: 60, reachJudge: 56 });
+  check('replay reports the reach rate of both labels, bilingual', describeReplay(counts), [
+    'dismissed turns that reach the judge: 56/60 (93.3%) @es turnos descartados que llegan al juez: 56/60 (93.3%)',
+    'genuine announcements that reach the judge: 4/4 (100.0%) @es anuncios genuinos que llegan al juez: 4/4 (100.0%)',
+  ]);
+  check('replay describes an empty label without dividing by zero', describeReplay({ allow: { total: 0, reachJudge: 0 }, block: { total: 0, reachJudge: 0 } })[0], 'dismissed turns that reach the judge: 0/0 (n/a) @es turnos descartados que llegan al juez: 0/0 (n/a)');
 }
 
 // --- THE DISMISSAL LOG, read back: a dismissal of THIS session after a moment ends the question; another
