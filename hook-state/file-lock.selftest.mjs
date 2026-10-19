@@ -251,7 +251,7 @@ const failing = (codes) => {
   const reused = held('past-ceiling', `${String(process.pid)}:reused`, STALE * 10 + 1_000, AT);
 
   check('K-D: past the ceiling a lock is stale although its owner pid still answers', outcomeOf(() => lock.takeLock(reused, options())), true);
-  check('K-D: ...and the journal says so, naming the ceiling and the pid, bilingual', breaksOf(reused).map((one) => [one.reason, one.ceilingMs, one.message.includes('ceiling') && one.message.includes(String(process.pid)) && one.message.includes(' @es ')]), [['ceiling', STALE * 10, true]]);
+  check('K-D: ...and the journal says so, naming the ceiling and the pid, bilingual', breaksOf(reused).map((one) => [one.reason, one.ceilingMs, one.message.includes('past the absolute ceiling') && one.message.includes(String(process.pid)) && one.message.includes(' @es ')]), [['ceiling', STALE * 10, true]]);
   lock.releaseLock(reused);
 
   const under = held('under-ceiling', `${String(process.pid)}:x`, STALE * 10 - 1_000, AT);
@@ -439,7 +439,7 @@ const RACE_DEADLINE_MS = 15_000;
  * they recorded, in entry order where it matters, and each exit code (3 is a contender that never held the lock).
  * @es Lanza contendientes como procesos reales sobre un lock y devuelve lo que registraron y cada código de salida.
  */
-async function race(name, { contenders, staleAfterMs, attempts = 400, createDelayMs = 0, breakHoldMs = 0, prepare = () => undefined }) {
+async function race(name, { contenders, staleAfterMs, attempts = 400, createDelayMs = 0, breakHoldMs = 0, breakerPid = 0, prepare = () => undefined }) {
   const dir = path.join(scratch, name);
   const target = path.join(dir, 'state.lock');
 
@@ -447,9 +447,9 @@ async function race(name, { contenders, staleAfterMs, attempts = 400, createDela
   prepare(target);
 
   const errors = [];
-  const run = ({ holdMs, startAfterMs = 0, judgeDelayMs = 0 }) => new Promise((resolve) => {
+  const run = ({ holdMs, startAfterMs = 0, judgeDelayMs = 0, breakerJudgeDelayMs = 0 }) => new Promise((resolve) => {
     setTimeout(() => {
-      const child = spawn(process.execPath, [CONTENDER, target, dir, String(holdMs), String(staleAfterMs), String(attempts), String(judgeDelayMs), String(createDelayMs), String(breakHoldMs)], { stdio: ['ignore', 'ignore', 'pipe'] });
+      const child = spawn(process.execPath, [CONTENDER, target, dir, String(holdMs), String(staleAfterMs), String(attempts), String(judgeDelayMs), String(createDelayMs), String(breakHoldMs), String(breakerPid), String(breakerJudgeDelayMs)], { stdio: ['ignore', 'ignore', 'pipe'] });
       // A wedged contender is a failed check within the deadline, never a hung proof. @es Un contendiente atascado
       // es un check fallido dentro del plazo, nunca una prueba colgada.
       const deadline = setTimeout(() => child.kill(), RACE_DEADLINE_MS);
@@ -491,16 +491,21 @@ const prepareDead = (target, content) => {
 }
 
 {
-  // K-B: a dead owner's lock AND a dead breaker's file; six processes judge slowly, each at its own pace, and a
-  // breaker holds its file a while before it breaks. Without the re-check a late judge removes another's live breaker.
-  // @es Lock y breaker de muertos; seis procesos juzgan lento, cada uno a su ritmo, y el rompedor retiene su fichero.
+  // K-B: a dead owner's lock AND a dead breaker's file. Six processes read the dead breaker's file at about the
+  // same moment and each takes its own time to judge it; the quickest removes it and takes the breaker, holding it a
+  // while. Without the re-check a slower judge then removes that LIVE breaker, and a third takes the breaker too.
+  // @es Lock y breaker de muertos. Seis procesos leen el breaker muerto casi a la vez y cada uno tarda lo suyo en
+  // juzgarlo; el más rápido lo quita y toma el breaker un rato. Sin la relectura, uno más lento quita ese breaker
+  // VIVO y un tercero lo toma también.
+  const breakerPid = confirmedDeadPid();
   const outcome = await race('dead-breaker', {
-    contenders: [0, 1, 2, 3, 4, 5].map((index) => ({ holdMs: 30, judgeDelayMs: 20 + index * 40 })),
+    contenders: [0, 1, 2, 3, 4, 5].map((index) => ({ holdMs: 30, breakerJudgeDelayMs: 10 + index * 60 })),
     staleAfterMs: 100,
-    breakHoldMs: 150,
+    breakHoldMs: 250,
+    breakerPid,
     prepare: (target) => {
       prepareDead(target, `${String(confirmedDeadPid())}:x`);
-      prepareDead(`${target}.breaker`, `${String(confirmedDeadPid())}:breaker`);
+      prepareDead(`${target}.breaker`, `${String(breakerPid)}:breaker`);
     }
   });
 
