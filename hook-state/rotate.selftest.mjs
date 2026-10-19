@@ -140,7 +140,7 @@ const scratch = mkdtempSync(path.join(tmpdir(), 'rotate-selftest-'));
 try {
   // --- the classification ---
   check('a refusal journal is archived', classify('collision-guard', 'refusals.jsonl').kind, ARCHIVE);
-  check('the undecided journal of the dependency-claim face is archived', classify('brief-provenance', 'undecided.jsonl').kind, ARCHIVE);
+  check('the undecided journal of the dependency-claim face is archived', classify('brief-provenance', 'undecided/entries.jsonl').kind, ARCHIVE);
   check('a dismissal registry is kept', classify('backlog-guard', 'dismissals.jsonl').kind, KEEP);
   check('a per-session marker is kept (*.json)', classify('engram-persistence', 'st-1.json').kind, KEEP);
   check('*.json does not match a .jsonl file', classify('engram-persistence', 'notes.jsonl').kind, UNKNOWN);

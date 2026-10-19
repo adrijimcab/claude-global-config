@@ -53,7 +53,8 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { stateDir } from '../hook-state/locations.mjs';
-import { unsourcedDependencyClaims } from './dependency-claim.mjs';
+import { defaultAsk, judgeCandidates } from './claim-judge.mjs';
+import { candidateClaims } from './dependency-claim.mjs';
 import { dependencyNamesOf, projectDirectories } from './dependency-names.mjs';
 import { dependencyReason } from './dependency-refusal.mjs';
 import { briefOf, inspectBrief } from './provenance.mjs';
@@ -65,17 +66,22 @@ const stateDirectory = () => stateDir('brief-provenance');
 const REFUSALS = 'refusals.jsonl';
 
 /**
- * The journal of the dependency-claim face's undecided readings. Kept apart from the refusals because an
- * undecided brief was ALLOWED: in the refusal journal it would read as a block.
- * @es El diario de las lecturas no decididas de la cara de dependencias, aparte de los rechazos porque un
- * brief no decidido se PERMITIÓ: en el diario de rechazos se leería como un bloqueo.
+ * The journal of the dependency-claim face's undecided readings, in a SUBFOLDER of the state directory. An
+ * undecided brief was ALLOWED, so it is no refusal, and `guard-precision/blocks.mjs` reads every `*.jsonl` at
+ * the top of a guard's state directory (and only there) as journal lines; a subfolder keeps these out of its
+ * counts while staying JSON Lines.
+ * @es El diario de las lecturas no decididas, en una SUBCARPETA del estado: un brief no decidido se PERMITIÓ, y
+ * `guard-precision/blocks.mjs` lee cada `*.jsonl` de la raíz del estado (y solo ahí); la subcarpeta lo deja
+ * fuera de sus cuentas sin dejar de ser JSON Lines.
  */
-const UNDECIDED = 'undecided.jsonl';
+const UNDECIDED = join('undecided', 'entries.jsonl');
 
 function journal(entry, file = REFUSALS) {
   try {
-    mkdirSync(stateDirectory(), { recursive: true });
-    appendFileSync(join(stateDirectory(), file), `${JSON.stringify(entry)}\n`, 'utf8');
+    const target = join(stateDirectory(), file);
+
+    mkdirSync(dirname(target), { recursive: true });
+    appendFileSync(target, `${JSON.stringify(entry)}\n`, 'utf8');
   } catch {
     /* the journal is evidence, never a precondition: its failure must not change the decision */
   }
@@ -144,45 +150,52 @@ function reason(refusal) {
 
 /**
  * The second face: a brief that DOES declare its provenance must still cite its source when a MEASURED
- * line makes a claim about an installed dependency (`guard-built-on-an-unmeasured-premise`, recorded 3
- * times). The decision is `dependency-claim.mjs`, the project's dependency names come from
- * `dependency-names.mjs`. When the project or its `package.json` cannot be read the face does not decide:
- * it journals why (`dependency-claim-undecided`, in `undecided.jsonl`, never among the refusals) and
- * allows, never failing closed and never silent.
- * @es La segunda cara: un brief que SÍ declara su procedencia debe citar la fuente cuando una línea
- * MEASURED afirma algo sobre una dependencia instalada. Si no se puede leer el proyecto o su
- * `package.json`, la cara no decide: registra por qué (en `undecided.jsonl`, nunca entre los rechazos) y
- * permite, sin fallar cerrada ni callar.
+ * claim asserts how an installed dependency behaves (`guard-built-on-an-unmeasured-premise`, recorded 3
+ * times). The project's dependency names come from `dependency-names.mjs`; the lexical prefilter
+ * `dependency-claim.mjs` keeps the claims that name one and cite no source; only those reach the claim judge
+ * (`claim-judge.mjs`, one model call). When the project cannot be read or the judge does not decide, the face
+ * allows and journals why (`dependency-claim-undecided`, in `undecided/entries.jsonl`), never failing closed
+ * and never silent.
+ * @es La segunda cara: un brief que SÍ declara su procedencia debe citar la fuente cuando una afirmación
+ * MEASURED dice cómo se comporta una dependencia instalada. El prefiltro léxico guarda las afirmaciones que
+ * nombran una y no citan fuente; solo esas llegan al juez (una llamada al modelo). Si no se puede leer el
+ * proyecto o el juez no decide, la cara permite y registra por qué (en `undecided/entries.jsonl`), sin fallar
+ * cerrada ni callar.
  */
-function dependencyClaimOutput(brief, payload) {
+async function dependencyClaimOutput(brief, payload, ask) {
   const entry = { at: new Date().toISOString(), session: payload?.session_id, tool: brief.toolName };
   const directories = projectDirectories(brief.text, payload);
   const { names, undecided } = dependencyNamesOf(directories);
 
   if (directories.length === 0) undecided.push({ file: null, reason: 'no project directory: the brief has no TENANCY path and the payload has no cwd' });
 
+  const claims = candidateClaims(brief.text, names);
+  const verdict = claims.length === 0 ? { kind: 'pass' } : await judgeCandidates(claims, ask);
+
+  if (verdict.kind === 'undecided') undecided.push({ file: null, reason: verdict.why });
+
   if (undecided.length > 0) journal({ ...entry, kind: 'dependency-claim-undecided', undecided }, UNDECIDED);
 
-  const claims = unsourcedDependencyClaims(brief.text, names);
+  if (verdict.kind !== 'block') return undefined;
 
-  if (claims.length === 0) return undefined;
-
-  journal({ ...entry, kind: 'dependency-claim', packages: claims.flatMap((claim) => claim.packages) });
+  journal({ ...entry, kind: 'dependency-claim', packages: claims.flatMap((claim) => claim.packages), reason: verdict.reason });
 
   return {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'deny',
-      permissionDecisionReason: dependencyReason({ claims, surface: brief.surface, toolName: brief.toolName })
+      permissionDecisionReason: dependencyReason({ claims, reason: verdict.reason, surface: brief.surface, toolName: brief.toolName })
     }
   };
 }
 
 /**
- * La salida de hook para un payload crudo (deny cuando el brief no declara MEASURED/HYPOTHESIS), o
- * `undefined`. Exportada para que `~/.claude/hook-dispatch/dispatch.mjs` la corra en su propio proceso.
+ * La salida de hook para un payload crudo (deny cuando el brief no declara MEASURED/HYPOTHESIS, o cuando el
+ * juez de afirmaciones rechaza una), o `undefined`. Exportada para que `~/.claude/hook-dispatch/dispatch.mjs` la
+ * corra en su propio proceso. `ask` es la pregunta al modelo del juez, inyectable para la prueba.
+ * @es Exported for the dispatcher; `ask` is the judge's model question, injected by the proof.
  */
-export function evaluate(raw) {
+export async function evaluate(raw, { ask = defaultAsk } = {}) {
   let payload;
 
   try {
@@ -201,7 +214,7 @@ export function evaluate(raw) {
 
   const refusal = inspectBrief(brief);
 
-  if (refusal === undefined) return dependencyClaimOutput(brief, payload);
+  if (refusal === undefined) return dependencyClaimOutput(brief, payload, ask);
 
   // The journal records the STATE of each failure and the surface it happened on. A run of `buried`
   // says the form is being misunderstood, a run of `absent` says the section is being skipped, and a
@@ -224,7 +237,7 @@ export function evaluate(raw) {
   };
 }
 
-function main() {
+async function main() {
   let raw;
 
   try {
@@ -234,7 +247,7 @@ function main() {
   }
 
   try {
-    const output = evaluate(raw);
+    const output = await evaluate(raw);
 
     if (output !== undefined) console.log(JSON.stringify(output));
   } catch {
