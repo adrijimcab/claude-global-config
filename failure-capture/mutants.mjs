@@ -58,7 +58,7 @@ const MUTANTS = [
   ['el ledger nuevo nace sin encabezado', 'failure-capture/ledgers.mjs', 'ledger.lines ??= ledger.header.split(\'\\n\');', "ledger.lines ??= [''];"],
   // The 2026-09-30 split-store incident: a capture without --session stamped `unknown`.
   ['the harness session id is ignored, so a capture without --session is stamped unknown again', 'failure-capture/capture.mjs', 'const fromHarness = process.env.CLAUDE_CODE_SESSION_ID;', 'const fromHarness = undefined;'],
-  ['the stamp ignores the session it was given, so any stamp satisfies every session', 'failure-capture/turn-guard.mjs', 'stamped.session === sessionId && ', '']
+  ['the stamp is read from one shared file, so any session\'s stamp satisfies every session', 'failure-capture/turn-guard.mjs', 'readJson(stampFile(stateDirectory(), sessionId), undefined)', "readJson(stampFile(stateDirectory(), 'shared'), undefined)"]
 ];
 
 const survivors = runMutants({
