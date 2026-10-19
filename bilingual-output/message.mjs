@@ -111,16 +111,31 @@ export function halvesOf(text) {
  * de la propia mitad: `En` o `Es`). Cualquier otro nombre, el sufijo de la otra mitad incluido, es él mismo.
  */
 function dataOf(half, suffix) {
-  const data = placeholdersOf(half).map((name) => (name.length > suffix.length && name.endsWith(suffix) ? `${name.slice(0, -suffix.length)}#half` : name));
+  const data = placeholdersOf(half).map((name) => datumOf(name, suffix));
 
   return [...new Set(data)].sort();
 }
 
+/** The datum one placeholder name of a half names (see `dataOf`). @es El dato que nombra un marcador de una mitad (ver `dataOf`). */
+function datumOf(name, suffix) {
+  return name.length > suffix.length && name.endsWith(suffix) ? `${name.slice(0, -suffix.length)}#half` : name;
+}
+
+/**
+ * A half with each split placeholder folded back to its datum, so two halves that differ only in `En`/`Es`
+ * suffixes compare as the copy they are.
+ * @es Una mitad con cada marcador partido devuelto a su dato, para que dos mitades que solo difieren en los
+ * sufijos `En`/`Es` se comparen como la copia que son.
+ */
+function folded(half, suffix) {
+  return placeholdersOf(half).reduce((text, name) => text.replaceAll(`{${name}}`, `{${datumOf(name, suffix)}}`), half);
+}
+
 /**
  * What is wrong with a table of messages, as readable problems (empty when nothing is): a half missing or
- * empty, a Spanish half identical to the English one (an untranslated copy), and halves that name different
- * data (`dataOf`), so one language would show data the other omits.
- * @es Qué falla en una tabla de mensajes, como problemas legibles (vacío si nada): una mitad ausente o vacía, una mitad española idéntica a la inglesa y mitades que nombran datos distintos (`dataOf`).
+ * empty, a Spanish half identical to the English one once split placeholders are folded (an untranslated copy,
+ * `folded`), and halves that name different data (`dataOf`), so one language would show data the other omits.
+ * @es Qué falla en una tabla de mensajes, como problemas legibles (vacío si nada): una mitad ausente o vacía, una mitad española idéntica a la inglesa una vez plegados los marcadores partidos (`folded`) y mitades que nombran datos distintos (`dataOf`).
  */
 export function messageProblems(table) {
   const problems = [];
@@ -134,7 +149,7 @@ export function messageProblems(table) {
       continue;
     }
 
-    if (english === spanish) problems.push(`${id}: the Spanish half is a copy of the English one. @es ${id}: la mitad española es una copia de la inglesa.`);
+    if (folded(english, 'En') === folded(spanish, 'Es')) problems.push(`${id}: the Spanish half is a copy of the English one. @es ${id}: la mitad española es una copia de la inglesa.`);
     if (dataOf(english, 'En').join() !== dataOf(spanish, 'Es').join()) problems.push(`${id}: the halves name different placeholders. @es ${id}: las mitades nombran marcadores distintos.`);
   }
 

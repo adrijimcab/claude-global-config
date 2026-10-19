@@ -43,6 +43,9 @@ equal('...whichever half is the reordered one', messageProblems({ ...CLEAN, ok: 
 // A datum written in one language is passed once per half: `{xEn}` in English and `{xEs}` in Spanish are one datum.
 // @es Un dato escrito en un idioma se pasa una vez por mitad: `{xEn}` en inglés y `{xEs}` en español son un mismo dato.
 equal('a datum split into its English and Spanish halves is not a problem', messageProblems({ ...CLEAN, ok: { en: 'Failed: {reasonEn}.', es: 'Falló: {reasonEs}.' } }), []);
+equal('a copy that differs only in the suffix of a split datum is flagged as untranslated', messageProblems({ ...CLEAN, bad: { en: 'Failed: {reasonEn}.', es: 'Failed: {reasonEs}.' } }), ['bad: the Spanish half is a copy of the English one. @es bad: la mitad española es una copia de la inglesa.']);
+equal('a copy with a plain and a split datum is flagged as untranslated', messageProblems({ ...CLEAN, bad: { en: '{file} failed: {reasonEn}', es: '{file} failed: {reasonEs}' } }).length, 1);
+equal('a real translation with a plain and a split datum is accepted', messageProblems({ ...CLEAN, ok: { en: '{file} failed: {reasonEn}', es: '{file} falló: {reasonEs}' } }), []);
 equal('a split datum renders each half in its own language, with one @es', render({ en: 'Failed: {reasonEn}.', es: 'Falló: {reasonEs}.' }, { reasonEn: 'boom', reasonEs: 'pum' }), 'Failed: boom. @es Falló: pum.');
 equal('the Spanish half of a datum in the English half is flagged', messageProblems({ ...CLEAN, bad: { en: 'Failed: {reasonEs}.', es: 'Falló: {reasonEs}.' } }).length, 1);
 equal('the English half of a datum in the Spanish half is flagged', messageProblems({ ...CLEAN, bad: { en: 'Failed: {reasonEn}.', es: 'Falló: {reasonEn}.' } }).length, 1);
