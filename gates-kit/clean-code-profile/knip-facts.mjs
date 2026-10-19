@@ -3,7 +3,8 @@
  * `knip.jsonc` as if it were JSON (it is code, or JSON with comments). The same decision as `eslint-facts.mjs`:
  * the tool that loads the config is the one that knows it. knip has no `--print-config`; its `--debug` run prints
  * the configuration it resolved (`parsedConfig`) as Node's `util.inspect` text, so the answer is read from that
- * block: every entry of every `ignore*` list, workspaces included. When the output has no such block, or knip cut
+ * block, whether `util.inspect` printed it over several lines or, being small, on one: every entry of every
+ * `ignore*` list, workspaces included. When the output has no such block, or knip cut
  * it short (`[Object]`), or knip is not installed, or its run failed, the answer is "not measured" with the reason,
  * never zero. The knip run is the only process this module starts.
  *
@@ -14,7 +15,8 @@
  * `knip.js` o `knip.jsonc` como si fuera JSON (es código, o JSON con comentarios). La misma decisión que
  * `eslint-facts.mjs`: la herramienta que carga la config es la que la conoce. knip no tiene `--print-config`; su
  * ejecución `--debug` imprime la configuración que resolvió (`parsedConfig`) como texto de `util.inspect` de Node,
- * así que la respuesta se lee de ese bloque: cada entrada de cada lista `ignore*`, workspaces incluidos. Si la
+ * así que la respuesta se lee de ese bloque, lo imprima `util.inspect` en varias líneas o, por ser pequeño, en
+ * una: cada entrada de cada lista `ignore*`, workspaces incluidos. Si la
  * salida no trae ese bloque, o knip lo cortó (`[Object]`), o knip no está instalado, o su ejecución falló, la
  * respuesta es "no medido" con el motivo, nunca cero. La ejecución de knip es el único proceso que lanza este módulo.
  * Límite conocido: el formato de texto de `--debug` es salida de diagnóstico de knip, no un contrato; si cambia, la
@@ -28,7 +30,10 @@ import path from 'node:path';
 const KNIP_TIMEOUT_MS = 300_000;
 const ANSI = /\u001B\[[0-9;]*m/g;
 const QUOTED = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
-const PARSED_CONFIG_OPEN = /^ {2}parsedConfig: \{(\},?)?$/;
+/** The first line of a `parsedConfig` printed over several lines. @es La primera línea de un `parsedConfig` en varias líneas. */
+const PARSED_CONFIG_OPEN = /^ {2}parsedConfig: \{$/;
+/** A `parsedConfig` small enough for `util.inspect` to print on one line (`{}` included); its body is captured. @es Un `parsedConfig` en una línea; se captura su cuerpo. */
+const PARSED_CONFIG_INLINE = /^ {2}parsedConfig: \{(.*)\},?$/;
 const BLOCK_CLOSE = /^ {2}\},?$/;
 const IGNORE_LIST = /\bignore\w*:\s*\[([^\]]*)\]/g;
 const MORE_ITEMS = /\.\.\. (\d+) more items?/g;
@@ -40,12 +45,18 @@ const NOT_MEASURED = Object.freeze({
   notInstalled: 'knip is not installed under node_modules @es knip no está instalado en node_modules',
 });
 
-/** The lines of the `parsedConfig` block, or `[]` for an empty one, or undefined when there is none. @es Las líneas del bloque `parsedConfig`. */
+/**
+ * The body lines of the `parsedConfig` block, printed on one line or on several, or undefined when there is none.
+ * @es Las líneas del cuerpo del bloque `parsedConfig`, impreso en una línea o en varias, o undefined si no lo hay.
+ */
 function parsedConfigLines(lines) {
-  const start = lines.findIndex((line) => PARSED_CONFIG_OPEN.test(line));
+  const start = lines.findIndex((line) => PARSED_CONFIG_OPEN.test(line) || PARSED_CONFIG_INLINE.test(line));
 
   if (start === -1) return undefined;
-  if (PARSED_CONFIG_OPEN.exec(lines[start])[1] !== undefined) return [];
+
+  const inline = PARSED_CONFIG_INLINE.exec(lines[start]);
+
+  if (inline !== null) return [inline[1]];
 
   const length = lines.slice(start + 1).findIndex((line) => BLOCK_CLOSE.test(line));
 

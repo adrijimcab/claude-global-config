@@ -24,6 +24,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inspect } from 'node:util';
 
 import { makeSpeaker } from '../../bilingual-output/speaker.mjs';
 
@@ -332,6 +333,27 @@ const sampleWith = (block) => KNIP_DEBUG_SAMPLE.replace(/ {2}parsedConfig: \{[\s
 const knipEntries = (text) => knipFacts.parseKnipDebug?.(text);
 
 check('knip --debug output: the entries of every ignore list of the parsed config are counted', knipEntries(KNIP_DEBUG_SAMPLE)?.ignoreEntries === 4);
+
+// A small parsed config is printed on ONE line. These samples are not hand-written: they are produced the way knip's
+// --debug logger prints (knip 5.88.1 `dist/util/debug.js`: `util.inspect(obj, { maxArrayLength: null, depth: null,
+// colors: !process.env.NO_COLOR })`). @es Una config resuelta pequeña se imprime en UNA línea. Estas muestras no están
+// escritas a mano: se producen como imprime el logger --debug de knip (knip 5.88.1 `dist/util/debug.js`).
+{
+  const KNIP_HEAD = { cacheLocation: '/work/node_modules/.cache/knip', config: undefined, configFilePath: '/work/knip.ts', isWatch: false, maxShowIssues: undefined };
+  const loggerPrints = (resolved, colors = false) => `[*] Unresolved configuration\n${inspect(resolved, { maxArrayLength: null, depth: null, colors })}\n`;
+  const oneEntry = loggerPrints({ ...KNIP_HEAD, parsedConfig: { ignore: ['a.ts'] }, rules: { files: 'error' } });
+  const threeEntries = loggerPrints({ ...KNIP_HEAD, parsedConfig: { ignore: ['a.ts', 'b.ts'], ignoreDependencies: ['x'] }, rules: { files: 'error' } });
+  const lastKey = loggerPrints({ ...KNIP_HEAD, rules: { files: 'error' }, parsedConfig: { ignore: ['a.ts'] } });
+
+  check('the generated sample really is the one-line form', oneEntry.split('\n').includes("  parsedConfig: { ignore: [ 'a.ts' ] },"));
+  check('the generated last-key sample really ends without a comma', lastKey.split('\n').includes("  parsedConfig: { ignore: [ 'a.ts' ] }"));
+  check('a one-line parsed config is counted', knipEntries(oneEntry)?.ignoreEntries === 1);
+  check('a one-line parsed config with two ignore lists is counted', knipEntries(threeEntries)?.ignoreEntries === 3);
+  check('a one-line parsed config as the last key is counted', knipEntries(lastKey)?.ignoreEntries === 1);
+  check('a one-line parsed config printed in colour is counted', knipEntries(loggerPrints({ ...KNIP_HEAD, parsedConfig: { ignore: ['a.ts', 'b.ts'] }, rules: { files: 'error' } }, true))?.ignoreEntries === 2);
+  check('a one-line empty parsed config is zero, not the next block', knipEntries(loggerPrints({ ...KNIP_HEAD, parsedConfig: {}, rules: { ignore: ['z'] } }))?.ignoreEntries === 0);
+  check('a one-line parsed config holding a regular expression is NOT measured', knipEntries(loggerPrints({ ...KNIP_HEAD, parsedConfig: { ignoreDependencies: ['x', /^@scope\/[a-z]+$/] }, rules: { files: 'error' } }))?.ignoreEntries === undefined);
+}
 check('knip --debug output in colour is read like the plain one', knipEntries(KNIP_DEBUG_SAMPLE.replaceAll("'a.ts'", "\u001B[32m'a.ts'\u001B[39m").replace('parsedConfig', '\u001B[1mparsedConfig\u001B[22m'))?.ignoreEntries === 4);
 check('a multi-line list, a quote and a bracket inside entries are counted once each', knipEntries(sampleWith("  parsedConfig: {\n    ignore: [\n      'a]b.ts',\n      \"it's.ts\",\n      'c.ts'\n    ],\n    ignoreMembers: [ 'ignoreFoo: [ x ]' ]\n  },\n"))?.ignoreEntries === 4);
 check('a list cut by "N more items" counts the hidden entries too', knipEntries(sampleWith("  parsedConfig: {\n    ignore: [\n      'a.ts',\n      'b.ts',\n      ... 98 more items\n    ]\n  },\n"))?.ignoreEntries === 100);
