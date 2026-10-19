@@ -129,3 +129,30 @@ export function writeLedger(ledger) {
     throw error;
   }
 }
+
+/** The bytes a ledger file holds, or `undefined` when it does not exist. @es Los bytes de un fichero de ledger, o `undefined` si no existe. */
+export const ledgerBytes = (file) => (existsSync(file) ? readFileSync(file) : undefined);
+
+/**
+ * Puts back the bytes `ledgerBytes` read, exactly (no blank line collapsed), through a temporary file renamed over
+ * the ledger like `writeLedger`; `undefined` removes the file, because it did not exist.
+ * @es Repone exactamente los bytes que leyó `ledgerBytes` (sin colapsar líneas en blanco), por un fichero temporal
+ * renombrado encima como en `writeLedger`; `undefined` borra el fichero, porque no existía.
+ */
+export function restoreLedgerBytes(file, bytes) {
+  if (bytes === undefined) {
+    rmSync(file, { force: true });
+
+    return;
+  }
+
+  const temp = `${file}.${String(process.pid)}.restore.tmp`;
+
+  try {
+    writeFileSync(temp, bytes);
+    renameSync(temp, file);
+  } catch (error) {
+    rmSync(temp, { force: true });
+    throw error;
+  }
+}

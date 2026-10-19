@@ -118,6 +118,21 @@ function memory(initial) {
   check('...and BOTH files are restored, a destination that did not exist back to NOT existing', world.state.from === SOURCE && world.state.to === undefined, JSON.stringify(world.state));
 }
 
+// The proof is taken on the plan BEFORE the first write: a plan that would alter, drop or duplicate the block never
+// reaches the disk.
+// @es La prueba se toma sobre el plan ANTES de la primera escritura: un plan que alteraría, perdería o duplicaría el
+// bloque nunca llega al disco.
+for (const [name, broken] of [
+  ['alters the block on the way', { ...plan, to: plan.to.replace('first sentence', 'first sentences') }],
+  ['leaves the block in the source too', { ...plan, from: SOURCE }],
+  ['drops another rule of the source', { ...plan, from: plan.from.replace(OTHER.join('\n'), '') }],
+]) {
+  const world = memory(before);
+  const refused = commitBlockRoute({ before, plan: broken, io: world.io });
+
+  check(`a block plan that ${name} is REFUSED before any write, marked as never written, bilingual`, !refused.ok && refused.written === false && world.state.writes.length === 0 && refused.deficits.every((deficit) => deficit.includes(' @es ')), JSON.stringify([refused, world.state.writes]));
+}
+
 console.log(`rule-block selftest: ${String(passed)} passed, ${String(failures.length)} failed`);
 for (const failure of failures) console.error(`  FAIL ${failure}`);
 process.exit(failures.length === 0 ? 0 : 1);

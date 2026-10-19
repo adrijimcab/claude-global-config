@@ -52,7 +52,7 @@ const AREA_MUTANTS = [
   ['no scope is accepted but global and the project\'s', 'failure-capture/loop-context.mjs', '...areaScopes(), ', ''],
   ['the home ledgers leave out the areas', LEDGERS, '...Object.fromEntries(areaScopes().map(', '...Object.fromEntries([].map('],
   ['an area ledger is written with no frontmatter', ROUTES, '`${frontmatterOf(definition.paths)}\\n# Lessons Ledger — ${area} (path-scoped)', '`# Lessons Ledger — ${area} (path-scoped)'],
-  ['the frontmatter names no paths', ROUTES, "['---', 'paths:', ...paths.map((glob) => `  - \"${glob}\"`), '---']", "['---', 'paths:', '---']"],
+  ['the frontmatter names no paths', ROUTES, "['---', 'paths:', ...paths.map((glob) => `  - ${quotedGlob(glob)}`), '---']", "['---', 'paths:', '---']"],
   ['the evidence of an area lesson goes under rules/, where the harness loads it', 'failure-capture/evidence.mjs', "return path.basename(directory) === 'rules' ? path.dirname(directory) : directory;", 'return directory;'],
   ['an area lesson is promoted into a project contract', ROUTES, 'scope === PROMOTED_SCOPE || isAreaScope(scope);', 'scope === PROMOTED_SCOPE;'],
   ['a project may take the name of an area', 'failure-capture/loop-context.mjs', 'if (project !== undefined && isReservedScope(project.scope))', 'if (false)'],
@@ -91,6 +91,9 @@ const BLOCK_MUTANTS = [
   ['a failed proof leaves the source rewritten', BLOCK, '    io.writeFrom(before.from);\n', ''],
   ['a failed proof leaves the destination rewritten', BLOCK, '    io.writeTo(before.to);\n', ''],
   ['the source is written before the destination, so a crash between loses the rule', BLOCK, '  io.writeTo(plan.to);\n  io.writeFrom(plan.from);\n', '  io.writeFrom(plan.from);\n  io.writeTo(plan.to);\n'],
+  ['a block plan is written without being proved first', BLOCK, '  if (!planned.ok) return { ...planned, written: false };\n\n  io.writeTo(plan.to);', '  io.writeTo(plan.to);'],
+  ['a refused block plan is not marked as never written', BLOCK, 'return { ...planned, written: false };', 'return planned;'],
+  ['the block plan is proved against the files as they were, not the plan', BLOCK, 'after: { from: plan.from, to: plan.to }, block: plan.block, key: plan.key, header: plan.header });\n\n  if (!planned.ok)', 'after: before, block: plan.block, key: plan.key, header: plan.header });\n\n  if (!planned.ok)'],
 ];
 
 // The pure side, proved by `ledger-route.selftest.mjs`.
@@ -136,14 +139,24 @@ const PURE_MUTANTS = [
   ['the header proof does not notice the text between lessons changing', PLAN, "...(before.slice(Math.max(before.findIndex(isEntry), 0)).filter((line) => !isEntry(line)).join('\\n') === after.slice(Math.max(after.findIndex(isEntry), 0)).filter((line) => !isEntry(line)).join('\\n') ? [] :", '...(true ? [] :'],
   ['the header commit never proves what it wrote', PLAN, 'const proof = provesHeaderRoute({ before, after: io.readBack(), header });', 'const proof = { ok: true };'],
   ['a failed header proof leaves the ledger rewritten', PLAN, 'if (!proof.ok) io.write(before);', ''],
+  ['a header plan is written without being proved first', PLAN, '  if (!planned.ok) return { ...planned, written: false };\n\n  io.write(plan.lines);', '  io.write(plan.lines);'],
+  ['a refused header plan is not marked as never written', PLAN, 'return { ...planned, written: false };\n\n  io.write(plan.lines);', 'return planned;\n\n  io.write(plan.lines);'],
+  ['the header plan is proved against the ledger as it was, not the plan', PLAN, 'provesHeaderRoute({ before, after: plan.lines, header })', 'provesHeaderRoute({ before, after: before, header })'],
 
   // --- the commit
   ['the commit never proves what it wrote', PLAN, 'const proof = provesRoute({ before, after: io.readBack(), renamed: plan.renamed });', 'const proof = { ok: true };'],
   ['the commit proves the plan, not the re-read files', PLAN, 'after: io.readBack(), renamed: plan.renamed', 'after: { source: plan.source, destination: plan.destination }, renamed: plan.renamed'],
-  ['a failed proof leaves the source rewritten', PLAN, '    io.writeSource(before.source);\n', ''],
-  ['a failed proof leaves the destination rewritten', PLAN, '    io.writeDestination(before.destination);\n', ''],
+  ['a failed proof leaves both files rewritten', PLAN, '  if (!proof.ok) io.restore(saved);\n', ''],
   ['an unproved route is reported done', PLAN, 'if (proof.ok) return { status: 0,', 'if (true) return { status: 0,'],
-  ['the source is written before the destination, so a crash between loses stubs', PLAN, '  io.writeDestination(plan.destination);\n  io.writeSource(plan.source);\n', '  io.writeSource(plan.source);\n  io.writeDestination(plan.destination);\n'],
+  ['the source is written before the destination, so a crash between loses stubs', PLAN, '    io.writeDestination(plan.destination);\n    io.writeSource(plan.source);\n', '    io.writeSource(plan.source);\n    io.writeDestination(plan.destination);\n'],
+
+  // --- the commit is one transaction: a write that throws restores both files
+  ['a write that throws leaves the first write in place', PLAN, '      io.restore(saved);\n', ''],
+  ['a write that throws is swallowed', PLAN, '    throw writeFailure(cause);\n', ''],
+  ['a restore that fails hides the write that failed', PLAN, 'throw writeFailure(cause, restoreFailure);', 'throw restoreFailure;'],
+  ['the bytes are kept only after the first write', PLAN, '  const saved = io.snapshot();\n\n  try {\n    io.writeDestination(plan.destination);\n', '  let saved;\n\n  try {\n    io.writeDestination(plan.destination);\n    saved = io.snapshot();\n'],
+  ['the error of a failed write loses its Spanish half', PLAN, 'return new Error(`${english} @es ${spanish}`, { cause });', 'return new Error(english, { cause });'],
+  ['the error of a failed write does not name the restore that failed too', PLAN, ', and restoring the files failed too (${messageOf(restoreFailure)}); check both files by hand.`', '.`'],
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

@@ -104,8 +104,18 @@ export function onDemandRulesFiles(home) {
   }
 }
 
+/**
+ * A glob as a YAML double-quoted scalar: a backslash and a double quote escaped. A declared glob holds neither
+ * (`project-areas.mjs` refuses them); the escape is the second line of defence, so no glob can end the scalar or
+ * start an escape.
+ * @es Un glob como escalar YAML entre comillas dobles: barra invertida y comilla doble escapadas. Un glob declarado no
+ * lleva ninguna (`project-areas.mjs` las rechaza); el escape es la segunda línea de defensa, para que ningún glob
+ * cierre el escalar ni inicie un escape.
+ */
+const quotedGlob = (glob) => `"${glob.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+
 /** The frontmatter the harness reads to scope a rule to paths. @es El frontmatter que lee el harness para dar a una regla alcance de ruta. */
-const frontmatterOf = (paths) => ['---', 'paths:', ...paths.map((glob) => `  - "${glob}"`), '---'].join('\n');
+const frontmatterOf = (paths) => ['---', 'paths:', ...paths.map((glob) => `  - ${quotedGlob(glob)}`), '---'].join('\n');
 
 /** The header of a new stubs file; it says it is never loaded and where the rule text is. @es El encabezado de un fichero de muñones nuevo. */
 export const STUBS_HEADER = `# Promoted lesson stubs — NOT loaded\n\nOne line per promoted lesson (a repeat folds into its line and bumps the counter). The harness does NOT load this file:\nnothing imports it and it is not under rules/. The rule text itself is in \`~/.claude/rules/promoted-rules.md\` (or, for an\narea, in its \`promoted-<area>.md\`), which it loads. Machine state: the trailing \`<!--fc:KEY#N-->\` marker belongs to\n\`~/.claude/failure-capture/\`; this file is written only by \`capture.mjs\`, never by hand.\n\n---\n`;

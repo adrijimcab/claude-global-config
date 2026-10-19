@@ -111,12 +111,19 @@ export function provesBlockRoute({ before, after, block, key, header }) {
 
 /**
  * Writes a planned block route, RE-READS both files and proves it, restoring what was there when the proof fails.
- * The writes are the caller's (`io`), so a proof can make them lie; the proof is taken on what `readBack` gives.
+ * The plan is proved BEFORE any write, as a lesson route is: a plan that would alter, drop or duplicate the block
+ * never reaches the disk. The writes are the caller's (`io`), so a proof can make them lie; the proof after the write
+ * is taken on what `readBack` gives.
  * @param input `{ before, plan, io }` — `before` the `{ from, to }` texts as they were (`to` `undefined` when the file did not exist); `plan` from `planBlockRoute`; `io` `{ writeFrom(text), writeTo(text | undefined), readBack() }`.
- * @returns the proof; on `ok: false` both files were restored.
- * @es Escribe una ruta de bloque planeada, RELEE ambos ficheros y la prueba, restaurando lo que había si falla.
+ * @returns the proof; on `ok: false` both files were restored, or, when `written` is `false`, never touched.
+ * @es Escribe una ruta de bloque planeada, RELEE ambos ficheros y la prueba, restaurando lo que había si falla. El
+ * plan se prueba ANTES de escribir: un plan que alteraría, perdería o duplicaría el bloque nunca llega al disco.
  */
 export function commitBlockRoute({ before, plan, io }) {
+  const planned = provesBlockRoute({ before, after: { from: plan.from, to: plan.to }, block: plan.block, key: plan.key, header: plan.header });
+
+  if (!planned.ok) return { ...planned, written: false };
+
   io.writeTo(plan.to);
   io.writeFrom(plan.from);
 

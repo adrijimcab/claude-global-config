@@ -191,17 +191,40 @@ export function provesRoute({ before, after, renamed = new Map() }) {
   return deficits.length === 0 ? { ok: true } : { ok: false, deficits };
 }
 
+/** The text of a thrown value. @es El texto de un valor lanzado. */
+const messageOf = (error) => (error instanceof Error ? error.message : String(error));
+
 /**
- * Writes a planned route, RE-READS both files and proves it, restoring what was there when the proof fails.
+ * The bilingual error a route rethrows when a write threw: what failed, and whether both files were put back.
+ * @es El error bilingüe que relanza una ruta cuando una escritura lanzó: qué falló y si ambos ficheros se repusieron.
+ */
+function writeFailure(cause, restoreFailure) {
+  const english = restoreFailure === undefined
+    ? `route FAILED while writing (${messageOf(cause)}); both files were restored to the bytes they had.`
+    : `route FAILED while writing (${messageOf(cause)}), and restoring the files failed too (${messageOf(restoreFailure)}); check both files by hand.`;
+  const spanish = restoreFailure === undefined
+    ? `route FALLÓ al escribir (${messageOf(cause)}); ambos ficheros se restauraron a los bytes que tenían.`
+    : `route FALLÓ al escribir (${messageOf(cause)}), y restaurar los ficheros también falló (${messageOf(restoreFailure)}); revisa ambos ficheros a mano.`;
+
+  return new Error(`${english} @es ${spanish}`, { cause });
+}
+
+/**
+ * Writes a planned route as ONE transaction, RE-READS both files and proves it. The plan is proved before any write;
+ * the bytes both files had are kept (`io.snapshot`) before the first write, and put back (`io.restore`) when a write
+ * throws or the re-read files fail the proof, so a failed second write never leaves a lesson in two files.
  * The writes are the caller's (`io`), so a proof can make them lie: the proof is taken on what `readBack` gives,
  * never on what was planned, so it cannot be satisfied by the write it checks.
  * @param input `{ before, plan, io }` — `before` the `{ source, destination }` lines as they were; `plan` from a `plan…Route`;
- *   `io` `{ writeSource(lines), writeDestination(lines | undefined), readBack() }` (`undefined` removes the destination file).
+ *   `io` `{ writeSource(lines), writeDestination(lines | undefined), readBack(), snapshot(), restore(saved) }`
+ *   (`undefined` removes the destination file; `snapshot` returns the bytes both files hold, `restore` writes them back).
  * @returns the proof: `{ ok: true }` or `{ ok: false, deficits }`; on `ok: false` both files were restored, or, when
- *   `written` is `false`, never touched (the plan itself failed the proof).
- * @es Escribe una ruta planeada, RELEE ambos ficheros y la prueba, restaurando lo que había si la prueba falla.
- * Las escrituras son del llamante (`io`), para que una prueba pueda hacerlas mentir: la prueba se toma sobre lo
- * que da `readBack`, nunca sobre lo planeado.
+ *   `written` is `false`, never touched (the plan itself failed the proof). A write that throws is rethrown, bilingual,
+ *   after both files were restored.
+ * @es Escribe una ruta planeada como UNA transacción, RELEE ambos ficheros y la prueba. El plan se prueba antes de
+ * escribir; los bytes de ambos ficheros se guardan (`io.snapshot`) antes de la primera escritura y se reponen
+ * (`io.restore`) si una escritura lanza o los ficheros releídos no pasan la prueba, así una segunda escritura fallida
+ * nunca deja una lección en dos ficheros. La prueba se toma sobre lo que da `readBack`, nunca sobre lo planeado.
  */
 export function commitRoute({ before, plan, io }) {
   // The same proof, taken on the plan BEFORE any write: a plan that would drop, duplicate or reword a lesson line
@@ -212,15 +235,24 @@ export function commitRoute({ before, plan, io }) {
 
   if (!planned.ok) return { ...planned, written: false };
 
-  io.writeDestination(plan.destination);
-  io.writeSource(plan.source);
+  const saved = io.snapshot();
+
+  try {
+    io.writeDestination(plan.destination);
+    io.writeSource(plan.source);
+  } catch (cause) {
+    try {
+      io.restore(saved);
+    } catch (restoreFailure) {
+      throw writeFailure(cause, restoreFailure);
+    }
+
+    throw writeFailure(cause);
+  }
 
   const proof = provesRoute({ before, after: io.readBack(), renamed: plan.renamed });
 
-  if (!proof.ok) {
-    io.writeSource(before.source);
-    io.writeDestination(before.destination);
-  }
+  if (!proof.ok) io.restore(saved);
 
   return proof;
 }
@@ -273,12 +305,18 @@ export function provesHeaderRoute({ before, after, header }) {
 }
 
 /**
- * Writes a ledger with its declared header, RE-READS it and proves it, restoring the ledger as it was when the proof fails.
+ * Writes a ledger with its declared header, RE-READS it and proves it, restoring the ledger as it was when the proof
+ * fails. The plan is proved BEFORE the write, as a lesson route is: a plan that would change a lesson never reaches the disk.
  * @param input `{ before, plan, header, io }` — `io` is `{ write(lines), readBack() }`.
- * @returns the proof.
+ * @returns the proof; `written: false` when the plan itself failed it and nothing was written.
  * @es Escribe un ledger con su encabezado declarado, lo RELEE y lo prueba, restaurando el ledger si la prueba falla.
+ * El plan se prueba ANTES de escribir, como una ruta de lección: un plan que cambiaría una lección nunca llega al disco.
  */
 export function commitHeaderRoute({ before, plan, header, io }) {
+  const planned = provesHeaderRoute({ before, after: plan.lines, header });
+
+  if (!planned.ok) return { ...planned, written: false };
+
   io.write(plan.lines);
 
   const proof = provesHeaderRoute({ before, after: io.readBack(), header });

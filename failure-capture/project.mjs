@@ -33,12 +33,12 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { realpathOf, sameFolder } from '../agent-contract-parity/real-path.mjs';
 import { userHomes } from '../agent-contract-parity/user-home.mjs';
-import { areaProblems } from './project-areas.mjs';
+import { areaProblems, normalizedAreas } from './project-areas.mjs';
 
 export const PROJECT_MARKER = path.join('.claude', 'CLAUDE.md');
 export const CONFIG_FILE = path.join('.claude', 'failure-capture.json');
@@ -53,6 +53,39 @@ const CONFIG_KEYS = ['scope', 'workerContracts', 'loadedSetCeiling', 'areas'];
  * @es El ledger con alcance de ruta de un área de proyecto, que Claude Code carga solo al leer un fichero que coincide con los globs del área.
  */
 export const projectAreaFile = (root, area) => path.join(root, '.claude', 'rules', `lessons-${area}.md`);
+
+const AREA_FILE_PREFIX = 'lessons-';
+const AREA_FILE_SUFFIX = '.md';
+const ENTRY_PREFIX = '- [';
+
+/**
+ * The defects of a declaration that stopped declaring an area whose ledger still holds lessons: every
+ * `.claude/rules/lessons-<area>.md` of the project whose area is not in `areas` and that holds a lesson line. Such a
+ * file is no ledger of the project any more, so its lessons would be hidden from every capture (a recurrence would
+ * be written a second time) and a spooled capture of that area would have nowhere to go.
+ * @es Los defectos de una declaración que dejó de declarar un área cuyo ledger aún tiene lecciones: cada
+ * `.claude/rules/lessons-<área>.md` del proyecto cuya área no está en `areas` y que tiene una línea de lección. Ese
+ * fichero ya no es un ledger del proyecto, así que sus lecciones quedarían ocultas a toda captura (una recurrencia se
+ * escribiría dos veces) y una captura en el spool de esa área no tendría adónde ir.
+ */
+function strandedAreaProblems(root, areas) {
+  const directory = path.join(root, '.claude', 'rules');
+  let names;
+
+  try {
+    names = readdirSync(directory);
+  } catch {
+    return [];
+  }
+
+  return names
+    .filter((name) => name.startsWith(AREA_FILE_PREFIX) && name.endsWith(AREA_FILE_SUFFIX))
+    .map((name) => ({ name, area: name.slice(AREA_FILE_PREFIX.length, -AREA_FILE_SUFFIX.length) }))
+    .filter(({ area }) => !Object.hasOwn(areas ?? {}, area))
+    .map(({ name, area }) => ({ name, area, count: readFileSync(path.join(directory, name), 'utf8').split('\n').filter((line) => line.startsWith(ENTRY_PREFIX)).length }))
+    .filter(({ count }) => count > 0)
+    .map(({ name, area, count }) => `the area "${area}" is no longer declared, but .claude/rules/${name} still holds ${String(count)} lesson(s) that no capture would see any more; route its lessons out of that file before dropping or renaming the area (no route command moves a lesson out of a project area yet), or keep declaring it. @es el área "${area}" ya no está declarada, pero .claude/rules/${name} aún tiene ${String(count)} lección(es) que ninguna captura vería; enruta sus lecciones fuera de ese fichero antes de quitar o renombrar el área (ningún comando route mueve todavía una lección fuera de un área de proyecto), o sigue declarándola`);
+}
 
 function git(directory, ...args) {
   const answer = spawnSync('git', ['-C', directory, ...args], { encoding: 'utf8', windowsHide: true });
@@ -103,13 +136,18 @@ export function readProjectConfig(root) {
   if (!existsSync(file)) return {};
 
   const config = JSON.parse(readFileSync(file, 'utf8'));
+
+  if (config.areas !== undefined) config.areas = normalizedAreas(config.areas);
+
+  const declared = areaProblems(config.areas);
   const unknown = Object.keys(config).filter((key) => !CONFIG_KEYS.includes(key));
   const problems = [
     ...unknown.map((key) => `unknown key "${key}"`),
     ...(config.scope === undefined || (typeof config.scope === 'string' && config.scope.length > 0 && config.scope !== GLOBAL_SCOPE) ? [] : ['"scope" must be a non-empty string other than "global"']),
     ...(config.workerContracts === undefined || (Array.isArray(config.workerContracts) && config.workerContracts.length > 0 && config.workerContracts.every((entry) => typeof entry === 'string')) ? [] : ['"workerContracts" must be a non-empty list of relative paths']),
     ...(config.loadedSetCeiling === undefined || (Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0) ? [] : ['"loadedSetCeiling" must be a positive integer (characters). @es "loadedSetCeiling" debe ser un entero positivo (caracteres)']),
-    ...areaProblems(config.areas)
+    ...declared,
+    ...(declared.length === 0 ? strandedAreaProblems(root, config.areas) : [])
   ];
 
   if (problems.length > 0) throw new Error(`${file} is invalid: ${problems.join('; ')}`);

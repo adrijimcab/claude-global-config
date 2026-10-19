@@ -25,8 +25,10 @@ import path from 'node:path';
 
 import { holdsWholeLine } from './conservation.mjs';
 import { lessonFor, makeCaptureWorld, readOrEmpty } from './capture-world.mjs';
+import { frontmatterOf } from './harness-count.mjs';
+import { loadedSet } from './loaded-set.mjs';
 import { areaLedgerHeader } from './ledger-routes.mjs';
-import { HEADER, PROJECT_LOADER, ledgerFiles } from './ledgers.mjs';
+import { GLOBAL_LOADER, HEADER, PROJECT_LOADER, ledgerFiles } from './ledgers.mjs';
 import { areaProblems } from './project-areas.mjs';
 import { areasOfLedger, projectAreaFile, projectOf } from './project.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
@@ -169,7 +171,16 @@ for (const [name, areas, wanted] of [
   ['an area that is null', { 'null-area': null }, 'must be an object'],
   ['an "about" that is empty', { 'blank-area': { about: '', paths: ['a'] } }, '"about"'],
   ['an unknown key inside an area', { 'extra-key-area': { about: 'x', paths: ['a'], more: 1 } }, 'unknown key "more"'],
-  ['areas that is a list', [], '"areas" must be an object']
+  ['areas that is a list', [], '"areas" must be an object'],
+  ['a glob with a backslash (a YAML escape in the double-quoted frontmatter)', { 'slash-area': { about: 'x', paths: ['src\\app\\**'] } }, '"paths"'],
+  ['a glob with a tab (a control character)', { 'tab-area': { about: 'x', paths: ['a\tb'] } }, '"paths"'],
+  ['a glob with a NUL (a control character)', { 'nul-area': { about: 'x', paths: ['a\u0000b'] } }, '"paths"'],
+  ['a glob with a DEL (a control character)', { 'del-area': { about: 'x', paths: ['a\u007fb'] } }, '"paths"'],
+  ['an "about" with a line feed (it would inject lines into the header)', { 'feed-about-area': { about: 'x\n- [demo] 2026-01-01 — injected', paths: ['a'] } }, '"about"'],
+  ['an "about" with a carriage return', { 'return-about-area': { about: 'x\ry', paths: ['a'] } }, '"about"'],
+  ['the always-loaded glob "**" (the area would not be path-scoped)', { 'all-area': { about: 'x', paths: ['src/**', '**'] } }, 'every file'],
+  ['the always-loaded glob "**/*"', { 'all-files-area': { about: 'x', paths: ['**/*'] } }, 'every file'],
+  ['the always-loaded glob "**/**"', { 'all-below-area': { about: 'x', paths: ['**/**'] } }, 'every file']
 ]) {
   const problems = areaProblems(areas);
 
@@ -204,6 +215,126 @@ for (const [name, areas, wanted] of [
 }
 
 check('a valid declaration, or none, has no problem', areaProblems(AREAS).length === 0 && areaProblems(undefined).length === 0, JSON.stringify(areaProblems(AREAS)));
+check('...a path-scoped glob that starts with "**" is still valid', areaProblems({ 'deep-area': { about: 'x', paths: ['**/*.spec.ts', '**/e2e/**'] } }).length === 0, JSON.stringify(areaProblems({ 'deep-area': { about: 'x', paths: ['**/*.spec.ts', '**/e2e/**'] } })));
+
+// ---------------------------------------------------------------------------------------------
+// a glob declared with Windows separators is normalised, and the frontmatter the harness reads stays path-scoped
+// ---------------------------------------------------------------------------------------------
+
+{
+  const SLASHED = { [AREA]: { about: 'writing browser and component tests', paths: ['src\\app\\**', 'e2e\\*.spec.ts'] } };
+  const moving = lessonLine('demo', KEY, 2);
+  const world = worldOf('backslash-glob', { config: { scope: 'demo', areas: SLASHED }, files: { 'repo/.claude/lessons-ledger.md': `${projectHead('demo')}${moving}` } });
+  const project = (() => {
+    try {
+      return projectOf(world.repo, { homes: [world.home] });
+    } catch (error) {
+      return { areas: `threw: ${error.message}` };
+    }
+  })();
+
+  check('a glob declared with backslashes is normalised to forward slashes when the config is read', JSON.stringify(project?.areas?.[AREA]?.paths) === JSON.stringify(['src/app/**', 'e2e/*.spec.ts']), JSON.stringify(project?.areas));
+
+  const written = world.run(['route', '--key', KEY, '--to', AREA, '--write']);
+  const file = readOrEmpty(areaFile(world));
+
+  check('...the area file is written with the normalised globs, no YAML escape in its frontmatter', written.status === 0 && frontmatterOf(file) === '---\npaths:\n  - "src/app/**"\n  - "e2e/*.spec.ts"\n---\n', `${written.out}\n${JSON.stringify(frontmatterOf(file))}`);
+
+  const loaded = loadedSet({ home: world.home, projectRoot: world.repo, ceiling: path.dirname(world.repo) }).files.map((one) => path.resolve(one.path));
+
+  check('...and the reader of the loaded set reads that frontmatter as path-scoped: the area file is not always loaded', existsSync(areaFile(world)) && !loaded.includes(path.resolve(areaFile(world))) && loaded.includes(path.resolve(path.join(world.repo, '.claude', 'CLAUDE.md'))), JSON.stringify(loaded));
+}
+
+{
+  const header = areaLedgerHeader('escape-area', { about: 'x', paths: ['a\\b"c'] });
+
+  check('the frontmatter ESCAPES a backslash and a double quote at write time (defence in depth)', header.startsWith('---\npaths:\n  - "a\\\\b\\"c"\n---\n'), JSON.stringify(header.slice(0, 60)));
+  check('...a glob with neither is written as it is', areaLedgerHeader(AREA, AREAS[AREA]).startsWith('---\npaths:\n  - "**/*.spec.ts"\n  - "e2e/**"\n---\n'), areaLedgerHeader(AREA, AREAS[AREA]).slice(0, 60));
+}
+
+// ---------------------------------------------------------------------------------------------
+// an area that is dropped from the declaration while its file still holds lessons
+// ---------------------------------------------------------------------------------------------
+
+{
+  const world = worldOf('dropped-with-lessons', { config: { scope: 'demo', areas: {} }, files: { 'repo/.claude/lessons-ledger.md': projectHead('demo'), [`repo/.claude/rules/lessons-${AREA}.md`]: `${areaLedgerHeader(AREA, AREAS[AREA])}\n${lessonLine(AREA, KEY, 2)}` } });
+  const refused = world.run(['status']);
+
+  check('a declaration that drops an area whose file still holds lessons is refused (exit 2), bilingual, naming the file and saying to route them out first', refused.status === 2 && refused.out.includes(`lessons-${AREA}.md`) && refused.out.includes('route its lessons out') && refused.out.includes('enruta sus lecciones fuera'), refused.out);
+}
+
+{
+  const world = worldOf('renamed-with-lessons', { config: { scope: 'demo', areas: { 'browser-testing': AREAS[AREA] } }, files: { 'repo/.claude/lessons-ledger.md': projectHead('demo'), [`repo/.claude/rules/lessons-${AREA}.md`]: `${areaLedgerHeader(AREA, AREAS[AREA])}\n${lessonLine(AREA, KEY, 2)}` } });
+  const refused = world.run(['capture', '--key', KEY, '--scope', 'demo', '--actor', 'orchestrator', '--lesson', lessonFor(KEY)]);
+
+  check('a RENAMED area whose old file holds lessons is refused too, and the lesson is not written a second time', refused.status === 2 && refused.out.includes(`lessons-${AREA}.md`) && !readOrEmpty(projectLedger(world)).includes(KEY), `${refused.out}\n${readOrEmpty(projectLedger(world))}`);
+}
+
+{
+  // Beside it, a rules file that is not an area ledger holds a markdown task list (`- [ ]`), and a `lessons-*.txt`
+  // holds a lesson-shaped line: neither is an area ledger, so neither is read as a stranded area.
+  // @es A su lado, un fichero de reglas que no es ledger de área tiene una lista de tareas markdown (`- [ ]`), y un
+  // `lessons-*.txt` tiene una línea con forma de lección: ninguno es ledger de área, así que ninguno cuenta como área varada.
+  const world = worldOf('dropped-empty', { config: { scope: 'demo', areas: {} }, files: { 'repo/.claude/lessons-ledger.md': projectHead('demo'), [`repo/.claude/rules/lessons-${AREA}.md`]: areaLedgerHeader(AREA, AREAS[AREA]), 'repo/.claude/rules/checklist.md': '# Checklist\n\n- [ ] a task list item\n', 'repo/.claude/rules/lessons-notes.txt': lessonLine('notes', KEY, 1) } });
+  const accepted = world.run(['status']);
+
+  check('...while dropping an area whose file holds no lesson is accepted, and rules files that are not area ledgers are not read as such', accepted.status === 0, accepted.out);
+}
+
+{
+  // An entry spooled under an area that has since been dropped has no ledger: it is DEFERRED, with its reason recorded
+  // in the entry, and every later reconcile keeps working.
+  // @es Una entrada del spool bajo un área que ya no está declarada no tiene ledger: se DIFIERE, con su motivo anotado
+  // en la entrada, y cada reconciliación posterior sigue funcionando.
+  const world = worldOf('spooled-dropped-area', { config: { scope: 'demo', areas: {} }, files: { 'repo/.claude/lessons-ledger.md': projectHead('demo') } });
+  const spoolDir = path.join(world.home, '.claude', 'failure-capture', 'state', 'spool');
+  const spooled = path.join(spoolDir, '1-1-dropped.json');
+
+  mkdirSync(spoolDir, { recursive: true });
+  writeFileSync(spooled, JSON.stringify({ key: 'spooled-dropped-key', scope: AREA, actor: 'orchestrator', lesson: lessonFor('spooled-dropped-key'), date: '2026-09-14', session: 'x', at: '2026-09-14T00:00:00.000Z', project: { scope: 'demo', ledgerFile: projectLedger(world) } }), 'utf8');
+
+  const first = world.run(['capture', '--key', 'first-after-drop-key', '--scope', 'demo', '--actor', 'orchestrator', '--lesson', lessonFor('first-after-drop-key')]);
+  const second = world.run(['capture', '--key', 'second-after-drop-key', '--scope', 'demo', '--actor', 'orchestrator', '--lesson', lessonFor('second-after-drop-key')]);
+  const left = (() => {
+    try {
+      return JSON.parse(readOrEmpty(spooled));
+    } catch {
+      return {};
+    }
+  })();
+
+  check('a spooled entry whose area was dropped does not wedge the spool: the next captures succeed and are written', first.status === 0 && second.status === 0 && readOrEmpty(projectLedger(world)).includes('<!--fc:first-after-drop-key#1-->') && readOrEmpty(projectLedger(world)).includes('<!--fc:second-after-drop-key#1-->'), `${first.out}\n${second.out}`);
+  check('...the entry is left in the spool, written nowhere, with the reason it was deferred recorded in it, bilingual', left.key === 'spooled-dropped-key' && typeof left.deferred?.reason === 'string' && left.deferred.reason.includes(AREA) && left.deferred.reason.includes(' @es ') && typeof left.deferred.at === 'string' && !readOrEmpty(projectLedger(world)).includes('spooled-dropped-key'), JSON.stringify(left));
+
+  // Declared again, the scope has its ledger back: the entry folds into it, and the deferral record is not part of the capture.
+  // @es Declarado de nuevo, el alcance recupera su ledger: la entrada se pliega en él, y la anotación de diferimiento no es parte de la captura.
+  writeFileSync(path.join(world.repo, '.claude', 'failure-capture.json'), JSON.stringify({ scope: 'demo', areas: AREAS }), 'utf8');
+
+  const third = world.run(['capture', '--key', 'third-after-drop-key', '--scope', 'demo', '--actor', 'orchestrator', '--lesson', lessonFor('third-after-drop-key')]);
+  const folded = readOrEmpty(world.incidents).split('\n').filter((line) => line.includes('spooled-dropped-key'));
+
+  check('...once the area is declared again the deferred entry folds into its ledger and leaves the spool, and its incident carries no deferral record', third.status === 0 && readOrEmpty(areaFile(world)).includes('<!--fc:spooled-dropped-key#1-->') && !existsSync(spooled) && folded.length === 1 && !folded[0].includes('deferred'), `${third.out}\n${readOrEmpty(areaFile(world))}\n${folded.join('\n')}`);
+}
+
+// ---------------------------------------------------------------------------------------------
+// route --headers refreshes the project's own area files too
+// ---------------------------------------------------------------------------------------------
+
+{
+  const lessonInArea = lessonLine(AREA, KEY, 2);
+  const stale = `---\npaths:\n  - "old/**"\n---\n# Old area header\n\nLessons about something else.\n\n---\n\n${lessonInArea}`;
+  // The home ledger already carries its declared header, so only the project area file has a header to refresh.
+  // @es El ledger del home ya lleva su encabezado declarado, así que solo el fichero del área de proyecto tiene encabezado que refrescar.
+  const world = worldOf('headers-project-area', { files: { 'home/.claude/lessons-ledger.md': HEADER('global', GLOBAL_LOADER), 'repo/.claude/lessons-ledger.md': projectHead('demo'), [`repo/.claude/rules/lessons-${AREA}.md`]: stale } });
+  const dry = world.run(['route', '--headers']);
+
+  check('route --headers names a project area file whose header is stale, and a dry run writes nothing', dry.status === 0 && dry.out.includes(AREA) && readOrEmpty(areaFile(world)) === stale, dry.out);
+
+  const done = world.run(['route', '--headers', '--write']);
+  const file = readOrEmpty(areaFile(world));
+
+  check('route --headers --write gives the project area file its declared header (paths and about) and keeps its lesson byte for byte', done.status === 0 && file.startsWith(areaLedgerHeader(AREA, AREAS[AREA]).trimEnd()) && holdsWholeLine(file, lessonInArea.trimEnd()) && !file.includes('old/**'), `${done.out}\n${file}`);
+}
 
 for (const [name, areas, wanted] of [
   ['an area named like a home area', { guards: { about: 'x', paths: ['a'] } }, 'is reserved'],

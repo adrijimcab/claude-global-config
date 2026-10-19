@@ -100,9 +100,58 @@ function memory(initial) {
     io: {
       writeSource: (next) => { state.source = next; state.writes.push('source'); },
       writeDestination: (next) => { state.destination = next; state.writes.push('destination'); },
-      readBack: () => ({ source: state.source, destination: state.destination })
+      readBack: () => ({ source: state.source, destination: state.destination }),
+      snapshot: () => ({ source: state.source, destination: state.destination }),
+      restore: (saved) => { state.source = saved.source; state.destination = saved.destination; state.writes.push('restore'); }
     }
   };
+}
+
+{
+  // The second write THROWS after the first one landed: the commit is one transaction, so both files go back to the
+  // bytes they had and the failure is rethrown, bilingual, never left as a lesson written twice.
+  // @es La segunda escritura LANZA después de que la primera aterrizó: el commit es una transacción, así que ambos
+  // ficheros vuelven a los bytes que tenían y el fallo se relanza, bilingüe; nunca queda una lección escrita dos veces.
+  const world = memory(before);
+  const failing = { ...world.io, writeSource: () => { world.state.writes.push('source'); throw new Error('disk full'); } };
+  let thrown;
+
+  try {
+    rawCommitRoute({ before, plan: planned, io: failing });
+  } catch (error) {
+    thrown = error;
+  }
+
+  check('a write that throws after the first one is rethrown, bilingual, naming the cause', thrown instanceof Error && thrown.message.includes('disk full') && thrown.message.includes(' @es '), String(thrown));
+  check('...and BOTH files are restored to the bytes they had, so the lesson is not left in two places', world.state.source.join('\n') === before.source.join('\n') && world.state.destination.join('\n') === before.destination.join('\n') && world.state.writes.join() === 'destination,source,restore', JSON.stringify(world.state));
+}
+
+{
+  const world = memory(before);
+  const failing = { ...world.io, writeDestination: () => { world.state.writes.push('destination'); throw new Error('no space'); } };
+  let thrown;
+
+  try {
+    rawCommitRoute({ before, plan: planned, io: failing });
+  } catch (error) {
+    thrown = error;
+  }
+
+  check('a FIRST write that throws is rethrown too, and what it may have half-done is restored', thrown instanceof Error && thrown.message.includes('no space') && world.state.writes.join() === 'destination,restore' && world.state.destination.join('\n') === before.destination.join('\n'), JSON.stringify([String(thrown), world.state]));
+}
+
+{
+  const world = memory(before);
+  const failing = { ...world.io, writeSource: () => { throw new Error('disk full'); }, restore: () => { throw new Error('still full'); } };
+  let thrown;
+
+  try {
+    rawCommitRoute({ before, plan: planned, io: failing });
+  } catch (error) {
+    thrown = error;
+  }
+
+  check('a restore that fails as well is named in the rethrown error, with both causes, in both languages', thrown instanceof Error && thrown.message.includes('disk full') && thrown.message.includes('restoring the files failed too (still full)') && thrown.message.includes('restaurar los ficheros también falló (still full)'), String(thrown));
 }
 
 {
@@ -209,6 +258,23 @@ for (const [name, plan] of [
   const proof = commitHeaderRoute({ before: old, plan, header: declared, io: liar });
 
   check('a write that drops a lesson is NOT proved, and the ledger is restored as it was', !proof.ok && state.join('\n') === old.join('\n'), JSON.stringify([proof, state]));
+
+  // The header proof is taken on the plan BEFORE the write, as for a lesson route: a plan that would lose a lesson
+  // never reaches the disk.
+  // @es La prueba del encabezado se toma sobre el plan ANTES de escribir, como en una ruta de lección: un plan que
+  // perdería una lección nunca llega al disco.
+  for (const [name, broken] of [
+    ['drops a lesson', { ...plan, lines: plan.lines.filter((line) => !line.includes('second-key')) }],
+    ['does not begin with the declared header', { ...plan, lines: ['# Another', ...plan.lines.slice(1)] }],
+  ]) {
+    let writes = 0;
+    const counted = { write: () => { writes += 1; }, readBack: () => old };
+    const refused = commitHeaderRoute({ before: old, plan: broken, header: declared, io: counted });
+
+    check(`a header plan that ${name} is REFUSED before any write, marked as never written, bilingual`, !refused.ok && refused.written === false && writes === 0 && refused.deficits.every((deficit) => deficit.includes(' @es ')), JSON.stringify([refused, writes]));
+  }
+
+  check('...and the command reports a refused header plan as a refused plan', routeOutcome({ proof: commitHeaderRoute({ before: old, plan: { ...plan, lines: plan.lines.filter((line) => !line.includes('second-key')) }, header: declared, io: { write: () => {}, readBack: () => old } }), count: 1 }).complain === 'route.planUnproven');
 }
 
 // --- moving a lesson of a PROJECT into an area of the SAME project
