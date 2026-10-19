@@ -11,19 +11,25 @@
  * Claude Code resolves them), through the shared reader of `agent-toolset-check`, which reads only a plain
  * comma list (a flow list, quotes, a block list, an empty value or a repeated key is a problem). A role is
  * read-only only when that reading succeeds and the toolset reaches none of `WRITE_TOOLS` (a scoped
- * `Bash(npm:*)` reaches Bash; `disallowedTools:` counted) and no MCP tool: an MCP server can write anywhere it
- * is wired to, and `tools: []` reaches every one, so it is always a writer. A role with no file, an unreadable
- * file, an unread shape, or no `subagent_type` (general-purpose) is a writer: a failed reading is never a
- * clean one, and the reason it failed travels with the verdict.
+ * `Bash(npm:*)` reaches Bash; `disallowedTools:` counted). A role with no file, an unreadable file, an unread
+ * shape, or no `subagent_type` (general-purpose) is a writer: a failed reading is never a clean one, and the
+ * reason it failed travels with the verdict.
+ *
+ * THE QUESTION IS "CAN THIS ROLE REDO PARKED REPOSITORY WORK?" (2026-10-19, owner-side decision), so the writer
+ * tools are exactly the ones that change the repository: Write, Edit, NotebookEdit, Bash and PowerShell, scoped
+ * forms included. MCP tools do not count. LIMIT, stated: a role wired to an MCP server that writes the file
+ * system is out of this guard's scope and reads as read-only.
  *
  * @es Si el rol que lanza una delegación puede ESCRIBIR: lo único que decide si el trabajo aparcado rechaza el
  * lanzamiento o solo se muestra. LA DECISIÓN FALLA CERRADA. Se lee de la definición del rol (`tools:` del
  * frontmatter, proyecto primero y luego la instalación) con el lector compartido de `agent-toolset-check`, que
  * solo lee una lista simple separada por comas. Es de solo lectura únicamente si esa lectura funciona y el
- * conjunto no alcanza ninguna de `WRITE_TOOLS` (un `Bash(npm:*)` con ámbito alcanza Bash) ni ninguna herramienta
- * MCP: un servidor MCP puede escribir donde esté conectado, y `tools: []` las alcanza todas, así que siempre
- * escribe. Sin fichero, con un fichero ilegible, con una forma no leída o sin `subagent_type` (general-purpose)
- * es escritor: una lectura fallida nunca es una limpia, y el motivo del fallo viaja con el veredicto.
+ * conjunto no alcanza ninguna de `WRITE_TOOLS` (un `Bash(npm:*)` con ámbito alcanza Bash). Sin fichero, con un
+ * fichero ilegible, con una forma no leída o sin `subagent_type` (general-purpose) es escritor: una lectura fallida
+ * nunca es una limpia, y el motivo del fallo viaja con el veredicto. LA PREGUNTA ES «¿PUEDE ESTE ROL REHACER TRABAJO
+ * APARCADO DEL REPOSITORIO?», así que las herramientas de escritura son exactamente Write, Edit, NotebookEdit, Bash
+ * y PowerShell, con ámbito incluido. Las herramientas MCP no cuentan. LÍMITE, dicho: un rol conectado a un servidor
+ * MCP que escribe en el sistema de ficheros queda fuera del alcance de esta guarda y se lee como de solo lectura.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -39,9 +45,6 @@ import { declarationOf, EXECUTION_TOOLS, reaches } from '../../agent-toolset-che
  * hacer commit o redirigir a un fichero, así que cuenta como escritor (decisión del 2026-10-19).
  */
 export const WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit', ...EXECUTION_TOOLS];
-
-/** The prefix every MCP tool name carries. @es El prefijo que lleva todo nombre de herramienta MCP. */
-export const MCP_PREFIX = 'mcp__';
 
 /**
  * Built-in types that have no definition file. Source: the harness's own `Agent` tool listing, which states
@@ -98,7 +101,5 @@ export function launchAccess(payload, directories) {
   if (declaration === undefined) return { readOnly: READ_ONLY_BUILT_INS.has(role) };
   if (declaration.problem !== undefined) return { readOnly: false, problem: `role ${role} ${declaration.problem}` };
 
-  const reachesMcp = declaration.all || declaration.declared.some((tool) => tool.startsWith(MCP_PREFIX));
-
-  return { readOnly: !reachesMcp && !WRITE_TOOLS.some((tool) => reaches(declaration, tool)) };
+  return { readOnly: !WRITE_TOOLS.some((tool) => reaches(declaration, tool)) };
 }

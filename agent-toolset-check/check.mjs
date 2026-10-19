@@ -98,6 +98,32 @@ function valuesOf(frontmatter, key) {
   return frontmatter.filter((candidate) => candidate.startsWith(`${key}:`)).map((line) => line.slice(key.length + 1).trim());
 }
 
+/** The blanks YAML allows between a key and its colon, and before a continuation. @es Los blancos que YAML admite antes de los dos puntos y al inicio de una continuación. */
+const BLANKS = [' ', '\t'];
+
+/** Whether `line` spells `key` with blanks before its colon (`tools : Write`). @es Si `line` escribe `key` con blancos antes de los dos puntos. */
+const spacedKey = (line, key) => line.startsWith(key) && BLANKS.includes(line[key.length]) && line.slice(key.length).trim().startsWith(':');
+
+/**
+ * Whether `line` continues the value above it: indented (frontmatter lines are right-trimmed, so an indented line
+ * always holds text). @es Si `line` continúa el valor de arriba: sangrada (las líneas ya vienen sin blancos finales).
+ */
+const continuesValue = (line) => BLANKS.includes(line?.[0]);
+
+/**
+ * The shape of `key` this reader does not read, or `undefined`: a key spelled with blanks before its colon, which
+ * YAML reads as the same key, or an indented line after it, which YAML reads as the rest of its value
+ * (`tools: Read,` then `  Write` is `Read, Write`).
+ * @es La forma de `key` que este lector no lee, o `undefined`: una clave con blancos antes de los dos puntos, que YAML
+ * lee como la misma clave, o una línea sangrada tras ella, que YAML lee como el resto de su valor.
+ */
+function shapeProblem(frontmatter, key) {
+  if (frontmatter.some((line) => spacedKey(line, key))) return `spells \`${key}\` with a blank before its colon, which this reader does not read @es escribe \`${key}\` con un blanco antes de los dos puntos, que este lector no lee`;
+  if (frontmatter.some((line, index) => line.startsWith(`${key}:`) && continuesValue(frontmatter[index + 1]))) return `continues \`${key}:\` on an indented line, which this reader does not read @es continúa \`${key}:\` en una línea sangrada, que este lector no lee`;
+
+  return undefined;
+}
+
 /** The characters a tool name is made of. @es Los caracteres de un nombre de herramienta. */
 const NAME_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
 
@@ -154,6 +180,9 @@ function plainListOf(frontmatter, key) {
 export function declarationOf(text) {
   const frontmatter = frontmatterOf(text);
   if (frontmatter === undefined) return { problem: 'has no frontmatter, so its tools cannot be read @es no tiene frontmatter, así que no se leen sus herramientas' };
+
+  const shape = shapeProblem(frontmatter, 'tools') ?? shapeProblem(frontmatter, 'disallowedTools');
+  if (shape !== undefined) return { problem: shape };
 
   const toolValues = valuesOf(frontmatter, 'tools');
   if (toolValues.length === 0) return { problem: 'declares no `tools:` line, so its capability is unverifiable @es no declara `tools:`, así que su capacidad no es verificable' };

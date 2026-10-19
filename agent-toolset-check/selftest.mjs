@@ -130,6 +130,13 @@ check('declarationOf reads disallowedTools', declarationOf(role(['tools: []', 'd
 // --- only a plain comma list is read: every other YAML shape is a problem, never a narrow toolset.
 // @es Solo se lee una lista simple separada por comas: cualquier otra forma YAML es un problema, nunca un conjunto estrecho.
 const UNREAD_SHAPES = {
+  'a multi-line plain scalar (YAML continues the value)': ['tools: Read,', '  Bash'],
+  'a multi-line plain scalar indented with a tab': ['tools: Read,', '\tBash'],
+  'every tool continued on the next line': ['tools: []', '  Bash'],
+  'a tools key with a space before its colon': ['tools: Read', 'tools : Bash'],
+  'a tools key with a tab before its colon': ['tools: Read', 'tools\t: Bash'],
+  'a continued disallowedTools': ['tools: Read', 'disallowedTools: Bash,', '  Write'],
+  'a disallowedTools key with a space before its colon': ['tools: Read', 'disallowedTools : Bash'],
   'a flow list': ['tools: [Read, Bash]'],
   'a flow list with spaces inside': ['tools: [ Read ]'],
   'a quoted tool': ['tools: Read, "Bash"'],

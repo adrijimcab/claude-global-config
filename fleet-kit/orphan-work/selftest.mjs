@@ -145,6 +145,10 @@ try {
   defineRole('probe-scoped-write', 'tools: Read, Write(src/**)');
   defineRole('probe-mcp-write', 'tools: Read, mcp__github__create_or_update_file');
   defineRole('probe-mcp-read', 'tools: Read, mcp__plugin_engram_engram__mem_search');
+  // The judges' X1 examples: a YAML multi-line plain scalar, and a key spelled with a space before its colon.
+  // @es Los ejemplos X1 de los jueces: un escalar plano YAML de varias líneas y una clave con espacio antes de los dos puntos.
+  defineRole('probe-continued', 'tools: Read,\n  Write');
+  defineRole('probe-spaced-key', 'tools: Read\ntools : Write');
   defineRole('probe-scoped-disallow', 'tools: Read, Bash\ndisallowedTools: Bash(rm:*)');
   defineRole('probe-write-disallowed', 'tools: Read, Write\ndisallowedTools: Write');
   // A definition that exists and cannot be read: a folder where the file should be.
@@ -171,7 +175,7 @@ try {
   check('a role declaring Edit is refused', await launch('probe-editor'), 'deny');
   check('a role declaring NotebookEdit is refused', await launch('probe-notebook'), 'deny');
   check('a role with every tool (`tools: []`) is refused', await launch('probe-all'), 'deny');
-  check('every tool minus the write tools and both shells still reaches every MCP tool: refused', await launch('probe-all-closed'), 'deny');
+  check('every tool minus the write tools and both shells is read-only', await launch('probe-all-closed'), 'note');
   check('every tool minus the three write tools still reaches a shell: refused', await launch('probe-all-no-shell-closed'), 'deny');
   check('a Bash-only role can commit or redirect: refused', await launch('probe-bash-only'), 'deny');
   check('a PowerShell-only role can write through a command: refused', await launch('probe-powershell-only'), 'deny');
@@ -183,9 +187,8 @@ try {
   // @es Una definición de solo lectura que EXISTE una carpeta por encima de la de agentes: solo la comprobación del nombre la deja fuera de alcance.
   writeFile(repository, '.claude/probe-outside.md', '---\nname: probe-outside\ntools: Read\n---\nbody\n');
   check('a role name that walks out of the agents folder is refused', await launch('../probe-outside'), 'deny');
-  check('the install\'s judge (jd-judge-a) reaches MCP tools, so it counts as a writer', await launch('jd-judge-a'), 'deny');
-  // Every install role is now a writer, so the lookup order is pinned on the folders themselves.
-  // @es Todo rol de la instalación es ahora escritor, así que el orden de búsqueda se fija sobre las carpetas.
+  check('the install\'s read-only judge (jd-judge-a) passes with the note', await launch('jd-judge-a'), 'note');
+  check('the install\'s read-only judge (jd-judge-b) passes with the note', await launch('jd-judge-b'), 'note');
   check('the project agents folder is searched first, then the install agents folder', [agentDirectories(repository)[0] === path.join(repository, '.claude', 'agents'), agentDirectories(repository).length, existsSync(path.join(agentDirectories(repository)[1] ?? '', 'jd-judge-a.md'))], [true, 2, true]);
   check('a flow list naming Write is refused', await launch('probe-flow-writer'), 'deny');
   check('a flow list of read tools is refused too: the reader does not read flow lists', await launch('probe-flow-readonly'), 'deny');
@@ -196,8 +199,10 @@ try {
   check('a repeated tools key (YAML keeps the last, which writes) is refused', await launch('probe-repeated-key'), 'deny');
   check('a scoped shell Bash(npm:*) is refused', await launch('probe-scoped-shell'), 'deny');
   check('a scoped Write(src/**) is refused', await launch('probe-scoped-write'), 'deny');
-  check('an MCP write tool is refused', await launch('probe-mcp-write'), 'deny');
-  check('any MCP tool counts as a writer', await launch('probe-mcp-read'), 'deny');
+  check('an MCP tool is out of scope: it cannot redo repository work', await launch('probe-mcp-write'), 'note');
+  check('an MCP read tool passes with the note', await launch('probe-mcp-read'), 'note');
+  check('a multi-line tools value (YAML continues the scalar) is refused', await launch('probe-continued'), 'deny');
+  check('a tools key spelled with a space before its colon is refused', await launch('probe-spaced-key'), 'deny');
   check('a scoped disallowedTools leaves the rest of Bash open: refused', await launch('probe-scoped-disallow'), 'deny');
   check('a write tool closed by disallowedTools leaves a read-only role', await launch('probe-write-disallowed'), 'note');
   check('a role file that exists but cannot be read is refused', await launch('probe-unreadable'), 'deny');
