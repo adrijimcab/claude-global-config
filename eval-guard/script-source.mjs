@@ -60,7 +60,7 @@ const NODE_LONG_VALUES = new Set([...NODE_OPTIONS_TAKING_A_VALUE].filter((option
  * Every interpreter family: its base `names`, whether it is `shellLike` (its `>` is a redirection), and its
  * command line. Short options are read letter by letter: `code` letters take the script elsewhere, `stdin`
  * letters force standard input, `value` letters take a value (the rest of the word, or the next word), `rest`
- * letters swallow the rest of the word, `digits` letters swallow the digits after them. `codeLong` and
+ * letters swallow the rest of the word (`perl -Mfeature=say`). `codeLong` and
  * `valueLong` are the long options. `subcommand` names the one subcommand that keeps reading the command line.
  * @es Cada familia de intérpretes: sus `names` base, si es `shellLike` (su `>` es una redirección) y su línea de
  * órdenes, leída letra a letra para las opciones cortas y por nombre para las largas.
@@ -68,7 +68,7 @@ const NODE_LONG_VALUES = new Set([...NODE_OPTIONS_TAKING_A_VALUE].filter((option
 export const FAMILIES = [
   { family: 'node', names: ['node', 'nodejs', 'tsx'], shellLike: false, code: 'ep', value: 'rC', codeLong: new Set(['--eval', '--print']), valueLong: NODE_LONG_VALUES },
   { family: 'python', names: ['python', 'py'], shellLike: false, code: 'cm', value: 'WXQ' },
-  { family: 'perl', names: ['perl'], shellLike: false, code: 'eE', value: 'I', rest: 'iMmdDxV', digits: 'l0C' },
+  { family: 'perl', names: ['perl'], shellLike: false, code: 'eE', value: 'I', rest: 'iMmdDxV' },
   { family: 'ruby', names: ['ruby'], shellLike: false, code: 'e', value: 'rICE' },
   { family: 'deno', names: ['deno'], shellLike: false, value: 'c', valueLong: new Set(['--config', '--import-map', '--location', '--seed', '--cert', '--lock', '--env-file']), subcommand: 'run' },
   { family: 'bun', names: ['bun'], shellLike: false, code: 'ep', value: 'r', codeLong: new Set(['--eval', '--print']), valueLong: new Set(['--preload', '--cwd', '--env-file', '--config']), subcommand: 'run' },
@@ -89,21 +89,17 @@ export function familyOf(name) {
   );
 }
 
-/** PowerShell options that name the script: their value is the script, `-` meaning standard input. @es Opciones de PowerShell que nombran el script. */
-const POWERSHELL_SCRIPT_OPTIONS = new Set(['command', 'c', 'encodedcommand', 'e', 'ec', 'file', 'f']);
-
-/** PowerShell options that take a value. @es Opciones de PowerShell que toman un valor. */
+/**
+ * PowerShell options that take a value. The script options (`-Command`, `-File`, `-EncodedCommand`) need no entry:
+ * their value is the first other word, which is the script, and `-` there is standard input like anywhere else.
+ * @es Opciones de PowerShell que toman un valor. Las de script (`-Command`, `-File`) no necesitan entrada: su valor
+ * es la primera otra palabra, que es el script, y `-` ahí es la entrada estándar como en cualquier sitio.
+ */
 const POWERSHELL_VALUE_OPTIONS = new Set(['executionpolicy', 'ep', 'ex', 'workingdirectory', 'wd', 'configurationname', 'config', 'outputformat', 'of', 'o', 'inputformat', 'if', 'in', 'windowstyle', 'w', 'version', 'v', 'settingsfile', 'settings', 'custompipename', 'psconsolefile']);
 
 /** What one option word means: `{ code, stdin, value }`. @es Qué significa una palabra de opción. */
-function optionMeaning(family, raw, next) {
-  if (family.powershell) {
-    const name = raw.slice(1).toLowerCase();
-
-    if (POWERSHELL_SCRIPT_OPTIONS.has(name)) return next !== undefined && STDIN_SCRIPTS.has(next.raw) ? { stdin: true, value: true } : { code: true };
-
-    return { value: POWERSHELL_VALUE_OPTIONS.has(name) };
-  }
+function optionMeaning(family, raw) {
+  if (family.powershell) return { value: POWERSHELL_VALUE_OPTIONS.has(raw.slice(1).toLowerCase()) };
 
   if (raw.startsWith('--')) {
     const name = raw.includes('=') ? raw.slice(0, raw.indexOf('=')) : raw;
@@ -121,7 +117,6 @@ function optionMeaning(family, raw, next) {
     if ((family.stdin ?? '').includes(letter)) meaning.stdin = true;
     if ((family.value ?? '').includes(letter)) return { ...meaning, value: index === letters.length - 1 };
     if ((family.rest ?? '').includes(letter)) return meaning;
-    if ((family.digits ?? '').includes(letter)) while (isDigit(letters[index + 1])) index += 1;
   }
 
   return meaning;
@@ -153,7 +148,7 @@ export function readsScriptFromStdin(family, words) {
     }
 
     if (isOption(family, word)) {
-      const meaning = optionMeaning(family, word.raw, argumentsOnly[index + 1]);
+      const meaning = optionMeaning(family, word.raw);
 
       if (meaning.code) return false;
       if (meaning.stdin) stdinForced = true;

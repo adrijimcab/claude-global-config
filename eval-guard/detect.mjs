@@ -247,7 +247,7 @@ export function tokenize(command) {
   // A bare run of digits glued to a redirection (`2>&1`, `0<<EOF`) is the file descriptor it redirects, not a
   // word of the command. @es Unos dígitos pegados a una redirección son el descriptor que redirige, no una palabra.
   const dropDescriptor = (at) => {
-    if (current !== undefined && !current.quoted && current.raw.length > 0 && current.start + current.raw.length === at && [...current.raw].every((digit) => digit >= '0' && digit <= '9')) current = undefined;
+    if (current !== undefined && !current.quoted && [...current.raw].every((digit) => digit >= '0' && digit <= '9')) current = undefined;
   };
 
   while (index < command.length) {
@@ -305,9 +305,9 @@ export function tokenize(command) {
     // it never closes). @es `(( … ))` es aritmética: su `>` compara, así que la expresión entera es dato.
     if (command.startsWith(ARITHMETIC_OPEN, index)) {
       const close = command.indexOf(ARITHMETIC_CLOSE, index + ARITHMETIC_OPEN.length);
-      const lineEnd = command.indexOf('\n', index);
+      const lineBreak = command.indexOf('\n', index);
 
-      index = close !== -1 ? close + ARITHMETIC_CLOSE.length : lineEnd === -1 ? command.length : lineEnd;
+      index = close !== -1 ? close + ARITHMETIC_CLOSE.length : lineBreak === -1 ? command.length : lineBreak;
       continue;
     }
 
@@ -472,10 +472,9 @@ export function invocations(items) {
       const next = items[at + 1];
       const glued = next?.kind === 'operator' && next.start === item.start + 1;
 
-      if (item.raw === '|' && glued && next.raw === '|') {
-        at += 1;
-        pipedFrom = [];
-      } else if (item.raw === '|') {
+      // `|` pipes the command before it; the second `|` of `||` closes nothing, so it pipes nothing.
+      // @es `|` encauza la orden anterior; el segundo `|` de `||` no cierra nada, así que no encauza nada.
+      if (item.raw === '|') {
         if (glued && next.raw === '&') at += 1;
         pipedFrom = closed !== undefined ? [closed] : compound ?? [];
       } else if (item.raw === '{' || item.raw === '(') {
@@ -485,8 +484,6 @@ export function invocations(items) {
 
         compound = start === undefined ? undefined : groups.slice(start);
         continue;
-      } else {
-        pipedFrom = [];
       }
 
       compound = undefined;
@@ -501,7 +498,6 @@ export function invocations(items) {
     if (group.length === 0) {
       group.upstream = pipedFrom;
       pipedFrom = [];
-      compound = undefined;
     }
 
     if (item.hereString) group.inputs.push(hereStringInput(item));
@@ -819,14 +815,14 @@ function inspectInterpreter(program, name, words) {
 }
 
 /**
- * The literal text a command writes to its standard output: a PowerShell here-string standing alone as a
- * statement (`@'…'@ | node -`). @es El texto literal que una orden escribe en su salida estándar: un here-string
- * de PowerShell solo como sentencia.
+ * The literal text a command writes to its standard output: a PowerShell here-string that starts the statement
+ * (`@'…'@ | node -`). @es El texto literal que una orden escribe en su salida estándar: un here-string de
+ * PowerShell que abre la sentencia.
  */
 function literalOutputOf(command, powerShellScripts) {
   const word = command[0];
 
-  if (command.length !== 1 || !word.raw.startsWith(POWERSHELL_PLACEHOLDER)) return [];
+  if (!word.raw.startsWith(POWERSHELL_PLACEHOLDER)) return [];
 
   const script = powerShellScripts[Number(word.raw.slice(POWERSHELL_PLACEHOLDER.length))];
 

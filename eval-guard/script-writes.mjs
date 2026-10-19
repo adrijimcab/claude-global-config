@@ -78,8 +78,9 @@ function callSites(text, name, prefix) {
 
     let end = from + name.length;
 
+    // A longer name (`writeFileSync` for `writeFile`) never reaches a `(` right after the marker, so it is no site.
+    // @es Un nombre más largo nunca llega a un `(` justo tras el marcador, así que no es una llamada.
     if (prefix) while (isIdentifierCharacter(text[end])) end += 1;
-    else if (isIdentifierCharacter(text[end])) continue;
 
     const open = afterBlanks(text, end);
 

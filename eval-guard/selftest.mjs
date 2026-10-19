@@ -185,6 +185,38 @@ const openCases = [
   ['allow', delegated(lines("python3 - <<'EOF'", "open(os.path.join(root, 'w'), 'r')", 'EOF')), 'a w inside the nested path is no mode']
 ];
 
+// Boundaries: each case pins one decision of the readers above (launchers, families, options, redirections).
+// @es Límites: cada caso fija una decisión de los lectores de arriba (lanzadores, familias, opciones, redirecciones).
+const boundaryCases = [
+  ['deny', delegated(lines("cat <<< 'x'; node - <<'EOF'", WRITE, 'EOF')), 'a here-string opener marks one word only'],
+  ['deny', delegated(lines("node 2>/dev/null <<'EOF'", WRITE, 'EOF')), 'a descriptor before > is no script path'],
+  ['deny', delegated(lines("node 0<<'EOF'", WRITE, 'EOF')), 'a descriptor before << is no script path'],
+  ['deny', delegated("node 0<<<\"fs.writeFileSync('a', 'b')\""), 'a descriptor before <<< is no script path'],
+  ['deny', delegated("node <<< \"fs.writeFileSync('a', 'b')\""), 'a here-string word is no script path'],
+  ['deny', delegated(lines("node > log.txt <<'EOF'", WRITE, 'EOF')), 'a redirection target is no script path'],
+  ['deny', delegated(lines("{ cat; } <<'EOF' | node -", WRITE, 'EOF')), 'a compound piped into an interpreter passes its heredoc on'],
+  ['deny', delegated(lines("nice -- node - <<'EOF'", WRITE, 'EOF')), 'a launcher -- ends its options'],
+  ['deny', delegated(lines("timeout --signal=KILL 5 node - <<'EOF'", WRITE, 'EOF')), 'a launcher option with = carries its value'],
+  ['deny', delegated(lines("/usr/bin/Python3 - <<'EOF'", "open('o', 'w')", 'EOF')), 'a program name is matched in any case'],
+  ['deny', delegated(lines("bash +o posix <<'EOF'", 'echo x > out.txt', 'EOF')), 'a shell +o value is no script path'],
+  ['deny', delegated(lines("pwsh -ExecutionPolicy Bypass -Command - <<'EOF'", "'x' | Set-Content o.txt", 'EOF')), 'a PowerShell option value is no script path'],
+  ['deny', delegated(lines("ruby -r json - <<'EOF'", WRITE, 'EOF')), 'a ruby -r value is no script path'],
+  ['deny', delegated(lines("deno run -c deno.json - <<'EOF'", WRITE, 'EOF')), 'a deno -c value is no script path'],
+  ['deny', delegated(lines("perl -Mfeature=say - <<'EOF'", WRITE, 'EOF')), 'a perl -M module swallows the rest of its word'],
+  ['deny', delegated(lines("bash <<'EOF'", 'FOO=1 cp a b', 'EOF')), 'an assignment before cp in a shell script', 'calls cp'],
+  ['deny', delegated(lines("bash <<'EOF'", "sed --in-place=.bak 's/a/b/' f.txt", 'EOF')), 'sed --in-place=suffix writes', 'calls sed -i'],
+  ['deny', delegated(lines("pwsh - <<'EOF'", "Write-Host don't", "Set-Content o.txt 'x'", 'EOF')), 'a quote with no partner on its line blanks nothing after it', 'writes a file'],
+  ['allow', delegated(lines("{ node -; } ; <<'EOF'", WRITE, 'EOF')), 'a heredoc after a separator that follows a compound is no one\'s'],
+  ['allow', delegated(lines("node tool.mjs>/dev/null <<'EOF'", WRITE, 'EOF')), 'a script path glued to > is no descriptor'],
+  ['allow', delegated(lines("nodemon - <<'EOF'", WRITE, 'EOF')), 'a longer program name is no versioned interpreter'],
+  ['allow', delegated(lines("node --eval \"1\" <<'EOF'", WRITE, 'EOF')), 'node --eval: the heredoc is data'],
+  ['allow', delegated(lines("node --require=./hook.js tool.mjs <<'EOF'", WRITE, 'EOF')), 'a long option with = skips no word'],
+  ['allow', delegated(lines("python3 -Wignore tool.py <<'EOF'", "open('o', 'w')", 'EOF')), 'an attached option value skips no word'],
+  ['allow', delegated(lines("ruby -e 'p 1' <<'EOF'", WRITE, 'EOF')), 'ruby -e: the heredoc is data'],
+  ['allow', delegated(lines("bash <<'EOF'", 'echo x >&-', 'echo x | tee /dev/null', 'echo x | tee -a', 'sed --expression p file.txt', 'sed -n p file.txt', 'EOF')), 'a closed descriptor, tee into a sink or nothing, sed without -i'],
+  ['allow', delegated(lines("pwsh - <<'EOF'", 'Show-Out-File', 'Out-FileReport', 'EOF')), 'a cmdlet name inside a longer word']
+];
+
 // E4: PowerShell here-strings are PowerShell syntax only, opened at a token start, never swallowing an unterminated rest.
 // @es E4: los here-strings de PowerShell son solo sintaxis de PowerShell, abiertos al inicio de un token, sin tragarse un resto sin cerrar.
 const powerShellCases = [
@@ -218,6 +250,7 @@ const cases = [
   ...falseRefusalCases,
   ...openCases,
   ...powerShellCases,
+  ...boundaryCases,
   ['deny', delegated(lines("python3 - <<'EOF'", "open(path, 'xb').write(data)", 'EOF')), "python heredoc with an exclusive-create mode (xb)", 'writes a file'],
   ['deny', delegated(lines('grep "@\'" notes.txt', "node - <<'EOF'", "fs.writeFileSync('a', 'b');", 'EOF')), 'an @-quote in the middle of a line is no here-string and hides nothing after it', 'writes a file'],
   ['allow', delegated(lines("bash <<'EOF'", 'echo x >>/dev/null', 'echo y > /dev/null', 'EOF')), 'redirections to /dev/null, appended or spaced, are not file writes'],
