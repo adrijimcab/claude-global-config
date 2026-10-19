@@ -44,6 +44,7 @@ process.on('exit', () => {
 const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./prompt.mjs');
 const { JUDGES: GATE_JUDGES, hookCommand } = await import('../judge-gate/judges.mjs');
 const { MARKER: PREMISE_MARKER } = await import('../premise-judge/prompt.mjs');
+const { MARKER: PENDING_MARKER } = await import('../pending-judge/prompt.mjs');
 const { JUDGES, VOICE_MECHANISM, evaluate, journalJudgeBlocks } = await import('../premise-judge/journal-guard.mjs');
 const { digestInput, firesPath, journalPath } = await import('../hook-state/journal.mjs');
 
@@ -122,7 +123,7 @@ const sidecar = JSON.parse(readFileSync(path.join(HERE, '..', 'premise-judge', '
 
 check('sidecar: the shared journal guard stays registered on Stop', sidecar.registrations, [{ event: 'Stop' }]);
 check('mechanism: the folder name', VOICE_MECHANISM, path.basename(HERE));
-check('judges: premise and voice, each with its marker', JUDGES.map((judge) => [judge.mechanism, judge.marker]), [['premise-judge', PREMISE_MARKER], ['voice-judge', MARKER]]);
+check('judges: premise, voice and pending, each with its marker', JUDGES.map((judge) => [judge.mechanism, judge.marker]), [['premise-judge', PREMISE_MARKER], ['voice-judge', MARKER], ['pending-judge', PENDING_MARKER]]);
 
 // --- JOURNAL. @es JOURNAL.
 let transcriptCount = 0;

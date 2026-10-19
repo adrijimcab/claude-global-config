@@ -35,6 +35,7 @@ import { fileURLToPath } from 'node:url';
 
 import { appendRecord, digestInput, incrementFires, journalPath, newId } from '../hook-state/journal.mjs';
 import { lastRecords } from '../hook-state/jsonl-tail.mjs';
+import { MARKER as PENDING_MARKER } from '../pending-judge/prompt.mjs';
 import { MARKER as VOICE_MARKER } from '../voice-judge/prompt.mjs';
 import { MARKER } from './prompt.mjs';
 
@@ -44,6 +45,9 @@ export const MECHANISM = 'premise-judge';
 /** The mechanism of the voice judge (`../voice-judge/prompt.mjs`). @es El mecanismo del juez de voz. */
 export const VOICE_MECHANISM = 'voice-judge';
 
+/** The mechanism of the pending judge (`../pending-judge/prompt.mjs`). @es El mecanismo del juez de pendientes. */
+export const PENDING_MECHANISM = 'pending-judge';
+
 /**
  * Every prompt judge this guard journals: its mechanism and the marker its block reasons start with.
  * @es Cada juez de prompt que esta guardia registra: su mecanismo y la marca con que empiezan sus motivos.
@@ -51,6 +55,7 @@ export const VOICE_MECHANISM = 'voice-judge';
 export const JUDGES = [
   { mechanism: MECHANISM, marker: MARKER },
   { mechanism: VOICE_MECHANISM, marker: VOICE_MARKER },
+  { mechanism: PENDING_MECHANISM, marker: PENDING_MARKER },
 ];
 
 /** Transcript records read back on a continued stop. @es Registros del transcript que se leen en una parada continuada. */

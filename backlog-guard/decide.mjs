@@ -51,15 +51,16 @@
  */
 
 import { resolveTopicKeyById } from '../backlog-owner-guard/resolve-topic-key.mjs';
-import { findAnnouncement } from './announcement.mjs';
+import { findCandidate } from './announcement.mjs';
 import { judgeMasterUpdates } from './master-update.mjs';
 import { hasMasterDocumentCommit } from './backlog-document-save.mjs';
 import { hasMasterBacklogSave } from './master-save.mjs';
 import { readOffsetState, readTranscriptTail, transcriptSize, writeOffsetState } from './state.mjs';
 
 /**
- * The decision over a parsed Stop payload, as `{ marker, sessionId, transcriptPath }` when the turn
- * must be blocked, `undefined` when it may end. Every dependency is injectable so the whole state space
+ * The PREFILTER decision over a parsed Stop payload, as `{ marker, sessionId, transcriptPath }` when the turn
+ * may owe the master backlog (a marker, and no master save in its window), which is when the pending judge
+ * (`../pending-judge/`) is asked; `undefined` when it may end with no question. Every dependency is injectable so the whole state space
  * is exercisable without a live session or a real transcript file.
  * @es La decisión sobre un payload `Stop` ya parseado, o `undefined` si el turno puede terminar. Toda
  * dependencia es inyectable.
@@ -75,11 +76,15 @@ export function decide(
     reportDegraded = () => {}
   } = {}
 ) {
-  // Already raised once this turn: the obligation has been stated. Never raise it twice.
-  if (payload?.stop_hook_active === true) return undefined;
-
+  // A continued stop (`stop_hook_active`) is a rewrite after a block: its window still starts where the turn's
+  // first stop left the offset, so a save made after the block counts, and it never moves the offset. How many
+  // times a turn may be blocked is the judge gate's cap, not this function's.
+  // @es Una parada continuada es el reescrito tras un bloqueo: su ventana sigue empezando donde la primera
+  // parada del turno dejó el offset, así que un guardado posterior cuenta, y nunca lo mueve. Cuántas veces se
+  // bloquea un turno lo fija el tope de la compuerta, no esta función.
+  const continued = payload?.stop_hook_active === true;
   const message = typeof payload?.last_assistant_message === 'string' ? payload.last_assistant_message : '';
-  const marker = findAnnouncement(message);
+  const marker = findCandidate(message);
 
   const sessionId = typeof payload?.session_id === 'string' && payload.session_id.length > 0 ? payload.session_id : 'unknown';
   const transcriptPath = payload?.transcript_path;
@@ -89,10 +94,9 @@ export function decide(
   const currentSize = sizeOf(transcriptPath);
   const tail = readTail(transcriptPath, offset);
 
-  // The window for THIS turn is consumed either way: a block does not get re-examined on retry (the
-  // retry bypasses above via `stop_hook_active`), and the next genuinely new turn must not re-read
-  // content this turn already judged.
-  writeState(sessionId, { offset: currentSize ?? offset });
+  // The window for THIS turn is consumed at its first stop, either way: the next genuinely new turn must not
+  // re-read content this turn already judged.
+  if (!continued) writeState(sessionId, { offset: currentSize ?? offset });
 
   // No pending phrase at all: nothing owed this turn, regardless of what was just learned.
   if (marker === undefined) return undefined;

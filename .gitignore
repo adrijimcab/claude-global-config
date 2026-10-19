@@ -153,6 +153,9 @@
 !/judge-gate/
 !/judge-gate/**
 /judge-gate/state/
+!/pending-judge/
+!/pending-judge/**
+/pending-judge/state/
 !/delegation-receipts/
 !/delegation-receipts/**
 /delegation-receipts/state/

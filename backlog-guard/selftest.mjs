@@ -1,21 +1,25 @@
 #!/usr/bin/env node
 /**
- * DISCRIMINATION PROOF for backlog-guard — the `Stop` mechanism enforcing the owner directive
+ * DISCRIMINATION PROOF for the PREFILTER half of the backlog obligation — the `decide()` that tells the pending
+ * judge (`../pending-judge/`) whether a stop is worth a model call, under the owner directive
  * "Backlog maestro — todo hallazgo entra en el momento" (`~/.claude/rules/00-owner-mandates.md`).
  *
  * Exercises `decide()`'s whole state space with constructed, real-shaped payloads and injected
  * dependencies — never a live session, per this fleet's own `guard-that-cannot-go-red` rule (a guard is
- * not trusted until proven to discriminate across the state space its decision ranges over). Then runs
- * the real `guard.mjs` process end to end over one small, real, constructed transcript file, to prove
- * the WIRING (stdin -> decide -> stdout) and not just the injected decision.
+ * not trusted until proven to discriminate across the state space its decision ranges over). Then runs the
+ * real `decide()` over one small, real, constructed transcript file and a real engram store, to prove the
+ * persisted offset and the store lookups, not just the injected decision. The intent question (does the
+ * message really leave something for later?) is the judge's, so no test here pins a sentence's meaning: the
+ * marker list is only proved BROAD, and the sentences it must reach are the judge's fixtures.
  *
- * @es PRUEBA DE DISCRIMINACIÓN de backlog-guard. Ejercita todo el espacio de estados de `decide()` con
- * payloads construidos y dependencias inyectadas — nunca una sesión viva. Luego corre `guard.mjs` de
- * verdad, de punta a punta, sobre un transcript pequeño y real construido, para probar el CABLEADO.
+ * @es PRUEBA DE DISCRIMINACIÓN de la mitad PREFILTRO de la obligación de backlog: el `decide()` que dice al
+ * juez de pendientes si una parada merece una llamada al modelo. Ejercita todo el espacio de estados con
+ * payloads construidos y dependencias inyectadas; luego corre el `decide()` real sobre un transcript y un
+ * almacén de engram reales construidos. La pregunta de intención es del juez: aquí solo se prueba que la
+ * lista de marcadores es AMPLIA.
  */
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -23,14 +27,14 @@ import { fileURLToPath } from 'node:url';
 
 import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs } from './dismiss.mjs';
 import { decide } from './decide.mjs';
-import { evaluate } from './guard.mjs';
-import { findAnnouncement } from './announcement.mjs';
+import { dismissalsFile, dismissedSince } from './dismissals.mjs';
+import { findCandidate } from './announcement.mjs';
 import { findPendingMarker, PENDING_MARKERS } from './markers.mjs';
 import { proseOutsideQuotes } from './prose.mjs';
 import { hasMasterDocumentCommit } from './backlog-document-save.mjs';
 import { replay } from './replay.mjs';
 import { hasMasterBacklogSave, isMasterBacklogTopicKey, topicKeyValuesIn } from './master-save.mjs';
-import { isolateState, stateDir } from '../hook-state/locations.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
 // session reads, and never a line a previous run left behind.
@@ -39,7 +43,6 @@ import { isolateState, stateDir } from '../hook-state/locations.mjs';
 isolateState('backlog-guard');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const GUARD_CLI = path.join(HERE, 'guard.mjs');
 
 let passed = 0;
 const failures = [];
@@ -280,19 +283,22 @@ check('empty message -> allow', verdict(stopPayload('')).result, 'allow');
 }
 
 // ---------------------------------------------------------------------------------------------
-// STATE 6: stop_hook_active -> allow (already raised once this turn, never raise it twice)
+// STATE 6: stop_hook_active. The prefilter no longer stands aside on a continued stop (the judge gate caps
+// the blocks per turn): it judges the rewrite from the offset the turn's first stop left, and moves nothing.
 // ---------------------------------------------------------------------------------------------
-check('stop_hook_active -> allow, even with a pending phrase and no save', verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '' }).result, 'allow');
+check('a continued stop with a pending phrase and no save still owes the judge', verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '' }).result, 'deny');
+check('a continued stop with a save after the block passes', verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master"}}' }).result, 'allow');
+check('a continued stop with no pending phrase passes', verdict(stopPayload(CLEAN_MESSAGE, { stopHookActive: true }), { tail: '' }).result, 'allow');
 
 // ---------------------------------------------------------------------------------------------
-// STATE 7: malformed payload -> allow + exit 0 (via the real `evaluate()`, not the injected decide())
+// STATE 7: a payload that is not an object, or carries no message -> allow, never a throw
 // ---------------------------------------------------------------------------------------------
-check('malformed JSON -> evaluate() allows (undefined)', settle(() => evaluate('NOT JSON AT ALL')), undefined);
-check('empty stdin -> evaluate() allows (undefined)', settle(() => evaluate('')), undefined);
-check('BOM + valid JSON is still parsed (PowerShell 5.1 shape)', settle(() => evaluate(`\ufeff${JSON.stringify(stopPayload(CLEAN_MESSAGE))}`)), undefined);
+check('an undefined payload passes', verdict(undefined).result, 'allow');
+check('a payload with no message passes', verdict({ session_id: 's-1' }).result, 'allow');
+check('a non-string message passes', verdict({ session_id: 's-1', last_assistant_message: 42 }).result, 'allow');
 
 // ---------------------------------------------------------------------------------------------
-// DIAGNOSTICS: the offset always advances, on every non-bypassed path, so the NEXT turn's window
+// DIAGNOSTICS: the offset advances at the FIRST stop of a turn, on every path, so the NEXT turn's window
 // starts fresh — proven by inspecting the `writes` the injected `writeState` captured.
 // ---------------------------------------------------------------------------------------------
 {
@@ -301,7 +307,11 @@ check('BOM + valid JSON is still parsed (PowerShell 5.1 shape)', settle(() => ev
 }
 {
   const { writes } = verdict(stopPayload(PENDING_MESSAGE), { tail: '', size: 9999 });
-  check('the offset advances even when the turn is blocked (the retry bypasses via stop_hook_active)', writes[0]?.state?.offset, 9999);
+  check('the offset advances even when the turn owes the judge', writes[0]?.state?.offset, 9999);
+}
+{
+  const { writes } = verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '', size: 12345 });
+  check('a continued stop never moves the offset', writes, []);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -316,7 +326,7 @@ check(
 // ---------------------------------------------------------------------------------------------
 // DIAGNOSTICS: the marker/topic_key primitives, in isolation.
 // ---------------------------------------------------------------------------------------------
-check('findPendingMarker finds a real owner-named root', findPendingMarker('This is left pending and worth flagging.'), 'left pending');
+check('findPendingMarker finds a real owner-named root', findPendingMarker('This is left pending and worth flagging.'), 'pending');
 check('findPendingMarker does not fire on the bare Spanish word "todo" alone', findPendingMarker('Corrí todo el árbol y todo salió verde.'), undefined);
 check('findPendingMarker fires on the list/comment shape "TODO:"', findPendingMarker('TODO: reconciliar node_modules'), 'TODO:');
 check('findPendingMarker does not fire on the Spanish "todo:" (everything:)', findPendingMarker('Lo cerré todo: seis worktrees.'), undefined);
@@ -382,58 +392,57 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
     seed.close();
   }
 
-  function runGuard(message, { dataDir = scratch } = {}) {
-    const input = JSON.stringify(stopPayload(message, { sessionId, transcriptPath }));
-    const env = { ...process.env, ENGRAM_DATA_DIR: dataDir };
+  // The REAL decision over the REAL state files, transcript and engram store, with no injected dependency.
+  // @es La decisión REAL sobre los ficheros de estado, el transcript y el almacén de engram REALES.
+  const degradedReports = [];
+
+  function runGuard(message, { dataDir = scratch, stopHookActive = false } = {}) {
+    const previous = process.env.ENGRAM_DATA_DIR;
+
+    process.env.ENGRAM_DATA_DIR = dataDir;
 
     try {
-      const out = execFileSync(process.execPath, [GUARD_CLI], { input, encoding: 'utf8', env, stdio: ['pipe', 'pipe', 'pipe'] });
-      return { code: 0, out };
-    } catch (error) {
-      return { code: typeof error?.status === 'number' ? error.status : 'did-not-run', out: `${error?.stdout ?? ''}` };
+      return { code: 0, finding: decide(stopPayload(message, { sessionId, transcriptPath, stopHookActive }), { reportDegraded: (info) => degradedReports.push(info) }) };
+    } catch {
+      return { code: 'threw', finding: undefined };
+    } finally {
+      if (previous === undefined) delete process.env.ENGRAM_DATA_DIR;
+      else process.env.ENGRAM_DATA_DIR = previous;
     }
   }
 
-  const verdictOf = (run) => `${String(run.code)}/${run.out.includes('"decision":"block"') ? 'deny' : 'allow'}`;
-  const degradedJournalledFor = () => {
-    const journalFile = path.join(stateDir('backlog-guard'), 'refusals.jsonl');
-
-    return existsSync(journalFile) ? readFileSync(journalFile, 'utf8').split('\n').filter((line) => line.includes(sessionId) && line.includes('"store-unreadable"')).length : 0;
-  };
+  const verdictOf = (run) => `${String(run.code)}/${run.finding === undefined ? 'allow' : 'deny'}`;
+  const degradedJournalledFor = () => degradedReports.length;
 
   // Turn 1: nothing saved yet, no pending phrase -> allow, and the offset gets recorded.
   writeFileSync(transcriptPath, '{"type":"assistant","text":"turn 1, exploring, nothing pending yet"}\n', 'utf8');
   const turn1 = runGuard(CLEAN_MESSAGE);
-  check('END TO END turn 1 (no pending phrase): allowed, exit 0', `${String(turn1.code)}/${turn1.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+  check('END TO END turn 1 (no pending phrase): allowed, exit 0', verdictOf(turn1), '0/allow');
 
   // An intervening, non-pending turn is where the master-backlog save actually happens (a routine
   // housekeeping save, unrelated to any pending announcement) — running the guard here is what
   // advances its offset PAST the save, the same way it would after any real turn.
   appendToFile(transcriptPath, '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master"}}\n');
   const housekeepingTurn = runGuard(CLEAN_MESSAGE);
-  check('END TO END housekeeping turn (save happens, no pending phrase): allowed', `${String(housekeepingTurn.code)}/${housekeepingTurn.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+  check('END TO END housekeeping turn (save happens, no pending phrase): allowed', verdictOf(housekeepingTurn), '0/allow');
 
   // Turn 2: a pending phrase NOW, but the only save in the whole file sits BEFORE the offset the
-  // housekeeping turn just recorded — this turn's own window never sees it -> block.
-  const journalPath = path.join(stateDir('backlog-guard'), 'refusals.jsonl');
-  const journalledFor = () => (existsSync(journalPath) ? readFileSync(journalPath, 'utf8').split('\n').filter((line) => line.includes(sessionId)).length : 0);
-  const journalBefore = journalledFor();
-
+  // housekeeping turn just recorded — this turn's own window never sees it -> the judge is asked.
   appendToFile(transcriptPath, '{"type":"assistant","text":"turn 2, found a real bug, still open for the owner"}\n');
   const turn2 = runGuard(PENDING_MESSAGE);
-  check('END TO END turn 2 (pending phrase, save was in the ALREADY-COVERED earlier window): blocked', `${String(turn2.code)}/${turn2.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/deny');
-  check('END TO END turn 2: the refusal names the guard', turn2.out.includes('BACKLOG-GUARD TRIPPED'), true);
-  check('END TO END turn 2: the refusal carries the Spanish half', turn2.out.includes('@es BACKLOG-GUARD SALTÓ'), true);
-  check('END TO END turn 2: the refusal names the phrase that tripped it, in both languages', turn2.out.includes('worth flagging') && turn2.out.includes('nuevo («worth flagging») y este turno'), true);
-  check('END TO END turn 2: the refusal offers committing the versioned document', turn2.out.includes('or commit the versioned document') && turn2.out.includes('o commiteá el documento versionado'), true);
-  check('END TO END turn 2: the refusal names the dismiss escape hatch', turn2.out.includes('dismiss.mjs'), true);
-  check('END TO END turn 2: the refusal is journaled as evidence', journalledFor() - journalBefore, 1);
+  check('END TO END turn 2 (pending phrase, save was in the ALREADY-COVERED earlier window): owes the judge', verdictOf(turn2), '0/deny');
+  check('END TO END turn 2: the finding names the marker that fired', turn2.finding?.marker, 'still open');
+
+  // Turn 2 continued: the rewrite after a block reads the window from the offset turn 2 left, and moves nothing.
+  // @es Turno 2 continuado: el reescrito tras un bloqueo lee desde el offset que dejó el turno 2 y no lo mueve.
+  check('END TO END turn 2 continued (nothing saved after the block): still owes the judge', verdictOf(runGuard(PENDING_MESSAGE, { stopHookActive: true })), '0/deny');
 
   // Turn 3: a master-backlog save appended DURING this turn's own window (after turn 2's offset) ->
   // the SAME pending phrase now passes, because this time the save genuinely sits in this turn.
   appendToFile(transcriptPath, '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"updated with the finding"}}\n');
+  check('END TO END turn 2 continued (saved after the block): the continued stop passes', verdictOf(runGuard(PENDING_MESSAGE, { stopHookActive: true })), '0/allow');
   const turn3 = runGuard(PENDING_MESSAGE);
-  check('END TO END turn 3 (pending phrase, save genuinely IN this turn): allowed', `${String(turn3.code)}/${turn3.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+  check('END TO END turn 3 (pending phrase, save genuinely IN this turn): allowed', verdictOf(turn3), '0/allow');
 
   // Turns 4-7: the mem_update face against a REAL (constructed, disposable) engram sqlite store reached
   // through `ENGRAM_DATA_DIR`, in REAL separate processes. No earlier read of the master id exists
@@ -462,14 +471,6 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
   appendToFile(transcriptPath, `${toolUseLine(UPDATE, { id: 1129, content: 'revised again' })}\n`);
   const turn7 = runGuard(PENDING_MESSAGE);
   check('END TO END turn 7 (store readable again, master id): allowed, and no new degradation journaled', `${verdictOf(turn7)}/${String(degradedJournalledFor() - degradedBefore)}`, '0/allow/1');
-
-  // stop_hook_active always allows, real process included.
-  const bypassed = settle(() => execFileSync(process.execPath, [GUARD_CLI], {
-    input: JSON.stringify(stopPayload(PENDING_MESSAGE, { sessionId, transcriptPath, stopHookActive: true })),
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe']
-  }));
-  check('END TO END stop_hook_active: allowed even with a pending phrase', bypassed === 'threw' ? 'threw' : bypassed.includes('"decision":"block"'), false);
 
   function appendToFile(file, text) {
     writeFileSync(file, readFileSync(file, 'utf8') + text, 'utf8');
@@ -505,161 +506,87 @@ check('a fenced block is not the author words', proseOutsideQuotes('a\n```\nlo a
 check('a quote line is not the author words', proseOutsideQuotes('> lo anoto\nok').includes('lo anoto'), false);
 check('guillemets are a quotation', proseOutsideQuotes('la regla «lo anoto» dice').includes('lo anoto'), false);
 check('an opener with no closer stays visible', proseOutsideQuotes('dijo "lo anoto').includes('lo anoto'), true);
-check('a new announced item still blocks', findAnnouncement('Encontré un defecto. Lo anoto en el backlog cuando cierre la tanda.'), 'lo anoto');
+check('a candidate is found in the author words', findCandidate('Encontré un defecto. Lo anoto en el backlog cuando cierre la tanda.'), 'backlog');
 
-// --- PHRASE FORMS, not bare verbs. Each FALSE POSITIVE below is a phrase whose dismissal is recorded in
-// --- `state/dismissals.jsonl` (2026-10-11 to 2026-10-18) or reported by the orchestrator on 2026-10-18; each
-// --- TRUE POSITIVE announces a NEW unrecorded item. The verbs «sumo / agrego» alone also say
-// --- «I add finished work to a checkpoint» or «I would add it if you ask», and «falta / queda por» also say
-// --- «nothing is missing» or «stays under a threshold».
-// @es FORMAS DE FRASE, no verbos sueltos. Cada FALSO POSITIVO es una frase con descarte registrado en
-// @es `state/dismissals.jsonl` o reportada por el orquestador; cada VERDADERO POSITIVO anuncia un ítem NUEVO.
-const FALSE_POSITIVES = [
-  ['adding a finished worker fix to a checkpoint (3 dismissals of «lo sumo»)', 'Lo sumo al checkpoint-37 cuando el worker termine.'],
-  ['adding a finished result to a landing (dismissal of «lo agrego»)', 'Lo agrego al checkpoint-40 en cuanto el worker confirme.'],
-  ['a conditional offer to extend a report (dismissal of «lo agrego»)', 'Lo agrego si querés ampliar el esquema del informe.'],
-  ['«a lo sumo» is «at most»', 'A lo sumo tarda 200 ms en el peor caso.'],
-  ['«queda por debajo» is a measurement threshold (2 dismissals of «queda por»)', 'El parseo queda por debajo de los 200 ms.'],
-  ['«no hace falta hacer nada» says no action is needed (dismissal of «falta hacer»)', 'No hace falta hacer nada mientras el worker termina.'],
-  ['nothing left to integrate (dismissal of «pendiente de integrar»)', 'No hay nada pendiente de integrar tras el aterrizaje.'],
-  ['«ya no falta integrar» (orchestrator report of «falta integrar»)', 'Ya no falta integrar nada de la tanda.'],
-  ['«no hay» in front of a marker', 'No hay pendiente de integrar nada en la tanda.'],
-  ['«queda por» followed by a noun, plural', 'Quedan por debajo del umbral dos mediciones.'],
-  // A negated marker says nothing is pending. The text opens with the negator, so only the start-of-text rule
-  // can void it: no other marker of the list appears in it.
-  // @es Un marcador negado dice que nada está pendiente; el texto abre con el negador, y solo la regla del
-  // inicio del texto puede anularlo.
-  ['a negator at the very start of the text is a negator', 'Nada pendiente de integrar tras el aterrizaje.'],
-  ['«nothing pending» in English', 'No pending tasks for this batch.'],
-  ['«no lo dejo pendiente» says it is closed now', 'No lo dejo pendiente: lo cierro en esta tanda.'],
-  ['«no queda por hacer nada» says nothing is left', 'Ya no queda por hacer nada en la tanda.']
-];
-const TRUE_POSITIVES = [
-  ['I leave an item pending', 'Lo dejo pendiente para la próxima tanda.', 'lo dejo pendiente'],
-  ['an item stays pending', 'Queda pendiente el cambio del hook.', 'queda pendiente'],
-  ['items stay pending', 'Quedan pendientes dos cambios del hook.', 'quedan pendientes'],
-  ['I add it to the backlog', 'Lo agrego al backlog al cerrar.', 'agrego al backlog'],
-  ['I add it to the backlog («sumo»)', 'Lo sumo al backlog cuando cierre.', 'sumo al backlog'],
-  ['I add it to the pending list', 'Lo agrego a la lista de pendientes.', 'lo agrego a la lista'],
-  ['I add it to the pending list («sumo»)', 'Lo sumo a la lista de pendientes.', 'lo sumo a la lista'],
-  ['I note it as pending', 'Lo anoto como pendiente.', 'lo anoto'],
-  ['I note it for later', 'Lo apunto para después.', 'lo apunto'],
-  ['work stays to be done', 'Queda por resolver la migración.', 'queda por'],
-  ['an infinitive in -er', 'Queda por hacer el cambio del hook.', 'queda por'],
-  ['an infinitive in -ir', 'Queda por definir la ruta.', 'queda por'],
-  ['an infinitive right before the full stop', 'Eso queda por resolver.', 'queda por'],
-  ['several things stay to be done', 'Quedan por integrar tres ramas.', 'quedan por'],
-  ['something is missing to integrate', 'Falta integrar la rama del worker.', 'falta integrar'],
-  ['work is pending integration', 'Hay trabajo pendiente de integrar en dos ramas.', 'pendiente de integrar'],
-  ['«uno» ends in «no» but negates nothing', 'Es uno pendiente de integrar todavía.', 'pendiente de integrar'],
-  ['the second occurrence is not negated even when the first is', 'No falta integrar nada, pero falta integrar la rama del worker.', 'falta integrar'],
-  // A heading over pending work is still an announcement: nothing in its own sentence or its neighbours
-  // points at a record, and a false positive costs one dismissal where a false negative loses an item.
-  // @es Un encabezado sobre trabajo pendiente sigue siendo un anuncio: nada en su frase ni en sus vecinas apunta a un registro.
-  ['«lo que queda pendiente» as a heading with no record beside it', 'Lo que queda pendiente, sin apuro: un runner de selftests.', 'queda pendiente'],
-  // A NOT-YET negation says the item is NOT recorded yet: it is still pending.
-  // @es Una negación de TODAVÍA NO dice que el ítem AÚN no está registrado: sigue pendiente.
-  ['«todavía no lo anoto en el backlog» says it is not recorded yet', 'Todavía no lo anoto en el backlog.', 'lo anoto'],
-  ['«aún no paso al backlog» says it is not recorded yet', 'Aún no paso al backlog el defecto del parser.', 'paso al backlog'],
-  // The bare verbs «anoto / apunto»: no dismissal on record justifies narrowing them.
-  // @es Los verbos sueltos «anoto / apunto»: ningún descarte registrado justifica estrecharlos.
-  ['the bare «lo anoto»', 'Lo anoto.', 'lo anoto'],
-  ['the bare «lo apunto»', 'Lo apunto y sigo con la tanda.', 'lo apunto']
+// --- THE PREFILTER IS BROAD. Every sentence below is one the judges of 2026-10-19 or the lexical rounds got
+// --- wrong, plus the phrase forms the old narrow list dropped: each MUST reach the pending judge, because the
+// --- judge, not the list, decides whether it is pending. WHEN UNSURE, THE PREFILTER FIRES.
+// @es EL PREFILTRO ES AMPLIO. Cada frase llegó mal por las rondas léxicas o por los jueces del 2026-10-19; todas
+// @es DEBEN llegar al juez, que decide si hay pendiente. EN LA DUDA, EL PREFILTRO DISPARA.
+const MUST_REACH_THE_JUDGE = [
+  ['a post-posed not-yet (judges, 2026-10-19)', 'No lo anoto todavía en el backlog.'],
+  ['a pre-posed not-yet', 'Todavía no lo anoto en el backlog.'],
+  ['a not-yet without the accent', 'Aun no paso al backlog el defecto del parser.'],
+  ['an English not-yet', 'Not yet recorded: the retry bug.'],
+  ['a short enclitic after the frame (verlo)', 'Queda por verlo con el dueño.'],
+  ['a short enclitic after the frame (darle)', 'Queda por darle una vuelta al matcher.'],
+  ['a short enclitic after the frame (irse)', 'Queda por irse la rama vieja.'],
+  ['a short enclitic after the frame (avisarme)', 'Queda por avisarme del resultado.'],
+  ['a short enclitic after the frame (pasarte)', 'Queda por pasarte el informe.'],
+  ['an infinitive after a line break', 'Queda por\nresolver la migración.'],
+  ['a negation before the frame, which only the judge may read', 'No queda por hacer nada en la tanda.'],
+  ['a bare backlog mention', 'Revisé el backlog y no cambió nada.'],
+  ['an item that stays pending', 'Queda pendiente el cambio del hook.'],
+  ['an item left for later', 'Lo apunto para después.'],
+  ['a defect named', 'Encontré un defecto en el parser.'],
+  ['a decision left to the owner', 'Falta la decisión del dueño sobre el matcher.'],
+  ['a deferral in English', 'I will fix the parser later on.'],
+  ['an English pending', 'Left pending: the retry bug.'],
+  ['a capitalised marker alone', 'Pendiente.'],
+  ['a deferral that matches only one marker', 'I will fix the parser later on.'],
+  ['an infinitive frame that matches only one marker', 'Eso queda por resolver.'],
+  ['a not-yet that matches only one marker', 'Aun no.']
 ];
 
-for (const [label, text] of FALSE_POSITIVES) check(`does not fire: ${label}`, findAnnouncement(text), undefined);
-for (const [label, text, marker] of TRUE_POSITIVES) check(`still fires: ${label}`, findAnnouncement(text), marker);
+for (const [label, text] of MUST_REACH_THE_JUDGE) check(`prefilter reaches the judge: ${label}`, findCandidate(text) !== undefined, true);
 
-// The word after «queda por», read past the whitespace and markdown around it, enclitic infinitives included.
-// Judged on one sentence, so a line break or a quote mark reaches the word reader untouched.
-// @es La palabra tras «queda por», leída más allá de los espacios y del markdown que la rodean, infinitivos con enclítico incluidos.
-const INFINITIVE_SHAPES = [
-  ['a line break before the infinitive', 'queda por\nresolver la migración', 'queda por'],
-  ['a carriage return before the infinitive', 'queda por\r\nresolver la migración', 'queda por'],
-  ['a tab before the infinitive', 'queda por\tresolver la migración', 'queda por'],
-  ['a carriage return right after the infinitive', 'queda por resolver\r', 'queda por'],
-  ['a bold infinitive', 'queda por **resolver** la migración', 'queda por'],
-  ['an italic infinitive', 'queda por _resolver_ la migración', 'queda por'],
-  ['an infinitive in a code span', 'queda por `resolver` la migración', 'queda por'],
-  ['an em dash right after the infinitive', 'queda por resolver—la migración entera', 'queda por'],
-  ['a slash right after the infinitive', 'queda por integrar/main la rama', 'queda por'],
-  ['a straight quote right after the infinitive', 'queda por resolver" dijo', 'queda por'],
-  ['a closing guillemet right after the infinitive', 'queda por resolver» dijo', 'queda por'],
-  ['a closing curly quote right after the infinitive', 'queda por resolver” dijo', 'queda por'],
-  ['an enclitic infinitive in -arlo', 'queda por revisarlo mañana', 'queda por'],
-  ['an enclitic infinitive in -erla', 'queda por hacerla mañana', 'queda por'],
-  ['an enclitic infinitive in -irlos', 'quedan por definirlos mañana', 'quedan por'],
-  ['an enclitic infinitive in -arse', 'queda por integrarse la rama', 'queda por'],
-  ['an enclitic infinitive in -arle', 'queda por avisarle al dueño', 'queda por'],
-  ['an enclitic infinitive in -arlas', 'quedan por revisarlas mañana', 'quedan por'],
-  ['an enclitic infinitive in -arles', 'queda por avisarles a los dos', 'queda por'],
-  ['a noun after the frame still does not fire', 'queda por **debajo** del umbral', undefined],
-  // Only lo, la, los, las, le, les and se attach, and only to a stem of five or more characters ending in an
-  // infinitive: «me», «te» and «nos» would let «firme», «parte» and «internos» through, and a four-character
-  // stem lets the noun «charla» through. @es Solo se pegan lo, la, los, las, le, les y se, a una raíz de cinco
-  // o más caracteres acabada en infinitivo.
-  ['the enclitic «resolverlo»', 'queda por resolverlo mañana', 'queda por'],
-  ['the enclitic «integrarla»', 'queda por integrarla mañana', 'queda por'],
-  ['the enclitic «hacerlo»', 'queda por hacerlo mañana', 'queda por'],
-  ['the enclitic «revisarlas»', 'quedan por revisarlas mañana', 'quedan por'],
-  ['the enclitic «moverse»', 'queda por moverse la rama', 'queda por'],
-  ['the noun «parte» is not an enclitic infinitive', 'queda por parte del equipo', undefined],
-  ['the noun «suerte» is not an enclitic infinitive', 'queda por suerte poco', undefined],
-  ['the word «firme» is not an enclitic infinitive', 'queda por firme el acuerdo', undefined],
-  ['the noun «perla» is not an enclitic infinitive', 'queda por perla del día', undefined],
-  ['the word «internos» is not an enclitic infinitive', 'quedan por internos dos cambios', undefined],
-  ['the name «Carlos» is not an enclitic infinitive', 'queda por carlos la revisión', undefined],
-  ['the noun «charla» is not an enclitic infinitive', 'queda por charla con el equipo', undefined],
-  ['a long stem before a pronoun must itself be an infinitive', 'queda por escuela del barrio', undefined]
+// A message with no marker costs no model call: the others are not asked.
+// @es Un mensaje sin marcador no cuesta llamada: los demás no se consultan.
+const NEEDS_NO_JUDGE = [
+  ['a plain status', 'Listo, el selftest pasa y los mutantes mueren todos.'],
+  ['the Spanish word everything', 'Corrí todo el árbol y todo salió verde.'],
+  ['a quoted marker is a mention', 'La regla dice "lo anoto en el backlog" y la cumplí.'],
+  ['a marker inside a code span', 'Corré `grep backlog` y mirá la salida.'],
+  ['a marker inside a fenced block', 'Mirá:\n```\nbacklog pendiente\n```\nListo.']
 ];
 
-for (const [label, text, marker] of INFINITIVE_SHAPES) check(`infinitive shape: ${label}`, findPendingMarker(text), marker);
+for (const [label, text] of NEEDS_NO_JUDGE) check(`prefilter stays silent: ${label}`, findCandidate(text), undefined);
 
-// A plain negation voids ANY marker it directly precedes; a NOT-YET negation («todavía no», «aún no», «not yet»,
-// «still not») voids nothing, because it says the item is still unrecorded. Judged on the marker reader itself,
-// so no record cue of the sentence can hide the result.
-// @es Una negación simple anula CUALQUIER marcador que precede; una negación de TODAVÍA NO no anula nada, porque
-// dice que el ítem sigue sin registrar.
-const NEGATIONS = [
-  ['«no hay hallazgo nuevo»', 'no hay hallazgo nuevo en la tanda.', undefined],
-  ['«no new finding»', 'no new finding in this batch.', undefined],
-  ['«no va al backlog»', 'no va al backlog: ya lo resuelvo', undefined],
-  ['«no lo sumo a la lista»', 'no lo sumo a la lista, lo cierro en esta tanda', undefined],
-  ['«no paso al backlog»', 'no paso al backlog el defecto, lo arreglo ya', undefined],
-  ['«not to the backlog»', 'this goes not to the backlog but to the fix', undefined],
-  ['«no new» before a marker', 'no new pending tasks here', undefined],
-  ['«todavía no lo anoto»', 'todavía no lo anoto en el backlog.', 'lo anoto'],
-  ['«aún no paso al backlog»', 'aún no paso al backlog el defecto del parser.', 'paso al backlog'],
-  ['«aun no» without the accent', 'aun no paso al backlog el defecto.', 'paso al backlog'],
-  ['«todavia no» without the accent', 'todavia no lo anoto en el backlog.', 'lo anoto'],
-  ['«not yet» before a marker', 'i am not yet flagging this for the owner', 'flagging this for'],
-  ['«still not» before a marker', 'i am still not flagging this for the owner', 'flagging this for']
-];
+// No lexical intent logic may return: the finder is the same function for a negated and a plain sentence.
+// @es La lógica léxica de intención no debe volver: el buscador trata igual una frase negada y una afirmada.
+check('a negated sentence reaches the judge exactly as the plain one does', findCandidate('No hay hallazgo nuevo.') !== undefined && findCandidate('Hay un hallazgo nuevo.') !== undefined, true);
+check('the finder has no record cue: a cited record still reaches the judge', findCandidate('Lo anoto: ya está en el backlog (#1209).') !== undefined, true);
 
-for (const [label, text, marker] of NEGATIONS) check(`negation: ${label}`, findPendingMarker(text), marker);
-check('the bare word backlog does not block', findAnnouncement('Revisé el backlog y no cambió nada.'), undefined);
-check('a quoted announcement does not block', findAnnouncement('La regla dice "lo anoto" y la cumplí.'), undefined);
-check('an item already recorded in the same sentence does not block', findAnnouncement('Lo anoto: ya está en el backlog.'), undefined);
-check('an observation cited in the next sentence does not block', findAnnouncement('Va al backlog final.\nLo guardé en engram (#1209).'), undefined);
-check('an observation reference alone records the sentence', findAnnouncement('Lo anoto como pendiente, es el #1209.'), undefined);
-check('"sigue pendiente" (continues) is not new', findAnnouncement('Sigue pendiente tu decisión.'), undefined);
-check('the infinitive "encolar" mentions the rule, it does not announce', findAnnouncement('Resolver en el momento en vez de encolar.'), undefined);
-check('an uppercase TODO: still blocks', findAnnouncement('Quedó un TODO: reconciliar.'), 'TODO:');
-check('decide lets a turn that merely names the backlog end', verdict(stopPayload('Revisé el backlog, sin cambios.'), { tail: '' }).result, 'allow');
-check('findAnnouncement of a non-string is undefined', findAnnouncement(undefined), undefined);
+check('an uppercase TODO: reaches the judge', findCandidate('Quedó un TODO: reconciliar.'), 'TODO:');
+check('the prefilter owes the judge for a bare backlog mention with no save', verdict(stopPayload('Revisé el backlog, sin cambios.'), { tail: '' }).result, 'deny');
+check('findCandidate of a non-string is undefined', findCandidate(undefined), undefined);
 
 {
   const counts = replay();
-  check('every labelled false positive of the live journals is judged, 60 of them', counts.allow.total, 60);
-  // 57, not 58: the heading «Lo que queda pendiente, sin apuro» (turn 5) fires again by decision, since nothing
-  // beside it points at a record and a false negative would lose an item. @es 57: el encabezado de la vuelta 5
-  // vuelve a disparar por decisión, porque nada a su lado apunta a un registro.
-  check('at least 57 of the 60 dismissed refusals are now allowed', counts.allow.allowed >= 57, true);
-  check('all 4 genuine announcements still block', counts.block, { total: 4, blocked: 4 });
+  check('the labelled live turns are 60 dismissed and 4 genuine', [counts.allow.total, counts.block.total], [60, 4]);
+  // The prefilter's RECALL is the point of making it broad: no genuine announcement may miss the judge. The
+  // dismissed turns that reach it too are the model calls the judge resolves (cost, not error).
+  // @es El RECALL del prefiltro es el sentido de hacerlo amplio: ningún anuncio genuino puede no llegar al juez.
+  check('all 4 genuine announcements reach the judge', counts.block, { total: 4, reachJudge: 4 });
 }
 
+// --- THE DISMISSAL LOG, read back: a dismissal of THIS session after a moment ends the question; another
+// --- session's, an earlier one, a torn line and a missing log do not. @es EL REGISTRO DE DESCARTES, releído.
+{
+  const dismissals = dismissalsFile();
+  const at = (ms) => new Date(ms).toISOString();
 
-// THE WIRING: the guard is registered for Stop, and the REAL global manifest lists it. Read from
+  check('a missing log is no dismissal', settle(() => dismissedSince('s-d', 0)), false);
+  mkdirSync(path.dirname(dismissals), { recursive: true });
+  writeFileSync(dismissals, `${JSON.stringify({ at: at(2000), session: 's-d', marker: 'x', reason: 'r' })}\nnot json\n${JSON.stringify({ at: at(3000), session: 'other', marker: 'x', reason: 'r' })}\n`, 'utf8');
+  check('a dismissal of this session after the moment counts', dismissedSince('s-d', 1000), true);
+  check('a dismissal at or before the moment does not', [dismissedSince('s-d', 2000), dismissedSince('s-d', 5000)], [false, false]);
+  check('another session\'s dismissal does not count', dismissedSince('s-d', 2500), false);
+  check('a session with no dismissal does not count', dismissedSince('s-none', 0), false);
+}
+
+// THE WIRING: the lexical guard is GONE from Stop (the pending judge of `judge-gate/` decides, wired in
+// `settings.json` and pinned by the judge-gate selftest), and the REAL global manifest no longer lists it. Read from
 // `homedir()`, deliberately NOT from a path relative to this file's own location: there is exactly
 // ONE real `~/.claude/hook-dispatch/manifests/stop.json` on the machine, and a mutation-proof sandbox
 // copies this selftest into a throwaway directory that has no sibling `hook-dispatch/` at all — a
@@ -671,13 +598,12 @@ check('findAnnouncement of a non-string is undefined', findAnnouncement(undefine
 // `hook-dispatch/` hermano, y una ruta relativa a `HERE` leería nada ahí en silencio. Bajo el runner
 // de selftests el home es un sandbox, así que el árbol bajo prueba se lee de `SELFTEST_TREE`.
 {
-  const declaration = JSON.parse(readFileSync(path.join(HERE, 'guard.mjs.hook-registration.json'), 'utf8'));
-  check('the declaration registers Stop', declaration.registrations?.[0]?.event, 'Stop');
+  check('the lexical Stop guard and its registration sidecar are gone', [existsSync(path.join(HERE, 'guard.mjs')), existsSync(path.join(HERE, 'guard.mjs.hook-registration.json'))], [false, false]);
 
   const tree = process.env.SELFTEST_TREE || path.join(homedir(), '.claude');
   const manifestPath = path.join(tree, 'hook-dispatch', 'manifests', 'stop.json');
   const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { guards: [] };
-  check('the REAL global Stop manifest lists backlog-guard', manifest.guards.some((entry) => entry.includes('backlog-guard/guard.mjs')), true);
+  check('the REAL global Stop manifest does not list the lexical backlog guard', manifest.guards.some((entry) => entry.includes('backlog-guard/guard.mjs')), false);
 }
 
 process.stdout.write(`backlog-guard.selftest: ${String(passed)} passed, ${String(failures.length)} failed\n`);

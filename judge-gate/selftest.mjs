@@ -42,7 +42,7 @@ const { readVerdict } = await import('./verdict.mjs');
 const { JUDGES, hookCommand } = await import('./judges.mjs');
 const { decide, MAX_BLOCKS_PER_TURN, NESTED_VARIABLE } = await import('./gate.mjs');
 const { askModel, modelArguments } = await import('./model.mjs');
-const { blocksThisTurn: readTurnCount, outcomesPath, recordOutcome } = await import('./outcome-log.mjs');
+const { blocksThisTurn: readTurnCount, lastBlockTimeThisTurn, outcomesPath, recordOutcome } = await import('./outcome-log.mjs');
 
 // The count as a value even when it throws, so a broken reader fails a check instead of crashing the run. @es El conteo como valor aun si lanza.
 const blocksThisTurn = (judge, session) => {
@@ -268,6 +268,33 @@ log('voice', 'turn-c', 'block');
 check('turn: another session\'s blocks are not counted', blocksThisTurn('voice', 'turn-none'), 0);
 check('turn: a session that only has continued records counts all its blocks', (log('voice', 'turn-d', 'block', true), blocksThisTurn('voice', 'turn-d')), 1);
 
+// --- WHEN THE TURN WAS LAST BLOCKED: the time of the newest block of the current turn, for the pending judge's
+// --- dismissal lookup. @es CUÁNDO SE BLOQUEÓ POR ÚLTIMA VEZ EL TURNO.
+const lastTime = (judge, session) => {
+  try {
+    return lastBlockTimeThisTurn(judge, session);
+  } catch (error) {
+    return `threw: ${error.message}`;
+  }
+};
+const threw = (value) => typeof value === 'string' && value.startsWith('threw:');
+const at = (seconds) => new Date(Date.UTC(2026, 9, 19, 12, 0, seconds)).toISOString();
+const raw = (judge, session, ts, outcome, continued) => appendFileSync(outcomesPath(), `${JSON.stringify({ ts, judge, session, outcome, costUsd: 0, durationMs: 1, ...(continued ? { continued: true } : {}) })}\n`);
+
+check('last block: a session with no records has none', lastTime('voice', 'time-none'), undefined);
+raw('voice', 'time-a', at(1), 'block');
+raw('voice', 'time-a', at(2), 'block', true);
+raw('voice', 'time-a', at(3), 'pass', true);
+check('last block: it is the newest block of the turn, not the newest record', lastTime('voice', 'time-a'), Date.parse(at(2)));
+raw('voice', 'time-a', at(4), 'pass');
+check('last block: a new first stop that passed leaves none', lastTime('voice', 'time-a'), undefined);
+raw('voice', 'time-a', at(5), 'block');
+raw('premise', 'time-a', at(6), 'block');
+raw('voice', 'time-other', at(7), 'block');
+check('last block: another judge\'s or session\'s block is not this one\'s', lastTime('voice', 'time-a'), Date.parse(at(5)));
+check('last block: the count and the time agree', [blocksThisTurn('voice', 'time-a'), lastTime('voice', 'time-a') === Date.parse(at(5))], [1, true]);
+check('last block: no session id is a failed read, never a time', threw(lastTime('voice', '')), true);
+
 const thrownMessage = (action) => {
   try {
     action();
@@ -415,7 +442,9 @@ for (const judge of Object.values(JUDGES)) {
   check(`settings: no native prompt hook still carries the ${judge.name} rubric`, stopHooks.some((hook) => hook.type === 'prompt' && hook.prompt.startsWith(judge.prompt.split('\n')[0])), false);
   check(`settings: the ${judge.name} model call leaves room inside the hook timeout`, judge.askTimeoutMs < judge.timeoutSeconds * 1000, true);
 }
-check('settings: the two judges are two hooks', new Set(stopHooks.filter((hook) => hook.command?.includes('judge-gate/run.mjs')).map((hook) => hook.command)).size, 2);
+check('settings: the judges are one hook each', new Set(stopHooks.filter((hook) => hook.command?.includes('judge-gate/run.mjs')).map((hook) => hook.command)).size, Object.keys(JUDGES).length);
+check('settings: the three judges are premise, voice and pending', Object.keys(JUDGES), ['premise', 'voice', 'pending']);
+check('settings: only the pending judge carries a prefilter and an appendix', Object.values(JUDGES).map((judge) => [typeof judge.prefilter, typeof judge.appendix]), [['undefined', 'undefined'], ['undefined', 'undefined'], ['function', 'function']]);
 check('settings: no prompt-type hook is left on Stop', stopHooks.filter((hook) => hook.type === 'prompt').length, 0);
 
 const sidecarPath = `${RUN}.hook-registration.json`;

@@ -17,9 +17,8 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { dismissalsFile } from './dismissals.mjs';
 import { stateDirectory } from './state.mjs';
-
-const dismissalsFile = () => path.join(stateDirectory(), 'dismissals.jsonl');
 
 /** The shortest reason accepted, the same floor `failure-capture`/`handback` dismiss commands apply. @es El motivo más corto aceptado. */
 export const MINIMUM_REASON_LENGTH = 25;
