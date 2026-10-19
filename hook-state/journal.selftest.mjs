@@ -253,6 +253,39 @@ try {
   // @es Un directorio de estado que ni se puede crear: no se puede registrar nada allí, y aun así nada lanza.
   writeFileSync(path.join(stateRoot, 'guard-w'), 'a file where the directory should be');
   check('J-1: a counter whose directory cannot be made returns null, never throws', notThrown(() => incrementFires('guard-w')), null);
+
+  // L3: an increment that landed is counted once, even when releasing its lock fails afterwards.
+  // @es L3: un incremento que llegó se cuenta una vez, aunque soltar su lock falle después.
+  const releaseReports = [];
+  const failingRelease = (one) => {
+    if (one === `${firesPath('guard-r')}.lock`) throw Object.assign(new Error('EIO: injected'), { code: 'EIO' });
+    rmSync(one, { force: true });
+  };
+
+  check('L3: an increment whose release fails returns its count and records no "not counted"', [notThrown(() => incrementFires('guard-r', { lock: { remove: failingRelease, report: (line) => releaseReports.push(line) } })), JSON.parse(readFileSync(firesPath('guard-r'), 'utf8')).count, uncounted('guard-r').length], [1, 1, 0]);
+  check('L3: ...and the release failure is reported, bilingual', [releaseReports.length, /could not be released/.test(releaseReports[0] ?? ''), / @es /.test(releaseReports[0] ?? '')], [1, true, true]);
+
+  // L5: one budget shared by several counters bounds them TOGETHER, so a Stop that counts two judges over two busy
+  // counters waits about 200 ms in all, not 200 ms each. @es L5: un presupuesto compartido acota a varios contadores
+  // JUNTOS: un Stop que cuenta dos jueces sobre dos contadores ocupados espera unos 200 ms en total.
+  for (const busyOne of ['guard-s1', 'guard-s2']) {
+    mkdirSync(path.dirname(firesPath(busyOne)), { recursive: true });
+    writeFileSync(`${firesPath(busyOne)}.lock`, '');
+  }
+
+  const budget = journal.firesBudget?.();
+  const sharedStart = Date.now();
+  const sharedOutcomes = ['guard-s1', 'guard-s2'].map((one) => notThrown(() => incrementFires(one, { lock: budget })));
+  const sharedSpent = Date.now() - sharedStart;
+
+  check('L5: two busy counters under one shared budget are both not counted, in about 200 ms together', [sharedOutcomes, sharedSpent > 150, sharedSpent < 330], [[null, null], true, true]);
+
+  let fakeNow = 0;
+  const slept = [];
+  const fake = journal.firesBudget?.({ now: () => fakeNow, sleep: (ms) => { slept.push(ms); fakeNow += ms; } });
+
+  for (let turn = 0; turn < 20; turn += 1) fake?.wait();
+  check('L5: a budget sleeps 15 ms at a time, never past its 200 ms, then not at all', [slept.reduce((sum, ms) => sum + ms, 0), slept.every((ms) => ms <= 15), slept.length, fake?.attempts], [200, true, 14, 13]);
   const absent = () => {
     throw Object.assign(new Error('no such file'), { code: 'ENOENT' });
   };

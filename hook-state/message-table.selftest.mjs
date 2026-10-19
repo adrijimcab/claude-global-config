@@ -37,6 +37,7 @@ const EXPECTED = {
   'fires-uncounted': [{ mechanism: 'm' }, 'This fire of m was not counted; the reason is in the record. @es Este disparo de m no se contó; el motivo está en el registro.'],
   'lock-create-fault': [{ file: 'L', code: 'EPERM', detail: 'd' }, 'The lock L could not be created (EPERM): d. This is a fault, not another writer holding it. @es No se pudo crear el lock L (EPERM): d. Es un fallo, no otro escritor que lo tiene.'],
   'lock-break-fault': [{ file: 'L', code: 'EIO', detail: 'd' }, 'The stale lock L could not be broken (EIO): d. @es No se pudo romper el lock caducado L (EIO): d.'],
+  'lock-break-journal-fault': [{ file: 'L', code: 'EISDIR', detail: 'd' }, 'The break of the stale lock L could not be journaled (EISDIR): d. The lock was taken all the same. @es No se pudo registrar la rotura del lock caducado L (EISDIR): d. El lock se tomó igualmente.'],
   'lock-release-fault': [{ file: 'L', code: 'EIO', detail: 'd' }, 'The lock L could not be released (EIO): d. @es No se pudo soltar el lock L (EIO): d.'],
   'lock-broken-dead-owner': [{ file: 'L', ageMs: 5, pid: 7 }, 'The lock L was 5 ms old and its owner pid 7 is gone; it was broken. @es El lock L tenía 5 ms y su dueño, el pid 7, ya no existe; se rompió.'],
   'lock-broken-no-owner': [{ file: 'L', ageMs: 5 }, 'The lock L was 5 ms old and names no owner (empty or unreadable); it was broken by its age. @es El lock L tenía 5 ms y no nombra dueño (vacío o ilegible); se rompió por su edad.'],

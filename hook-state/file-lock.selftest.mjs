@@ -57,7 +57,7 @@ const outcomeOf = (action) => {
   try {
     return action();
   } catch (error) {
-    return { threw: error?.name, message: String(error?.message), code: error?.cause?.code ?? error?.code };
+    return { threw: error?.name, message: String(error?.message), code: error?.cause?.code ?? error?.code, file: error?.file };
   }
 };
 
@@ -362,7 +362,7 @@ const failing = (codes) => {
   waits = 0;
   const denied = outcomeOf(() => lock.takeLock(file('denied'), options({ create: failing(['EACCES']), wait: () => { waits += 1; } })));
 
-  check('K-E: any other create failure is a fault at once, bilingual, with its cause', [denied.threw, denied.code, / @es /.test(denied.message), waits], ['LockFault', 'EACCES', true, 0]);
+  check('K-E: any other create failure is a fault at once, bilingual, with its cause and the lock it is about', [denied.threw, denied.code, / @es /.test(denied.message), waits, denied.file], ['LockFault', 'EACCES', true, 0, file('denied')]);
 
   const missing = outcomeOf(() => lock.takeLock(path.join(scratch, 'no-such-dir', 'x.lock'), options()));
 
@@ -383,8 +383,76 @@ const failing = (codes) => {
   };
   const broken = outcomeOf(() => lock.takeLock(stale(), options({ create: breakerFails('EACCES') })));
 
-  check('K-E: a non-contention failure creating the breaker is rethrown, never a silent return', [broken.threw, broken.code, / @es /.test(broken.message)], ['LockFault', 'EACCES', true]);
-  check('K-E: a breaker that is delete-pending is retried, not thrown', outcomeOf(() => lock.takeLock(stale(), options({ create: breakerFails('EPERM') }))), false);
+  check('K-E: a non-contention failure creating the breaker is rethrown, never a silent return', [broken.threw, broken.code, / @es /.test(broken.message), String(broken.file).endsWith('.lock.breaker')], ['LockFault', 'EACCES', true, true]);
+  const breakerPendingTwice = (() => {
+    let left = 2;
+
+    return (target, token) => {
+      if (target.endsWith('.breaker') && left > 0) {
+        left -= 1;
+        throw failure('EPERM');
+      }
+
+      writeFileSync(target, token, { flag: 'wx' });
+    };
+  })();
+  const breakerTarget = stale();
+
+  check('K-E: a breaker that is delete-pending is retried, and the lock is taken once it clears', outcomeOf(() => lock.takeLock(breakerTarget, options({ attempts: 5, create: breakerPendingTwice }))), true);
+  lock.releaseLock(breakerTarget);
+
+  // L1: a breaker that stays delete-pending through every attempt is a fault, never "another writer holds it".
+  // @es L1: un breaker que sigue pendiente de borrado en todos los intentos es un fallo, nunca «otro escritor lo tiene».
+  const breakerStuck = outcomeOf(() => lock.takeLock(stale(), options({ create: breakerFails('EPERM') })));
+
+  check('L1: a breaker delete-pending through every attempt is a fault: "could not be broken", bilingual', [breakerStuck.threw, breakerStuck.code, /could not be broken \(EPERM\)/.test(breakerStuck.message), / @es /.test(breakerStuck.message)], ['LockFault', 'EPERM', true, true]);
+
+  // L1: a stale lock whose removal stays delete-pending (Windows) is retried, and a fault once it persists.
+  // @es L1: un lock caducado cuyo borrado sigue pendiente (Windows) se reintenta, y es un fallo si persiste.
+  const removalFails = (code) => (target) => {
+    if (!target.endsWith('.breaker')) throw failure(code);
+    rmSync(target, { force: true });
+  };
+  let waitsOnStuck = 0;
+  const stuck = outcomeOf(() => lock.takeLock(stale(), options({ platform: 'win32', remove: removalFails('EPERM'), wait: () => { waitsOnStuck += 1; } })));
+
+  check('L1: on Windows a stale lock that cannot be deleted through every attempt is a fault, after retrying each attempt', [stuck.threw, stuck.code, /could not be broken \(EPERM\)/.test(stuck.message), / @es /.test(stuck.message), waitsOnStuck], ['LockFault', 'EPERM', true, true, 3]);
+
+  const busyStuck = outcomeOf(() => lock.takeLock(stale(), options({ platform: 'linux', remove: removalFails('EBUSY') })));
+
+  check('L1: EBUSY on a POSIX unlink is retried as well, and a fault once it persists', [busyStuck.threw, busyStuck.code], ['LockFault', 'EBUSY']);
+
+  let waitsOnPosix = 0;
+  const posix = outcomeOf(() => lock.takeLock(stale(), options({ platform: 'linux', remove: removalFails('EPERM'), wait: () => { waitsOnPosix += 1; } })));
+
+  check('L1: on POSIX an unlink EPERM is a fault at once', [posix.threw, posix.code, waitsOnPosix], ['LockFault', 'EPERM', 0]);
+
+  const once = stale();
+  let failedOnce = false;
+  const eperOnce = (target) => {
+    if (!target.endsWith('.breaker') && !failedOnce) {
+      failedOnce = true;
+      throw failure('EPERM');
+    }
+    rmSync(target, { force: true });
+  };
+
+  check('L1: on Windows an EPERM that clears is retried and the lock taken', outcomeOf(() => lock.takeLock(once, options({ platform: 'win32', attempts: 5, remove: eperOnce }))), true);
+  lock.releaseLock(once);
+
+  // A break that failed once and then found a LIVE holder is contention, not a fault.
+  // @es Una rotura que falló una vez y luego encontró un dueño VIVO es contienda, no un fallo.
+  const relived = stale();
+  let replacedByLive = false;
+  const relive = () => {
+    if (!replacedByLive) {
+      replacedByLive = true;
+      writeFileSync(relived, `${String(process.pid)}:live`);
+      utimesSync(relived, AT / 1000, AT / 1000);
+    }
+  };
+
+  check('L1: NEAR MISS: a failed break followed by a live holder is "held", not a fault', outcomeOf(() => lock.takeLock(relived, options({ platform: 'win32', remove: removalFails('EPERM'), wait: relive }))), false);
 
   const busy = stale();
   let removals = 0;
@@ -428,6 +496,54 @@ const failing = (codes) => {
   let ran = false;
 
   check('a held lock: the work does not run and the holder keeps its lock', [outcomeOf(() => lock.withLock(other, () => { ran = true; }, options())), ran, existsSync(other)], [{ held: false }, false, true]);
+}
+
+// --- L2: a break journal that cannot be written never fails the take -------------------------------------
+{
+  const target = held('journal-unwritable', `${String(deadPid)}:x`, STALE + 10_000, AT);
+  const reported = [];
+
+  mkdirSync(`${target}.breaks.jsonl`);
+  check('L2: a stale lock is still broken and taken when its break cannot be journaled', outcomeOf(() => lock.takeLock(target, options({ report: (line) => reported.push(line) }))), true);
+  check('L2: ...and the failed journal is reported once, bilingual, naming the lock', [reported.length, /could not be journaled/.test(reported[0] ?? ''), (reported[0] ?? '').includes(target), / @es /.test(reported[0] ?? '')], [1, true, true, true]);
+  lock.releaseLock(target);
+}
+
+// --- L3: a release that fails never masks the work, and never turns a finished work into a throw -----------
+{
+  const target = file('release-fails');
+  const reported = [];
+  const releaseFails = (one) => {
+    if (one === target) throw failure('EIO');
+    rmSync(one, { force: true });
+  };
+  const done = outcomeOf(() => lock.withLock(target, () => 42, options({ remove: releaseFails, report: (line) => reported.push(line) })));
+
+  check('L3: a finished work whose release fails still returns its value', done, { held: true, value: 42 });
+  check('L3: ...and the release failure is reported, bilingual', [reported.length, /could not be released \(EIO\)/.test(reported[0] ?? ''), / @es /.test(reported[0] ?? '')], [1, true, true]);
+  rmSync(target, { force: true });
+
+  const boom = new Error('boom');
+  let thrown;
+
+  reported.length = 0;
+  try {
+    lock.withLock(target, () => { throw boom; }, options({ remove: releaseFails, report: (line) => reported.push(line) }));
+  } catch (error) {
+    thrown = error;
+  }
+
+  check('L3: a work that throws reaches the caller as itself, with the release failure attached, and reported', [thrown === boom, thrown?.suppressed?.name, thrown?.suppressed?.cause?.code, reported.length], [true, 'LockFault', 'EIO', 1]);
+  rmSync(target, { force: true });
+
+  // Without a reporter, the report goes to the standard error of the process. @es Sin reportero, el informe va a stderr.
+  const script = `import { withLock } from ${JSON.stringify(new URL('./file-lock.mjs', import.meta.url).href)};
+const target = ${JSON.stringify(path.join(scratch, 'release-stderr.lock'))};
+const outcome = withLock(target, () => 7, { remove: (one) => { if (one === target) throw Object.assign(new Error('EIO: injected'), { code: 'EIO' }); } });
+process.stdout.write(JSON.stringify(outcome));`;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+
+  check('L3: by default the release failure goes to stderr, and the work still returns', [child.status, child.stdout, /could not be released \(EIO\)/.test(child.stderr), / @es /.test(child.stderr)], [0, '{"held":true,"value":7}', true, true]);
 }
 
 // --- real processes ---------------------------------------------------------------------------------------

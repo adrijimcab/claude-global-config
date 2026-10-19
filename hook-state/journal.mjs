@@ -91,13 +91,38 @@ export const firesPath = (mechanism) => path.join(stateDir(mechanism), 'fires.js
 export const uncountedPath = (mechanism) => path.join(stateDir(mechanism), 'fires-uncounted.jsonl');
 
 /**
- * The lock budget of the counter, which runs on every Stop: thirteen pauses of 15 ms, about 200 ms. The pause is
+ * The wait budget of the counter, which runs on every Stop: about 200 ms in all, in pauses of 15 ms. The pause is
  * 15 ms, not shorter, because a shorter sleep is not shorter on Windows: MEASURED 2026-10-19, forty pauses of 5 ms
  * took 613 ms there (the timer ticks about every 15.6 ms).
- * @es El presupuesto del lock del contador, que corre en cada Stop: trece pausas de 15 ms, unos 200 ms. La pausa
- * es de 15 ms porque una más corta no lo es en Windows: MEDIDO el 2026-10-19, cuarenta pausas de 5 ms tardaron 613 ms.
+ * @es El presupuesto de espera del contador, que corre en cada Stop: unos 200 ms en total, en pausas de 15 ms. La
+ * pausa es de 15 ms porque una más corta no lo es en Windows: MEDIDO el 2026-10-19, cuarenta pausas de 5 ms tardaron 613 ms.
  */
-const FIRES_LOCK = Object.freeze({ attempts: 13, wait: pauseFor(15) });
+const FIRES_BUDGET_MS = 200;
+const FIRES_PAUSE_MS = 15;
+const FIRES_ATTEMPTS = 13;
+
+/**
+ * The lock options of one wait budget: a deadline `totalMs` from now, and a wait that sleeps at most 15 ms and
+ * never past the deadline, then not at all. One budget passed to several `incrementFires` calls bounds them
+ * TOGETHER, so a Stop that counts several mechanisms waits about 200 ms in all, not 200 ms each; every counter
+ * keeps its own file and its own lock. `now` and `sleep` are test seams.
+ * @es Las opciones de lock de un presupuesto de espera: un plazo `totalMs` desde ahora y una espera que duerme como
+ * mucho 15 ms y nunca más allá del plazo, y luego nada. Un presupuesto compartido por varias llamadas a
+ * `incrementFires` las acota JUNTAS: un Stop que cuenta varios mecanismos espera unos 200 ms en total, no 200 cada
+ * uno; cada contador conserva su fichero y su lock.
+ */
+export function firesBudget({ totalMs = FIRES_BUDGET_MS, now = Date.now, sleep = (ms) => pauseFor(ms)() } = {}) {
+  const deadline = now() + totalMs;
+
+  return {
+    attempts: FIRES_ATTEMPTS,
+    wait: () => {
+      const left = deadline - now();
+
+      if (left > 0) sleep(Math.min(FIRES_PAUSE_MS, left));
+    }
+  };
+}
 
 /**
  * Appends one v2 record to the journal of `mechanism` and returns it.
@@ -150,9 +175,11 @@ function readCount(file, readFile) {
  * It NEVER throws: it runs on every Stop, and a counter is evidence, never a reason to abort its caller. When
  * the run cannot be counted (the lock stays held past its short budget, the counter is corrupt or unreadable, the
  * write fails, the lock faults) the call returns `null` and appends one record to `fires-uncounted.jsonl` beside
- * the counter, with the reason, so the gap in the count is visible. The wait budget is about 200 ms in all
- * (`FIRES_LOCK`). Only when even that record cannot be written (the state directory itself is unusable) is
- * the gap lost, and nothing else could record it.
+ * the counter, with the reason, so the gap in the count is visible. An increment that landed is never recorded
+ * as not counted: a lock that cannot be released after it is reported, not counted twice. The wait budget is about
+ * 200 ms in all (`firesBudget`), and a caller counting several mechanisms passes one shared budget as
+ * `options.lock`. Only when even that record cannot be written (the state directory itself is unusable) is the gap
+ * lost, and nothing else could record it.
  * @es Cuenta una corrida más de `mechanism` y devuelve el total; el journal no se toca. La lectura-
  * modificación-escritura corre bajo un lock exclusivo (`<contador>.lock`) para que dos procesos no pierdan un
  * incremento, y el valor nuevo pasa por un nombre temporal único por proceso y luego un renombrado, de modo
@@ -160,9 +187,11 @@ function readCount(file, readFile) {
  * un contador es evidencia, nunca motivo para abortar a quien lo llama. Si la corrida no se puede contar (el lock
  * sigue ocupado tras su presupuesto corto, el contador está corrupto o ilegible, la escritura falla, el lock
  * falla) devuelve `null` y añade un registro a `fires-uncounted.jsonl` junto al contador, con el motivo, para que
- * el hueco se vea. El presupuesto de espera es de unos 200 ms en total (`FIRES_LOCK`). Solo si ni ese registro
+ * el hueco se vea. Un incremento que llegó nunca se registra como no contado: un lock que no se puede soltar después
+ * se informa, no se cuenta dos veces. El presupuesto de espera es de unos 200 ms en total (`firesBudget`), y quien
+ * cuenta varios mecanismos pasa un presupuesto compartido como `options.lock`. Solo si ni ese registro
  * se puede escribir (el propio directorio de estado no sirve) se pierde el hueco, y nada más podría registrarlo.
- * @param options.lock Options of the lock (a test seam). @es Opciones del lock (punto de prueba).
+ * @param options.lock Options of the lock, over this call's own `firesBudget()`: a shared budget, or a test seam. @es Opciones del lock sobre el presupuesto propio de la llamada: un presupuesto compartido, o un punto de prueba.
  * @param options.readFile Replaces `fs.readFileSync` (a test seam: a read failure other than absence cannot be told from a write failure on a real directory). @es Sustituye a `fs.readFileSync` (punto de prueba: un fallo de lectura que no es ausencia no se distingue de un fallo de escritura sobre un directorio real).
  * @returns The new total, or `null` when this run was not counted. @es El total nuevo, o `null` si esta corrida no se contó.
  */
@@ -186,7 +215,7 @@ export function incrementFires(mechanism, { readFile = readFileSync, lock } = {}
       }
 
       return count;
-    }, { ...FIRES_LOCK, ...lock });
+    }, { ...firesBudget(), ...lock });
 
     if (!outcome.held) throw new Error(bilingual('fires-busy', { file }));
 

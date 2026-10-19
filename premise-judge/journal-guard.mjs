@@ -33,7 +33,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { appendRecord, digestInput, incrementFires, journalPath, newId } from '../hook-state/journal.mjs';
+import { appendRecord, digestInput, firesBudget, incrementFires, journalPath, newId } from '../hook-state/journal.mjs';
 import { lastRecords } from '../hook-state/jsonl-tail.mjs';
 import { MARKER as VOICE_MARKER } from '../voice-judge/prompt.mjs';
 import { MARKER } from './prompt.mjs';
@@ -150,10 +150,15 @@ export function journalJudgeBlocks(payload) {
 /**
  * Always `undefined`: the turn is never held. Exported for `~/.claude/hook-dispatch/dispatch.mjs`. Each judge's
  * run is counted on its own (`incrementFires` never throws, and records a run it could not count), and the blocks
- * are journaled after, whatever the counting did.
+ * are journaled after, whatever the counting did. The judges share ONE wait budget (`firesBudget`), so a Stop whose
+ * counters are all busy waits about 200 ms in all, not 200 ms per judge. DECIDED over counting both judges under
+ * one lock: each counter stays in its own mechanism's state directory with its own lock, so no mechanism's file
+ * is locked or rotated through another's.
  * @es Siempre `undefined`: el turno nunca se retiene. Cada corrida de juez se cuenta por su cuenta
  * (`incrementFires` nunca lanza y registra la corrida que no pudo contar), y los bloqueos se registran después,
- * haga lo que haga el conteo.
+ * haga lo que haga el conteo. Los jueces comparten UN presupuesto de espera, así que un Stop con todos los
+ * contadores ocupados espera unos 200 ms en total, no 200 por juez. DECIDIDO frente a contar ambos bajo un solo
+ * lock: cada contador sigue en el directorio de estado de su mecanismo con su propio lock.
  */
 export function evaluate(raw) {
   let payload;
@@ -166,7 +171,9 @@ export function evaluate(raw) {
     return undefined;
   }
 
-  for (const { mechanism } of JUDGES) incrementFires(mechanism);
+  const budget = firesBudget();
+
+  for (const { mechanism } of JUDGES) incrementFires(mechanism, { lock: budget });
 
   try {
     journalJudgeBlocks(payload);

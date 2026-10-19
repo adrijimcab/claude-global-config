@@ -224,6 +224,17 @@ check('hook: a missing transcript fails open', (() => {
     const verdict = evaluate(JSON.stringify(stopPayload(both, { session_id: 'j3' })));
 
     check('J-1: a busy counter costs the hook at most about 200 ms and no block', [verdict, Date.now() - started < 1_500, count('voice-judge'), records(MECHANISM).length, records('voice-judge').length], [undefined, true, 2, 2, 3]);
+
+    // L5: BOTH counters held by other processes: the two judges share one budget, so the Stop waits about 200 ms
+    // in all, not 200 ms per judge. @es L5: AMBOS contadores ocupados: los dos jueces comparten un presupuesto, así
+    // que el Stop espera unos 200 ms en total, no 200 por juez.
+    writeFileSync(`${firesPath('voice-judge')}.lock`, '');
+
+    const bothStarted = Date.now();
+    const bothVerdict = evaluate(JSON.stringify(stopPayload(both, { session_id: 'j4' })));
+    const bothSpent = Date.now() - bothStarted;
+
+    check('L5: two busy counters cost the Stop about 200 ms in all, and no block', [bothVerdict, bothSpent > 150, bothSpent < 330, records(MECHANISM).length, records('voice-judge').length], [undefined, true, true, 3, 4]);
   } finally {
     process.env.HOOK_STATE_DIR = saved;
     rmSync(ISOLATED, { recursive: true, force: true });

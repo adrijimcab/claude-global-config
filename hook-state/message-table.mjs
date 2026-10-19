@@ -44,6 +44,10 @@ export const MESSAGE_TABLE = {
     en: 'The stale lock {file} could not be broken ({code}): {detail}.',
     es: 'No se pudo romper el lock caducado {file} ({code}): {detail}.'
   },
+  'lock-break-journal-fault': {
+    en: 'The break of the stale lock {file} could not be journaled ({code}): {detail}. The lock was taken all the same.',
+    es: 'No se pudo registrar la rotura del lock caducado {file} ({code}): {detail}. El lock se tomó igualmente.'
+  },
   'lock-release-fault': {
     en: 'The lock {file} could not be released ({code}): {detail}.',
     es: 'No se pudo soltar el lock {file} ({code}): {detail}.'

@@ -17,15 +17,17 @@ import * as stateLock from '../hook-state/file-lock.mjs';
 export const STALE_AFTER_MS = stateLock.STALE_AFTER_MS;
 
 /**
- * A fault of the state lock, said as the ledger lock's in both halves; any other error is returned unchanged.
- * @es Un fallo del lock de estado, dicho como del lock del ledger en ambas mitades; cualquier otro error vuelve igual.
+ * A fault of THIS ledger lock (its lock file or its breaker), said as the ledger lock's in both halves; any other
+ * error, a fault of another lock thrown by the work included, is returned unchanged.
+ * @es Un fallo de ESTE lock del ledger (su fichero o su breaker), dicho como del lock del ledger en ambas mitades;
+ * cualquier otro error, también el fallo de otro lock lanzado por el trabajo, vuelve igual.
  */
 function asLedgerFault(error, lockFile) {
-  if (!(error instanceof stateLock.LockFault)) return error;
+  if (!(error instanceof stateLock.LockFault) || (error.file !== lockFile && error.file !== `${lockFile}.breaker`)) return error;
 
   const [english, spanish = english] = error.message.split(' @es ');
 
-  return new stateLock.LockFault(`The ledger lock ${lockFile} failed: ${english} @es Falló el lock del ledger ${lockFile}: ${spanish}`, { cause: error.cause });
+  return new stateLock.LockFault(`The ledger lock ${lockFile} failed: ${english} @es Falló el lock del ledger ${lockFile}: ${spanish}`, { cause: error.cause, file: error.file });
 }
 
 /**

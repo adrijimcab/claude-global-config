@@ -25,8 +25,12 @@
  *
  * FAILURES. `EEXIST` is contention. On Windows `EPERM` and `EBUSY` mean the file is being deleted or is open
  * elsewhere, and are retried; if they persist through EVERY attempt the result is a fault ("could not be
- * created"), never "another writer holds it". Any other failure, and any failure of the breaker path that is not
- * contention, is thrown as a `LockFault`. Every message is bilingual (`message-table.mjs`).
+ * created"), never "another writer holds it". The break path escalates the same way: a stale lock or a dead
+ * breaker whose removal stays `EPERM`/`EBUSY` (only `EBUSY` on POSIX, where an unlink `EPERM` is a fault at once)
+ * through every attempt is a fault ("could not be broken"). Any other failure, and any failure of the breaker
+ * path that is not contention, is thrown as a `LockFault`. What must never fail a take or a finished work (the
+ * break journal, the release after the work) is reported instead, bilingual, on stderr by default. Every message
+ * is bilingual (`message-table.mjs`).
  *
  * @es El único lock de todo escritor de estado: el derecho exclusivo a leer-modificar-escribir un fichero, que
  * toman los contadores de hook-state y, por el adaptador `failure-capture/ledger-lock.mjs`, los escritores de
@@ -40,7 +44,10 @@
  * `<lock>.breaker`, que es un lock del mismo tipo; bajo él el lock caducado se relee y se borra solo si conserva
  * el token Y la identidad (fecha e inodo) que se juzgaron. Lo residual: releer y borrar son dos llamadas al
  * sistema. FALLOS: `EEXIST` es contienda; `EPERM` y `EBUSY` (Windows) se reintentan, y si persisten en TODOS los
- * intentos es un fallo, nunca «otro escritor lo tiene»; cualquier otro fallo es un `LockFault`. Todo mensaje es bilingüe.
+ * intentos es un fallo, nunca «otro escritor lo tiene»; la rotura escala igual (en POSIX un `EPERM` de unlink es
+ * un fallo al instante); cualquier otro fallo es un `LockFault`. Lo que nunca debe hacer fallar una toma ni un
+ * trabajo terminado (el registro de roturas, soltar tras el trabajo) se informa, bilingüe, en stderr. Todo
+ * mensaje es bilingüe.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -60,14 +67,28 @@ export const pauseFor = (ms) => () => Atomics.wait(new Int32Array(new SharedArra
 /** The failures that mean a file is being deleted or is open elsewhere (Windows). @es Los fallos de un fichero que se está borrando o está abierto en otro sitio (Windows). */
 const DELETE_PENDING = new Set(['EPERM', 'EBUSY']);
 
-/** The failures of a removal that only mean someone else got there first. @es Los fallos de un borrado que solo significan que otro llegó antes. */
-const ALREADY_GOING = new Set(['ENOENT', ...DELETE_PENDING]);
+/**
+ * The failures of a removal that may clear by waiting, by platform: on Windows a file being deleted or open elsewhere
+ * (`EPERM`, `EBUSY`); on POSIX only `EBUSY`, because there an unlink `EPERM` is a permission fault that never clears.
+ * @es Los fallos de un borrado que pueden pasar esperando, por plataforma: en Windows `EPERM` y `EBUSY`; en POSIX
+ * solo `EBUSY`, porque allí un `EPERM` de unlink es un fallo de permisos que no pasa.
+ */
+const removalPending = (platform) => (platform === 'win32' ? DELETE_PENDING : new Set(['EBUSY']));
 
-/** A failure of the lock itself, never "another writer holds it". @es Un fallo del propio lock, nunca «otro escritor lo tiene». */
+/** Writes one report line to the standard error. @es Escribe una línea de informe en stderr. */
+const toStderr = (line) => process.stderr.write(`${line}\n`);
+
+/**
+ * A failure of the lock itself, never "another writer holds it". `file` is the lock or breaker file it is about,
+ * so an adapter can tell its own lock's faults from another lock's.
+ * @es Un fallo del propio lock, nunca «otro escritor lo tiene». `file` es el fichero de lock o breaker al que se
+ * refiere, para que un adaptador distinga los fallos de su lock de los de otro.
+ */
 export class LockFault extends Error {
   constructor(message, options) {
     super(message, options);
     this.name = 'LockFault';
+    this.file = options?.file;
   }
 }
 
@@ -78,7 +99,7 @@ const taken = new Map();
 const newToken = () => `${String(process.pid)}:${randomBytes(6).toString('hex')}`;
 
 /** A fault of `file`, bilingual, carrying the failure as its cause. @es Un fallo de `file`, bilingüe, con la causa. */
-const fault = (id, file, error) => new LockFault(bilingual(id, { file, code: String(error?.code ?? 'unknown'), detail: error instanceof Error ? error.message : String(error) }), { cause: error });
+const fault = (id, file, error) => new LockFault(bilingual(id, { file, code: String(error?.code ?? 'unknown'), detail: error instanceof Error ? error.message : String(error) }), { cause: error, file });
 
 /** Whether a process with this pid exists; one we may not signal exists all the same. @es Si existe un proceso con este pid; uno al que no podemos enviar señal existe igual. */
 function processExists(pid) {
@@ -152,24 +173,26 @@ function staleOf(file, { staleAfterMs, ceilingMs, now, isAlive }) {
 }
 
 /**
- * Removes `file` only if it still holds the token AND the identity that were judged; returns whether it did. A
- * removal another process got to first is no failure; any other is a fault.
- * @es Quita `file` solo si conserva el token Y la identidad juzgados; devuelve si lo hizo.
+ * Removes `file` only if it still holds the token AND the identity that were judged: `{ removed }`, plus `pending`
+ * (the failure) when the removal may clear by waiting. A file already gone is no failure; any other is a fault.
+ * @es Quita `file` solo si conserva el token Y la identidad juzgados: `{ removed }`, más `pending` (el fallo) si el
+ * borrado puede pasar esperando. Un fichero que ya no está no es un fallo; cualquier otro lo es.
  */
-function removeIfStill(file, judged, remove) {
+function removeIfStill(file, judged, { remove, platform }) {
   const now = readLock(file);
 
-  if (now === undefined || now.token !== judged.token || now.identity !== judged.identity) return false;
+  if (now === undefined || now.token !== judged.token || now.identity !== judged.identity) return { removed: false };
 
   try {
     remove(file);
   } catch (error) {
-    if (ALREADY_GOING.has(error?.code)) return false;
+    if (error?.code === 'ENOENT') return { removed: false };
+    if (removalPending(platform).has(error?.code)) return { removed: false, pending: error };
 
     throw fault('lock-break-fault', file, error);
   }
 
-  return true;
+  return { removed: true };
 }
 
 /** Removes `file` if it still holds `token`. @es Quita `file` si aún tiene `token`. */
@@ -183,18 +206,30 @@ function releaseToken(file, token, remove) {
   }
 }
 
-/** Journals one break beside the lock. @es Registra una rotura junto al lock. */
-function recordBreak(lockFile, file, judged, { ceilingMs }) {
+/**
+ * Journals one break beside the lock. The break has already happened, so a journal that cannot be written never
+ * fails the take: the failure is reported, bilingual, and the take goes on.
+ * @es Registra una rotura junto al lock. La rotura ya ocurrió, así que un registro que no se puede escribir nunca
+ * hace fallar la toma: el fallo se informa, bilingüe, y la toma sigue.
+ */
+function recordBreak(lockFile, file, judged, { ceilingMs, report }) {
   const ageMs = Math.round(judged.ageMs);
   const message = bilingual(`lock-broken-${judged.reason}`, { file, ageMs, pid: judged.pid, ceilingMs });
 
-  appendFileSync(`${lockFile}.breaks.jsonl`, `${JSON.stringify({ at: new Date().toISOString(), file, reason: judged.reason, token: judged.token, pid: judged.pid, ageMs, ceilingMs, message })}\n`);
+  try {
+    appendFileSync(`${lockFile}.breaks.jsonl`, `${JSON.stringify({ at: new Date().toISOString(), file, reason: judged.reason, token: judged.token, pid: judged.pid, ageMs, ceilingMs, message })}\n`);
+  } catch (error) {
+    report(bilingual('lock-break-journal-fault', { file, code: String(error?.code ?? 'unknown'), detail: error instanceof Error ? error.message : String(error) }));
+  }
 }
 
 /**
  * Breaks the stale lock that was judged, holding the breaker; a breaker left by a dead breaker is judged and
- * removed by the same rule, so a crashed breaker cannot wedge the lock.
- * @es Rompe el lock caducado juzgado, con el breaker; un breaker de un rompedor muerto se juzga y quita con la misma regla.
+ * removed by the same rule, so a crashed breaker cannot wedge the lock. Returns the failure when the break could
+ * not be done for a reason that may clear by waiting (a breaker or a stale file being deleted elsewhere), so the
+ * taker can tell a break that never succeeds from contention.
+ * @es Rompe el lock caducado juzgado, con el breaker. Devuelve el fallo cuando la rotura no se pudo hacer por algo
+ * que puede pasar esperando, para que quien toma distinga una rotura que nunca sale de la contienda.
  */
 function breakStale(lockFile, judged, settings) {
   const breaker = `${lockFile}.breaker`;
@@ -206,18 +241,26 @@ function breakStale(lockFile, judged, settings) {
     if (error?.code === 'EEXIST') {
       const dead = staleOf(breaker, settings);
 
-      if (dead !== undefined && removeIfStill(breaker, dead, settings.remove)) recordBreak(lockFile, breaker, dead, settings);
+      if (dead === undefined) return undefined;
 
-      return;
+      const outcome = removeIfStill(breaker, dead, settings);
+
+      if (outcome.removed) recordBreak(lockFile, breaker, dead, settings);
+
+      return outcome.pending;
     }
 
-    if (DELETE_PENDING.has(error?.code)) return;
+    if (DELETE_PENDING.has(error?.code)) return error;
 
     throw fault('lock-break-fault', breaker, error);
   }
 
   try {
-    if (removeIfStill(lockFile, judged, settings.remove)) recordBreak(lockFile, lockFile, judged, settings);
+    const outcome = removeIfStill(lockFile, judged, settings);
+
+    if (outcome.removed) recordBreak(lockFile, lockFile, judged, settings);
+
+    return outcome.pending;
   } finally {
     releaseToken(breaker, token, settings.remove);
   }
@@ -226,15 +269,21 @@ function breakStale(lockFile, judged, settings) {
 /**
  * Takes the lock, or returns false once `attempts` are spent with the lock held. Every option is injectable so a
  * proof never sleeps: `create(file, token)` and `remove(file)` replace the file operations, `isAlive(pid)` the
- * process probe, `now()` the clock and `wait()` the pause between attempts.
- * @throws {LockFault} when the lock cannot be created (not contention), or the breaker path fails.
- * @es Toma el lock, o devuelve false al agotar los intentos con el lock ocupado. Toda opción es inyectable.
+ * process probe, `now()` the clock, `wait()` the pause between attempts, `platform` the platform whose removal
+ * codes apply, and `report(line)` where a failure that must not stop the take is told (stderr by default).
+ * @throws {LockFault} when the lock cannot be created (not contention), when a stale lock could not be broken in
+ * ANY attempt, or when the breaker path fails for a reason that does not clear by waiting.
+ * @es Toma el lock, o devuelve false al agotar los intentos con el lock ocupado. Toda opción es inyectable. Lanza
+ * `LockFault` si el lock no se puede crear, si un lock caducado no se pudo romper en NINGÚN intento, o si el
+ * camino del breaker falla por algo que no pasa esperando.
  */
-export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_MS, ceilingMs = staleAfterMs * CEILING_FACTOR, now = Date.now, wait = pauseFor(50), isAlive = processExists, create = createWithToken, remove = removeFile } = {}) {
-  const settings = { staleAfterMs, ceilingMs, now, isAlive, create, remove };
+export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_MS, ceilingMs = staleAfterMs * CEILING_FACTOR, now = Date.now, wait = pauseFor(50), isAlive = processExists, create = createWithToken, remove = removeFile, platform = process.platform, report = toStderr } = {}) {
+  const settings = { staleAfterMs, ceilingMs, now, isAlive, create, remove, platform, report };
   const token = newToken();
   let held = false;
   let pending;
+  let failedBreaks = 0;
+  let breakFailure;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
@@ -248,41 +297,77 @@ export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_M
       else throw fault('lock-create-fault', lockFile, error);
 
       const judged = staleOf(lockFile, settings);
+      const failedBreak = judged === undefined ? undefined : breakStale(lockFile, judged, settings);
 
-      if (judged !== undefined) breakStale(lockFile, judged, settings);
+      if (failedBreak === undefined) failedBreaks = 0;
+      else {
+        failedBreaks += 1;
+        breakFailure = failedBreak;
+      }
 
       wait();
     }
   }
 
+  // A stale lock that could not be broken in ANY attempt is a fault, not another writer holding it.
+  // @es Un lock caducado que no se pudo romper en NINGÚN intento es un fallo, no otro escritor que lo tiene.
+  if (attempts > 0 && failedBreaks === attempts) throw fault('lock-break-fault', lockFile, breakFailure);
   if (!held && pending !== undefined) throw fault('lock-create-fault', lockFile, pending);
 
   return false;
 }
 
 /**
- * Removes the lock this process took, only while it still holds this process's token.
+ * Removes the lock this process took, only while it still holds this process's token. `remove` replaces the
+ * removal (a test seam).
  * @es Quita el lock que tomó este proceso, solo mientras aún tenga su token.
  */
-export function releaseLock(lockFile) {
+export function releaseLock(lockFile, { remove = removeFile } = {}) {
   const mine = taken.get(lockFile);
 
   taken.delete(lockFile);
 
-  if (mine !== undefined) releaseToken(lockFile, mine, removeFile);
+  if (mine !== undefined) releaseToken(lockFile, mine, remove);
 }
 
 /**
- * Runs `work` holding the lock and releases it whether `work` returns or throws.
+ * Runs `work` holding the lock and releases it whether `work` returns or throws. A release that fails never
+ * changes what the work did: a work that returned still returns its value, a work that threw still throws its own
+ * error (with the release failure attached as `suppressed`), and the release failure is reported, bilingual,
+ * through `options.report` (stderr by default).
  * @returns `{ held: true, value }`, or `{ held: false }` when the lock could not be taken: `work` did not run and the holder's lock is untouched.
- * @es Ejecuta `work` con el lock y lo suelta tanto si vuelve como si lanza. Con el lock ocupado, `work` no corre.
+ * @es Ejecuta `work` con el lock y lo suelta tanto si vuelve como si lanza. Un fallo al soltar nunca cambia lo que
+ * hizo el trabajo: si volvió, vuelve con su valor; si lanzó, lanza su propio error (con el fallo al soltar adjunto
+ * como `suppressed`), y el fallo al soltar se informa, bilingüe. Con el lock ocupado, `work` no corre.
  */
-export function withLock(lockFile, work, options) {
+export function withLock(lockFile, work, options = {}) {
   if (!takeLock(lockFile, options)) return { held: false };
 
+  const report = options.report ?? toStderr;
+  const release = () => {
+    try {
+      releaseLock(lockFile, options);
+
+      return undefined;
+    } catch (error) {
+      report(error instanceof Error ? error.message : String(error));
+
+      return error;
+    }
+  };
+  let value;
+
   try {
-    return { held: true, value: work() };
-  } finally {
-    releaseLock(lockFile);
+    value = work();
+  } catch (error) {
+    const failure = release();
+
+    if (failure !== undefined && error !== null && typeof error === 'object') error.suppressed = failure;
+
+    throw error;
   }
+
+  release();
+
+  return { held: true, value };
 }

@@ -115,6 +115,30 @@ const gone = (file) => !existsSync(file);
 
   check('a lock that cannot be created throws a fault named as the ledger lock\'s, in both halves, with its cause', isLedgerFault(taken), String(taken?.message));
   check('...and withLock says it the same way', isLedgerFault(within), String(within?.message));
+
+  // L4: a fault of ANOTHER lock, thrown by the work, is not the ledger lock's and reaches the caller as it was.
+  // @es L4: un fallo de OTRO lock, lanzado por el trabajo, no es del lock del ledger y llega tal cual.
+  const ledger = path.join(scratch, 'ledger-own.lock');
+  const other = path.join(scratch, 'no-such-dir', 'other.lock');
+  let inner;
+  const relabelled = attempt(() => withLock(ledger, () => {
+    try {
+      takeLock(other, options(Date.now()));
+    } catch (error) {
+      inner = error;
+    }
+
+    throw inner;
+  }, options(Date.now())));
+
+  check('L4: a fault of another lock thrown inside the work is not relabelled as the ledger lock\'s', relabelled === inner && relabelled?.name === 'LockFault' && !String(relabelled?.message).includes(`The ledger lock ${ledger}`), String(relabelled?.message));
+  check('L4: ...and the ledger lock is released after it', !existsSync(ledger));
+
+  // A fault of the ledger lock's own breaker IS the ledger lock's. @es Un fallo del breaker del propio lock SÍ es suyo.
+  const { lock: staleLedger, at } = held('stale-ledger', 2 * 60_000);
+  const breakerDenied = attempt(() => takeLock(staleLedger, options(at, { create: (file, token) => { if (file.endsWith('.breaker')) throw Object.assign(new Error('EACCES: injected'), { code: 'EACCES' }); writeFileSync(file, token, { flag: 'wx' }); } })));
+
+  check('L4: a fault of the ledger lock\'s own breaker is said as the ledger lock\'s, keeping the file it is about', breakerDenied?.name === 'LockFault' && String(breakerDenied?.message).startsWith(`The ledger lock ${staleLedger} failed: `) && breakerDenied?.file === `${staleLedger}.breaker`, String(breakerDenied?.message));
 }
 
 // --- withLock: released on success and on failure -------------------------------------------------------
