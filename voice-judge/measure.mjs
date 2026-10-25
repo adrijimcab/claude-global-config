@@ -39,7 +39,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { askModel } from '../judge-gate/model.mjs';
+import { askModel, spawnAsync } from '../judge-gate/model.mjs';
 import { readVerdict } from '../judge-gate/verdict.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -144,12 +144,13 @@ export const matrixRow = (met, fixture, verdicts) => `${met.padEnd(4)} ${fixture
 function scored(fixtures, judgedFor) {
   const red = fixtures.filter((fixture) => fixture.expect === 'fail');
   const green = fixtures.filter((fixture) => fixture.expect === 'pass');
+  const miss = (fixture) => ({ id: fixture.id, verdict: judgedFor(fixture).verdict, reason: judgedFor(fixture).reason });
 
   return {
     red: red.length,
-    missedRed: red.filter((fixture) => judgedFor(fixture).verdict !== false).map((fixture) => fixture.id),
+    missedRed: red.filter((fixture) => judgedFor(fixture).verdict !== false).map(miss),
     green: green.length,
-    blockedGreen: green.filter((fixture) => judgedFor(fixture).verdict !== true).map((fixture) => fixture.id),
+    blockedGreen: green.filter((fixture) => judgedFor(fixture).verdict !== true).map(miss),
   };
 }
 
@@ -203,8 +204,8 @@ function scoredLines(run, who, quien, set) {
 
   return [
     `run ${run} ${who} ${rates} precision ${precision} @es corrida ${run} ${quien}: ${rates}, precisión ${precision}`,
-    ...set.missedRed.map((id) => `    missed red ${id} @es rojo no detectado`),
-    ...set.blockedGreen.map((id) => `    blocked green ${id} @es verde bloqueado`),
+    ...set.missedRed.map(({ id, verdict }) => `    missed red ${id}, judged ${shown(verdict)} @es rojo no detectado ${id}, juzgado ${mostrado(verdict)}`),
+    ...set.blockedGreen.map(({ id, verdict, reason }) => `    blocked green ${id}, judged ${shown(verdict)}${reason === '' ? '' : `: ${reason}`} @es verde bloqueado ${id}, juzgado ${mostrado(verdict)}${reason === '' ? '' : `: ${reason}`}`),
   ];
 }
 
@@ -230,10 +231,19 @@ export function ratesLines(run, summary) {
  */
 export const ratesFixtures = (fixtures, prefix) => fixtures.filter((fixture) => fixture.id.startsWith(prefix) || Array.isArray(fixture.pinsRule4));
 
+/**
+ * The spawn the model runs go through: the asynchronous one, so `--parallel` calls are really in flight together.
+ * @es El spawn por el que pasan las corridas del modelo: el asíncrono, para que `--parallel` sea real.
+ */
+export const MODEL_SPAWN = spawnAsync;
+
+/** The default model call of a judged run. @es La llamada al modelo por defecto de una corrida juzgada. */
+const askTheModel = (prompt, options) => askModel(prompt, { ...options, spawn: MODEL_SPAWN });
+
 /** One judged run; the cost and latency of the call travel with the verdict. @es Una corrida juzgada; costo y latencia viajan con el veredicto. */
-async function judge(message, model, rubric) {
+async function judge(message, model, rubric, ask) {
   try {
-    const { answer, costUsd, durationMs } = await askModel(promptFor(message, rubric.prompt), { timeoutMs: 120000, model });
+    const { answer, costUsd, durationMs } = await ask(promptFor(message, rubric.prompt), { timeoutMs: 120000, model });
     const judged = judgedOf(answer, rubric.marker);
 
     if (judged.verdict === null) console.error(`? not a rubric verdict @es no es un veredicto de rúbrica: ${String(answer).replace(/\s+/g, ' ').slice(0, 200)}`);
@@ -251,7 +261,7 @@ async function judge(message, model, rubric) {
  * ends with the ship-bar verdict of the owner set. @es La vista de calibración: ejecuta los fixtures `runs` veces,
  * `parallel` llamadas a la vez, imprime el resumen de cada corrida y cierra con el veredicto de la barra del dueño.
  */
-async function rates(fixtures, runs, model, parallel, rubric) {
+async function rates(fixtures, runs, model, parallel, rubric, ask) {
   const jobs = fixtures.flatMap((fixture) => Array.from({ length: runs }, (_, run) => ({ fixture, run })));
   const results = new Map();
   let next = 0;
@@ -263,7 +273,7 @@ async function rates(fixtures, runs, model, parallel, rubric) {
 
       next += 1;
 
-      const result = await judge(job.fixture.message, model, rubric);
+      const result = await judge(job.fixture.message, model, rubric, ask);
 
       cost += result.costUsd;
       results.set(`${job.fixture.id}#${job.run}`, result);
@@ -286,8 +296,11 @@ async function rates(fixtures, runs, model, parallel, rubric) {
   return bar.met ? 0 : 1;
 }
 
-/** The command line: exit 0, 1 (a label or the ship bar missed) or 2 (a wrong `--rubric`). @es La línea de comandos. */
-export async function main(argv) {
+/**
+ * The command line: exit 0, 1 (a label or the ship bar missed) or 2 (a wrong `--rubric`). `ask` is the model call,
+ * injected only by the selftest. @es La línea de comandos; `ask` es la llamada al modelo, que solo inyecta el selftest.
+ */
+export async function main(argv, { ask = askTheModel } = {}) {
   const option = (name, fallback) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : fallback);
   let rubric;
 
@@ -305,7 +318,7 @@ export async function main(argv) {
   const only = option('--only', '')?.split(',').filter(Boolean);
   const fixtures = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json')).map((name) => JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8'))).filter((fixture) => only.length === 0 || only.includes(fixture.id));
 
-  if (argv.includes('--rates')) return rates(ratesFixtures(fixtures, option('--prefix', DEFAULT_PREFIX)), runs, model, Number(option('--parallel', '6')), rubric);
+  if (argv.includes('--rates')) return rates(ratesFixtures(fixtures, option('--prefix', DEFAULT_PREFIX)), runs, model, Number(option('--parallel', '6')), rubric, ask);
 
   let wrong = 0;
   let cost = 0;
@@ -314,7 +327,7 @@ export async function main(argv) {
   for (const fixture of fixtures) {
     const results = [];
 
-    for (let run = 0; run < runs; run += 1) results.push(await judge(fixture.message, model, rubric));
+    for (let run = 0; run < runs; run += 1) results.push(await judge(fixture.message, model, rubric, ask));
 
     const verdicts = results.map((result) => result.verdict);
     const wanted = fixture.expect === 'pass' ? true : fixture.expect === 'fail' ? false : undefined;

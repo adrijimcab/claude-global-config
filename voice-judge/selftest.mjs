@@ -209,6 +209,35 @@ check('measure: a matrix row says in both languages whether the label was met', 
   `MISS ${'f2'.padEnd(40)} expect=${'fail'.padEnd(14)} pass @es FALLO f2 esperado=fail pasa`,
   `n/a  ${'f3'.padEnd(40)} expect=${'unadjudicated'.padEnd(14)} FAIL @es n/a f3 esperado=unadjudicated FALLA`,
 ]);
+
+const { spawnAsync } = await import('../judge-gate/model.mjs');
+
+check('measure: the model runs through the asynchronous spawn, so --parallel is real', [typeof spawnAsync, measure.MODEL_SPAWN === spawnAsync], ['function', true]);
+
+let inFlight = 0;
+let maxInFlight = 0;
+const asked = [];
+const fakeAsk = async (prompt) => {
+  inFlight += 1;
+  maxInFlight = Math.max(maxInFlight, inFlight);
+  asked.push(prompt);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  inFlight -= 1;
+
+  return { answer: '{"ok": true}', costUsd: 0, durationMs: 20 };
+};
+const pinnedCount = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json') && Array.isArray(JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8')).pinsRule4)).length;
+
+console.log = (text) => printedLines.push(String(text));
+printedLines.splice(0);
+
+const prefixExit = await measure.main(['--rates', '--runs', '2', '--parallel', '3', '--prefix', 'held-owner-', '--rubric', goodRubric], { ask: fakeAsk }).catch((error) => `threw: ${error.message}`);
+const prefixLines = printedLines.splice(0);
+
+console.log = consoleLog;
+check('measure: --prefix selects what --rates measures, plus every rule-4 pin, once per run', [prefixExit, asked.length, asked.filter((prompt) => prompt.includes('Ya tomé la decisión que me pidió Discovery')).length], [1, 2 * (1 + pinnedCount), 2]);
+check('measure: --parallel keeps that many model calls in flight, and no more', maxInFlight, 3);
+check('measure: a scored miss is printed with how it was judged', prefixLines.filter((line) => line.startsWith('    missed red held-owner-')), Array(2).fill('    missed red held-owner-red-5f411d3c-10181322, judged pass @es rojo no detectado held-owner-red-5f411d3c-10181322, juzgado pasa'));
 check('measure: --rates measures the held-out set by default, and the bar needs 10 owner labels', [measure.DEFAULT_PREFIX, measure.OWNER_LABELS_NEEDED], ['held-', 10]);
 check('measure: --rates measures the requested prefix plus every rule-4 pin', [measure.ratesFixtures([{ id: 'held-a' }, { id: 'real-b' }, { id: 'real-c', pinsRule4: ['x'] }], 'held-').map((fixture) => fixture.id), measure.ratesFixtures([{ id: 'held-a' }, { id: 'real-b' }], 'real-').map((fixture) => fixture.id)], [['held-a', 'real-c'], ['real-b']]);
 check('measure: a block is read with the marker of the loaded rubric, with its reason', [measure.judgedOf('{"ok": false, "reason": "X-JUDGE: tuteo"}', 'X-JUDGE:'), measure.judgedOf('{"ok": false, "reason": "X-JUDGE: tuteo"}', MARKER), measure.judgedOf('{"ok": true}', 'X-JUDGE:')], [{ verdict: false, reason: 'X-JUDGE: tuteo' }, { verdict: null, reason: '' }, { verdict: true, reason: '' }]);
@@ -235,17 +264,17 @@ const summaryVerdicts = {
 };
 const summary = measure.summarise(summaryFixtures, (fixture) => summaryVerdicts[fixture.id]);
 
-check('measure: the owner set is scored on its own', summary.owner, { red: 2, missedRed: ['ow3'], green: 1, blockedGreen: [] });
-check('measure: the author set is scored on its own, a malfunction counted as missed', summary.author, { red: 5, missedRed: ['a2'], green: 2, blockedGreen: ['a3'] });
+check('measure: the owner set is scored on its own', summary.owner, { red: 2, missedRed: [{ id: 'ow3', verdict: true, reason: '' }], green: 1, blockedGreen: [] });
+check('measure: the author set is scored on its own, a malfunction counted as missed', summary.author, { red: 5, missedRed: [{ id: 'a2', verdict: null, reason: '' }], green: 2, blockedGreen: [{ id: 'a3', verdict: false, reason: 'VOICE-JUDGE: "das" in line 2' }] });
 check('measure: every unadjudicated verdict is kept with its reason, never scored', summary.unadjudicated, [{ id: 'u1', verdict: false, reason: 'VOICE-JUDGE: (d) absent' }, { id: 'u2', verdict: true, reason: '' }, { id: 'u3', verdict: null, reason: '' }]);
 check('measure: a rule-4 false positive is a block citing rule 4 on a pinned fixture only', [summary.pinned, summary.rule4FalsePositives], [3, [{ id: 'a3', reason: 'VOICE-JUDGE: "das" in line 2' }, { id: 'a6', reason: 'VOICE-JUDGE: usted in line 2' }]]);
 check('measure: a malfunction is counted', summary.malfunction, 2);
 check('measure: --rates prints every line of the summary, in both languages', measure.ratesLines(1, summary), [
   'run 1 owner recall 50.0% (1/2) precision 100.0% (1/1) @es corrida 1 dueño: recall 50.0% (1/2), precisión 100.0% (1/1)',
-  '    missed red ow3 @es rojo no detectado',
+  '    missed red ow3, judged pass @es rojo no detectado ow3, juzgado pasa',
   'run 1 author recall 80.0% (4/5) precision 50.0% (1/2) @es corrida 1 autor: recall 80.0% (4/5), precisión 50.0% (1/2)',
-  '    missed red a2 @es rojo no detectado',
-  '    blocked green a3 @es verde bloqueado',
+  '    missed red a2, judged ? @es rojo no detectado a2, juzgado ?',
+  '    blocked green a3, judged FAIL: VOICE-JUDGE: "das" in line 2 @es verde bloqueado a3, juzgado FALLA: VOICE-JUDGE: "das" in line 2',
   'run 1 unadjudicated blocked 33.3% (1/3), never scored, for the owner to label @es corrida 1 sin adjudicar: bloqueadas 33.3% (1/3), nunca puntúan, para que las etiquete el dueño',
   '    FAIL u1: VOICE-JUDGE: (d) absent',
   '    pass u2',

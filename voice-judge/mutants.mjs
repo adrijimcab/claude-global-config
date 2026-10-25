@@ -126,6 +126,15 @@ const MUTANTS = [
   ['a quoted pinned form is not a rule-4 reason', MEASURE, "return forms.some((form) => new RegExp(`[\"“«'‘]${form}[\"”»'’]`, 'iu').test(reason));", 'return false;'],
   ['a quoted pinned form is matched case sensitively', MEASURE, "[\"”»'’]`, 'iu')", "[\"”»'’]`, 'u')"],
 
+  // --- THE MODEL CALLS: ASYNCHRONOUS, BOUNDED, INJECTABLE.
+  ['the model runs through the blocking spawn again', MEASURE, 'MODEL_SPAWN = spawnAsync;', 'MODEL_SPAWN = undefined;'],
+  ['--parallel keeps one call in flight', MEASURE, 'Array.from({ length: parallel }, async', 'Array.from({ length: 1 }, async'],
+  ['--rates drops the injected model call', MEASURE, "Number(option('--parallel', '6')), rubric, ask);", "Number(option('--parallel', '6')), rubric);"],
+  ['--prefix is ignored', MEASURE, "option('--prefix', DEFAULT_PREFIX)", 'DEFAULT_PREFIX'],
+  ['a scored miss loses how it was judged', MEASURE, "verdict: judgedFor(fixture).verdict, reason: judgedFor(fixture).reason", "verdict: true, reason: ''"],
+  ['a missed red is printed without its verdict', MEASURE, ', judged ${shown(verdict)} @es rojo no detectado', ' @es rojo no detectado'],
+  ['a blocked green is printed without its reason', MEASURE, "${reason === '' ? '' : `: ${reason}`} @es verde bloqueado", ' @es verde bloqueado'],
+
   // --- WHO LABELLED WHAT, AND THE SHIP BAR (DECISION 1).
   ['the owner set is every fixture', MEASURE, "owner: scored(fixtures.filter((fixture) => fixture.labelledBy === 'owner'), judgedFor)", 'owner: scored(fixtures, judgedFor)'],
   ['the author set is the owner set', MEASURE, "fixture.labelledBy === 'author'", "fixture.labelledBy === 'owner'"],
