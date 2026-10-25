@@ -586,6 +586,9 @@ run(after, post('git commit -m work -- a.txt', { cwd: plain }));
 sent.length = 0;
 check('BEFORE a plain refusal: git is asked for the root and for the recorded paths, nothing more', [typeof denialOf(run(before, pre('git commit -m next', { cwd: plain }), { git: spy })), sent.map((args) => args[0])], ['string', ['rev-parse', 'status']]);
 
+sent.length = 0;
+check('BEFORE a repository with no record while another has one: git is asked only for the root', [run(before, pre('git commit -m next', { cwd: otherClean }), { git: spy }), sent.map((args) => args[0])], [undefined, ['rev-parse']]);
+
 rmSync(path.join(plain, 'a.txt'));
 check('BEFORE the refusal shows the current status of the path, not the recorded one', denialOf(run(before, pre('git commit -m next', { cwd: plain })))?.includes('a.txt [MD]'), true);
 

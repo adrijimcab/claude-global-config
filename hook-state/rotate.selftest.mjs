@@ -155,6 +155,8 @@ try {
   check('prefix*suffix needs both its start and its ending', [pathMatches('stale-*.json', 'other-ab.json'), pathMatches('stale-*.json', 'stale-ab.jsonl'), pathMatches('stale-*.json', 'stale-ab.txt')], [false, false, false]);
   check('prefix*suffix is one segment', [pathMatches('stale-*.json', 'x/stale-ab.json'), pathMatches('x/stale-*.json', 'x/stale-ab.json')], [false, true]);
   check('a segment with no star is compared whole, a segment with two stars is not a glob', [pathMatches('ab', 'abc'), pathMatches('a*b*c', 'axbxc'), pathMatches('a*b*c', 'a*b*c')], [false, false, true]);
+  check('a pattern with two stars is compared whole even when a glob on its first star would match', pathMatches('a*b*c', 'axb*c'), false);
+  check('a lone * matches any non-empty segment', [pathMatches('*', 'x'), pathMatches('a/*', 'a/anything.json')], [true, true]);
   check('the stale records of commit-index-guard are kept', [classify('commit-index-guard', 'stale-0123abcd.json').kind, classify('commit-index-guard', 'stale-.json').kind], [KEEP, UNKNOWN]);
   check('a rule of one mechanism does not apply to another', classify('guard-anything', 'refusals.jsonl').kind, UNKNOWN);
   check('a file no rule names is unknown, with no reason', classify('collision-guard', 'surprise.txt'), { kind: UNKNOWN, reason: '' });

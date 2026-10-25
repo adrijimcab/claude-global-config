@@ -29,7 +29,7 @@ const MUTANTS = [
   ['prefix*suffix lets the prefix and the ending overlap', R, 'segment.length > prefix.length + suffix.length &&', 'segment.length > 0 &&'],
   ['a pattern with two stars is read as a glob', R, "if (star === -1 || pattern.indexOf('*', star + 1) !== -1) return pattern === segment;", 'if (star === -1) return pattern === segment;'],
   ['a pattern with no star is read as a glob', R, "if (star === -1 || pattern.indexOf('*', star + 1) !== -1) return pattern === segment;", "if (pattern.indexOf('*', star + 1) !== -1) return pattern === segment;"],
-  ['* matches nothing', R, "  if (pattern === '*') return true;\n", ''],
+  ['a lone * matches only an empty segment', R, 'segment.length > prefix.length + suffix.length &&', 'segment.length < prefix.length + suffix.length &&'],
   ['** matches zero segments', R, 'given.length >= wanted.length && wanted.slice(0, -1)', 'given.length >= wanted.length - 1 && wanted.slice(0, -1)'],
   ['a pattern matches a path of another length', R, 'return wanted.length === given.length && wanted.every(', 'return wanted.every('],
   ['** is read as a plain segment', R, "if (wanted.at(-1) === '**')", "if (wanted.at(-1) === '***')"],

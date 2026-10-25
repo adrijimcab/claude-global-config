@@ -133,8 +133,6 @@ export const KINDS = Object.freeze([
 
 /** Whether one path segment matches one pattern segment. @es Si un segmento de ruta casa con uno de patrón. */
 function segmentMatches(pattern, segment) {
-  if (pattern === '*') return true;
-
   const star = pattern.indexOf('*');
 
   if (star === -1 || pattern.indexOf('*', star + 1) !== -1) return pattern === segment;
