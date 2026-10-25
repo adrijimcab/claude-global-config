@@ -215,6 +215,18 @@ check('measure: a matrix row says in both languages whether the label was met', 
   `n/a  ${'f3'.padEnd(40)} expect=${'unadjudicated'.padEnd(14)} FAIL @es n/a f3 esperado=unadjudicated FALLA`,
 ]);
 
+// The three rule-4 false positives of the v8e A/B run (2026-10-25), English halves, each sentence verbatim (the second
+// and third abridged by whole sentences): each quotes a pinned
+// form or names rule 4 only to say the voseo is correct, and blocks on another trait.
+const praisingReasons = [
+  ["VOICE-JUDGE: The reply has two paragraphs, so under rule 6 it needs trait (a), trait (c) and a closing sentence, and it needs (b) and (d) because it states a decision. Traits (a) and (b) are present: the voseo forms 'Hacé', 'avisame', 'querés' and the subjunctive 'reinicies' address the owner, and the reasoning 'para que no se pierda ninguna escritura en curso' connects a cause to a choice. Trait (c) is absent: there is no rhetorical question, no deliberate emphasis on the point that matters, no image or analogy, and no lesson stated as a principle for future cases. The closing sentence 'Cuando puedas, avisame si querés que lo integre, y cuando vengas de revisar lo cierro' is a next step and a promise to report back, with no stance or principle behind it, so it does not land.", ['reinicies']],
+  ["VOICE-JUDGE: rule 6 fails. The reply is two paragraphs, so it needs traits (a), (c) and a landing close, plus (b) and (d) because it states a recommendation. Trait (a) is present: 'sepas', 'fijate' and 'decime' are voseo aimed at him. Trait (c) is absent: there is no rhetorical question, no deliberate emphasis, no image and no principle, only facts. Trait (b) is absent: the advice to check the session before integrating ('Antes de que lo integres, fijate que tengas la sesión limpia') gives no cause connecting it to the choice.", ['sepas', 'tengas', 'integres']],
+  ["VOICE-JUDGE: The reply is two paragraphs, so it needs trait (c), energy that serves the point, and a closing sentence that lands. Both are missing. The second paragraph closes on an offer ('si hace falta que lo revisemos juntos, decime'), which is not a stance. The voseo aimed at the owner ('fijate', 'decime') is present, so rule 4 passes.", ['sepas', 'tengas', 'integres']],
+];
+
+check('measure: a reason that quotes a pinned form or names rule 4 only to call the voseo correct does not cite rule 4', praisingReasons.map(([reason, forms]) => measure.citesRule4(reason, forms)), [false, false, false]);
+check('measure: a sentence that quotes a pinned form as a failure still cites rule 4, beside one that praises another form', [measure.citesRule4("VOICE-JUDGE: 'fijate' is voseo. 'sepas' in line 2 is the problem.", ['sepas']), measure.citesRule4("VOICE-JUDGE: the voseo forms are fine. Rule 4 fails on 'reinicies'.", ['reinicies'])], [true, true]);
+
 const { spawnAsync } = await import('../judge-gate/model.mjs');
 
 check('measure: the model runs through the asynchronous spawn, so --parallel is real', [typeof spawnAsync, measure.MODEL_SPAWN === spawnAsync], ['function', true]);

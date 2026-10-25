@@ -116,14 +116,30 @@ export function judgedOf(answer, marker) {
  * nombrada así, la regla 4 por número, o una de las `forms` que fija el fixture, citada sola. Only the English half
  * of a bilingual reason is read: the `@es` half mirrors it and names tú and the quoted forms in its own words.
  * @es Solo se lee la mitad inglesa de un motivo bilingüe: la mitad `@es` la repite con sus propias palabras.
+ * It is read sentence by sentence: a sentence that calls the forms voseo or says rule 4 passes is praise, so its
+ * quoted forms and its rule number do not count; tuteo, usted and a tú form count wherever they appear.
+ * @es Se lee oración por oración: una oración que llama voseo a las formas o dice que la regla 4 pasa es un elogio,
+ * así que sus formas citadas y su número de regla no cuentan; tuteo, usted y una forma de tú cuentan siempre.
  */
 export function citesRule4(bilingualReason, forms = []) {
   const reason = bilingualReason.split(' @es ')[0];
 
-  if (/tuteo|usted|(^|[^\p{L}])t[uú][ -]forms?([^\p{L}]|$)|(^|[^\p{L}])tú([^\p{L}]|$)|rule 4\b|regla 4\b/iu.test(reason)) return true;
+  return reason.split(/(?<=[.;!?])\s+/u).some((sentence) => {
+    if (RULE4_WORDS.test(sentence)) return true;
+    if (PRAISES_VOSEO.test(sentence)) return false;
 
-  return forms.some((form) => new RegExp(`["“«'‘]${form}["”»'’]`, 'iu').test(reason));
+    return RULE4_NUMBER.test(sentence) || forms.some((form) => new RegExp(`["“«'‘]${form}["”»'’]`, 'iu').test(sentence));
+  });
 }
+
+/** The words that name tuteo or usted. @es Las palabras que nombran el tuteo o el usted. */
+const RULE4_WORDS = /tuteo|usted|(^|[^\p{L}])t[uú][ -]forms?([^\p{L}]|$)|(^|[^\p{L}])tú([^\p{L}]|$)/iu;
+
+/** Rule 4 named by its number. @es La regla 4 nombrada por su número. */
+const RULE4_NUMBER = /rule 4\b|regla 4\b/iu;
+
+/** A sentence that calls the voseo correct. @es Una oración que da el voseo por correcto. */
+const PRAISES_VOSEO = /\b(?:is|are) voseo\b|\bvoseo forms?\b|\brule 4 (?:passes|holds|is met)\b/iu;
 
 /** The share of `part` in `whole`, as a percentage with one decimal. @es La proporción de `part` en `whole`, en porcentaje. */
 const percent = (part, whole) => (whole === 0 ? 'n/a' : `${((100 * part) / whole).toFixed(1)}%`);
