@@ -18,9 +18,10 @@
  * (`company-remote/invocation-directory.mjs`, the one fold of `-C` the guards share).
  *
  * THE TREE THE HOOK SEES (both judges, 2026-10-19). The whole line is judged before any of it runs, so when an
- * earlier command of the line may write files (`line-writes.mjs`) and the commit reads a pathspec file or names a
- * pathspec that can match files still to come (a glob or a directory), the answer would be about a stale tree;
- * such a commit is refused, and the refusal says to commit in its own command once the files exist.
+ * earlier command of the line may write files (`line-writes.mjs`) and the commit reads a pathspec file (one that
+ * does not exist yet included: the writer may be creating it) or names a pathspec that can match files still to
+ * come (a glob or a directory), the answer would be about a stale tree; such a commit is refused, and the refusal
+ * says to commit in its own command once the files exist. This is decided before the file is read.
  *
  * `--pathspec-from-file=<file>` (judge B, 2026-10-19). Its paths are read from the file, relative to the directory
  * the commit runs in, one per line (NUL separated with `--pathspec-file-nul`), a line in double quotes unquoted as
@@ -46,7 +47,8 @@
  * `GIT_WORK_TREE` y `GIT_INDEX_FILE`); una respuesta no vacía es un infractor, salvo lo que agrega un `git add`
  * anterior de la misma cadena `&&`, leído con la tabla de opciones de git (un ensayo, `-u`, `-p`, `-i`, `-e` y `-N` no
  * agregan ficheros nuevos; `-A` sin rutas cubre todo el worktree). EL ÁRBOL QUE VE EL HOOK: la línea se juzga antes de
- * correr, así que si un comando anterior puede escribir ficheros y el commit lee un fichero de pathspec o nombra un
+ * correr, así que si un comando anterior puede escribir ficheros y el commit lee un fichero de pathspec (también uno
+ * que aún no existe: el escritor puede estar creándolo) o nombra un
  * pathspec que puede casar con ficheros por venir (un glob o un directorio), se rechaza y se pide hacer el commit en
  * su propio comando cuando los ficheros existan. `--pathspec-from-file`: sus líneas se leen (con NUL si se pide, y
  * las entrecomilladas al estilo C se desentrecomillan como hace git) y se comprueban igual; un fichero ilegible es un
@@ -217,18 +219,20 @@ export function untrackedUnderCommits(script, dialect, cwd, list = listUntracked
     const pathspec = pathspecOf(invocation.args, directory, read);
 
     if (pathspec === undefined) continue;
-    if (pathspec.unreadable !== undefined) return { offender: { family: 'commitPathspecFile', text: invocation.text, file: pathspec.unreadable }, unchecked };
 
     const layout = repositoryLayout(directory, invocation.environment, invocation.gitOptions);
-
-    if (pathspec.fromFile && sweepsWorktree(pathspec.pathspecs, { dialect: undefined, directory, layout })) return { offender: { family: 'commitNoPaths', text: invocation.text }, unchecked };
-
     const writer = earlierWriter(invocation.before, dialect);
     const base = typeof directory === 'string' ? directory : cwd;
+    const readsPathspecFile = pathspec.unreadable !== undefined || pathspec.fromFile;
 
-    if (writer !== undefined && (pathspec.fromFile || pathspec.pathspecs.some((spec) => matchesFilesToCome(spec, base, layout?.root)))) {
+    // A pathspec file an earlier command may write (or create) is judged as the writer's: the hook cannot see it yet.
+    // @es Un fichero de pathspec que un comando anterior puede escribir (o crear) se juzga como del escritor.
+    if (writer !== undefined && (readsPathspecFile || pathspec.pathspecs.some((spec) => matchesFilesToCome(spec, base, layout?.root)))) {
       return { offender: { family: 'commitAfterWrites', text: invocation.text, writer }, unchecked };
     }
+
+    if (pathspec.unreadable !== undefined) return { offender: { family: 'commitPathspecFile', text: invocation.text, file: pathspec.unreadable }, unchecked };
+    if (pathspec.fromFile && sweepsWorktree(pathspec.pathspecs, { dialect: undefined, directory, layout })) return { offender: { family: 'commitNoPaths', text: invocation.text }, unchecked };
 
     const environment = typeof directory === 'string' ? gitEnvironmentOf(directory, invocation.environment, invocation.gitOptions) : undefined;
 

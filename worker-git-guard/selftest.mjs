@@ -156,6 +156,7 @@ expect('deny', asSubagent('PowerShell', 'git commit -m x -- $env:FILES'), 'Power
 expect('deny', asSubagent('PowerShell', 'git commit -m x -- $files'), 'PowerShell, a variable names no specific path');
 expect('allow', asSubagent('PowerShell', 'git commit -m x -- src/a.ts'), 'PowerShell, a literal path');
 expect('allow', asSubagent('PowerShell', 'git commit -m x -- $dir\\a.ts'), 'PowerShell, a variable with a literal part after a backslash');
+expect('deny', asSubagent('PowerShell', 'git commit -m x -- $PWD\\'), 'PowerShell, a variable followed only by a backslash names the directory it hides');
 denied('git commit -m x -- $(cat lists/a.txt)');
 denied('git commit -m x -- `cat list`');
 denied('git commit -Ka -m x -- a');
@@ -526,8 +527,12 @@ const SUBDIRECTORY = path.join(REPO, 'clean');
 const REPO_FWD = REPO.split('\\').join('/');
 const rootSweeps = ['.', './', '*', '?*', '[!.]*', '**', ':/', '":(top)"', '":(glob)**"', 'clean/..', 'clean/../', REPO_FWD, `${REPO_FWD}/`, '"$PWD/"', '"$(git rev-parse --show-toplevel)/"', '$(pwd)/*', ':!x', '":(exclude)x"'];
 
-for (const form of rootSweeps) check(`R2: refused at the root: git commit -m x -- ${form}`, untrackedVerdict(`git commit -m x -- ${form}`) === 'deny');
-for (const form of ['..', '../', '../*', ':/', '":(top)"', ':/*', REPO_FWD]) check(`R2: refused from a subdirectory: git commit -m x -- ${form}`, untrackedVerdict(`git commit -m x -- ${form}`, SUBDIRECTORY) === 'deny');
+// A sweep must get the paths refusal itself, not the untracked one the repository root would also earn.
+// @es Un barrido debe recibir el rechazo de rutas, no el de ficheros sin seguimiento que la raíz también ganaría.
+const sweepRefused = (command, cwd = REPO) => untrackedReason(command, cwd).includes('must name its paths');
+
+for (const form of rootSweeps) check(`R2: refused at the root: git commit -m x -- ${form}`, sweepRefused(`git commit -m x -- ${form}`));
+for (const form of ['..', '../', '../*', ':/', '":(top)"', ':/*', REPO_FWD]) check(`R2: refused from a subdirectory: git commit -m x -- ${form}`, sweepRefused(`git commit -m x -- ${form}`, SUBDIRECTORY));
 for (const form of ['.', './', '*', '?*', '[!.]*', '":(top)clean"', SUBDIRECTORY.split('\\').join('/')]) check(`R2: allowed from a subdirectory, it names that subdirectory only: git commit -m x -- ${form}`, untrackedVerdict(`git commit -m x -- ${form}`, SUBDIRECTORY) === undefined);
 for (const form of ['clean', 'clean/*', '":(top)clean"', '"*.md"', '"$PWD/clean"', '$DIR/a.txt', '":(literal)*"']) check(`R2: allowed at the root: git commit -m x -- ${form}`, untrackedVerdict(`git commit -m x -- ${form}`) !== 'deny' || untrackedReason(`git commit -m x -- ${form}`).includes('untracked'));
 check('R2: a whole-root pathspec in a pathspec file is refused', (() => { writeFileSync(path.join(SPECS, 'root.lst'), `${REPO}\n`); return untrackedReason(`git commit -m x --pathspec-from-file=${spec('root.lst')}`).includes('must name its paths'); })());
@@ -552,16 +557,20 @@ check('R3: export then unset clears it', untrackedVerdict('export GIT_INDEX_FILE
 for (const clearing of ['Remove-Item Env:GIT_INDEX_FILE', 'Remove-Item -Path Env:\\GIT_INDEX_FILE', '$env:GIT_INDEX_FILE = $null', "$env:GIT_INDEX_FILE = ''", '$env:GIT_INDEX_FILE=""']) {
   check(`R3: PowerShell, a variable cleared later on the line is cleared: ${clearing}`, untrackedVerdict(`$env:GIT_INDEX_FILE = "C:\\t\\i"; ${clearing}; git read-tree HEAD`, REPO, 'PowerShell') === 'deny');
 }
+check('R3: PowerShell, $env:X = $null clears a repository variable, so the commit is checked in its own repository', untrackedVerdict('$env:GIT_DIR = "C:\\nowhere"; $env:GIT_DIR = $null; git commit -m "x" -- mixed', REPO, 'PowerShell') === 'deny');
 check('R3: PowerShell, a variable removed and set again counts', untrackedVerdict('Remove-Item Env:GIT_INDEX_FILE; $env:GIT_INDEX_FILE = "C:\\t\\i"; git read-tree HEAD', REPO, 'PowerShell') === undefined);
 
 // --- R4: an earlier command of the line that may write files, before a commit that could cover them ---------------
 for (const command of ['touch mixed/x.txt && git commit -m x -- mixed', 'echo a > mixed/y.txt && git commit -m x -- mixed', 'npm run gen && git commit -m x -- clean', 'cp a b && git commit -m x -- "*.txt"', 'node gen.mjs; git commit -m x -- clean', 'git status > clean/s.txt && git commit -m x -- clean', 'git stash list && git mv a b && git commit -m x -- clean', `echo clean > ${spec('w.lst')} && git commit -m x --pathspec-from-file=${spec('w.lst')}`, `npm run gen && git commit -m x --pathspec-from-file=${spec('clean.lst')}`]) {
-  check(`R4: refused: ${command}`, untrackedVerdict(command) === 'deny');
+  check(`R4: refused as a commit after writes: ${command}`, untrackedReason(command).includes('commit in its own command'));
 }
 for (const command of ['npm run gen && git commit -m x -- clean/tracked.txt', 'git status && git commit -m x -- clean', 'cat clean/tracked.txt && git commit -m x -- clean', 'git status 2>&1 && git commit -m x -- clean', 'git log > /dev/null && git commit -m x -- clean', 'cd clean && git commit -m x -- .']) {
   check(`R4: allowed: ${command}`, untrackedVerdict(command) === undefined);
 }
 check('R4: PowerShell, an output file counts and $null does not', untrackedVerdict('Get-Date > clean/d.txt; git commit -m "x" -- clean', REPO, 'PowerShell') === 'deny' && untrackedVerdict('git status *> $null; git commit -m "x" -- clean', REPO, 'PowerShell') === undefined);
+writeFileSync(path.join(SPECS, 'tracked.lst'), 'clean/tracked.txt\n');
+check('R4: a pathspec file naming one tracked file passes on its own', untrackedVerdict(`git commit -m x --pathspec-from-file=${spec('tracked.lst')}`) === undefined);
+check('R4: the same pathspec file rewritten earlier on the line is refused as a commit after writes', untrackedReason(`echo clean/tracked.txt > ${spec('tracked.lst')} && git commit -m x --pathspec-from-file=${spec('tracked.lst')}`).includes('commit in its own command'));
 check('R4: the refusal names the writer and says to commit in its own command, in both halves', (() => { const text = untrackedReason('touch mixed/x.txt && git commit -m x -- mixed'); return text.includes('touch mixed/x.txt') && text.includes('commit in its own command') && text.includes('su propio comando'); })());
 
 // --- R4: C-style quoted lines of a pathspec file are unquoted as git does --------------------------------------------
