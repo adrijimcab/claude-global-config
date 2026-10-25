@@ -33,9 +33,38 @@ export const ENFORCING_ROOTS = Object.freeze(['unit-suite', 'integration-script'
 const HOOKS = Object.freeze(['pre-push', 'pre-commit']);
 const WORKSPACE_FLAGS = new Set(['-w', '--workspace', '--workspaces', '-ws']);
 
-/** Parsed JSON of a file, or undefined when it is absent. A present file that is not JSON throws. @es JSON de un fichero, o undefined si no está. */
+/**
+ * A file that is present but cannot be read or is not JSON. The checker turns it into `unmeasured` (the file is the
+ * evidence), never into a crash: a crash exits 1, the code of a strict failure.
+ * @es Un fichero presente que no se puede leer o no es JSON. El checker lo vuelve `unmeasured` (el fichero es la
+ * evidencia), nunca un crash: un crash sale con 1, el código de un fallo estricto.
+ */
+export class UnreadableJsonError extends Error {
+  constructor(file) {
+    super(`${file} cannot be read or is not valid JSON @es ${file} no se puede leer o no es JSON válido`);
+    this.name = 'UnreadableJsonError';
+    this.file = file;
+  }
+}
+
+/** A JSON file as `{ state: 'absent' }`, `{ state: 'invalid' }` (present, unreadable or not JSON) or `{ state: 'ok', value }`. @es Un fichero JSON como `absent`, `invalid` (presente, ilegible o no JSON) u `ok` con su valor. */
+export function readJsonResult(file) {
+  if (!existsSync(file)) return { state: 'absent' };
+
+  try {
+    return { state: 'ok', value: JSON.parse(readFileSync(file, 'utf8')) };
+  } catch {
+    return { state: 'invalid' };
+  }
+}
+
+/** Parsed JSON of a file, or undefined when it is absent. A present file that is not JSON throws `UnreadableJsonError`. @es JSON de un fichero, o undefined si no está; uno presente que no es JSON lanza `UnreadableJsonError`. */
 export function readJson(file) {
-  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : undefined;
+  const read = readJsonResult(file);
+
+  if (read.state === 'invalid') throw new UnreadableJsonError(file);
+
+  return read.value;
 }
 
 /** The `unitSuite.npmScript` of the nearest `.claude/fleet-kit.json` at or above `root`. @es El `unitSuite.npmScript` del `.claude/fleet-kit.json` más cercano. */

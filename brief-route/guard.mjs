@@ -25,11 +25,8 @@
  * ABIERTO ante todo fallo propio.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { briefOf } from '../brief-provenance/provenance.mjs';
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { refusalReason } from './refusal-text.mjs';
 import { inspectRoute } from './route-line.mjs';
 
@@ -39,15 +36,9 @@ import { inspectRoute } from './route-line.mjs';
  * @es La salida de hook (deny) para un payload crudo cuyo brief no lleva una línea ROUTE bien formada, o `undefined`.
  */
 export function evaluate(raw) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    // A PowerShell-written payload can carry a UTF-8 BOM, which makes JSON.parse throw.
-    // @es Un payload escrito por PowerShell puede llevar BOM UTF-8, que hace lanzar a JSON.parse.
-    payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   const brief = briefOf(payload);
 
@@ -57,28 +48,22 @@ export function evaluate(raw) {
 
   if (reason === undefined) return undefined;
 
-  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } };
+  return deny(reason);
 }
 
-function main() {
-  let raw;
-
+/** `evaluate` for the standalone hook: a malfunction of this guard allows the delegation. @es `evaluate` para el hook independiente: una avería de esta guardia deja pasar la delegación. */
+const evaluateOrAllow = (raw) => {
   try {
-    raw = readFileSync(0, 'utf8');
+    return evaluate(raw);
   } catch {
-    process.exit(0);
+    return undefined;
   }
+};
 
-  try {
-    const output = evaluate(raw);
+const standalone = hookMain(evaluateOrAllow);
 
-    if (output !== undefined) process.stdout.write(JSON.stringify(output));
-  } catch {
-    /* a malfunction of this guard allows the delegation: the dispatcher reports a throw of evaluate as a guard problem */
-  }
-
-  process.exit(0);
-}
-
-// Only as the main process: imported by the dispatcher or a selftest, main() must not read their stdin.
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
+// Only as the main process: imported by the dispatcher or a selftest, the hook must not read their stdin.
+// The process then ends with status 0.
+// @es Solo como proceso principal: importado por el dispatcher o un selftest, el hook no debe leer su stdin.
+// El proceso termina con estado 0.
+runWhenMain(import.meta.url, () => standalone().then(() => process.exit(0)));

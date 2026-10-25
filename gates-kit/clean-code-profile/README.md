@@ -131,8 +131,17 @@ Typescript: `"strict": true` in the `tsconfig.json` the build uses.
 node gates-kit/clean-code-profile/check.mjs <project root> [--stack angular|node] [--strict]
 ```
 
-Exit 0 the report was produced; 1 with `--strict` when a gate is not enforced; 2 nothing was measured. It reads and
-never writes. The stack is `angular` when `@angular/core` is a dependency, else `node`.
+Exit 0 the report was produced; 1 with `--strict` when a gate is not enforced; 2 nothing was measured: bad usage,
+a root that is not a directory, or a crash while measuring (reported with its reason, never left to escape as exit
+1, which means a strict failure). A `package.json` or `fleet-kit.json` that is present but not valid JSON leaves
+every gate `UNMEASURED` with the file as evidence; an invalid `.jscpd.json` leaves only `duplication` unmeasured.
+The ignore debt of a `knip.ts`, `knip.js` or `knip.jsonc` is asked to the project's own installed knip (`knip
+--debug`, reading its resolved `parsedConfig`; there is no `--print-config`); when knip is not installed, times
+out or prints a shape the parser does not know, the evidence says `NOT MEASURED` with the reason, never zero. A
+plain `knip.json` is counted directly. It writes no file, but it is not a passive reader: it runs the project's
+own installed tools (ESLint, the compiler, and knip, which loads a `knip.ts` or `knip.js` as code and may run for
+up to 300 s) and loads a dependency-cruiser config written as code, so it executes the project's code; run it
+only on a project you trust. The stack is `angular` when `@angular/core` is a dependency, else `node`.
 
 | Verdict | Meaning |
 |---|---|
@@ -156,8 +165,17 @@ What it does not do: it does not read the body of a custom script (a project's o
 workspace-scoped run (`-w`) is recorded but not followed, YAML anchors and `rules:` conditions of the CI file are
 not evaluated, and it samples one source file and one template, so a per-folder override is not seen.
 
-@es Sale con 0 si se produjo el informe, 1 con `--strict` si algún gate no está aplicado, 2 si no se midió nada.
-Lee y nunca escribe. **ENFORCED** (aplicado): se cumple la config del perfil Y un comando de la herramienta corre
+@es Sale con 0 si se produjo el informe, 1 con `--strict` si algún gate no está aplicado, 2 si no se midió nada
+(uso erróneo, raíz que no es directorio, o un fallo al medir, informado con su motivo y nunca dejado escapar como
+1, que significa fallo estricto). Un `package.json` o `fleet-kit.json` presente pero que no es JSON válido deja
+todos los gates `UNMEASURED` con el fichero como evidencia; un `.jscpd.json` inválido deja sin medir solo
+`duplication`. La deuda ignore de un `knip.ts`, `knip.js` o `knip.jsonc` se le pregunta al knip instalado del
+proyecto (`knip --debug`, leyendo su `parsedConfig` resuelto; no existe `--print-config`); si knip no está
+instalado, agota el tiempo o imprime una forma que el parser no conoce, la evidencia dice `NO MEDIDO` con el
+motivo, nunca cero. Un `knip.json` simple se cuenta directamente. No escribe ningún fichero, pero no es un
+lector pasivo: ejecuta las herramientas instaladas del propio proyecto (ESLint, el compilador y knip, que carga
+un `knip.ts` o `knip.js` como código y puede correr hasta 300 s) y carga una config de dependency-cruiser
+escrita como código, así que ejecuta código del proyecto; solo debe ejecutarse sobre un proyecto de confianza. **ENFORCED** (aplicado): se cumple la config del perfil Y un comando de la herramienta corre
 desde una raíz que aplica. **CONFIGURED-ONLY**: un rastro sin ambos (límite más flojo, un aviso, un comando
 alcanzado solo desde un hook o un job con `allow_failure`, o una config que nadie corre). **ABSENT**: ningún
 rastro. **UNMEASURED**: la herramienta que responde no pudo correr. A ESLint se le pregunta con `eslint

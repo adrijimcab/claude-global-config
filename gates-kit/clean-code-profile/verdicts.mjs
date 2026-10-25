@@ -9,8 +9,9 @@
  */
 
 import { ruleSetVerdict, ruleVerdict } from './eslint-verdicts.mjs';
-import { gatesOf } from './profile.mjs';
+import { GATES, STACKS, gatesOf } from './profile.mjs';
 import { circularDependencies, dependencyAudit, deadCode, duplication, hexagonalLayering, lintOnLanding, strictTypescript } from './tool-verdicts.mjs';
+import { ev, unmeasured } from './verdict-parts.mjs';
 
 const BY_KIND = Object.freeze({
   'landing-tool': lintOnLanding,
@@ -24,9 +25,18 @@ const BY_KIND = Object.freeze({
   'npm-audit': dependencyAudit,
 });
 
-/** One verdict per gate of the facts' stack. @es Un veredicto por gate del stack de los hechos. */
+/**
+ * One verdict per gate of the facts' stack. A project whose input could not be read (`facts.unreadable`) has every
+ * gate `unmeasured` with the file as evidence, on its stack or, when the stack could not be told, on all of them.
+ * @es Un veredicto por gate del stack de los hechos. Un proyecto cuya entrada no se pudo leer (`facts.unreadable`)
+ * deja cada gate `unmeasured` con el fichero como evidencia, en su stack o, si no se pudo saber, en todos.
+ */
 export function gradeProject(facts) {
-  return gatesOf(facts.stack).map((gate) => {
+  const gates = STACKS.includes(facts.stack) ? gatesOf(facts.stack) : GATES;
+
+  if (facts.unreadable !== undefined) return gates.map((gate) => unmeasured(gate, [ev('input-unreadable', { file: facts.unreadable.file })]));
+
+  return gates.map((gate) => {
     const verdictOf = BY_KIND[gate.kind];
 
     if (verdictOf === undefined) throw new Error(`gate ${gate.id} has kind "${gate.kind}" with no verdict function @es el gate ${gate.id} tiene el kind "${gate.kind}" sin función de veredicto`);

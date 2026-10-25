@@ -2,11 +2,24 @@
  * The one way kit modules ask git anything: an argv array (never a shell string), an explicit working
  * directory, and a result that says whether git answered — never an exception for a normal "no".
  *
+ * A thin wrapper over `../../git-port/git.mjs`. What it keeps of its own: no timeout (`timeoutMs: 0`, as before;
+ * the port's 15 s bound is not imposed on gate runs), `stdout` trimmed of its trailing newline, and the
+ * three-field result `{ status, stdout, stderr }`. It passes `inheritSelectors: true`: a guard sees exactly the
+ * GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE the command it judges inherits, so it never judges another repository.
+ * `mustAsk` is the port's (it throws a bilingual GitFailure).
+ *
  * @es La única forma en que los módulos del kit le preguntan algo a git: argv en array (nunca una
- * cadena de shell), directorio explícito, y un resultado que dice si git respondió.
+ * cadena de shell), directorio explícito, y un resultado que dice si git respondió. Envoltorio fino del puerto
+ * `../../git-port/git.mjs`. Conserva lo propio: sin tiempo límite (`timeoutMs: 0`, como antes; el límite de 15 s
+ * del puerto no se impone a las corridas de gates), `stdout` sin su salto de línea final y el resultado de tres
+ * campos. Pasa `inheritSelectors: true`: una guardia ve exactamente el GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE que
+ * hereda la orden que juzga, así que nunca juzga otro repositorio. `mustAsk` es el del puerto (lanza un GitFailure
+ * bilingüe).
  */
 
-import { spawnSync } from 'node:child_process';
+import { mustAsk, runGit as portRunGit } from '../../git-port/git.mjs';
+
+export { mustAsk };
 
 /**
  * Runs `git <gitOptions...> <args...>` in `directory`.
@@ -15,13 +28,9 @@ import { spawnSync } from 'node:child_process';
  * @es Corre git en `directory` y devuelve `{ status, stdout, stderr }`.
  */
 export function runGit(directory, args, gitOptions = []) {
-  const result = spawnSync('git', [...gitOptions, ...args], { cwd: directory, encoding: 'utf8', windowsHide: true, maxBuffer: 256 * 1024 * 1024 });
+  const { status, stdout, stderr } = portRunGit(directory, args, { gitOptions, timeoutMs: 0, inheritSelectors: true });
 
-  return {
-    status: result.error === undefined ? result.status : null,
-    stdout: (result.stdout ?? '').trimEnd(),
-    stderr: result.stderr ?? ''
-  };
+  return { status, stdout: stdout.trimEnd(), stderr };
 }
 
 /**
@@ -29,19 +38,6 @@ export function runGit(directory, args, gitOptions = []) {
  * @es Un «preguntador» ligado a un directorio y a unas opciones globales de git.
  */
 export const gitAsker = (directory, gitOptions = []) => (...args) => runGit(directory, args, gitOptions);
-
-/**
- * `ask(...args).stdout`, or a thrown error naming the command when git said no. For facts the caller
- * cannot proceed without; a malfunction, not a verdict.
- * @es `stdout`, o un error con nombre cuando git dice que no. Para hechos imprescindibles.
- */
-export function mustAsk(ask, ...args) {
-  const answer = ask(...args);
-
-  if (answer.status !== 0) throw new Error(`git ${args.join(' ')} failed (${String(answer.status)}): ${answer.stderr.trim()}`);
-
-  return answer.stdout;
-}
 
 /** The commit `rev` names, or `undefined`. @es El commit que nombra `rev`, o `undefined`. */
 export function commitOf(ask, rev) {

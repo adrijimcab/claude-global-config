@@ -27,7 +27,7 @@ export const HYPOTHESIS_WORD = 'HYPOTHESIS';
  * @es Rechaza un marcador que solo es PREFIJO de otra palabra. Pertenencia literal a un conjunto de
  * caracteres, no un límite de palabra de regex (M5).
  */
-const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+export const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 /**
  * Leading characters that are LAYOUT rather than content: indentation, list bullets, headings,
@@ -96,7 +96,7 @@ function classifyMarker(brief, word) {
 
 /**
  * The tools whose payload can carry a CLAIM, the `tool_input` field that carries it, and the noun a
- * refusal uses for that surface. This map IS the claim-bearing set: a tool cannot be added to the
+ * refusal uses for that surface (in English, and with its article in Spanish for the `@es` half). This map IS the claim-bearing set: a tool cannot be added to the
  * decision without saying where its brief lives, and `selftest.mjs` proves each field against a
  * RECORDED payload and each tool against `guard.mjs.hook-registration.json`.
  *
@@ -114,7 +114,7 @@ function classifyMarker(brief, word) {
  * 6 brief incidents pass. It closes a REACH gap; it is not a detector.
  *
  * @es Las herramientas cuyo payload puede llevar una AFIRMACIÓN, el campo de `tool_input` que la lleva
- * y el sustantivo del rechazo. Este mapa ES el conjunto: no se añade una herramienta sin decir dónde vive
+ * y el sustantivo del rechazo (en inglés, y con su artículo en español para la mitad `@es`). Este mapa ES el conjunto: no se añade una herramienta sin decir dónde vive
  * su brief. POR QUÉ EL CAMPO VA POR HERRAMIENTA (medido el 2026-09-14): el guard anterior leía `prompt`
  * siempre, y `SendMessage` no lo tiene — el payload capturado lleva el texto entero en `message` y una
  * vista previa de 50 caracteres en `content` —, así que todo resume se permitía mientras este módulo
@@ -122,9 +122,9 @@ function classifyMarker(brief, word) {
  * reales; no caza afirmaciones en el CUERPO, cierra un hueco de ALCANCE.
  */
 export const BRIEF_CARRIERS = Object.freeze({
-  Agent: Object.freeze({ field: 'prompt', surface: 'delegation' }),
-  Task: Object.freeze({ field: 'prompt', surface: 'delegation' }),
-  SendMessage: Object.freeze({ field: 'message', surface: 'message' }),
+  Agent: Object.freeze({ field: 'prompt', surface: 'delegation', spanishSurface: 'esta delegación' }),
+  Task: Object.freeze({ field: 'prompt', surface: 'delegation', spanishSurface: 'esta delegación' }),
+  SendMessage: Object.freeze({ field: 'message', surface: 'message', spanishSurface: 'este mensaje' }),
 });
 
 /**
@@ -136,12 +136,12 @@ export function briefOf(payload) {
 
   if (typeof toolName !== 'string' || !Object.hasOwn(BRIEF_CARRIERS, toolName)) return undefined;
 
-  const { field, surface } = BRIEF_CARRIERS[toolName];
+  const { field, surface, spanishSurface } = BRIEF_CARRIERS[toolName];
   const text = payload?.tool_input?.[field];
 
   if (typeof text !== 'string' || text.trim().length === 0) return undefined;
 
-  return { toolName, surface, text };
+  return { toolName, surface, spanishSurface, text };
 }
 
 /**
@@ -166,5 +166,5 @@ export function inspectBrief(brief) {
     if (state !== 'present') failures.push({ word, state });
   }
 
-  return failures.length === 0 ? undefined : { failures, length: brief.text.length, toolName: brief.toolName, surface: brief.surface };
+  return failures.length === 0 ? undefined : { failures, length: brief.text.length, toolName: brief.toolName, surface: brief.surface, spanishSurface: brief.spanishSurface };
 }

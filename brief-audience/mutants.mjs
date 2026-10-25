@@ -19,7 +19,6 @@
  * por medición, el `catch` alrededor de `inspectPayload`: ningún payload JSON lo hace lanzar.
  */
 
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,8 +27,6 @@ import { DECIDER_PHRASES, MARKUP_TAGS } from './audience.mjs';
 
 const AUD = 'brief-audience/audience.mjs';
 const GUARD = 'brief-audience/guard.mjs';
-/** The guard is saved with CRLF on the owner's machine: a mutant that spans lines must say which line ending it spans. @es La guardia se guarda con CRLF: un mutante de varias líneas dice con cuál. */
-const EOL = readFileSync(fileURLToPath(new URL('guard.mjs', import.meta.url)), 'utf8').includes('\r\n') ? '\r\n' : '\n';
 const DENY = "{ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'BRIEF-AUDIENCE REFUSED' } }";
 const FIELDS = "fields: ['subject', 'description', 'activeForm']";
 const MEMORY = "fields: ['title', 'content']";
@@ -64,17 +61,17 @@ const MUTANTS = [
   ['a closed fence keeps quoting what follows it', AUD, 'insideFence = !insideFence;', 'insideFence = true;'],
   ['a fenced line is inspected like any other', AUD, 'if (insideFence) continue;', 'if (false) continue;'],
   // The hook shim: what the harness reads / El shim del hook: lo que lee el harness
-  ['a BOM-prefixed payload is read as garbage', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
-  ['the BOM strip cuts into the payload', GUARD, 'raw.slice(1) : raw', 'raw.slice(2) : raw'],
-  ['every payload reads as unreadable', GUARD, 'payload = JSON.parse(text);', 'payload = JSON.parse(text.slice(0, 0));'],
-  ['an unreadable payload blocks the call instead of failing open', GUARD, `return undefined;${EOL}  }${EOL}${EOL}  let refusal;`, `return ${DENY};${EOL}  }${EOL}${EOL}  let refusal;`],
+  // Retired, pinned by hook-io's own mutants: the BOM strip ('the BOM is not stripped', 'the BOM test strips
+  // any first character'), the decision value ('deny does not say deny') and the event ('deny names the wrong
+  // event'). The mutants below keep the shim's own use of the port.
+  // @es Retirados, fijados por los mutantes de hook-io: el BOM, el valor de la decisión y el evento.
+  ['every payload reads as unreadable', GUARD, 'const payload = tryParsePayload(raw);', "const payload = tryParsePayload('');"],
+  ['an unreadable payload blocks the call instead of failing open', GUARD, `if (payload === undefined) return undefined;`, `if (payload === undefined) return ${DENY};`],
   ['a brief the decision allows is refused all the same', GUARD, 'if (refusal === undefined) return undefined;', "if (refusal === undefined) refusal = { toolName: 'Agent', field: 'prompt', kind: 'markup', tag: '</parameter>', length: 1 };"],
-  ['a refusal asks instead of denying', GUARD, "permissionDecision: 'deny',", "permissionDecision: 'ask',"],
-  ['a refusal names the wrong hook event', GUARD, "hookEventName: 'PreToolUse',", "hookEventName: 'PostToolUse',"],
   ['every refusal gives one reason, whatever it found', GUARD, "refusal.kind === 'markup' ? markupReason(refusal) : deciderReason(refusal)", "'BRIEF-AUDIENCE REFUSED this call.'"],
   ['a decider refusal gives the markup reason', GUARD, "refusal.kind === 'markup' ? markupReason(refusal) : deciderReason(refusal)", 'markupReason(refusal)'],
-  ['the process prints nothing for a refusal', GUARD, 'if (output !== undefined) console.log(JSON.stringify(output));', "if (output !== undefined) console.log('');"],
-  ['importing the guard runs it as a process', GUARD, 'process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))', 'true'],
+  ['the process prints nothing for a refusal', GUARD, 'runWhenMain(import.meta.url, hookMain(evaluate));', 'runWhenMain(import.meta.url, hookMain(() => undefined));'],
+  ['importing the guard runs it as a process', GUARD, 'runWhenMain(import.meta.url, hookMain(evaluate));', 'hookMain(evaluate)();'],
   ['a backtick span quotes by its backtick count alone, parity ignored', AUD, 'backticksBefore % 2 === 1', 'backticksBefore > 0'],
   ['a span that never closes still quotes the tag after it', AUD, "&& line.indexOf('`', at + tag.length) !== -1", '&& true'],
   ['a quoted tag stops the scan of its line, hiding the same tag bare later', AUD, 'from = at + tag.length;', 'break;'],
@@ -82,7 +79,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['brief-audience', 'hook-payloads', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['brief-audience', 'hook-io', 'hook-payloads', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'brief-audience/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

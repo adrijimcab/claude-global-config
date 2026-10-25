@@ -12,24 +12,19 @@
  * hook. FALLA ABIERTO ante cualquier fallo propio.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { isSubagentCaller, isUnderSubagentDirectory } from '../hook-caller/identify-caller.mjs';
+import { deny, hookMain, parseFailureMessage, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { englishParagraphs } from './decide.mjs';
 import { readInterstitialTexts } from './interstitial.mjs';
 import { recordLastRun } from './last-run.mjs';
 import { speaker } from './pretool-messages.mjs';
-
-const withoutBom = (raw) => (raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
 
 /**
  * Decides one raw PreToolUse payload: the hook output (or `undefined` to allow) and the trace of the run.
  * @es Decide un payload crudo de PreToolUse: la salida de hook (o `undefined` para permitir) y la traza de la corrida.
  */
 function judge(raw, readTexts) {
-  const payload = JSON.parse(withoutBom(raw));
+  const payload = parsePayload(raw);
   const transcript = payload?.transcript_path;
   const trace = {
     toolName: payload?.tool_name,
@@ -49,13 +44,7 @@ function judge(raw, readTexts) {
   if (first === undefined) return { output: undefined, trace: { ...trace, verdict: 'allow', judged: 0 } };
 
   return {
-    output: {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: speaker.line('english-before-tool', { excerpt: first.excerpt })
-      }
-    },
+    output: deny(speaker.line('english-before-tool', { excerpt: first.excerpt })),
     trace: { ...trace, verdict: 'deny', judged: paragraphs.length }
   };
 }
@@ -72,7 +61,7 @@ export function evaluate(raw, readTexts = readInterstitialTexts) {
   try {
     result = judge(raw, readTexts);
   } catch (error) {
-    result = { output: undefined, trace: { verdict: 'error', error: error instanceof Error ? error.message : String(error) } };
+    result = { output: undefined, trace: { verdict: 'error', error: parseFailureMessage(error) } };
   }
 
   recordLastRun({ ...result.trace, ms: Date.now() - started });
@@ -80,15 +69,4 @@ export function evaluate(raw, readTexts = readInterstitialTexts) {
   return result.output;
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  let output;
-
-  try {
-    output = evaluate(readFileSync(0, 'utf8'));
-  } catch {
-    output = undefined;
-  }
-
-  if (output !== undefined) process.stdout.write(JSON.stringify(output));
-  process.exitCode = 0;
-}
+runWhenMain(import.meta.url, hookMain(evaluate));

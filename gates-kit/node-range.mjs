@@ -7,14 +7,19 @@
  * the major is given). Prerelease tags are not read: no `engines.node` range of a pinned toolchain holds one.
  *
  * Decision: a range or version this module cannot read throws, never answers; a guess here would let a
- * toolchain be handed to a Node it cannot run on, or refuse one it can.
+ * toolchain be handed to a Node it cannot run on, or refuse one it can. The WHOLE range is read (`parseRange`,
+ * which needs no host version) before any comparator is weighed against the host, so a defect in a later
+ * alternative or comparator throws on every host instead of hiding behind one that decided first.
  *
  * @es Decide si una versión de Node cumple un rango `engines.node` de npm, en las formas que usan: alternativas
  * unidas por `||`, cada una un conjunto de comparadores separados por espacios que deben cumplirse todos; un
  * comparador es un operador opcional y una versión que puede ser parcial o llevar comodín, o un `*` suelto.
  * Una versión parcial suelta es todo el tramo que nombra. `^` fija la primera parte no cero, `~` el minor.
  * No se leen etiquetas prerelease. Un rango o versión ilegible lanza, nunca responde: adivinar aquí
- * entregaría una toolchain a un Node que no puede ejecutarla, o rechazaría uno que sí puede.
+ * entregaría una toolchain a un Node que no puede ejecutarla, o rechazaría uno que sí puede. Se lee el rango
+ * ENTERO (`parseRange`, que no necesita versión anfitriona) antes de pesar ningún comparador contra el
+ * anfitrión, así que un defecto en una alternativa o comparador posterior lanza en todo anfitrión en vez de
+ * esconderse tras uno que decidió antes.
  */
 
 const VERSION = /^v?(\d+)\.(\d+)\.(\d+)$/;
@@ -74,14 +79,22 @@ function caretUpper(parts) {
   return upper;
 }
 
-/** True when `version` satisfies one comparator. @es Verdadero si `version` cumple un comparador. */
-function satisfiesComparator(version, token) {
+/**
+ * One comparator token read as `{ operator, parts }` (`parts` the numbers given, a wildcard ending them).
+ * @es Un comparador leído como `{ operator, parts }` (`parts` los números dados; un comodín los termina).
+ */
+function parseComparator(token) {
   const match = COMPARATOR.exec(token);
 
   if (match === null) throw new Error(`unreadable comparator: ${token} @es comparador ilegible: ${token}`);
 
   const [, operator = '', ...raw] = match;
-  const parts = givenParts(raw);
+
+  return { operator, parts: givenParts(raw) };
+}
+
+/** True when `version` satisfies one parsed comparator. @es Verdadero si `version` cumple un comparador leído. */
+function satisfiesComparator(version, { operator, parts }) {
   const { lower, upper } = span(parts);
   const below = (bound) => bound === undefined || compare(version, bound) < 0;
 
@@ -115,14 +128,26 @@ function comparators(alternative) {
 }
 
 /**
- * True when `version` (exact, `v` prefix allowed) satisfies `range`.
- * @es Verdadero si `version` (exacta, admite prefijo `v`) cumple `range`.
+ * Every alternative of `range` as its list of parsed comparators, reading ALL of them and needing no host
+ * version; throws on the first unreadable comparator or empty alternative, wherever it sits.
+ * @es Cada alternativa de `range` como su lista de comparadores leídos, leyéndolos TODOS y sin versión
+ * anfitriona; lanza ante el primer comparador ilegible o alternativa vacía, esté donde esté.
+ */
+export function parseRange(range) {
+  const alternatives = String(range).split('||').map(comparators);
+
+  if (alternatives.some((tokens) => tokens.length === 0)) throw new Error(`empty alternative in range: ${range} @es alternativa vacía en el rango: ${range}`);
+
+  return alternatives.map((tokens) => tokens.map(parseComparator));
+}
+
+/**
+ * True when `version` (exact, `v` prefix allowed) satisfies `range`; the whole range is read first.
+ * @es Verdadero si `version` (exacta, admite prefijo `v`) cumple `range`; antes se lee el rango entero.
  */
 export function satisfies(version, range) {
   const parsed = parseVersion(version);
-  const alternatives = String(range).split('||');
+  const alternatives = parseRange(range);
 
-  if (alternatives.some((alternative) => comparators(alternative).length === 0)) throw new Error(`empty alternative in range: ${range} @es alternativa vacía en el rango: ${range}`);
-
-  return alternatives.some((alternative) => comparators(alternative).every((token) => satisfiesComparator(parsed, token)));
+  return alternatives.some((alternative) => alternative.every((comparator) => satisfiesComparator(parsed, comparator)));
 }

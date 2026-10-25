@@ -38,8 +38,7 @@
 
 import os from 'node:os';
 
-import { listProcesses } from '../worker-status/processes.mjs';
-import { killTree } from '../process-control/kill-tree.mjs';
+import { killTree, listProcesses } from '../process-control/process-port.mjs';
 import { isReapableWorktree } from './linked-worktree.mjs';
 import { speaker } from './messages.mjs';
 import { markersOf, namesAny } from './ownership.mjs';

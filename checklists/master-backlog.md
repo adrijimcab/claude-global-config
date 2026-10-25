@@ -398,6 +398,29 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   reproduced): `git commit -- <paths>` with lint-staged left the index out of step with HEAD and the backup
   stash behind. Pairs with lesson commit-pathspec-restaged-a-removed-file. PENDING, reason (4): reproduce
   on constructed state first, then decide whether workers commit with pathspecs or stage-then-commit.
+- process-reaper/reaper.selftest.mjs is flaky (master, 2026-10-25). On the t8-p1-process-port tree, 1 of 6
+  runs exited 1 and 5 exited 0. Its mutant campaign is 51/51 killed. P1u changed only one import line in
+  reaper.mjs, so the flake is most likely pre-existing process-timing sensitivity (HYPOTHESIS). PENDING,
+  reason (3): the owner froze the backlog-1-6 scope to in-flight units and the six points (L13). The fix:
+  reproduce under load, find the timing assumption, and bound it.
+- Anonymous selftest failures (master, 2026-10-25). The locks worker found that some selftests print a failing
+  check's name only on stderr or not in the last stdout line, which is the only line the mutation runner
+  shows. It fixed hook-state/journal and premise-judge (b8c9530). The other selftests have not been audited.
+  PENDING, reason (3): scope frozen by L13. Fix: one shared reporter in the selftest kit, whose last line
+  names every failing check, adopted by every selftest.
+- Writer commit-as-you-go mechanism (master, 2026-10-25). In this batch, 6 writers (T7, T4e, H1, H3, H5, H6, H7)
+  held all their work uncommitted for 40+ minutes, although every brief told them to commit as they go.
+  Lesson worker-work-left-uncommitted-across-a-stop is now at 3x, and promotion requires a mechanism. Proposed
+  mechanism: a PostToolUse or Stop check on a delegated writer's worktree that tells it to commit once
+  uncommitted paths are older than a bounded window. PENDING, reason (3): scope frozen by L13. It is the
+  first item for the next batch.
+- Promotion mechanism for guard-built-on-an-unmeasured-premise (5x, master 2026-10-25). capture.mjs requires a
+  mechanism with a selftest. Proposed: a guard acceptance check that a new guard's selftest drives the
+  original incident payload against the incident's own project tree. PENDING, reason (3): scope frozen by L13.
+- gentle-ai upgrade past 4.2.0 (master, 2026-10-25). main 5ee1ac77 is 306 commits ahead and has no tag. A
+  read-only assessment found no overlay or contract break, but the check "Windows Full Suite (rest)" fails on
+  that commit. PENDING, reason (1): waiting for a tagged release (4.2.1 or 4.3.0). Then install it, run sync
+  through the overlay wrapper, and run check.mjs.
 
 ## ORDER (decided 2026-10-11)
 

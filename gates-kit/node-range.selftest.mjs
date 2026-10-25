@@ -13,7 +13,7 @@
  * entrada ilegible, que debe lanzar y nunca responder.
  */
 
-import { parseVersion, satisfies } from './node-range.mjs';
+import { parseRange, parseVersion, satisfies } from './node-range.mjs';
 
 let passed = 0;
 const failures = [];
@@ -89,6 +89,29 @@ for (const [version, range, label] of [
   ['', '>=18', 'an empty host version'],
   ['latest', '>=18', 'a tag as host version'],
 ]) check(`${label} throws`, verdict(version, range) === 'threw');
+
+// A defect anywhere in the range throws on EVERY host, whichever alternative or comparator decides first.
+// @es Un defecto en cualquier parte del rango lanza en TODO anfitrión, decida primero la alternativa o el comparador que sea.
+for (const host of ['18.0.0', '22.13.0', '24.15.0', '30.0.0']) {
+  check(`a broken third alternative throws on ${host}`, verdict(host, '>=18 || >=20 || >=banana') === 'threw');
+  check(`a broken comparator after a failing one throws on ${host}`, verdict(host, '<1 >=banana') === 'threw');
+  check(`a broken comparator after a holding one throws on ${host}`, verdict(host, '>=1 >=banana') === 'threw');
+}
+
+/** The verdict of `parseRange`: `threw`, or the parsed shape as JSON. @es El veredicto de `parseRange`: `threw` o la forma leída en JSON. */
+function parsed(range) {
+  try {
+    return JSON.stringify(parseRange(range));
+  } catch {
+    return 'threw';
+  }
+}
+
+check('a range is parsed without a host into its alternatives and comparators', parsed('^22 >=22.1 || 6.*') === JSON.stringify([[{ operator: '^', parts: [22] }, { operator: '>=', parts: [22, 1] }], [{ operator: '', parts: [6] }]]));
+check('a bare wildcard parses to no parts', parsed('*') === JSON.stringify([[{ operator: '', parts: [] }]]));
+check('parseRange refuses a broken third alternative', parsed('^22 || ^24 || >=banana') === 'threw');
+check('parseRange refuses an empty alternative', parsed('^22 ||') === 'threw');
+check('parseRange refuses an empty range', parsed('') === 'threw');
 
 if (failures.length > 0) {
   console.error(`gates-kit node-range selftest FAILED @es el selftest de node-range de gates-kit FALLÓ (${failures.length} of ${passed + failures.length}):`);
