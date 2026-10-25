@@ -46,6 +46,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { blockStop, parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
 import { abandonmentsFor, defaultStateDir } from './abandon.mjs';
 import { delegationsInFinalTurn } from './turn-delegations.mjs';
 import { unlaunchedDelegations } from './unlaunched.mjs';
@@ -173,7 +174,7 @@ export function main(payload, stateDir = defaultStateDir(), now = Date.now()) {
   writeJson(file, { ...state, [sessionId]: { blockedAt: now } });
   note(stateDir, { event: 'block', session: sessionId, owed: owed.map((attempt) => attempt.label) });
 
-  return { decision: 'block', reason: reason(owed, sessionId) };
+  return blockStop(reason(owed, sessionId));
 }
 
 /**
@@ -183,32 +184,28 @@ export function main(payload, stateDir = defaultStateDir(), now = Date.now()) {
  */
 export function evaluate(raw) {
   try {
-    // PowerShell 5.1 prepends a UTF-8 BOM when it pipes a string into a native process and
-    // `JSON.parse` rejects it. Without this the guard would parse nothing, fall into the catch and
-    // ALLOW — a failed parse reading exactly like a clean turn.
-    // @es PowerShell 5.1 antepone un BOM; sin esto el parseo falla y DEJA PASAR, que es indistinguible
-    // de un turno limpio.
-    return main(JSON.parse(raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw));
+    // The port strips the UTF-8 BOM PowerShell 5.1 prepends when it pipes a string into a native process; without
+    // it the guard would parse nothing, fall into the catch and ALLOW — a failed parse reading exactly like a
+    // clean turn.
+    // @es El puerto quita el BOM que antepone PowerShell 5.1; sin él el parseo falla y DEJA PASAR, que es
+    // indistinguible de un turno limpio.
+    return main(parsePayload(raw));
   } catch (error) {
-    // A guard that throws must never wedge a session — but it must not do so invisibly either.
-    // @es Un guard que peta jamás debe atascar la sesión, pero tampoco callar.
-    note(defaultStateDir(), { event: 'malfunction', error: error instanceof Error ? error.message : String(error), rawLength: raw.length });
+    // A guard that throws must never wedge a session — but it must not do so invisibly either. A parse failure
+    // is recorded with the parser's own message (the port keeps it as the error's cause).
+    // @es Un guard que peta jamás debe atascar la sesión, pero tampoco callar. Un fallo de parseo se anota con el
+    // mensaje propio del parser (el puerto lo guarda como causa del error).
+    note(defaultStateDir(), { event: 'malfunction', error: error instanceof Error ? (error.cause ?? error).message : String(error), rawLength: raw.length });
 
     return undefined;
   }
 }
 
-function run() {
-  let raw = '';
+async function run() {
+  const output = evaluate(await readStdin());
 
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', (chunk) => (raw += chunk));
-  process.stdin.on('end', () => {
-    const output = evaluate(raw);
-
-    if (output !== undefined) process.stdout.write(JSON.stringify(output));
-    process.exit(0);
-  });
+  if (output !== undefined) process.stdout.write(JSON.stringify(output));
+  process.exit(0);
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) run();
+runWhenMain(import.meta.url, run);
