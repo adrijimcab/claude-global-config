@@ -4,8 +4,8 @@
  * workspace `package.json` files that are cheap to find (a plain workspace directory, or a `dir/*` entry
  * listed one level deep). The project's own code is left out: a value that points into its tree
  * (`workspace:`, `file:`, `link:`, `portal:`) and the `name` of every manifest read (a sibling workspace
- * depended on by a plain version range). Nothing else is read: no network, never the contents of
- * `node_modules`.
+ * depended on by a plain version range). A scoped key is also named by its scope and its tail (see
+ * `mentionsOf`). Nothing else is read: no network, never the contents of `node_modules`.
  *
  * WHERE THE PROJECT COMES FROM. The checkout paths of the brief's `TENANCY:` lines (the path the brief
  * itself declares as the worker's tree); when it declares none, the `cwd` of the hook payload. Neither
@@ -26,7 +26,8 @@
  * `dependencies`, `devDependencies` y `peerDependencies` (solo objetos planos) del `package.json` raíz y de
  * los de workspace baratos de hallar. El código propio queda fuera: un valor que apunta a su árbol
  * (`workspace:`, `file:`, `link:`, `portal:`) y el `name` de cada manifiesto leído (un workspace hermano del
- * que se depende con un rango de versión normal). EL PROYECTO sale de las rutas `TENANCY:` del brief o, si no hay, del `cwd` del
+ * que se depende con un rango de versión normal). Una clave con ámbito también se nombra por su ámbito y su
+ * cola (ver `mentionsOf`). EL PROYECTO sale de las rutas `TENANCY:` del brief o, si no hay, del `cwd` del
  * payload; si su raíz no tiene `package.json`, se leen los de un nivel más abajo (salvo `node_modules` y
  * carpetas con punto), en unión. CONTENIDO: nada fuera del checkout; una entrada de workspace que sale
  * (`..`) o es absoluta no se sigue y queda como no decidida. NUNCA FALLA CERRADO NI CALLA: cada manifiesto
@@ -93,6 +94,28 @@ function readManifest(file, files) {
   return manifest !== null && typeof manifest === 'object' ? { manifest } : { reason: 'package.json is not a JSON object' };
 }
 
+/**
+ * The tails of a scoped name that are common English words, so never a name on their own (`@playwright/test`
+ * adds `playwright` but not `test`). A prefilter hit only costs one judge call, so the list stays short.
+ * @es Las colas de un nombre con ámbito que son palabras inglesas corrientes y nunca son un nombre por sí solas.
+ */
+const COMMON_TAILS = new Set(['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node']);
+
+/**
+ * The names a dependency key is mentioned by in prose: the key itself and, for a scoped `@scope/tail`, the scope
+ * without its `@` and the tail unless it is a common word. Prose says "Playwright" for `@playwright/test`.
+ * @es Los nombres con que la prosa menciona una dependencia: la clave y, si tiene ámbito, el ámbito sin `@` y la
+ * cola salvo que sea palabra común. La prosa dice «Playwright» por `@playwright/test`.
+ */
+function mentionsOf(name) {
+  if (!name.startsWith('@') || !name.includes('/')) return [name];
+
+  const slash = name.indexOf('/');
+  const tail = name.slice(slash + 1);
+
+  return [name, name.slice(1, slash), ...(COMMON_TAILS.has(tail.toLowerCase()) ? [] : [tail])];
+}
+
 /** Whether a dependency value points inside the project's own tree. @es Si un valor de dependencia apunta al propio árbol. */
 const isLocal = (value) => typeof value === 'string' && LOCAL_PREFIXES.some((prefix) => value.startsWith(prefix));
 
@@ -111,7 +134,7 @@ function addNames(manifest, context) {
 
     if (entries === null || typeof entries !== 'object' || Array.isArray(entries)) continue;
 
-    for (const [name, value] of Object.entries(entries)) if (!isLocal(value)) context.names.add(name);
+    for (const [name, value] of Object.entries(entries)) if (!isLocal(value)) for (const mention of mentionsOf(name)) context.names.add(mention);
   }
 }
 

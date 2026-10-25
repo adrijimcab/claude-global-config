@@ -51,6 +51,19 @@ const droppedLocals = LOCALS.map((prefix) => [
   `const LOCAL_PREFIXES = [${LOCALS.filter((other) => other !== prefix).map((other) => `'${other}'`).join(', ')}];`
 ]);
 
+const TAILS_LINE = "const COMMON_TAILS = new Set(['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node']);";
+const TAILS = ['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node'];
+
+/** One mutant per common tail: the set without it. @es Un mutante por cola común. */
+const droppedTails = TAILS.map((tail) => [
+  `the tail ${tail} counts as a name`,
+  NAMES,
+  TAILS_LINE,
+  `const COMMON_TAILS = new Set([${TAILS.filter((other) => other !== tail).map((other) => `'${other}'`).join(', ')}]);`
+]);
+
+const MENTIONS_LINE = "return [name, name.slice(1, slash), ...(COMMON_TAILS.has(tail.toLowerCase()) ? [] : [tail])];";
+
 const PACKAGES_LINE = 'return [...new Set(words(unit, NAME_SEPARATORS).map((word) => trimPeriods(word).toLowerCase()).filter((word) => folded.has(word)))];';
 
 export const DEPENDENCY_MUTANTS = [
@@ -108,7 +121,18 @@ export const DEPENDENCY_MUTANTS = [
   ['an array section names its indexes', NAMES, ' || Array.isArray(entries)) continue;', ') continue;'],
   ...droppedLocals,
   ['a non-string version throws', NAMES, "typeof value === 'string' && LOCAL_PREFIXES", 'LOCAL_PREFIXES'],
-  ['local packages are named', NAMES, 'if (!isLocal(value)) context.names.add(name);', 'context.names.add(name);'],
+  ['local packages are named', NAMES, 'if (!isLocal(value)) for (const mention', 'for (const mention'],
+  // How a scoped key is mentioned / Cómo se menciona una clave con ámbito
+  ['only the key is a name', NAMES, 'for (const mention of mentionsOf(name)) context.names.add(mention);', 'context.names.add(name);'],
+  ['an unscoped slashed key is split', NAMES, "if (!name.startsWith('@') || !name.includes('/'))", "if (!name.includes('/'))"],
+  ['a scope with no slash is split', NAMES, "if (!name.startsWith('@') || !name.includes('/'))", "if (!name.startsWith('@'))"],
+  ['the scope is not a name', NAMES, MENTIONS_LINE, "return [name, ...(COMMON_TAILS.has(tail.toLowerCase()) ? [] : [tail])];"],
+  ['the scope keeps its @', NAMES, 'name.slice(1, slash)', 'name.slice(0, slash)'],
+  ['the tail is not a name', NAMES, MENTIONS_LINE, 'return [name, name.slice(1, slash)];'],
+  ['a common tail is a name', NAMES, MENTIONS_LINE, 'return [name, name.slice(1, slash), tail];'],
+  ['the tail is compared unfolded', NAMES, 'COMMON_TAILS.has(tail.toLowerCase())', 'COMMON_TAILS.has(tail)'],
+  ['the tail keeps its slash', NAMES, 'name.slice(slash + 1)', 'name.slice(slash)'],
+  ...droppedTails,
   ["a manifest's own name is not recorded", NAMES, '  context.own.add(manifest.name);\n', ''],
   ["the project's own names stay third-party", NAMES, 'for (const name of context.own) context.names.delete(name);', ''],
   ['a BOM-prefixed manifest is not read', NAMES, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],

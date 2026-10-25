@@ -133,6 +133,14 @@ function buildFixtures() {
     dependencies: { ignore: '1.0.0' },
     devDependencies: { eslint: '9.0.0', typescript: '~5.8.0', LegacyPkg: '1.0.0' }
   }));
+  // Discovery's shape: the project one folder down declares Playwright only as `@playwright/test`. Every common
+  // tail is here once (`node` with a capital, to pin the fold), plus a scope-only and an unscoped slashed key.
+  write('scoped/App', 'package.json', JSON.stringify({
+    devDependencies: {
+      '@playwright/test': '1.58.2', '@angular/core': '19.2.0', '@acme/widgets': '1.0.0', '@acme/cli': '1.0.0', '@acme/common': '1.0.0',
+      '@acme/types': '1.0.0', '@acme/utils': '1.0.0', '@acme/kit': '1.0.0', '@acme/Node': '1.0.0', '@lonely': '1.0.0', 'odd/name': '1.0.0'
+    }
+  }));
   // A checkout whose npm project sits one folder down, as in a repository whose workspace is `App/`.
   write('nested/App', 'package.json', JSON.stringify({ devDependencies: { 'nested-app-dep': '1.0.0' }, workspaces: ['projects/*'] }));
   write('nested/App/projects/lib', 'package.json', JSON.stringify({ dependencies: { 'nested-lib-dep': '1.0.0' } }));
@@ -372,6 +380,19 @@ const cases = [
   ['deny', claim('MEASURED: nested-app-dep closes', fixtureDir('nested')), 'a project one folder down is read', 'nested-app-dep', REFUSE],
   ['deny', claim('MEASURED: nested-other-dep closes', fixtureDir('nested')), 'every project one folder down is read, as a union', 'nested-other-dep', REFUSE],
   ['deny', claim('MEASURED: nested-lib-dep closes', fixtureDir('nested')), 'the workspaces of a project one folder down are read', 'nested-lib-dep', REFUSE],
+  // A scoped dependency is also named by its scope and by its tail, unless the tail is a common word.
+  // @es Una dependencia con ámbito también se nombra por su ámbito y por su cola, salvo si la cola es palabra común.
+  ['deny', claim('MEASURED: Playwright closes its children on SIGTERM', fixtureDir('scoped')), 'REAL INCIDENT in Discovery: only @playwright/test is declared, and its scope is a name', 'playwright', REFUSE, 'Playwright closes its children on SIGTERM (playwright)'],
+  ['deny', claim('MEASURED: angular retries the request', fixtureDir('scoped')), 'the scope is named without its @', 'angular', REFUSE],
+  ['deny', claim('MEASURED: widgets breaks on resize', fixtureDir('scoped')), 'the tail of a scoped name is a name', 'widgets', REFUSE],
+  ['deny', claim('MEASURED: @playwright/test closes', fixtureDir('scoped')), 'the full scoped name stays a name', '@playwright/test', REFUSE],
+  ...['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node'].map((word) => [
+    'allow',
+    claim(`MEASURED: the ${word} folder holds 3 files`, fixtureDir('scoped')),
+    `the common tail ${word} alone never counts as a name, so the judge is not asked`
+  ]),
+  ['allow', claim('MEASURED: lonel breaks', fixtureDir('scoped')), 'a scope with no slash is not split'],
+  ['allow', claim('MEASURED: name breaks', fixtureDir('scoped')), 'an unscoped name with a slash is not split'],
   ['allow', claim('MEASURED: installed-root-dep closes', fixtureDir('nested')), 'node_modules is never read as a nested project'],
   ['allow', claim('MEASURED: hidden-dep closes', fixtureDir('nested')), 'a dot-folder is never read as a nested project'],
   ['allow', claim('MEASURED: playwright closes', fixtureDir('nested-broken')), 'an unparsable nested manifest: the face does not decide'],
