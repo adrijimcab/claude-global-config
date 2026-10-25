@@ -28,7 +28,7 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-09-30 — worker-overwrote-master-backlog: mechanism C:/Users/adrian.jimenez/.claude/backlog-owner-guard/guard.mjs <!--fc:worker-overwrote-master-backlog#1-->
 - [promoted] 2026-09-30 — unverified-commit-published-by-another-sessions-sync: mechanism C:/Users/adrian.jimenez/.claude/worktree-landing/land.mjs <!--fc:unverified-commit-published-by-another-sessions-sync#3-->
 - [promoted] 2026-10-01 — backlog-rewritten-from-summary-lost-detail: mechanism C:/Users/adrian.jimenez/.claude/backlog-content-guard/guard.mjs <!--fc:backlog-rewritten-from-summary-lost-detail#4-->
-- [promoted] 2026-10-01 — replied-to-owner-in-english: no mechanism <!--fc:replied-to-owner-in-english#17-->
+- [promoted] 2026-10-01 — replied-to-owner-in-english: no mechanism <!--fc:replied-to-owner-in-english#18-->
 - [promoted] 2026-10-04 — root-cause-stated-before-measured: no mechanism <!--fc:root-cause-stated-before-measured#2-->
 - [promoted] 2026-10-02 — brief-had-workers-open-every-image: no mechanism <!--fc:brief-had-workers-open-every-image#2-->
 - [promoted] 2026-10-05 — brief-measured-line-carried-an-unmeasured-claim: no mechanism <!--fc:brief-measured-line-carried-an-unmeasured-claim#6-->
