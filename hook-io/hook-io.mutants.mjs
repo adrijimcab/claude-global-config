@@ -61,6 +61,7 @@ const MUTANTS = [
 
   // --- standalone hook ---
   ['hookMain prints a missing decision as null', H, 'if (output !== undefined) process', 'if (true) process'],
+  ['hookMain never prints the decision', H, 'if (output !== undefined) process.stdout.write(`${JSON.stringify(output)}\\n`);', ''],
   ['hookMain prints without the line break', H, '${JSON.stringify(output)}\\n','${JSON.stringify(output)}'],
   ['hookMain stops reading after a failed read with a throw', H, '  } catch {\n    return;\n  }\n\n  const output', '  } catch (error) {\n    throw error;\n  }\n\n  const output']
 ];
