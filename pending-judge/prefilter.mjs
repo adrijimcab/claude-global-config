@@ -8,13 +8,20 @@
  * so the continued stop passes. It is looked up only on a continued stop and only against a block of THIS turn,
  * so a dismissal from an earlier turn silences nothing.
  *
+ * A FAIL-OPEN LEAVES EVIDENCE: when the turn's `mem_update` cannot be resolved by the engram store, `decide()` lets
+ * it pass and reports it; this prefilter journals that report with the stop's payload
+ * (`../backlog-guard/degradation-journal.mjs`), so no fail-open is silent.
+ *
  * @es El prefiltro del juez de pendientes: ¿vale la pena preguntar al modelo por esta parada? Solo si el mensaje
  * lleva un marcador, el turno no guardó nada en el backlog maestro y no fue descartado. Un DESCARTE cierra la
  * pregunta de su turno: tras un bloqueo de este turno, un descarte posterior de la sesión significa que respondió
- * por escrito al juez. Se consulta solo en una parada continuada y contra un bloqueo de ESTE turno.
+ * por escrito al juez. Se consulta solo en una parada continuada y contra un bloqueo de ESTE turno. UN FALLO
+ * ABIERTO DEJA EVIDENCIA: si el almacén de engram no resuelve el `mem_update` del turno, `decide()` lo deja pasar y
+ * lo informa, y este prefiltro lo registra con el payload de la parada.
  */
 
 import { decide } from '../backlog-guard/decide.mjs';
+import { journalDegraded } from '../backlog-guard/degradation-journal.mjs';
 import { dismissedSince } from '../backlog-guard/dismissals.mjs';
 import { lastBlockTimeThisTurn } from '../judge-gate/outcome-log.mjs';
 
@@ -25,8 +32,8 @@ const JUDGE_NAME = 'pending';
  * Whether to ask the model about the hook input `payload`. Every dependency is injectable.
  * @es Si preguntar al modelo por la entrada `payload`. Toda dependencia es inyectable.
  */
-export function prefilter(payload, { owes = decide, lastBlockTime = lastBlockTimeThisTurn, dismissed = dismissedSince } = {}) {
-  if (owes(payload) === undefined) return false;
+export function prefilter(payload, { owes = decide, lastBlockTime = lastBlockTimeThisTurn, dismissed = dismissedSince, journal = journalDegraded } = {}) {
+  if (owes(payload, { reportDegraded: (info) => journal(payload, info) }) === undefined) return false;
 
   if (payload?.stop_hook_active !== true) return true;
 

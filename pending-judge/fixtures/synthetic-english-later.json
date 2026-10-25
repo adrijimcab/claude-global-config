@@ -1,6 +1,7 @@
 {
   "id": "synthetic-english-later",
   "expect": "fail",
+  "provenance": "author",
   "source": "synthetic: English deferral",
   "message": "I found a defect in the retry logic of the gate. I will fix it later, once the current batch lands."
 }

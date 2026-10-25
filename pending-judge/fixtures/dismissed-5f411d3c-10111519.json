@@ -1,6 +1,7 @@
 {
   "id": "dismissed-5f411d3c-10111519",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The word names the backlog-guard fix being landed right now (land/batch-2); no pending item announced.)",
   "message": "La sesión 2d confirmó los dos casos que veníamos atacando, mientras esperaba en pausa:\n- **El guard del backlog** saltó otra vez por la palabra suelta. Es justo lo que corrige el aterrizaje que está corriendo ahora.\n- **engram-persistence** la culpó por tercera vez hoy, ahora por 10 commits de traducciones de feature/meet que hizo otra sesión. Su arreglo se está construyendo en `fix/engram-persistence-ownership`: va a contar solo los commits que salen de las propias llamadas de shell de cada sesión. Entra en el aterrizaje siguiente.\n\nLe respondí que siga en pausa hasta que termine `land.mjs`."
 }

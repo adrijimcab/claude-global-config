@@ -1,6 +1,7 @@
 {
   "id": "judges-enclitic-verlo",
   "expect": "fail",
+  "provenance": "author",
   "source": "synthetic: built from the sentences the two final judges of T4a confirmed on 2026-10-19",
   "message": "El guard quedó verde con 60 de 60. Queda por verlo con el dueño antes de integrar."
 }

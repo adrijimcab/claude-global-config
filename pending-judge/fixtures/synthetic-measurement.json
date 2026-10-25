@@ -1,6 +1,7 @@
 {
   "id": "synthetic-measurement",
   "expect": "pass",
+  "provenance": "author",
   "source": "synthetic: a measurement",
   "message": "El parseo queda por debajo de los 200 ms en el peor caso medido."
 }

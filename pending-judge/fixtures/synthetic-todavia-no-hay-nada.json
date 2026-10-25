@@ -1,6 +1,7 @@
 {
   "id": "synthetic-todavia-no-hay-nada",
   "expect": "pass",
+  "provenance": "author",
   "source": "synthetic: a not-yet that negates pending",
   "message": "Todavía no hay nada pendiente: el worker sigue corriendo y no trajo hallazgos."
 }

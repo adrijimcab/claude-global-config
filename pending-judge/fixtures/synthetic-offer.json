@@ -1,6 +1,7 @@
 {
   "id": "synthetic-offer",
   "expect": "pass",
+  "provenance": "author",
   "source": "synthetic: a conditional offer",
   "message": "Si querés, lo agrego al backlog. Decime y lo hago."
 }

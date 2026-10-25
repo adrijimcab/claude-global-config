@@ -1,6 +1,7 @@
 {
   "id": "dismissed-664a8a26-10181511",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Saved as items 380-381 of backlog part 38 (engram #1572) via the engram CLI this turn; the guard does not see CLI writes.)",
   "message": "Tenés razón con la otra sesión, y no la doy por terminada. Todavía tiene en vuelo la ronda de arreglos de chain (15 hallazgos) y la segunda y última ronda de pdt (7 hallazgos). Además le falta integrar las dos, cerrar sus worktrees y pasarme PROD y el guard. Cuando me mande su informe final, lo voy a contrastar con `git log`, los worktrees y los puertos antes de aceptarlo.\n\nSobre lanzar algo más: lo intenté y el guard me frenó, y tiene razón. Preparé E7 (los e2e de administración de usuarios, lista de proyectos, batch jobs y data lineage) en un worktree propio, y verifiqué que no choca con nada en vuelo. Pero el guard de trabajo huérfano bloquea cualquier writer nuevo mientras E5/E6 siga sin integrar: ya aprobado por los jueces, con 12 commits esperando. La solución de fondo no es esquivar el guard. Es integrar E5/E6.\n\nPara eso necesito el lugar de cadena completa, y la master todavía no anunció que terminó su checkpoint-42. Ya le pregunté. Apenas me lo libere, corro la corrida de diagnóstico, que de paso nos dice si la falla en masa de antes fue por carga de la máquina. Si sale limpia, integro E5/E6 y en ese mismo momento largo E7."
 }

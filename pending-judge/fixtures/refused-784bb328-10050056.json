@@ -1,6 +1,7 @@
 {
   "id": "refused-784bb328-10050056",
   "expect": "pass",
+  "provenance": "author",
   "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading || LABEL (T4a2, 2026-10-19): read: the refusal was never dismissed, but the reply reports work in flight, a plan, a measurement, or cites its record; it parks no unrecorded item",
   "message": "Coincido con vos: no tiene sentido. Desde ahora, la mutación al 100% es obligatoria solo en `src/lib`. Lo dejé registrado en engram (#1221) y reemplaza la parte de scripts de la decisión anterior (#1125).\n\nComo los dos workers que seguían corriendo eran justo de scripts (harness/presentation y release-and-checks), **los frené ya**. No lancé nada nuevo: solo les ordené cortar. A cada uno le pedí:\n\n- parar sus corridas de Stryker;\n- commitear los specs y arreglos que ya tienen terminados;\n- quedarse solo con los suelos que ya tienen dos corridas limpias al 100;\n- descartar lo parcial y dejar el worktree limpio;\n- reportar.\n\nCuando confirmen, arranco el cierre que pediste: integrar todo en develop, push, borrar worktrees y ramas salvo `main`, `develop` y `feature/angular21`, y pasarte el backlog final.\n\nEn ese backlog te propongo el criterio liviano para scripts. Mi recomendación es conservar los suelos que ya están al 100, pero que `check:mutation` mida solo los ficheros que cambiaron, en lugar de volver a correr todo en cada cadena. Así deja de costar horas."
 }

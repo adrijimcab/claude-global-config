@@ -1,6 +1,7 @@
 {
   "id": "dismissed-784bb328-10052301",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Progress line of the landing in flight; no new finding; the close steps are the owner's order #1247 already in master #972, and the master is rewritten whole as)",
   "message": "`no-suppressions` y `spec-typecheck` dieron 0. Ahora corre `ci:test`, la suite unitaria completa con cobertura y la parte más larga del suelo. Si da verde, avanzo develop, hago push, limpio ramas y worktrees, y te paso el backlog final."
 }

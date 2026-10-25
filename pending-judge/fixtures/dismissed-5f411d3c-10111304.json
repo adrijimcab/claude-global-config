@@ -1,6 +1,7 @@
 {
   "id": "dismissed-5f411d3c-10111304",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The pending work named this turn (R2 fixtures branch waiting to land together with the runner isolation) is already recorded as item 39 of backlog/main-4-master)",
   "message": "El texto promovido ya nombra esta cara. En `rules/promoted-rules.md`, la regla de `brief-measured-line-carried-an-unmeasured-claim` dice que una afirmación de estado tomada de un registro duradero (contrato, memoria o backlog) se vuelve a medir antes de ir a un brief, y vale para cualquier parte del brief, no solo para las líneas `MEASURED:`. No hace falta extenderlo; queda contada como tercera recurrencia.\n\nLa parte de fixtures y censo de R2 espera en su rama. La integro junto con el aislamiento del runner cuando termine ese worker, porque por separado `land.mjs` la rechazaría."
 }

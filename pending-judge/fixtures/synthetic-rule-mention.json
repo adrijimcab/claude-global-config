@@ -1,6 +1,7 @@
 {
   "id": "synthetic-rule-mention",
   "expect": "pass",
+  "provenance": "author",
   "source": "synthetic: the rule is mentioned",
   "message": "La regla dice que todo hallazgo se anota en el backlog en el mismo turno, y la cumplí: el worker no trajo ninguno."
 }

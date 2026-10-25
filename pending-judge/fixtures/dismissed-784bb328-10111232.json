@@ -1,6 +1,7 @@
 {
   "id": "dismissed-784bb328-10111232",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Status message only: the audit was launched and its results have not arrived; the one new measurement (47 Material class references in 11 stories) confirms the )",
   "message": "Lancé la auditoría completa; todavía no hay resultados.\n\n- **Ítems dados por hechos:** dos agentes de solo lectura los revisan uno por uno contra el código actual, con evidencia por ítem (17 más el ítem 12 el primero, 33 el segundo). No escriben nada en el repo ni en el backlog.\n- **`as` y `!` fuera de `src/lib`:** un censo sobre todo el repo corriendo en segundo plano.\n- **Clases internas de Material en las stories:** ya medido, 47 referencias en 11 stories, igual que decía la triage. La mayor parte está en menu (17), button (5) y context-menu (5).\n\nCuando lleguen los tres resultados, contrasto lo que digan los agentes leyendo yo la evidencia, hago el análisis de qué vale la pena para la 1.0.0 y qué no, y recién ahí armo el backlog final."
 }

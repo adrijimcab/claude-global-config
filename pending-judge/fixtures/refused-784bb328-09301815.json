@@ -1,6 +1,7 @@
 {
   "id": "refused-784bb328-09301815",
   "expect": "pass",
+  "provenance": "author",
   "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading || LABEL (T4a2, 2026-10-19): read: the refusal was never dismissed, but the reply reports work in flight, a plan, a measurement, or cites its record; it parks no unrecorded item",
   "message": "Ya relancé el agente de GitLab. Cada acción remota te va a pedir aprobación: revisá sobre todo el cambio de permisos del job token (A), el forwarding de npm (E) y el borrado del paquete huérfano (D). Es el único paquete que va a borrar, y antes de hacerlo tiene que comprobar que el lockfile no lo usa.\n\nSiguen corriendo en paralelo:\n- el facade de formularios (#35);\n- la deuda de dependencias (audit, `BlobPart`, eslint deprecado);\n- el barrido de engram de los últimos dos días contra el backlog.\n\nCuando vuelva el barrido rehago el backlog completo. Parto de la revisión 62, le sumo todo lo que encuentre con su detalle medido y actualizo el estado de GitLab, que ahora está autorizado y en curso."
 }

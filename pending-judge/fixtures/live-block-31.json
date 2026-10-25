@@ -1,6 +1,7 @@
 {
   "id": "live-block-31",
   "expect": "fail",
+  "provenance": "unadjudicated",
   "source": "real: labelled genuine announcement of live-turns-2026-10-11.json",
   "message": "y un `@if (body)`: sin `!` y sin depender de `any`. Además tiene que borrar `groupFor` y `dynamicConfigs` si quedan muertos, cubrir la rama nueva por el harness y correr `build:demo`.\n\n**¿Se está haciendo todo como lo haría un senior?** No siempre a la primera, y este es un ejemplo. Los workers cumplen el gate, y este caso pasaba typecheck porque el `any` lo escondía. Lo que lo frena es la revisión: la mía, la tuya como recién, y los gates finales antes de aterrizar.\n\nEl hallazgo de fondo vale para todo el repo: un `let-x` sin tipar en un `ng-template` es un agujero de tipos que **ningún gate detecta hoy**. Una regla de lint o una directiva de contexto tipado lo cerraría de raíz. Lo sumo al backlog final como ítem nuevo."
 }

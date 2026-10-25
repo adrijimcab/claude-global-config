@@ -1,6 +1,7 @@
 {
   "id": "dismissed-c4d7f854-10111306",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Nothing new: the only open item named (when F4 blocks the tag) is already in #972 REV102 under DUENO ('cuando bloquea F4'); FR before 1.0.0 is already REV102 ph)",
   "message": "Arranqué F0.1: la corrida completa de `build:ci-pr` sobre `develop` (`11b86727`), en segundo plano. Uso el runner del repo (`.claude/gate-run/gate-run.mjs`), que deja el veredicto gate por gate. El log va a `scratchpad/f0-1-gate-run-20261011.log`.\n\nLo de la reorganización a `projects/` y lo de F4 ya estaba registrado así. Los dos registros los leí recién:\n- **Reorganización a `projects/`:** en el backlog maestro #972, REV102 la tiene como fase FR, antes de la 1.0.0. Va después de F0 y antes de F1.\n- **F4:** el traspaso #1367 la deja fuera de esta sesión, por decisión tuya.\n- **Lo que pegaste:** dice que la reorganización va después de la 1.0.0. Esa es la versión vieja; en engram ya está corregida.\n\nUna cosa queda abierta, y define el alcance de F6: cuando decís «F4 más adelante», ¿es después del tag 1.0.0 o antes del tag, pero en otra sesión?"
 }

@@ -1,6 +1,7 @@
 {
   "id": "dismissed-5f411d3c-10111213",
   "expect": "unknowable",
+  "provenance": "author",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The turn's findings are saved in engram record #1299 (backlog/merge-2026-10-11-findings); they enter the single merged backlog when the host verifier returns, b) || LABEL (T4a2, 2026-10-19): dismissed because the item is recorded in a store this reply does not cite; the message alone parks it, so the judge cannot know",
   "message": "Los dos detectores no son equivalentes:\n\n- **El de master (`leaks.mjs`)** vigila los directorios de estado, selftest por selftest, y ya está integrado al runner.\n- **El varado (`pollution.mjs`)** vigila además el `git status` del checkout y los restos en la carpeta temporal.\n\nEse segundo punto es justo el hueco que el propio documento del servidor reconoce: un selftest de gates-kit dejó residuos fuera de su sandbox.\n\nMi decisión es no integrar `pollution.mjs` como módulo paralelo, porque serían dos respuestas a la misma pregunta. Lo correcto es extender `leaks.mjs` para que también mire el árbol, usando la rama varada como referencia.\n\nEl verificador sigue corriendo en tu máquina: runner completo, `vendored check`, presupuesto, gates, latencia del cierre de turno e higiene del host. Cuando termine, armo el backlog único mezclando engram y el documento del servidor."
 }

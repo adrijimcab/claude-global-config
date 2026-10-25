@@ -1,6 +1,7 @@
 {
   "id": "dismissed-5f411d3c-10121657",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Not a new pending item: adding an in-flight worker's verified fix to checkpoint-37, already recorded in engram #1543. Second false positive of this marker in on)",
   "message": "El arreglo del guard de espejos ODD ya está commiteado (`0a07c7a`): el selftest arma su base de prueba desde un esquema capturado y versionado, no desde la base real de la máquina. Ahora el worker está corriendo la batería completa con el mismo runner y el mismo sandbox que usa el aterrizaje, que arrancó a las 18:57. Si da verde, lo sumo al checkpoint-37 y aterrizo todo junto."
 }

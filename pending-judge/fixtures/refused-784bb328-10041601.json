@@ -1,6 +1,7 @@
 {
   "id": "refused-784bb328-10041601",
   "expect": "fail",
+  "provenance": "unadjudicated",
   "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading",
   "message": "Terminó el primero de los 8: la triage. Su informe completo quedó guardado en engram (#1201). Faltan 7: los 6 de mutación y el de deuda chica.\n\nNo te paso la triage todavía, porque me pediste el backlog actualizado una sola vez, al final. Sí te adelanto el dato que más pesa, medido por ese worker y que yo todavía no verifiqué: en el árbol compartido faltan los paquetes de Stryker, así que `check:mutation` no puede correr dentro de la cadena final. Se resuelve con un `npm install` en el checkout principal sin workers vivos, y eso solo es posible cuando terminen todos. No es algo nuevo: es el paso que ya estaba previsto antes del cierre."
 }

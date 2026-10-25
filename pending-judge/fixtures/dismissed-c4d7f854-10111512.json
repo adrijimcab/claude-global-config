@@ -1,6 +1,7 @@
 {
   "id": "dismissed-c4d7f854-10111512",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Writes to the backlog document are paused by the coordinated rebuild of the tooling master (di-1700002-discovery-fe-f4); the turn's entries are held verbatim in)",
   "message": "Paré mis escrituras en `.claude` de b100, el documento del backlog incluido, porque la otra sesión va a rehacer el master de ese repo de respaldo. La decisión de fondo es buena:\n\n- **Por qué.** La campaña de mutantes de F0.3 tardó 34 minutos, mató solo 3 y ya tiene un mutante ambiguo. Hoy no puede probar ese commit, y como es el más viejo, todo lo que está encima queda trabado.\n- **Qué va a hacer.**\n  - Sacar F0.3 a su propia rama.\n  - Rehacer master con los otros 17 commits, mis 13 del backlog incluidos sin cambios.\n  - Subirlo y comprobar que el remoto quedó igual.\n\nLe marqué un riesgo para que lo verifique antes de cambiar el árbol: mis cuatro workers trabajan en worktrees que viven dentro de `.claude/worktrees/`, y el `capture.mjs` escribe logs en `.claude/fleet-env/scratch/`. Si esas rutas están ignoradas por el repo de respaldo, el cambio de rama no las toca. Si alguna no lo está, paro a los workers antes de que siga.\n\nMientras tanto los cuatro siguen trabajando en lo suyo: U01 de FR, #1240, el ítem 162 y F3.3."
 }

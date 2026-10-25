@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-item-deferred-past-worker",
+  "expect": "fail",
+  "provenance": "author",
+  "source": "synthetic: an item deferred until a worker finishes, with no record (T4A2 P3)",
+  "message": "El worker sigue corriendo. Cuando termine miro el bug del retry que encontré en el parser."
+}

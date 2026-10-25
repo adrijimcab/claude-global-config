@@ -1,6 +1,7 @@
 {
   "id": "dismissed-5f411d3c-10181359",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (adding a finished worker's commit to the next landing checkpoint, not a new pending item; the work (item 28) is already recorded as in flight in file memory ite)",
   "message": "El worker del trabajo huérfano entregó, y la causa que encontró es la que habíamos medido. Su arreglo deja de contar como huérfanos los commits que ya tiene la rama viva sobre la que está apilado un worktree. Corrí su selftest yo mismo: 47 de 47. Él reporta que la campaña mata los 36 mutantes.\n\nSe apartó del brief en dos decisiones, y las dos están bien fundadas:\n- **Solo cuenta la rama que está debajo.** Si cualquier otra rama pudiera cubrir los commits, la base y el worktree apilado se taparían mutuamente, y el trabajo huérfano de verdad desaparecería de los dos lados.\n- **Solo cuentan los worktrees vivos.** Una rama detenida no va a aterrizar sus commits, así que no tiene por qué cubrirlos.\n\nCada decisión tiene su propio mutante que la defiende.\n\nRevisé también los procesos de los dos workers que ya terminaron: no les quedó nada corriendo.\n\nLo sumo al checkpoint-42, junto con el aviso de sincronización cuando entregue el tercer worker. Antes repito yo la campaña de mutantes, una vez que termine el aterrizaje del 41, para no correr dos cadenas a la vez."
 }

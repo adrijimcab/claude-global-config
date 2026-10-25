@@ -1,6 +1,7 @@
 {
   "id": "dismissed-5f411d3c-10111438",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The word named b100's backlog commits and a rejected design option; the only pending item (push of 6 b100 tooling commits after the F0.3 campaign now running) i)",
   "message": "b100-f8 tiene razón en la causa, y el error fue mío: commiteé F0.3 sin terminar de probar directo en el `master` compartido del tooling. Por eso sus commits del backlog no pueden subir sin el mío, y el guard de sincronización la bloquea en cada cierre de turno.\n\n**Rechazo su otra propuesta, darle al backlog una rama o un repo propio.** El backlog va junto al tooling que describe. Lo que estuvo mal fue tener trabajo sin probar en `master`, no que lo compartan.\n\nAhora está corriendo la campaña completa de mutantes de F0.3. Los tramos que ya habían corrido mataron 11 de 11 mutantes. Según cómo termine:\n- **Si sale en verde,** subo los 6 commits juntos.\n- **Si sobrevive algún mutante,** paso F0.3 a una rama propia, rearmo `master` sin ese commit y subo el resto.\n\nEn paralelo sigue el aterrizaje de R1 a R3 en `~/.claude`."
 }

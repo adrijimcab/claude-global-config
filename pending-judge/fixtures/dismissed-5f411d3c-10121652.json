@@ -1,6 +1,7 @@
 {
   "id": "dismissed-5f411d3c-10121652",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Not a new pending item: 'lo sumo al checkpoint-37' describes adding an in-flight worker's fix to the landing already recorded in engram #1543 (state/2026-10-12-)",
   "message": "El worker del guard de espejos ODD sigue con el arreglo de su selftest. Está corriendo la batería completa en el mismo sandbox que usa el aterrizaje, que es justo la prueba que le faltó la primera vez. Cuando reporte, lo sumo al checkpoint-37 y lo aterrizo."
 }

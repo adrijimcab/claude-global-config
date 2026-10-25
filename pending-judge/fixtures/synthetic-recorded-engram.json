@@ -1,6 +1,7 @@
 {
   "id": "synthetic-recorded-engram",
   "expect": "pass",
+  "provenance": "author",
   "source": "synthetic: a cited record",
   "message": "Queda pendiente la decisión del dueño sobre el matcher: está en el backlog maestro, ítem 322 (#1562)."
 }

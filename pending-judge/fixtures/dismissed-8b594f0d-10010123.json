@@ -1,6 +1,7 @@
 {
   "id": "dismissed-8b594f0d-10010123",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (This turn only acknowledged a repeated completion notification for b1, whose findings are already in backlog/main-master revision 15-18 (items 14-34); nothing n)",
   "message": "Esto es solo el aviso repetido de que B1 terminó. Su informe ya lo tenemos y está anotado en el backlog, así que no hay nada nuevo.\n\nA1, el catálogo de APIs, sigue trabajando.\n\nSigo esperando tu respuesta a la pregunta de antes: **¿me autorizás a agregar la regla de permiso, solo para este proyecto, que deje leer el `.env` de producción y hacer consultas de solo lectura a `localhost:3000` y al Mongo local?**"
 }

@@ -1,6 +1,7 @@
 {
   "id": "refused-784bb328-10041447",
   "expect": "fail",
+  "provenance": "unadjudicated",
   "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading",
   "message": "Paró el worker de release y checks, con todo commiteado. Arregló `kahn.cycleNodes` de raíz (0f0b2336): ahora lista solo los nodos que están sobre un ciclo, con specs para los casos río abajo, autociclos y dos ciclos separados. Le quedan 6 suelos por debajo de 100, ya corregidos en el código pero sin volver a medir, y unas 35 carpetas sin medir; él calcula unas 5 horas de campaña.\n\nAnotó un hallazgo más: `config$` en `check-examples` nunca puede coincidir con un binding de plantilla. Lo sumo al backlog cuando cierre la tanda.\n\nEl suelo de la tanda 2c ya corre con la máquina libre."
 }

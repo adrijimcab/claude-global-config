@@ -12,14 +12,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { findCandidate } from '../backlog-guard/announcement.mjs';
+import { MAX_BLOCKS_PER_TURN } from '../judge-gate/gate.mjs';
 
 const DISMISS_CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'backlog-guard', 'dismiss.mjs');
 
 /**
- * The block text for the hook input `payload`.
- * @es El texto del bloqueo para la entrada `payload`.
+ * The block text for the hook input `payload`. The cap it states is the gate's own (`MAX_BLOCKS_PER_TURN`), so the
+ * text cannot drift from what the gate enforces.
+ * @es El texto del bloqueo para la entrada `payload`. El tope que enuncia es el de la compuerta, así que el texto
+ * no puede apartarse de lo que la compuerta aplica.
  */
-export function appendix(payload) {
+export function appendix(payload, { cap = MAX_BLOCKS_PER_TURN } = {}) {
   const session = typeof payload?.session_id === 'string' && payload.session_id !== '' ? payload.session_id : 'unknown';
   const marker = findCandidate(payload?.last_assistant_message) ?? 'pending-judge';
 
@@ -43,6 +46,6 @@ export function appendix(payload) {
     '  @es B) DESCARTALO, con un motivo que queda escrito:',
     `       node "${DISMISS_CLI}" --session ${session} --marker "${marker}" --reason "why this is not a pending item here"`,
     '',
-    'This judge blocks at most twice per turn. @es Este juez bloquea como mucho dos veces por turno.',
+    `This judge blocks at most ${String(cap)} times per turn. @es Este juez bloquea como mucho ${String(cap)} veces por turno.`,
   ].join('\n');
 }

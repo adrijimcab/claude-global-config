@@ -1,6 +1,7 @@
 {
   "id": "refused-8b594f0d-10040817",
   "expect": "fail",
+  "provenance": "unadjudicated",
   "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading",
   "message": "El checkpoint quedó subido: el commit 7007946 lleva 67 rutas y la punta remota de `docs/migration-study` coincide. Lo lancé después de regenerar el Documento 1, así que la rama de respaldo tiene la versión regenerada, con la revisión de gravedad y la auditoría de imágenes.\n\nSiguen corriendo a2, que arma el Documento 2, y el PDF del Documento 1. El checkpoint lo anoto en el backlog junto con el resultado del PDF."
 }

@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-waiting-on-worker",
+  "expect": "pass",
+  "provenance": "author",
+  "source": "synthetic: waiting on a worker and the next step of the plan (T4A2 P3)",
+  "message": "El worker sigue corriendo. Cuando termine, verifico su diff y lo integro; queda por correr el gate final de esa integración."
+}

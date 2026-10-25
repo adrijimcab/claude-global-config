@@ -1,6 +1,7 @@
 {
   "id": "dismissed-784bb328-10010103",
   "expect": "pass",
+  "provenance": "unadjudicated",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The message only reports that item 120's docs follow-up (f88a54b8) is queued and that item 126 is already recorded; both items are in master revision 86 saved e)",
   "message": "El ítem 120 quedó cerrado en rama: f88a54b8 documenta el hook nuevo en `docs/PRE-COMMIT.md` y corrige los comentarios de `.husky/pre-commit` y `.husky/pre-push`. a553 ya lo tiene en cola para sumarlo a la tanda, justo después de aa2d6e59.\n\nEl `check:doc-links` rojo que vio el worker en `docs/SCRIPTS.md:539` es el ítem 126, que ya está en el backlog."
 }
