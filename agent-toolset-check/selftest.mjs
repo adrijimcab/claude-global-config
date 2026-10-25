@@ -132,6 +132,9 @@ check('declarationOf reads disallowedTools', declarationOf(role(['tools: []', 'd
 const UNREAD_SHAPES = {
   'a multi-line plain scalar (YAML continues the value)': ['tools: Read,', '  Bash'],
   'a multi-line plain scalar indented with a tab': ['tools: Read,', '\tBash'],
+  'a continuation after a blank line (YAML carries the value over it)': ['tools: Read,', '', '  Bash'],
+  'a continuation after two blank lines, tab-indented': ['tools: Read,', '', '', '\tBash'],
+  'a disallowedTools continued after a blank line': ['tools: Read, Write', 'disallowedTools: Write', '', '  , Edit'],
   'every tool continued on the next line': ['tools: []', '  Bash'],
   'a tools key with a space before its colon': ['tools: Read', 'tools : Bash'],
   'a tools key with a tab before its colon': ['tools: Read', 'tools\t: Bash'],
@@ -159,6 +162,7 @@ for (const [shape, lines] of Object.entries(UNREAD_SHAPES)) {
   const judged = gapsOf({ 'jd-judge-a': role(lines) });
   check(`${shape} makes a blind reviewer a gap that says the shape is unread`, judged.length === 1 && judged[0].role === 'jd-judge-a' && (judged[0].problem.includes('does not read') || judged[0].problem.includes('times')));
 }
+check('a blank line before the next unindented key continues nothing', declarationOf(role(['tools: Read', '', 'model: haiku'])).problem === undefined && declarationOf(role(['tools: Read', '', ''])).problem === undefined);
 check('the repeated-key problem names the count', declarationOf(role(['tools: Read', 'tools: Bash'])).problem?.includes('2 times'));
 check('the unread token is named', declarationOf(role(['tools: Read, "Bash"'])).problem?.includes('"Bash"'));
 check('a scoped tool reaches its tool: a blind reviewer with Bash(git:*) is a gap', gapsOf({ 'jd-judge-b': role(['tools: Read, Bash(git:*)']) }).length === 1);

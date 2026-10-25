@@ -149,6 +149,8 @@ try {
   // @es Los ejemplos X1 de los jueces: un escalar plano YAML de varias líneas y una clave con espacio antes de los dos puntos.
   defineRole('probe-continued', 'tools: Read,\n  Write');
   defineRole('probe-spaced-key', 'tools: Read\ntools : Write');
+  defineRole('probe-blank-continued', 'tools: Read,\n\n  Write');
+  defineRole('probe-blank-then-key', 'tools: Read\n\nmodel: haiku');
   defineRole('probe-scoped-disallow', 'tools: Read, Bash\ndisallowedTools: Bash(rm:*)');
   defineRole('probe-write-disallowed', 'tools: Read, Write\ndisallowedTools: Write');
   // A definition that exists and cannot be read: a folder where the file should be.
@@ -203,6 +205,8 @@ try {
   check('an MCP read tool passes with the note', await launch('probe-mcp-read'), 'note');
   check('a multi-line tools value (YAML continues the scalar) is refused', await launch('probe-continued'), 'deny');
   check('a tools key spelled with a space before its colon is refused', await launch('probe-spaced-key'), 'deny');
+  check('a tools value continued after a blank line is refused', await launch('probe-blank-continued'), 'deny');
+  check('a blank line before the next key leaves a read-only role', await launch('probe-blank-then-key'), 'note');
   check('a scoped disallowedTools leaves the rest of Bash open: refused', await launch('probe-scoped-disallow'), 'deny');
   check('a write tool closed by disallowedTools leaves a read-only role', await launch('probe-write-disallowed'), 'note');
   check('a role file that exists but cannot be read is refused', await launch('probe-unreadable'), 'deny');

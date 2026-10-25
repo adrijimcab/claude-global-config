@@ -105,10 +105,14 @@ const BLANKS = [' ', '\t'];
 const spacedKey = (line, key) => line.startsWith(key) && BLANKS.includes(line[key.length]) && line.slice(key.length).trim().startsWith(':');
 
 /**
- * Whether `line` continues the value above it: indented (frontmatter lines are right-trimmed, so an indented line
- * always holds text). @es Si `line` continúa el valor de arriba: sangrada (las líneas ya vienen sin blancos finales).
+ * Whether the value of the key on line `index` continues below it. YAML carries a value over blank lines and
+ * indented lines up to the next unindented line, so it continues when the first non-blank line after the key is
+ * indented (frontmatter lines are right-trimmed, so a blank line is empty and an indented line holds text).
+ * @es Si el valor de la clave de la línea `index` continúa debajo. YAML lleva un valor por encima de líneas en blanco
+ * y sangradas hasta la siguiente línea sin sangría, así que continúa cuando la primera línea no vacía tras la clave
+ * está sangrada (las líneas vienen sin blancos finales: una en blanco queda vacía y una sangrada tiene texto).
  */
-const continuesValue = (line) => BLANKS.includes(line?.[0]);
+const continuesValue = (frontmatter, index) => BLANKS.includes(frontmatter.slice(index + 1).find((line) => line.length > 0)?.[0]);
 
 /**
  * The shape of `key` this reader does not read, or `undefined`: a key spelled with blanks before its colon, which
@@ -119,7 +123,7 @@ const continuesValue = (line) => BLANKS.includes(line?.[0]);
  */
 function shapeProblem(frontmatter, key) {
   if (frontmatter.some((line) => spacedKey(line, key))) return `spells \`${key}\` with a blank before its colon, which this reader does not read @es escribe \`${key}\` con un blanco antes de los dos puntos, que este lector no lee`;
-  if (frontmatter.some((line, index) => line.startsWith(`${key}:`) && continuesValue(frontmatter[index + 1]))) return `continues \`${key}:\` on an indented line, which this reader does not read @es continúa \`${key}:\` en una línea sangrada, que este lector no lee`;
+  if (frontmatter.some((line, index) => line.startsWith(`${key}:`) && continuesValue(frontmatter, index))) return `continues \`${key}:\` on an indented line, which this reader does not read @es continúa \`${key}:\` en una línea sangrada, que este lector no lee`;
 
   return undefined;
 }
