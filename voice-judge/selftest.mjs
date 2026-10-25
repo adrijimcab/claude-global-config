@@ -42,8 +42,9 @@ process.on('exit', () => {
 });
 
 const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./prompt.mjs');
-const { hookCommand, loadJudges } = await import('../judge-gate/judges.mjs');
-const GATE_JUDGES = await loadJudges();
+const { hookCommand, loadJudge } = await import('../judge-gate/judges.mjs');
+// Only this judge is loaded, as its own hook process does. @es Solo se carga este juez, como su propio proceso.
+const GATE_JUDGE = await loadJudge('voice');
 const { MARKER: PREMISE_MARKER } = await import('../premise-judge/prompt.mjs');
 const { MARKER: PENDING_MARKER } = await import('../pending-judge/prompt.mjs');
 const { JUDGES, VOICE_MECHANISM, evaluate, journalJudgeBlocks } = await import('../premise-judge/journal-guard.mjs');
@@ -64,7 +65,7 @@ const commandHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks
 
 check('settings: exactly one command Stop hook runs the voice judge through the gate', commandHooks.length, 1);
 check('settings: its timeout is the pinned one', commandHooks[0]?.timeout, TIMEOUT_SECONDS);
-check('rubric: the gate runs this rubric, the single source', GATE_JUDGES.voice.prompt === PROMPT, true);
+check('rubric: the gate runs this rubric, the single source', GATE_JUDGE.prompt === PROMPT, true);
 check('rubric: starts with its signature', PROMPT.startsWith(`${PROMPT_SIGNATURE}\n`), true);
 check('rubric: the signature is not the premise judge\'s', PROMPT_SIGNATURE.includes('premise-judge'), false);
 check('rubric: one $ and it is $ARGUMENTS', [PROMPT.split('$').length - 1, PROMPT.split('$ARGUMENTS').length - 1], [1, 1]);

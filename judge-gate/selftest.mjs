@@ -177,16 +177,18 @@ check('appendix: an appendix that throws is a malfunction that passes', [appendi
 // turn window). @es OBSERVAR: un paso que corre en TODA parada legible, antes de cualquier salida temprana.
 const observed = [];
 const observing = (extra = {}) => ({ ...voice, observe: (parsed) => observed.push(parsed.session_id), ...extra });
+// A gate that throws is a failed check, never a crashed run. @es Una compuerta que lanza es un check fallido.
+const settledGate = (...args) => gate(...args).catch((error) => ({ outcome: 'threw', why: error.message }));
 
 observed.length = 0;
-await gate(payload({ session_id: 'o1' }), blockingAnswer, observing(), true);
-await gate(payload({ session_id: 'o2', stop_hook_active: true }), blockingAnswer, observing(), false, () => MAX_BLOCKS_PER_TURN);
-await gate(payload({ session_id: 'o3', last_assistant_message: '' }), blockingAnswer, observing());
-await gate(payload({ session_id: 'o4', stop_hook_active: true }), blockingAnswer, observing(), false, () => { throw new Error('log unreadable'); });
-await gate(payload({ session_id: 'o5' }), blockingAnswer, observing({ prefilter: () => false }));
-await gate(payload({ session_id: 'o6' }), failing, observing());
-await gate(payload({ session_id: 'o7' }), blockingAnswer, observing());
-await gate('not json', blockingAnswer, observing());
+await settledGate(payload({ session_id: 'o1' }), blockingAnswer, observing(), true);
+await settledGate(payload({ session_id: 'o2', stop_hook_active: true }), blockingAnswer, observing(), false, () => MAX_BLOCKS_PER_TURN);
+await settledGate(payload({ session_id: 'o3', last_assistant_message: '' }), blockingAnswer, observing());
+await settledGate(payload({ session_id: 'o4', stop_hook_active: true }), blockingAnswer, observing(), false, () => { throw new Error('log unreadable'); });
+await settledGate(payload({ session_id: 'o5' }), blockingAnswer, observing({ prefilter: () => false }));
+await settledGate(payload({ session_id: 'o6' }), failing, observing());
+await settledGate(payload({ session_id: 'o7' }), blockingAnswer, observing());
+await settledGate('not json', blockingAnswer, observing());
 check('observe: a nested, capped, empty, uncounted, prefiltered, failed and judged stop are each observed once; an unreadable one never', observed, ['o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7']);
 
 const order = [];
@@ -195,7 +197,7 @@ await gate(payload(), blockingAnswer, observing({ observe: () => order.push('obs
 check('observe: it runs before the prefilter', order, ['observe', 'prefilter']);
 
 asked.length = 0;
-const observeThrew = await gate(payload({ stop_hook_active: true }), blockingAnswer, observing({ observe: () => { throw new Error('window down'); } }), false, () => 0);
+const observeThrew = await settledGate(payload({ stop_hook_active: true }), blockingAnswer, observing({ observe: () => { throw new Error('window down'); } }), false, () => 0);
 
 check('observe: a throw there is a malfunction that passes, marked continued, with no model call', [observeThrew.outcome, observeThrew.why, observeThrew.continued, observeThrew.reason, asked.length], ['malfunction', 'window down', true, undefined, 0]);
 
@@ -215,7 +217,7 @@ const fallbackThrew = await gate(payload(), failing, withFallback({ fallback: ()
 check('fallback: a fallback that throws is a malfunction that passes, saying both whys', [fallbackThrew.outcome, fallbackThrew.why, fallbackThrew.reason], ['malfunction', 'model unavailable; no text', undefined]);
 check('fallback: a judged pass never falls back', (await gate(payload(), answering('{"ok": true}'), withFallback())).outcome, 'pass');
 check('fallback: a judged block keeps the judge reason', (await gate(payload(), blockingAnswer, withFallback())).reason, goodBlock);
-check('fallback: a count that cannot be read never falls back', (await gate(payload({ stop_hook_active: true }), failing, withFallback(), false, () => { throw new Error('log unreadable'); })).outcome, 'malfunction');
+check('fallback: a count that cannot be read never falls back', (await settledGate(payload({ stop_hook_active: true }), failing, withFallback(), false, () => { throw new Error('log unreadable'); })).outcome, 'malfunction');
 check('fallback: a prefilter that throws never falls back', (await gate(payload(), failing, withFallback({ prefilter: () => { throw new Error('p'); } }))).outcome, 'malfunction');
 check('fallback: an appendix that throws never falls back', (await gate(payload(), blockingAnswer, withFallback({ appendix: () => { throw new Error('a'); } }))).outcome, 'malfunction');
 check('fallback: an unreadable input never falls back', (await gate('not json', failing, withFallback())).outcome, 'malfunction');
@@ -467,7 +469,7 @@ check('run: a first stop whose block cannot be recorded still prints its block',
 check('run: a continued stop whose block cannot be recorded prints nothing, though the model was asked', [await run('voice', payload({ session_id: 'rec-1', stop_hook_active: true }), { model: blockingModel, record: throwingRecord, countBlocks: () => 0 }), seen.length], ['', 2]);
 check('run: a continued stop whose block is recorded prints it', decisionOf(await run('voice', payload({ session_id: 'rec-2', stop_hook_active: true }), { model: blockingModel, countBlocks: () => 0 })), 'block');
 seen.length = 0;
-check('run: a continued stop whose count cannot be read prints nothing and never asks the model', [await run('voice', payload({ session_id: 'rec-3', stop_hook_active: true }), { model: blockingModel, countBlocks: () => { throw new Error('log unreadable'); } }), seen.length], ['', 0]);
+check('run: a continued stop whose count cannot be read prints nothing and never asks the model', [await run('voice', payload({ session_id: 'rec-3', stop_hook_active: true }), { model: blockingModel, countBlocks: () => { throw new Error('log unreadable'); } }).catch((error) => `threw: ${error.message}`), seen.length], ['', 0]);
 check('run: the count is read for this judge and session', await (async () => {
   const counted = [];
 
@@ -490,7 +492,7 @@ const brokenPending = (specifier) => (specifier.startsWith('../pending-judge/') 
 check('lazy: a broken pending chain fails only the pending judge load', [await loadJudge('pending', { importModule: brokenPending }).then(() => 'loaded', (error) => error.message), (await loadJudge('premise', { importModule: brokenPending }))?.name, (await loadJudge('voice', { importModule: brokenPending }))?.name], ['broken pending chain', 'premise', 'voice']);
 seen.length = 0;
 check('lazy: the pending judge with a broken chain prints nothing and asks no model', [await run('pending', payload({ session_id: 'lazy-1' }), { model: blockingModel, importModule: brokenPending }).catch((error) => `threw: ${error.message}`), seen.length], ['', 0]);
-check('lazy: that load failure is logged as the pending judge\'s malfunction, in both languages', readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'lazy-1' && line.judge === 'pending' && line.outcome === 'malfunction' && line.why.includes('the pending judge could not be loaded: broken pending chain') && line.why.includes('@es no se pudo cargar el juez pending')), true);
+check('lazy: that load failure is logged as the pending judge\'s malfunction, in both languages', readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'lazy-1' && line.judge === 'pending' && line.outcome === 'malfunction' && String(line.why).includes('the pending judge could not be loaded: broken pending chain') && String(line.why).includes('@es no se pudo cargar el juez pending')), true);
 seen.length = 0;
 
 const voiceDespite = await run('voice', payload({ session_id: 'lazy-2' }), { model: blockingModel, importModule: brokenPending });

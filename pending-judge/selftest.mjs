@@ -113,7 +113,7 @@ check('prefilter: a payload with no session id asks with the empty session', see
 
   prefilter(reported, {
     owes: (payload, options) => {
-      options.reportDegraded({ errors: ['store-unreadable'] });
+      options?.reportDegraded?.({ errors: ['store-unreadable'] });
 
       return undefined;
     },
@@ -201,8 +201,9 @@ check('appendix: a non-object input still builds', appendix(undefined).includes(
   check('packet: ten cases, five blocked then five passed', cases.map((line) => line.split(' — ')[1]), [...Array(5).fill('the judge BLOCKED @es el juez BLOQUEÓ'), ...Array(5).fill('the judge PASSED @es el juez DEJÓ PASAR')]);
   check('packet: an owner label, a missing verdict and a later provenance are left out first', ['owned', 'unknown', 'author-1', 'b6', 'p6'].map((id) => packet.includes(`. ${id} — `)), [false, false, false, false, false]);
   check('packet: each case carries its provenance, current label, the judge reason and a blank owner label', [packet.includes('- provenance: unadjudicated; current label: pass'), packet.includes(`- judge reason: ${MARKER} reason of b1`), packet.split('Owner label: ____ (pending / not pending) @es Etiqueta del dueño: ____ (pendiente / no pendiente)').length - 1], [true, true, 10]);
-  check('packet: it says when, with which model, and how to record a label, in both languages', [packet.includes('Generated 2026-10-25T10:00:00.000Z with model haiku, run 1.'), packet.includes('"provenance": "owner"'), packet.includes('@es Generado 2026-10-25T10:00:00.000Z con el modelo haiku, corrida 1.')], [true, true, true]);
+  check('packet: it says when, with which model, and how to record a label, in both languages', [packet.includes('Generated 2026-10-25T10:00:00.000Z with model haiku, run 1.'), packet.includes('Each label is then stored in its fixture as "provenance": "owner", with "expect": "fail" for pending'), packet.includes('@es Generado 2026-10-25T10:00:00.000Z con el modelo haiku, corrida 1.')], [true, true, true]);
   check('packet: a judge that blocked fewer than five gets what there is', ownerPacket(entries.slice(0, 2), { generatedAt: 'x', model: 'm' }).split('\n').filter((line) => line.startsWith('## ')).length, 2);
+  check('packet: an owner label never enters, even with room for it', ownerPacket([judged('owned-alone', false, { provenance: 'owner' })], { generatedAt: 'x', model: 'm' }).includes('owned-alone'), false);
   check('packet: author cases fill in when unadjudicated ones run out', ownerPacket([judged('author-2', true, { provenance: 'author' })], { generatedAt: 'x', model: 'm' }).includes('. author-2 — '), true);
 
   const long = `${'a'.repeat(2000)} queda pendiente el bug ${'z'.repeat(2000)}`;

@@ -42,8 +42,9 @@ process.on('exit', () => {
 });
 
 const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./prompt.mjs');
-const { hookCommand, loadJudges } = await import('../judge-gate/judges.mjs');
-const JUDGES = await loadJudges();
+const { hookCommand, loadJudge } = await import('../judge-gate/judges.mjs');
+// Only this judge is loaded, as its own hook process does. @es Solo se carga este juez, como su propio proceso.
+const GATE_JUDGE = await loadJudge('premise');
 const { MECHANISM, REASON_LIMIT, TAIL_RECORDS, evaluate, journalJudgeBlocks, judgeReasons } = await import('./journal-guard.mjs');
 const { judgeLatency, latencyReport, main: latencyMain } = await import('./latency.mjs');
 const { digestInput, firesPath, journalPath } = await import('../hook-state/journal.mjs');
@@ -63,7 +64,7 @@ const commandHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks
 
 check('settings: exactly one command Stop hook runs the premise judge through the gate', commandHooks.length, 1);
 check('settings: its timeout is the pinned one', commandHooks[0]?.timeout, TIMEOUT_SECONDS);
-check('rubric: the gate runs this rubric, the single source', JUDGES.premise.prompt === PROMPT, true);
+check('rubric: the gate runs this rubric, the single source', GATE_JUDGE.prompt === PROMPT, true);
 check('rubric: starts with its signature', PROMPT.startsWith(`${PROMPT_SIGNATURE}\n`), true);
 check('rubric: one $ and it is $ARGUMENTS', [PROMPT.split('$').length - 1, PROMPT.split('$ARGUMENTS').length - 1], [1, 1]);
 check('rubric: the model judges the first stop and the rewrite after a block alike', PROMPT.includes('You see either the first stop of a turn or the rewrite after a block: the gate judges a continued stop until its turn has had two blocks. Judge both the same way.'), true);
