@@ -1,7 +1,14 @@
 {
   "id": "dismissed-5f411d3c-10111508",
   "expect": "pass",
-  "provenance": "unadjudicated",
+  "provenance": "owner-delegated",
+  "labelledOn": "2026-10-25",
+  "ownerWords": [
+    "Lo que haría un seior architect",
+    "Lo que haría u decidiria un cto/tech lead /senior architect"
+  ],
+  "labelReason": "\"Ahora sigue con la segunda parte\" is the same work continuing now.",
+  "labelRecord": "odd/tasks/backlog-1-6.md L17",
   "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The reply quoted the old marker word while reporting the backlog-guard fix (worker commit 235d1f0); no new pending item announced — the exact false-positive cla)",
   "message": "La primera parte del ajuste del guard del backlog funciona. Mirá estos números, porque explican por qué te tenía harto:\n\n- **El problema era una sola palabra.** La palabra suelta «backlog» disparaba 88 de los 141 rechazos, el 62 %. Y de los 60 descartes de hoy, 54 eran por ella. No había ninguna intención de anunciar algo pendiente: bastaba con nombrarla.\n- **Con el arreglo,** el guard deja de leer palabras sueltas, lo citado y el código, y busca un anuncio de verdad, como «lo anoto en el backlog». De los 60 descartes reales pasan 58, y los 4 casos que sí debían frenar siguen frenando. La prueba: 94 checks en verde y 35 de 35 mutantes muertos.\n- **Los 2 que todavía saltan** decían «va al backlog» refiriéndose a algo que ya estaba guardado. Eso no se puede deducir solo del texto, y prefiero que el guard dude a que deje pasar un pendiente real.\n\nAhora sigue con la segunda parte:\n1. que commitear el documento del backlog cuente como guardado;\n2. que el mensaje de rechazo sea bilingüe y diga qué frase lo disparó.\n\nLe saqué una tercera parte que proponía: llevar la cuenta de qué sesión es dueña de cada backlog. Era un síntoma de juzgar palabras; con la intención bien leída ese caso desaparece solo, y no vale la pena mantener un estado nuevo para él.\n\nDe paso arreglé algo que había roto yo: la copia vendorizada del selftest de scope quedó desfasada cuando lo arreglé en b100, y eso iba a poner en rojo el próximo aterrizaje. La re-sincronicé y volví a correr el `check`: 0 fallos (commit `610829b`).\n\nTrabajan 5 workers, que es el tope:\n1. ODD;\n2. los guards de incidentes;\n3. B7;\n4. engram-persistence, que culpaba a una sesión por commits de otras;\n5. el guard del backlog.\n\nEl runner de gates quedó pausado con su trabajo commiteado. En cuanto se libere un lugar entran el guard de idioma y el juez de voz."
 }

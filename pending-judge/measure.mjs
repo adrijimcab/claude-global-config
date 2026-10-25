@@ -45,10 +45,22 @@ import { MARKER, PROMPT } from './prompt.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 /** Who decided a label, from the strongest. @es Quién decidió una etiqueta, de la más fuerte a la más débil. */
-export const PROVENANCES = Object.freeze(['owner', 'author', 'unadjudicated']);
+export const PROVENANCES = Object.freeze(['owner', 'owner-delegated', 'author', 'unadjudicated']);
 
 /** The owner labels the judge needs before it ships. @es Las etiquetas del dueño que el juez necesita para salir. */
 export const SHIP_BAR_OWNER_LABELS = 10;
+
+/**
+ * OWNER-DELEGATED LABELS COUNT FOR THIS JUDGE ONLY. On 2026-10-25 the owner delegated the pending labels («Lo que
+ * haría un seior architect», `odd/tasks/backlog-1-6.md` L17), and master labelled the packet by the rubric as written.
+ * Such a label is ground truth here because its question applies a stated rule (an item deferred with no record of
+ * it), not a matter of taste like the voice judge's; so it counts toward this judge's ship bar, and toward no other.
+ * Each one carries its date, the owner's words, its reason and its record.
+ * @es LAS ETIQUETAS DELEGADAS POR EL DUEÑO CUENTAN SOLO PARA ESTE JUEZ: su pregunta aplica una regla enunciada (un
+ * ítem diferido sin registro), no un gusto como la del juez de voz; por eso cuentan para la vara de este juez y de
+ * ningún otro. Cada una lleva su fecha, las palabras del dueño, su motivo y su registro.
+ */
+export const SHIP_BAR_PROVENANCES = Object.freeze(['owner', 'owner-delegated']);
 
 /** The characters of one excerpt in the owner packet. @es Los caracteres de un extracto del paquete del dueño. */
 export const PACKET_EXCERPT_CHARS = 600;
@@ -75,7 +87,7 @@ export function verdictOf(answer) {
  * @es La vara de salida sobre `fixtures`: cuántas etiquetas del dueño hay, cuántas se exigen y si se cumple.
  */
 export function shipBar(fixtures) {
-  const ownerLabels = fixtures.filter((fixture) => fixture.provenance === 'owner' && fixture.expect !== 'unknowable').length;
+  const ownerLabels = fixtures.filter((fixture) => SHIP_BAR_PROVENANCES.includes(fixture.provenance) && fixture.expect !== 'unknowable').length;
 
   return { ownerLabels, required: SHIP_BAR_OWNER_LABELS, met: ownerLabels >= SHIP_BAR_OWNER_LABELS };
 }
@@ -85,8 +97,20 @@ export function describeShipBar({ ownerLabels, required, met }) {
   const count = `${String(ownerLabels)}/${String(required)}`;
 
   return met
-    ? `ship bar: ${count} owner labels, MET @es vara de salida: ${count} etiquetas del dueño, CUMPLIDA`
-    : `ship bar: ${count} owner labels, NOT MET: author and unadjudicated labels do not ship the judge @es vara de salida: ${count} etiquetas del dueño, NO CUMPLIDA: las etiquetas del autor y las no adjudicadas no habilitan al juez`;
+    ? `ship bar: ${count} owner or owner-delegated labels, MET @es vara de salida: ${count} etiquetas del dueño o delegadas por él, CUMPLIDA`
+    : `ship bar: ${count} owner or owner-delegated labels, NOT MET: author and unadjudicated labels do not ship the judge @es vara de salida: ${count} etiquetas del dueño o delegadas por él, NO CUMPLIDA: las etiquetas del autor y las no adjudicadas no habilitan al juez`;
+}
+
+/**
+ * THE LANDING SWITCH, decided by the ship bar: a met bar wires the pending judge and retires the lexical
+ * backlog-guard; an unmet bar lands this work as a candidate, with backlog-guard still live and the judge not wired.
+ * @es EL INTERRUPTOR DEL ATERRIZAJE, decidido por la vara: cumplida, se cablea el juez y se retira backlog-guard; no
+ * cumplida, esto aterriza como candidato, con backlog-guard vivo y el juez sin cablear.
+ */
+export function landingDecision({ met }) {
+  return met
+    ? { wire: true, line: 'landing: WIRE the pending judge (its settings.json Stop hook) and retire the lexical backlog-guard @es aterrizaje: CABLEAR el juez de pendientes (su hook Stop de settings.json) y retirar la guardia léxica backlog-guard' }
+    : { wire: false, line: 'landing: CANDIDATE only: keep backlog-guard/guard.mjs live in the Stop manifest and do not wire the pending judge @es aterrizaje: solo CANDIDATO: backlog-guard/guard.mjs sigue vivo en el manifiesto Stop y el juez de pendientes no se cablea' };
 }
 
 /**
@@ -235,6 +259,7 @@ async function main(argv) {
   }
 
   console.log(describeShipBar(shipBar(fixtures)));
+  console.log(landingDecision(shipBar(fixtures)).line);
 
   latencies.sort((left, right) => left - right);
   console.log(`cost=$${cost.toFixed(4)} (mean $${(cost / Math.max(1, latencies.length)).toFixed(5)}/run) latency median=${latencies[Math.floor(latencies.length / 2)] ?? 0}ms max=${latencies.at(-1) ?? 0}ms`);

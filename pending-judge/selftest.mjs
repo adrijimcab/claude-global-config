@@ -22,7 +22,8 @@ const { appendix } = await import('./appendix.mjs');
 const { unavailableBlock } = await import('./fallback.mjs');
 const { prefilter } = await import('./prefilter.mjs');
 const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./prompt.mjs');
-const { describeShipBar, excerptAround, ownerPacket, PACKET_EXCERPT_CHARS, PROVENANCES, SHIP_BAR_OWNER_LABELS, shipBar } = await import('./measure.mjs');
+const { describeShipBar, excerptAround, landingDecision, ownerPacket, PACKET_EXCERPT_CHARS, PROVENANCES, SHIP_BAR_OWNER_LABELS, SHIP_BAR_PROVENANCES, shipBar } = await import('./measure.mjs');
+const MEASURE_SOURCE = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'measure.mjs'), 'utf8');
 const { decide, MAX_BLOCKS_PER_TURN } = await import('../judge-gate/gate.mjs');
 const { loadJudge } = await import('../judge-gate/judges.mjs');
 const { blocksThisTurn, lastBlockTimeThisTurn, recordOutcome } = await import('../judge-gate/outcome-log.mjs');
@@ -163,26 +164,51 @@ check('appendix: a non-object input still builds', appendix(undefined).includes(
 
   // PROVENANCE: who decided a label. `author`: the mechanism's author, by reading (synthetic, or a real reply with a
   // written LABEL); `unadjudicated`: a real reply whose label only mirrors what a session did with the old guard's
-  // refusal; `owner`: the owner. @es PROCEDENCIA: quién decidió la etiqueta.
-  const provenanceOf = (fixture) => (String(fixture.source).startsWith('owner') ? 'owner' : String(fixture.source).startsWith('real') && !String(fixture.source).includes('LABEL (') ? 'unadjudicated' : 'author');
+  // refusal; `owner`: the owner; `owner-delegated`: labelled by the rubric as written, under the owner's delegation
+  // (it carries the date, his words, the reason and the record). @es PROCEDENCIA: quién decidió la etiqueta.
+  const delegated = (fixture) => typeof fixture.labelledOn === 'string';
+  const provenanceOf = (fixture) => (delegated(fixture) ? 'owner-delegated' : String(fixture.source).startsWith('owner') ? 'owner' : String(fixture.source).startsWith('real') && !String(fixture.source).includes('LABEL (') ? 'unadjudicated' : 'author');
+  const L17 = [
+    ['dismissed-5f411d3c-10111508', 'pass'], ['dismissed-5f411d3c-10111818', 'fail'], ['dismissed-5f411d3c-10121336', 'fail'], ['dismissed-5f411d3c-10181359', 'pass'], ['dismissed-664a8a26-10181511', 'fail'],
+    ['refused-8b594f0d-10040817', 'fail'], ['dismissed-5f411d3c-09301427', 'pass'], ['dismissed-5f411d3c-10111304', 'pass'], ['dismissed-5f411d3c-10111404', 'pass'], ['dismissed-5f411d3c-10111412', 'pass'],
+  ];
 
-  check('fixtures: the provenances are owner, author and unadjudicated', PROVENANCES, ['owner', 'author', 'unadjudicated']);
+  check('fixtures: the provenances are owner, owner-delegated, author and unadjudicated', PROVENANCES, ['owner', 'owner-delegated', 'author', 'unadjudicated']);
   check('fixtures: every one carries the provenance its source states', fixtures.filter((fixture) => fixture.provenance !== provenanceOf(fixture)).map((fixture) => fixture.id), []);
+  check('fixtures: the owner-delegated labels are the ten of L17, with its verdicts', fixtures.filter((fixture) => fixture.provenance === 'owner-delegated').map((fixture) => [fixture.id, fixture.expect]).sort(), [...L17].sort());
+  check('fixtures: every owner-delegated label carries its date, the owner\'s words, its reason and its record', fixtures.filter(delegated).every((fixture) => fixture.labelledOn === '2026-10-25' && Array.isArray(fixture.ownerWords) && fixture.ownerWords.includes('Lo que haría un seior architect') && typeof fixture.labelReason === 'string' && fixture.labelReason.length > 20 && fixture.labelRecord === 'odd/tasks/backlog-1-6.md L17'), true);
+  check('fixtures: a brief to a worker carries its written label, by what it says', (() => { const brief = fixtures.find((fixture) => fixture.id === 'synthetic-brief-to-worker'); return [brief?.expect, typeof brief?.labelReason === 'string' && brief.labelReason.includes('hands the matcher review to the worker in this very message')]; })(), ['pass', true]);
   check('fixtures: both non-owner provenances are present', ['author', 'unadjudicated'].map((provenance) => fixtures.some((fixture) => fixture.provenance === provenance)), [true, true]);
   check('fixtures: the in-flight and record-of-other-work cases are there and reach the judge', ['synthetic-item-deferred-past-worker', 'synthetic-waiting-on-worker', 'synthetic-record-of-other-work'].map((id) => { const found = fixtures.find((fixture) => fixture.id === id); return [found?.expect, found?.provenance, found === undefined ? false : findCandidate(found.message) !== undefined]; }), [['fail', 'author', true], ['pass', 'author', true], ['fail', 'author', true]]);
 
-  // THE SHIP BAR: the judge ships only on at least ten owner labels. @es LA VARA DE SALIDA: diez etiquetas del dueño.
-  const owned = (count, expect = 'pass') => Array.from({ length: count }, (_, index) => ({ id: `o${String(index)}`, provenance: 'owner', expect }));
+  // THE SHIP BAR: the judge ships only on at least ten owner or owner-delegated labels. @es LA VARA DE SALIDA.
+  const owned = (count, expect = 'pass', provenance = 'owner') => Array.from({ length: count }, (_, index) => ({ id: `o${String(index)}`, provenance, expect }));
 
   check('ship bar: it needs ten owner labels', SHIP_BAR_OWNER_LABELS, 10);
-  check('ship bar: today it is not met', shipBar(fixtures), { ownerLabels: fixtures.filter((fixture) => fixture.provenance === 'owner').length, required: 10, met: false });
+  check('ship bar: owner and owner-delegated labels count for this judge', SHIP_BAR_PROVENANCES, ['owner', 'owner-delegated']);
+  check('ship bar: today it is met by the ten delegated labels', shipBar(fixtures), { ownerLabels: 10, required: 10, met: true });
   check('ship bar: ten owner labels meet it, nine do not', [shipBar(owned(10)).met, shipBar(owned(9)).met], [true, false]);
+  check('ship bar: delegated labels count like the owner\'s', [shipBar(owned(10, 'fail', 'owner-delegated')).met, shipBar([...owned(5), ...owned(5, 'pass', 'owner-delegated')]).ownerLabels], [true, 10]);
   check('ship bar: an owner fixture marked unknowable is no label', shipBar([...owned(9), ...owned(1, 'unknowable')]).met, false);
   check('ship bar: author and unadjudicated labels never count', shipBar([...owned(9), { provenance: 'author', expect: 'fail' }, { provenance: 'unadjudicated', expect: 'pass' }]).ownerLabels, 9);
   check('ship bar: it is described in both languages', [describeShipBar({ ownerLabels: 3, required: 10, met: false }), describeShipBar({ ownerLabels: 12, required: 10, met: true })], [
-    'ship bar: 3/10 owner labels, NOT MET: author and unadjudicated labels do not ship the judge @es vara de salida: 3/10 etiquetas del dueño, NO CUMPLIDA: las etiquetas del autor y las no adjudicadas no habilitan al juez',
-    'ship bar: 12/10 owner labels, MET @es vara de salida: 12/10 etiquetas del dueño, CUMPLIDA',
+    'ship bar: 3/10 owner or owner-delegated labels, NOT MET: author and unadjudicated labels do not ship the judge @es vara de salida: 3/10 etiquetas del dueño o delegadas por él, NO CUMPLIDA: las etiquetas del autor y las no adjudicadas no habilitan al juez',
+    'ship bar: 12/10 owner or owner-delegated labels, MET @es vara de salida: 12/10 etiquetas del dueño o delegadas por él, CUMPLIDA',
   ]);
+  check('ship bar: measure.mjs states why delegated labels count, for this judge only', [MEASURE_SOURCE.includes('OWNER-DELEGATED LABELS COUNT FOR THIS JUDGE ONLY'), MEASURE_SOURCE.includes('its question applies a stated rule'), MEASURE_SOURCE.includes('@es LAS ETIQUETAS DELEGADAS POR EL DUEÑO CUENTAN SOLO PARA ESTE JUEZ')], [true, true, true]);
+
+  // THE LANDING SWITCH: the bar decides whether the landing wires the judge or keeps backlog-guard live.
+  // @es EL INTERRUPTOR DEL ATERRIZAJE: la vara decide si se cablea el juez o sigue vivo backlog-guard.
+  check('landing: a met bar wires the pending judge and retires the lexical guard', landingDecision({ ownerLabels: 10, required: 10, met: true }), {
+    wire: true,
+    line: 'landing: WIRE the pending judge (its settings.json Stop hook) and retire the lexical backlog-guard @es aterrizaje: CABLEAR el juez de pendientes (su hook Stop de settings.json) y retirar la guardia léxica backlog-guard',
+  });
+  check('landing: an unmet bar lands the judge as a candidate and keeps backlog-guard live', landingDecision({ ownerLabels: 9, required: 10, met: false }), {
+    wire: false,
+    line: 'landing: CANDIDATE only: keep backlog-guard/guard.mjs live in the Stop manifest and do not wire the pending judge @es aterrizaje: solo CANDIDATO: backlog-guard/guard.mjs sigue vivo en el manifiesto Stop y el juez de pendientes no se cablea',
+  });
+  check('landing: today\'s fixtures wire the judge', landingDecision(shipBar(fixtures)).wire, true);
+  check('packet: an owner-delegated label never enters the packet', ownerPacket([{ fixture: { id: 'delegated-1', expect: 'pass', provenance: 'owner-delegated', source: 'real: x', message: 'x' }, verdict: false, reason: 'r' }], { generatedAt: 'x', model: 'm' }).includes('delegated-1'), false);
 }
 
 // --- THE OWNER PACKET: five stops the judge blocked and five it passed, for the owner to label. @es EL PAQUETE DEL DUEÑO.
