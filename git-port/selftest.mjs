@@ -11,7 +11,7 @@
  * entorno. El doble guionado `fake.mjs` también se prueba aquí, porque todos los demás selftests confiarán en él.
  */
 
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -87,18 +87,41 @@ const inherited = Object.fromEntries(SELECTORS.map((name) => [name, process.env[
 
 for (const name of SELECTORS) process.env[name] = path.join(other.repoDir, `.git-${name}`);
 const inheritedView = seen({});
-const forcedView = seen({ env: { GIT_DIR: path.join(other.repoDir, '.git-forced'), GIT_TERMINAL_PROMPT: '1', KIT_EXTRA: 'yes' } });
+const forcedView = seen({ env: { GIT_TERMINAL_PROMPT: '1', KIT_EXTRA: 'yes' } });
 for (const name of SELECTORS) {
   check(`${name} of the parent is not passed to git`, String(inheritedView).includes(`${name}=${path.join(other.repoDir, `.git-${name}`)}`), false);
 }
 check('with every selector set in the parent, git still answers about the directory it was given', attempt(() => runGit(repo, ['rev-parse', '--show-toplevel']).status), 0);
-check('a selector the caller passes in env is cleared too', String(forcedView).includes('.git-forced'), false);
 check('git never prompts, even when the caller asks for it', String(forcedView).includes('PROMPT=0'), true);
 check('the variables the caller adds in env reach git', String(forcedView).includes('EXTRA=yes'), true);
 for (const [name, value] of Object.entries(inherited)) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
 }
+
+// Selectors: inherited ones are cleared unless asked for; explicit ones are honoured. / Selectores.
+const otherGit = path.join(other.repoDir, '.git');
+const gitDirOf = (run) => attempt(() => run().stdout.trim());
+const ownGitDir = gitDirOf(() => runGit(repo, ['rev-parse', '--git-dir']));
+const fleetGit = await import(pathToFileURL(path.join(import.meta.dirname, '..', 'fleet-kit', 'lib', 'git.mjs')).href);
+const landingGit = await import(pathToFileURL(path.join(import.meta.dirname, '..', 'worktree-landing', 'git.mjs')).href);
+
+process.env.GIT_DIR = otherGit;
+check('an inherited GIT_DIR is cleared by default', gitDirOf(() => runGit(repo, ['rev-parse', '--git-dir'])), ownGitDir);
+check('an inherited GIT_DIR is kept with inheritSelectors', gitDirOf(() => runGit(repo, ['rev-parse', '--git-dir'], { inheritSelectors: true })), otherGit);
+check('inheritSelectors false clears like the default', gitDirOf(() => runGit(repo, ['rev-parse', '--git-dir'], { inheritSelectors: false })), ownGitDir);
+check('fleet-kit sees the GIT_DIR the process inherited', gitDirOf(() => fleetGit.runGit(repo, ['rev-parse', '--git-dir'])), otherGit);
+check('worktree-landing clears the GIT_DIR the process inherited', gitDirOf(() => landingGit.git(repo, ['rev-parse', '--git-dir'])), ownGitDir);
+delete process.env.GIT_DIR;
+check('a GIT_DIR the caller passes in env is honoured', gitDirOf(() => runGit(repo, ['rev-parse', '--git-dir'], { env: { GIT_DIR: otherGit } })), otherGit);
+
+const privateIndex = path.join(sandbox.root, 'private-index');
+const indexed = () => attempt(() => runGit(repo, ['ls-files'], {}).stdout);
+const realIndexBefore = indexed();
+writeFileSync(path.join(repo, 'priv.txt'), 'private');
+const added = attempt(() => runGit(repo, ['add', 'priv.txt'], { env: { GIT_INDEX_FILE: privateIndex } }).status);
+check('a GIT_INDEX_FILE the caller passes in env is used by git', [added, existsSync(privateIndex), attempt(() => runGit(repo, ['ls-files'], { env: { GIT_INDEX_FILE: privateIndex } }).stdout.includes('priv.txt'))], [0, true, true]);
+check('the real index is untouched by a command on a private index', indexed(), realIndexBefore);
 
 // gitOutput. / gitOutput.
 check('gitOutput returns the stdout of a command that succeeded', attempt(() => gitOutput(repo, ['rev-parse', '--is-inside-work-tree'])), 'true\n');

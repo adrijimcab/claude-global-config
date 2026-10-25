@@ -24,15 +24,21 @@ export class GitFailure extends Error {}
  * @es Corre git en `cwd` (el directorio del proceso si es `undefined`). Nunca lanza.
  * @param {string | undefined} cwd
  * @param {string[]} args
- * @param {{ gitOptions?: string[], input?: string, timeoutMs?: number, env?: Record<string, string> }} [options]
- *   `env` adds variables over the parent's; the repository selectors are removed afterwards, so it cannot pass them.
+ * @param {{ gitOptions?: string[], input?: string, timeoutMs?: number, env?: Record<string, string>, inheritSelectors?: boolean }} [options]
+ *   `env` adds variables over the parent's and is always honoured, repository selectors included (a private
+ *   `GIT_INDEX_FILE` is explicit input). The selectors the PARENT process exports are removed unless
+ *   `inheritSelectors` is `true`: a named opt-in for callers that must see the environment of the command they judge.
+ * @es `env` añade variables sobre las del padre y siempre se respeta, selectores incluidos (un `GIT_INDEX_FILE`
+ *   privado es entrada explícita). Los selectores que exporta el proceso PADRE se quitan salvo que
+ *   `inheritSelectors` sea `true`: una opción nombrada para quien debe ver el entorno de la orden que juzga.
  * @returns {{ status: number | null, stdout: string, stderr: string, timedOut: boolean }} `status` is `null` when
  *   git did not start or was killed; `stdout` is raw; `stderr` ends with the spawn error text when there was one.
  */
-export function runGit(cwd, args, { gitOptions = [], input, timeoutMs = GIT_TIMEOUT_MS, env } = {}) {
-  const childEnv = { ...process.env, ...env };
+export function runGit(cwd, args, { gitOptions = [], input, timeoutMs = GIT_TIMEOUT_MS, env, inheritSelectors = false } = {}) {
+  const childEnv = { ...process.env };
 
-  for (const name of REPOSITORY_SELECTORS) delete childEnv[name];
+  if (!inheritSelectors) for (const name of REPOSITORY_SELECTORS) delete childEnv[name];
+  Object.assign(childEnv, env);
   childEnv.GIT_TERMINAL_PROMPT = '0';
 
   const result = spawnSync('git', [...gitOptions, ...args], { cwd, encoding: 'utf8', input, timeout: timeoutMs, maxBuffer: 256 * 1024 * 1024, windowsHide: true, env: childEnv });

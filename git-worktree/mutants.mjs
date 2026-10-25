@@ -20,7 +20,7 @@ const MUTANTS = [
   ['every directory reads as a linked worktree', L, 'path.resolve(gitDir.trim()) !== path.resolve(commonDir.trim())', 'true'],
   ['no directory reads as a linked worktree', L, 'path.resolve(gitDir.trim()) !== path.resolve(commonDir.trim())', 'false'],
   ['the git directory is asked of the process directory, not the one given', Q, "gitOptions: ['-C', directory]", "gitOptions: ['-C', '.']"],
-  ['a repository selected by the environment is not ignored', P, 'for (const name of REPOSITORY_SELECTORS) delete childEnv[name];', ''],
+  ['a repository selected by the environment is not ignored', P, 'if (!inheritSelectors) for (const name of REPOSITORY_SELECTORS) delete childEnv[name];', ''],
   ['git is asked for a relative common directory, so a nested directory misreads', L, "'--path-format=absolute', ", '']
 ];
 

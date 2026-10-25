@@ -4,13 +4,17 @@
  *
  * A thin wrapper over `../../git-port/git.mjs`. What it keeps of its own: no timeout (`timeoutMs: 0`, as before;
  * the port's 15 s bound is not imposed on gate runs), `stdout` trimmed of its trailing newline, and the
- * three-field result `{ status, stdout, stderr }`. `mustAsk` is the port's (it throws a bilingual GitFailure).
+ * three-field result `{ status, stdout, stderr }`. It passes `inheritSelectors: true`: a guard sees exactly the
+ * GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE the command it judges inherits, so it never judges another repository.
+ * `mustAsk` is the port's (it throws a bilingual GitFailure).
  *
  * @es La única forma en que los módulos del kit le preguntan algo a git: argv en array (nunca una
  * cadena de shell), directorio explícito, y un resultado que dice si git respondió. Envoltorio fino del puerto
  * `../../git-port/git.mjs`. Conserva lo propio: sin tiempo límite (`timeoutMs: 0`, como antes; el límite de 15 s
  * del puerto no se impone a las corridas de gates), `stdout` sin su salto de línea final y el resultado de tres
- * campos. `mustAsk` es el del puerto (lanza un GitFailure bilingüe).
+ * campos. Pasa `inheritSelectors: true`: una guardia ve exactamente el GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE que
+ * hereda la orden que juzga, así que nunca juzga otro repositorio. `mustAsk` es el del puerto (lanza un GitFailure
+ * bilingüe).
  */
 
 import { mustAsk, runGit as portRunGit } from '../../git-port/git.mjs';
@@ -24,7 +28,7 @@ export { mustAsk };
  * @es Corre git en `directory` y devuelve `{ status, stdout, stderr }`.
  */
 export function runGit(directory, args, gitOptions = []) {
-  const { status, stdout, stderr } = portRunGit(directory, args, { gitOptions, timeoutMs: 0 });
+  const { status, stdout, stderr } = portRunGit(directory, args, { gitOptions, timeoutMs: 0, inheritSelectors: true });
 
   return { status, stdout: stdout.trimEnd(), stderr };
 }
