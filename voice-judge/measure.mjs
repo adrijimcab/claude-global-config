@@ -75,8 +75,8 @@ export function rubricPathOf(argv) {
   return RUBRICS[value] ?? path.resolve(value);
 }
 
-/** The rubrics `--rubric` takes by name: the live v7 and the v8f candidate. @es Las rúbricas que `--rubric` toma por nombre. */
-export const RUBRICS = { v7: path.join(HERE, 'rubrics', 'v7.mjs'), v8f: path.join(HERE, 'rubrics', 'v8f.mjs') };
+/** The rubrics `--rubric` takes by name: the live v7 and the v8f and v8g candidates. @es Las rúbricas que `--rubric` toma por nombre. */
+export const RUBRICS = { v7: path.join(HERE, 'rubrics', 'v7.mjs'), v8f: path.join(HERE, 'rubrics', 'v8f.mjs'), v8g: path.join(HERE, 'rubrics', 'v8g.mjs') };
 
 /** Where `--record` writes the ship-bar verdict that promotion reads. @es Donde `--record` escribe el veredicto de la barra que lee la promoción. */
 export const SHIP_BAR_RECORD = path.join(HERE, 'ship-bar.json');

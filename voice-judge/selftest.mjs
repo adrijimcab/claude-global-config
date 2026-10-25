@@ -192,6 +192,11 @@ const loaded = (file) => measure.loadRubric(file).catch((error) => ({ error: Str
 check('measure: a rubric module brings its own prompt and marker', await loaded(goodRubric), { path: goodRubric, prompt: 'judge $ARGUMENTS', marker: 'X-JUDGE:' });
 check('measure: the current rubric loads with the marker of prompt.mjs', await loaded(measure.DEFAULT_RUBRIC).then((rubric) => [rubric.prompt === LIVE_PROMPT, rubric.marker]), [true, MARKER]);
 check('measure: --rubric measures v7 or the v8f candidate by name', [measure.rubricPathOf(['--rubric', 'v7']), measure.rubricPathOf(['--rubric', 'v8f'])], [path.join(HERE, 'rubrics', 'v7.mjs'), path.join(HERE, 'rubrics', 'v8f.mjs')]);
+const V8G = await import('./rubrics/v8g.mjs').catch(() => ({}));
+
+check('measure: --rubric measures the v8g candidate by name', measure.rubricPathOf(['--rubric', 'v8g']), path.join(HERE, 'rubrics', 'v8g.mjs'));
+check('rubrics: v8g is v8f with the register the owner hears as Argentine, and a Rioplatense turn as address', [V8G.PROMPT_SIGNATURE, V8G.PROMPT?.startsWith('voice-judge rubric v8g.\n'), V8G.PROMPT?.includes('in a Rioplatense register that a porteño reader hears as Argentine: a warm, colloquial cadence carried by natural Rioplatense turns of phrase aimed at him, not by the vos conjugation alone; voseo or shared forms inside an otherwise neutral Spanish lexicon do not sound Argentine and fail (a), however good the content.'), V8G.PROMPT?.includes('no particular expression is required'), V8G.PROMPT?.includes('the pronoun vos, or a colloquial Rioplatense turn or vocative aimed at him, which is address in itself.'), V8G.PROMPT?.split('\n').slice(1).join('\n').length > PROMPT.split('\n').slice(1).join('\n').length], ['voice-judge rubric v8g.', true, true, false, true, true]);
+check('promotion: v8g is not live without a MET record either', measure.promotionAllowed(V8G.PROMPT ?? '', V7.PROMPT, measure.readShipBarRecord()), false);
 check('measure: a named rubric loads its own text', [await loaded(measure.rubricPathOf(['--rubric', 'v7'])).then((rubric) => rubric.prompt === V7.PROMPT), await loaded(measure.rubricPathOf(['--rubric', 'v8f'])).then((rubric) => rubric.prompt === PROMPT)], [true, true]);
 
 // --- PROMOTION: the live rubric is v7 until measure.mjs records the ship bar MET for the exact live text.
