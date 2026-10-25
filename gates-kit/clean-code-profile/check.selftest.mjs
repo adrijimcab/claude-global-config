@@ -20,9 +20,12 @@
  * `--strict`, y que cada línea de evidencia impresa es bilingüe.
  */
 
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { inspect } from 'node:util';
 
 import { makeSpeaker } from '../../bilingual-output/speaker.mjs';
 
@@ -31,6 +34,9 @@ import { main, parseArguments, rootsSummary } from './check.mjs';
 import { collectFacts } from './collect-facts.mjs';
 import { limitOf, severityOf } from './eslint-verdicts.mjs';
 import { scriptSample, templateSample } from './eslint-facts.mjs';
+import * as knipFacts from './knip-facts.mjs';
+import * as landingPath from './landing-path.mjs';
+import * as tool from './tool-configs.mjs';
 import { forbids, forbidsCycles } from './layering-probe.mjs';
 import { MESSAGES } from './messages.mjs';
 import { GATES, SECURITY_RULES, gatesOf } from './profile.mjs';
@@ -48,6 +54,11 @@ function check(label, condition) {
   if (condition) passed += 1;
   else failures.push(label);
 }
+
+/** How many ` @es ` markers a printed line carries; a one-line bilingual message carries exactly one. @es Cuántas marcas ` @es ` lleva una línea impresa. */
+const esMarkers = (line) => String(line).split(' @es ').length - 1;
+/** The English and Spanish halves of a one-line message. @es Las mitades inglesa y española de un mensaje de una línea. */
+const halves = (line) => { const at = String(line).indexOf(' @es '); return at === -1 ? [String(line), ''] : [String(line).slice(0, at), String(line).slice(at + 5)]; };
 
 /** The strong ESLint answer: every rule of the profile at its limit. @es La respuesta fuerte de ESLint. */
 const STRONG_SCRIPT = {
@@ -176,7 +187,7 @@ check('npm run is not an npm audit', stateOf(workspace, 'dependency-audit') === 
 
 const unreadable = await gradeFixture('enforced-angular', () => ({ error: 'boom' }), () => ({ file: 'tsconfig.json', error: 'no compiler' }));
 
-check('an ESLint that cannot run leaves its rules unmeasured, with the reason', stateOf(unreadable, 'complexity') === 'unmeasured' && unreadable.byId.complexity.evidence[0].params.reason === 'boom');
+check('an ESLint that cannot run leaves its rules unmeasured, with the reason', stateOf(unreadable, 'complexity') === 'unmeasured' && unreadable.byId.complexity.evidence[0].params.reasonEn === 'boom');
 check('a compiler that cannot run leaves strict TypeScript unmeasured', stateOf(unreadable, 'strict-typescript') === 'unmeasured');
 check('lint-on-landing is graded without running ESLint', stateOf(unreadable, 'lint-on-landing') === 'enforced');
 check('a tsconfig that is not strict is absent', stateOf(await gradeFixture('enforced-angular', answering(STRONG_SCRIPT), () => ({ file: 'tsconfig.json', strict: false })), 'strict-typescript') === 'absent');
@@ -189,6 +200,276 @@ for (const gate of gatesOf('node')) check(`${gate.id} is absent on the empty pro
 check('an empty project has no landing root', absent.facts.landing.roots.length === 0 && absent.facts.stack === 'node');
 check('the stack comes from @angular/core', enforced.facts.stack === 'angular');
 check('the stack can be forced', (await collectFacts(fixture('absent-node'), { stack: 'angular', showConfig: strictTsc })).stack === 'angular');
+
+// --- inputs the checker cannot read: unmeasured, never a crash read as a strict failure -------------------------
+// Projects are generated in a fresh directory of the system temp directory (`mkdtemp`, removed on every exit),
+// never inside the repository: a file that is invalid JSON on purpose would break every other JSON tool that walks
+// the repository, and a run killed before its exit would leave it there. Nothing needs them in the repository: the
+// only walk upward (`fleetKitUnitScript`, four levels) reads a fleet-kit each project writes into itself.
+// @es Los proyectos se generan en un directorio nuevo del directorio temporal del sistema (`mkdtemp`, borrado en toda
+// salida), nunca dentro del repositorio: un fichero con JSON inválido a propósito rompería cualquier otra
+// herramienta JSON que recorra el repositorio, y una ejecución matada antes de salir lo dejaría ahí. Nada los
+// necesita en el repositorio: el único recorrido hacia arriba (`fleetKitUnitScript`, cuatro niveles) lee un
+// fleet-kit que cada proyecto escribe dentro de sí.
+const generatedRoots = [];
+
+/** A speaker sink that records its lines. @es Un sumidero de speaker que guarda sus líneas. */
+const sink = () => {
+  const lines = { out: [], err: [] };
+
+  return { lines, sink: { log: (text) => lines.out.push(text), error: (text) => lines.err.push(text) } };
+};
+
+process.once('exit', () => generatedRoots.forEach((root) => rmSync(root, { recursive: true, force: true })));
+
+/** A generated project holding `files` (path to text), as its root. @es Un proyecto generado con `files`, como su raíz. */
+function generated(files) {
+  const root = mkdtempSync(path.join(tmpdir(), 'clean-code-check-'));
+
+  generatedRoots.push(root);
+  for (const [name, text] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+    writeFileSync(path.join(root, name), text);
+  }
+
+  return root;
+}
+
+/** The facts and verdicts of a project, or `threw:` with the reason. @es Los hechos y veredictos, o `threw:`. */
+async function gradeGenerated(root, options = {}) {
+  try {
+    const facts = await collectFacts(root, { printConfig: answering({}), showConfig: strictTsc, ...options });
+
+    return { facts, verdicts: gradeProject(facts) };
+  } catch (error) {
+    return { threw: String(error.message) };
+  }
+}
+
+{
+  const root = generated({});
+  const inside = path.relative(path.resolve(here, '..', '..'), root);
+
+  check('a generated project lives outside the repository, under the system temp directory', (inside.startsWith('..') || path.isAbsolute(inside)) && path.relative(tmpdir(), root).startsWith('..') === false);
+  check('a generated project sees no fleet-kit of its surroundings', landingPath.fleetKitUnitScript(root) === undefined);
+}
+
+// A tool that cannot run prints its reason with exactly one @es: a bilingual reason split into its halves, an
+// English-only one in both. @es Una herramienta que no puede correr imprime su motivo con exactamente un @es.
+{
+  /** The printed line of the evidence `id` of gate `gate`, or `missing`/`threw:`. @es La línea impresa de una evidencia. */
+  const printedOf = (verdicts, gate, id) => {
+    const entry = verdicts.find((verdict) => verdict.id === gate)?.evidence.find((item) => item.id === id);
+
+    if (entry === undefined) return 'missing';
+    try {
+      return makeSpeaker(MESSAGES).line(entry.id, entry.params);
+    } catch (error) {
+      return `threw: ${error.message}`;
+    }
+  };
+  const verdictsOf = (graded) => Object.values(graded.byId);
+  /** One @es, the English reason only in the English half, the Spanish one only in the Spanish half. @es Un @es y cada motivo en su mitad. */
+  const splitRight = (line, english, spanish) => esMarkers(line) === 1 && halves(line)[0].includes(english) && !halves(line)[0].includes(spanish) && halves(line)[1].includes(spanish) && !halves(line)[1].includes(english);
+  /** One @es and the same English-only reason in both halves. @es Un @es y el mismo motivo en ambas mitades. */
+  const bothHalves = (line, reason) => esMarkers(line) === 1 && halves(line).every((half) => half.includes(reason));
+
+  const bilingualTools = verdictsOf(await gradeFixture('enforced-angular', () => ({ error: 'eslint boom @es eslint pum' }), () => ({ file: 'tsconfig.json', error: 'tsc boom @es tsc pum' })));
+  const englishTools = verdictsOf(await gradeFixture('enforced-angular', () => ({ error: 'eslint boom' }), () => ({ file: 'tsconfig.json', error: 'tsc boom' })));
+
+  check('an ESLint reason that is bilingual is split into its halves, with one @es', splitRight(printedOf(bilingualTools, 'complexity', 'eslint-not-runnable'), 'eslint boom', 'eslint pum'));
+  check('an ESLint reason in English only goes into both halves, with one @es', bothHalves(printedOf(englishTools, 'complexity', 'eslint-not-runnable'), 'eslint boom'));
+  check('a compiler reason that is bilingual is split into its halves, with one @es', splitRight(printedOf(bilingualTools, 'strict-typescript', 'tsc-not-runnable'), 'tsc boom', 'tsc pum'));
+  check('a compiler reason in English only goes into both halves, with one @es', bothHalves(printedOf(englishTools, 'strict-typescript', 'tsc-not-runnable'), 'tsc boom'));
+
+  const cruiser = async (message) => (await gradeGenerated(generated({ 'package.json': '{}', '.dependency-cruiser.cjs': `throw new Error(${JSON.stringify(message)});\n` }))).verdicts ?? [];
+
+  check('a dependency-cruiser reason that is bilingual is split into its halves, with one @es', splitRight(printedOf(await cruiser('cruiser boom @es cruiser pum'), 'circular-dependencies', 'depcruise-unreadable'), 'cruiser boom', 'cruiser pum'));
+  check('a dependency-cruiser reason in English only goes into both halves, with one @es', bothHalves(printedOf(await cruiser('cruiser boom'), 'circular-dependencies', 'depcruise-unreadable'), 'cruiser boom'));
+}
+
+const NOT_JSON = '{ "scripts": ';
+const brokenPackage = await gradeGenerated(generated({ 'package.json': NOT_JSON }));
+const brokenPackageNode = await gradeGenerated(generated({ 'package.json': NOT_JSON }), { stack: 'node' });
+const brokenFleet = await gradeGenerated(generated({ 'package.json': '{ "scripts": { "ci": "eslint ." } }', '.claude/fleet-kit.json': NOT_JSON }));
+const brokenJscpd = await gradeGenerated(generated({ 'package.json': '{ "scripts": { "ci": "eslint ." } }', '.jscpd.json': NOT_JSON }));
+const unreadableIds = (graded) => (graded.verdicts ?? []).filter((verdict) => verdict.verdict === 'unmeasured').map((verdict) => verdict.id);
+
+check('a package.json that is not JSON does not crash the facts', brokenPackage.threw === undefined && brokenPackage.facts.unreadable?.file.endsWith('package.json'));
+check('an unreadable package.json leaves every gate of every stack unmeasured, with the file named', brokenPackage.verdicts?.length === GATES.length && unreadableIds(brokenPackage).length === GATES.length && brokenPackage.verdicts.every((verdict) => verdict.evidence[0].id === 'input-unreadable' && verdict.evidence[0].params.file === 'package.json'));
+check('an unreadable package.json with a forced stack leaves that stack unmeasured', brokenPackageNode.verdicts?.length === gatesOf('node').length && unreadableIds(brokenPackageNode).length === gatesOf('node').length && brokenPackageNode.facts.stack === 'node');
+check('a fleet-kit.json that is not JSON is unreadable input too', brokenFleet.facts?.unreadable?.file.endsWith('fleet-kit.json') && unreadableIds(brokenFleet).length === GATES.length);
+check('a .jscpd.json that is not JSON leaves only duplication unmeasured', brokenJscpd.threw === undefined && unreadableIds(brokenJscpd).join() === 'duplication' && brokenJscpd.verdicts.find((verdict) => verdict.id === 'duplication').evidence[0].id === 'jscpd-unreadable');
+check('the unreadable-input evidence is bilingual', ['input-unreadable', 'jscpd-unreadable'].every((id) => MESSAGES[id]?.en.length > 10 && MESSAGES[id]?.es.length > 10 && MESSAGES[id].en !== MESSAGES[id].es));
+
+{
+  const absentFile = path.join(generated({}), 'package.json');
+  const broken = generated({ 'package.json': NOT_JSON });
+  const asDirectory = generated({ 'package.json/inside.txt': 'x' });
+  const outcome = (file) => { try { return { value: landingPath.readJson(file) }; } catch (error) { return { error, typed: typeof landingPath.UnreadableJsonError === 'function' && error instanceof landingPath.UnreadableJsonError }; } };
+
+  check('readJson of an absent file is undefined', outcome(absentFile).value === undefined && outcome(absentFile).error === undefined);
+  check('readJson of a file that is not JSON throws the typed error naming the file', outcome(path.join(broken, 'package.json')).typed && outcome(path.join(broken, 'package.json')).error.file.endsWith('package.json'));
+  check('readJson of a path it cannot read throws the typed error too', outcome(path.join(asDirectory, 'package.json')).typed === true);
+  check('the typed error is bilingual', outcome(path.join(broken, 'package.json')).error?.message.includes(' @es '));
+}
+
+{
+  /** The exit code of `main`, or `threw` when it lets an exception out. @es El código de `main`, o `threw` si deja salir una excepción. */
+  const exitOf = async (argv, recorder, collect) => { try { return await main(argv, makeSpeaker(MESSAGES, recorder.sink), collect); } catch { return 'threw'; } };
+  const boom = () => { throw new Error('boom'); };
+  const crashed = sink();
+  const crashedCode = await exitOf([fixture('absent-node')], crashed, boom);
+
+  check('a crash of the measuring exits 2 (not measured), never 1 (strict failure)', crashedCode === 2);
+  check('a crash reports its reason in one bilingual line', crashed.lines.err.length === 1 && crashed.lines.err[0].includes('boom') && crashed.lines.err[0].includes(' @es '));
+  check('a crash whose reason is English only keeps exactly one @es, the reason in both halves', esMarkers(crashed.lines.err[0]) === 1 && halves(crashed.lines.err[0]).every((half) => half.includes('boom')));
+
+  const bilingualCrash = sink();
+
+  await exitOf([fixture('absent-node')], bilingualCrash, () => { throw new Error('boom @es pum'); });
+  check('a crash whose reason is already bilingual keeps exactly one @es', esMarkers(bilingualCrash.lines.err[0]) === 1);
+  check('...with the English reason in the English half and the Spanish one in the Spanish half', halves(bilingualCrash.lines.err[0])[0].includes('boom') && !halves(bilingualCrash.lines.err[0])[0].includes('pum') && halves(bilingualCrash.lines.err[0])[1].includes('pum') && !halves(bilingualCrash.lines.err[0])[1].includes('boom'));
+
+  const strictCrash = sink();
+
+  check('a crash under --strict is still exit 2', (await exitOf([fixture('absent-node'), '--strict'], strictCrash, boom)) === 2);
+
+  const unreadable = sink();
+  const unreadableRoot = generated({ 'package.json': NOT_JSON });
+
+  check('a project with unreadable input reports and exits 0 without --strict', (await exitOf([unreadableRoot], unreadable)) === 0 && unreadable.lines.out.some((line) => line.startsWith('UNMEASURED')));
+  check('a project with unreadable input fails --strict with exit 1, as any gate not enforced', (await exitOf([unreadableRoot, '--strict'], sink())) === 1);
+
+  const crashRoot = generated({ 'package.json': '{}', '.gitlab-ci.yml/inside.txt': 'a directory where a file is expected' });
+  const cli = spawnSync(process.execPath, [path.join(here, 'check.mjs'), crashRoot], { encoding: 'utf8' });
+
+  check('an error that is not an unreadable JSON still propagates out of the facts', (await gradeGenerated(crashRoot)).threw?.includes('EISDIR') === true);
+  check('readJsonResult tells absent, invalid and ok apart', landingPath.readJsonResult?.(path.join(crashRoot, 'nothing.json')).state === 'absent' && landingPath.readJsonResult?.(path.join(unreadableRoot, 'package.json')).state === 'invalid' && landingPath.readJsonResult?.(path.join(crashRoot, 'package.json')).state === 'ok');
+
+  check('the command exits 2 when the measuring really crashes (a directory where the CI file is expected)', cli.status === 2);
+  check('the crashed command prints a bilingual reason on its error stream', cli.stderr.includes(' @es ') && !cli.stderr.includes('    at '));
+  check('the crashed command prints exactly one @es', esMarkers(cli.stderr) === 1);
+}
+
+// --- knip: a .ts / .js / .jsonc config is asked to knip itself, never parsed as JSON -------------------------------
+// The sample below is the real `knip --debug` output (knip 5.88.1, NO_COLOR=1) for a `knip.ts` holding two `ignore`
+// entries, one `ignoreDependencies` entry and one `ignoreBinaries` entry in a workspace, trimmed to the lines around
+// the block the parser reads. @es La muestra de abajo es la salida real de `knip --debug` (knip 5.88.1, NO_COLOR=1)
+// para un `knip.ts` con dos entradas `ignore`, una `ignoreDependencies` y una `ignoreBinaries` en un workspace,
+// recortada a las líneas que rodean el bloque que lee el parser.
+const KNIP_DEBUG_SAMPLE = `[*] Unresolved configuration
+{
+  cacheLocation: '/work/node_modules/.cache/knip',
+  config: undefined,
+  configFilePath: '/work/knip.ts',
+  isWatch: false,
+  maxShowIssues: undefined,
+  parsedConfig: {
+    ignore: [ 'a.ts', 'b.ts' ],
+    ignoreDependencies: [ 'x' ],
+    syncCompilers: {},
+    asyncCompilers: {},
+    workspaces: { '.': { ignoreBinaries: [ 'q' ] } }
+  },
+  rules: {
+    files: 'error'
+  }
+}
+`;
+const sampleWith = (block) => KNIP_DEBUG_SAMPLE.replace(/ {2}parsedConfig: \{[\s\S]*?\n {2}\},\n/, block);
+const knipEntries = (text) => knipFacts.parseKnipDebug?.(text);
+
+check('knip --debug output: the entries of every ignore list of the parsed config are counted', knipEntries(KNIP_DEBUG_SAMPLE)?.ignoreEntries === 4);
+
+// A small parsed config is printed on ONE line. These samples are not hand-written: they are produced the way knip's
+// --debug logger prints (knip 5.88.1 `dist/util/debug.js`: `util.inspect(obj, { maxArrayLength: null, depth: null,
+// colors: !process.env.NO_COLOR })`). @es Una config resuelta pequeña se imprime en UNA línea. Estas muestras no están
+// escritas a mano: se producen como imprime el logger --debug de knip (knip 5.88.1 `dist/util/debug.js`).
+{
+  const KNIP_HEAD = { cacheLocation: '/work/node_modules/.cache/knip', config: undefined, configFilePath: '/work/knip.ts', isWatch: false, maxShowIssues: undefined };
+  const loggerPrints = (resolved, colors = false) => `[*] Unresolved configuration\n${inspect(resolved, { maxArrayLength: null, depth: null, colors })}\n`;
+  const oneEntry = loggerPrints({ ...KNIP_HEAD, parsedConfig: { ignore: ['a.ts'] }, rules: { files: 'error' } });
+  const threeEntries = loggerPrints({ ...KNIP_HEAD, parsedConfig: { ignore: ['a.ts', 'b.ts'], ignoreDependencies: ['x'] }, rules: { files: 'error' } });
+  const lastKey = loggerPrints({ ...KNIP_HEAD, rules: { files: 'error' }, parsedConfig: { ignore: ['a.ts'] } });
+
+  check('the generated sample really is the one-line form', oneEntry.split('\n').includes("  parsedConfig: { ignore: [ 'a.ts' ] },"));
+  check('the generated last-key sample really ends without a comma', lastKey.split('\n').includes("  parsedConfig: { ignore: [ 'a.ts' ] }"));
+  check('a one-line parsed config is counted', knipEntries(oneEntry)?.ignoreEntries === 1);
+  check('a one-line parsed config with two ignore lists is counted', knipEntries(threeEntries)?.ignoreEntries === 3);
+  check('a one-line parsed config as the last key is counted', knipEntries(lastKey)?.ignoreEntries === 1);
+  check('a one-line parsed config printed in colour is counted', knipEntries(loggerPrints({ ...KNIP_HEAD, parsedConfig: { ignore: ['a.ts', 'b.ts'] }, rules: { files: 'error' } }, true))?.ignoreEntries === 2);
+  check('a one-line empty parsed config is zero, not the next block', knipEntries(loggerPrints({ ...KNIP_HEAD, parsedConfig: {}, rules: { ignore: ['z'] } }))?.ignoreEntries === 0);
+  check('a one-line parsed config holding a regular expression is NOT measured', knipEntries(loggerPrints({ ...KNIP_HEAD, parsedConfig: { ignoreDependencies: ['x', /^@scope\/[a-z]+$/] }, rules: { files: 'error' } }))?.ignoreEntries === undefined);
+}
+check('knip --debug output in colour is read like the plain one', knipEntries(KNIP_DEBUG_SAMPLE.replaceAll("'a.ts'", "\u001B[32m'a.ts'\u001B[39m").replace('parsedConfig', '\u001B[1mparsedConfig\u001B[22m'))?.ignoreEntries === 4);
+check('a multi-line list, a quote and a bracket inside entries are counted once each', knipEntries(sampleWith("  parsedConfig: {\n    ignore: [\n      'a]b.ts',\n      \"it's.ts\",\n      'c.ts'\n    ],\n    ignoreMembers: [ 'ignoreFoo: [ x ]' ]\n  },\n"))?.ignoreEntries === 4);
+check('a list cut by "N more items" counts the hidden entries too', knipEntries(sampleWith("  parsedConfig: {\n    ignore: [\n      'a.ts',\n      'b.ts',\n      ... 98 more items\n    ]\n  },\n"))?.ignoreEntries === 100);
+check('an empty parsed config is measured as zero entries, whatever follows it', knipEntries(sampleWith('  parsedConfig: {},\n  other: { nested: { ignore: [ "z" ] } },\n'))?.ignoreEntries === 0);
+check('a nested multi-line block does not end the parsed config early', knipEntries(sampleWith("  parsedConfig: {\n    workspaces: {\n      '.': {\n        ignoreBinaries: [ 'q' ]\n      }\n    },\n    ignore: [ 'z' ]\n  },\n"))?.ignoreEntries === 2);
+check('a parsed config with no ignore list is measured as zero entries', knipEntries(sampleWith("  parsedConfig: {\n    entry: [ 'src/main.ts' ]\n  },\n"))?.ignoreEntries === 0);
+check('ignoreIssues (an object) and boolean ignore settings are not lists', knipEntries(sampleWith("  parsedConfig: {\n    ignoreIssues: { 'a.ts': [ 'exports' ] },\n    ignoreExportsUsedInFile: true\n  },\n"))?.ignoreEntries === 0);
+check('an ignore list holding a regular expression is NOT measured rather than miscounted', (() => { const answer = knipEntries(sampleWith("  parsedConfig: {\n    ignoreDependencies: [ 'x', /^@scope\\/[a-z]+$/ ]\n  },\n")); return answer?.ignoreEntries === undefined && answer?.error?.includes(' @es ') === true; })());
+check('output without a parsed config is NOT measured, never zero', (() => { const answer = knipEntries('some other output\n'); return answer?.ignoreEntries === undefined && typeof answer?.error === 'string'; })());
+check('a parsed config that knip cut with [Object] is NOT measured', (() => { const answer = knipEntries(sampleWith("  parsedConfig: {\n    workspaces: { '.': [Object] }\n  },\n")); return answer?.ignoreEntries === undefined && typeof answer?.error === 'string'; })());
+check('every knip failure reason is bilingual', ['nothing here', ''].every((text) => knipEntries(text)?.error?.includes(' @es ')));
+
+{
+  const bin = (body) => ({ 'package.json': '{}', 'node_modules/knip/bin/knip.js': body });
+  const reply = (text, code = 0) => `process.stdout.write(${JSON.stringify(text)});\nprocess.exit(${code});\n`;
+  const asked = (files) => { const root = generated(files); return knipFacts.runInstalledKnip?.(root, path.join(root, 'knip.ts')); };
+  const echoing = "const argv = process.argv.slice(2);\nif (!argv.includes('--debug') || !argv[argv.indexOf('-c') + 1].endsWith('knip.ts') || process.env.NO_COLOR !== '1') process.exit(3);\n";
+
+  check('the installed knip is asked with --debug and the config file, without colour', asked(bin(`${echoing}${reply(KNIP_DEBUG_SAMPLE)}`))?.ignoreEntries === 4);
+  check('a knip that reports issues (exit 1) still answers with its config', asked(bin(reply(KNIP_DEBUG_SAMPLE, 1)))?.ignoreEntries === 4);
+  check('a project with no installed knip is NOT measured, with a bilingual reason that says so', (() => { const answer = asked({ 'package.json': '{}' }); return answer?.ignoreEntries === undefined && answer?.error?.includes(' @es ') === true && answer.error.includes('not installed'); })());
+  check('a knip that runs past its time is NOT measured, with a bilingual reason', (() => { const root = generated(bin('setTimeout(() => {}, 30000);\n')); const answer = knipFacts.runInstalledKnip?.(root, path.join(root, 'knip.ts'), 300); return answer?.ignoreEntries === undefined && answer?.error?.includes('could not run') === true && answer.error.includes(' @es '); })());
+  check('a knip that prints no config is NOT measured', (() => { const answer = asked(bin(reply('nothing useful'))); return answer?.ignoreEntries === undefined && typeof answer?.error === 'string'; })());
+  check('a knip that cannot start the run is NOT measured', asked(bin('process.exit(2);\n'))?.ignoreEntries === undefined);
+}
+
+{
+  const asks = [];
+  const ask = (answer) => (root, file) => { asks.push(path.basename(file)); return answer; };
+  const knipOf = (files, answer = { ignoreEntries: 5 }) => { asks.length = 0; return tool.knipConfig?.(generated(files), ask(answer)); };
+  const jsonConfig = '{ "ignore": ["a.ts"], "workspaces": { "w": { "ignoreDependencies": ["x", "y"] } } }';
+  const typed = 'export default { ignore: ["a.ts"] } satisfies KnipConfig;\n';
+
+  check('a knip.json is counted directly, without asking knip', knipOf({ 'package.json': '{}', 'knip.json': jsonConfig })?.ignoreEntries === 3 && asks.length === 0);
+  check('a knip.ts is asked to knip, not parsed as JSON', knipOf({ 'package.json': '{}', 'knip.ts': typed })?.ignoreEntries === 5 && asks.join() === 'knip.ts');
+  check('a knip.js, a knip.config.ts and a .jsonc are asked to knip too', ['knip.js', 'knip.config.ts', 'knip.jsonc'].every((name) => knipOf({ 'package.json': '{}', [name]: typed })?.ignoreEntries === 5 && asks.join() === name));
+  check('the knip answer names the file it came from', knipOf({ 'package.json': '{}', 'knip.ts': typed })?.file.endsWith('knip.ts'));
+  check('a knip that cannot answer leaves the ignore debt NOT measured, with its reason', (() => { const config = knipOf({ 'package.json': '{}', 'knip.ts': typed }, { error: 'knip said no @es knip dijo que no' }); return config?.ignoreEntries === undefined && config?.reason === 'knip said no @es knip dijo que no'; })());
+  check('a knip.json that is not JSON leaves the ignore debt NOT measured', (() => { const config = knipOf({ 'package.json': '{}', 'knip.json': '{ "ignore": ' }); return config?.ignoreEntries === undefined && typeof config?.reason === 'string' && asks.length === 0; })());
+  check('the knip config inside package.json is counted directly', knipOf({ 'package.json': '{ "knip": { "ignore": ["a", "b"] } }' })?.ignoreEntries === 2 && asks.length === 0);
+  check('no knip config at all is no knip config', knipOf({ 'package.json': '{}' }) === undefined);
+
+  const graded = async (files, answer) => {
+    const facts = await collectFacts(generated({ 'package.json': '{ "scripts": { "ci": "knip" } }', ...files }), { printConfig: answering({}), showConfig: strictTsc, askKnip: () => answer });
+
+    return gradeProject(facts).find((verdict) => verdict.id === 'dead-code');
+  };
+  const ids = (verdict) => verdict.evidence.map((entry) => entry.id);
+  const debt = await graded({ 'knip.ts': typed }, { ignoreEntries: 3 });
+  const clean = await graded({ 'knip.ts': typed }, { ignoreEntries: 0 });
+  const unmeasured = await graded({ 'knip.ts': typed }, { error: 'knip said no @es knip dijo que no' });
+
+  check('collectFacts hands the injected knip to the config reader (debt reported)', ids(debt).includes('knip-ignore-debt') && debt.evidence.find((entry) => entry.id === 'knip-ignore-debt').params.count === 3);
+  check('a measured zero reports neither debt nor "not measured"', !ids(clean).includes('knip-ignore-debt') && !ids(clean).includes('knip-ignore-unmeasured'));
+  /** The printed line of a verdict's "not measured" evidence, or `threw:`. @es La línea impresa de la evidencia "no medido". */
+  const unmeasuredLineOf = (verdict) => { const entry = verdict.evidence.find((item) => item.id === 'knip-ignore-unmeasured'); try { return makeSpeaker(MESSAGES).line(entry.id, entry.params); } catch (error) { return `threw: ${error.message}`; } };
+  const unmeasuredLine = unmeasuredLineOf(unmeasured);
+
+  check('an ignore debt knip could not report is stated as NOT measured with its reason, never as zero', ids(unmeasured).includes('knip-ignore-unmeasured') && !ids(unmeasured).includes('knip-ignore-debt') && unmeasuredLine.includes('knip said no'));
+  check('the knip "not measured" line carries exactly one @es', esMarkers(unmeasuredLine) === 1);
+  check('...with the English reason in the English half and the Spanish one in the Spanish half', halves(unmeasuredLine)[0].includes('knip said no') && !halves(unmeasuredLine)[0].includes('dijo') && halves(unmeasuredLine)[1].includes('knip dijo que no') && !halves(unmeasuredLine)[1].includes('said'));
+
+  const englishOnlyLine = unmeasuredLineOf(await graded({ 'knip.ts': typed }, { error: 'knip timed out' }));
+
+  check('a knip reason in one language only goes into both halves, with exactly one @es', esMarkers(englishOnlyLine) === 1 && halves(englishOnlyLine).every((half) => half.includes('knip timed out')));
+  check('a project without any knip config states no ignore debt either way', !ids(await graded({}, undefined)).some((id) => id.startsWith('knip-ignore')));
+  check('the knip "not measured" line is bilingual', MESSAGES['knip-ignore-unmeasured']?.en.length > 10 && MESSAGES['knip-ignore-unmeasured']?.es.length > 10);
+}
 
 // --- the profile itself ---------------------------------------------------------------------------------------
 check('every gate id is unique', new Set(GATES.map((gate) => gate.id)).size === GATES.length);
@@ -205,12 +486,6 @@ for (const gate of GATES.filter((candidate) => candidate.kind === 'eslint-rule')
 check('README carries the jscpd settings', readme.includes('`minTokens` 70, `threshold` 0') && readme.includes('--audit-level=high'));
 
 // --- the command ------------------------------------------------------------------------------------------------
-const sink = () => {
-  const lines = { out: [], err: [] };
-
-  return { lines, sink: { log: (text) => lines.out.push(text), error: (text) => lines.err.push(text) } };
-};
-
 check('arguments: a root alone is usable', parseArguments(['x'])?.root === 'x');
 check('arguments: --stack and --strict are read', (() => { const options = parseArguments(['x', '--stack', 'node', '--strict']); return options.stack === 'node' && options.strict; })());
 check('arguments: no root, a second root, an unknown flag or an unknown stack are refused', parseArguments([]) === undefined && parseArguments(['a', 'b']) === undefined && parseArguments(['a', '--nope']) === undefined && parseArguments(['a', '--stack', 'ruby']) === undefined && parseArguments(['a', '--stack']) === undefined);

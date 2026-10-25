@@ -13,6 +13,8 @@
  * razón es su evidencia), nunca una suposición.
  */
 
+import { halvesOf } from '../../bilingual-output/message.mjs';
+
 import { describeRecords } from './landing-reach.mjs';
 
 export const ENFORCED = 'enforced';
@@ -23,6 +25,18 @@ export const UNMEASURED = 'unmeasured';
 /** An evidence entry. @es Una entrada de evidencia. */
 export function ev(id, params = {}) {
   return { id, params };
+}
+
+/**
+ * The `{ reasonEn, reasonEs }` parameters of a tool's or an error's reason, which may already be bilingual, so the
+ * printed line keeps exactly one `@es`.
+ * @es Los parámetros `{ reasonEn, reasonEs }` del motivo de una herramienta o un error, que puede venir ya bilingüe,
+ * para que la línea impresa conserve exactamente un `@es`.
+ */
+export function reasonParams(reason) {
+  const { en, es } = halvesOf(reason);
+
+  return { reasonEn: en, reasonEs: es };
 }
 
 /** The evidence lines that say how the landing path relates to a tool. @es Las líneas que dicen cómo se relaciona el camino con una herramienta. */

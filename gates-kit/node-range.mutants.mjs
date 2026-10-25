@@ -37,11 +37,13 @@ const MUTANTS = [
   ['a caret keeps the parts after its pivot', N, 'index < at ? value : 0', 'value'],
   ['a tilde over a major alone holds the minor', N, 'parts.length === 1 ? [lower[0] + 1, 0, 0] : [lower[0], lower[1] + 1, 0]', '[lower[0], lower[1] + 1, 0]'],
   ['a tilde holds the major only', N, 'parts.length === 1 ? [lower[0] + 1, 0, 0] : [lower[0], lower[1] + 1, 0]', '[lower[0] + 1, 0, 0]'],
-  ['an unreadable comparator answers instead of throwing', N, 'if (match === null) throw new Error(`unreadable comparator', 'if (match === null) return false;\n  if (false) throw new Error(`unreadable comparator'],
+  ['an unreadable comparator is read as a bare wildcard instead of throwing', N, 'if (match === null) throw new Error(`unreadable comparator', "if (match === null) return { operator: '', parts: [] };\n  if (false) throw new Error(`unreadable comparator"],
   ['an operator separated by a space is two tokens', N, ".replace(/(\\^|~|>=|<=|>|<|=)\\s+/g, '$1')", ''],
-  ['an empty alternative is read as accepting all', N, 'if (alternatives.some((alternative) => comparators(alternative).length === 0)) throw', 'if (false) throw'],
+  ['an empty alternative is read as accepting all', N, 'if (alternatives.some((tokens) => tokens.length === 0)) throw', 'if (false) throw'],
   ['alternatives must all hold', N, 'return alternatives.some((alternative)', 'return alternatives.every((alternative)'],
-  ['one comparator of a conjunction suffices', N, 'comparators(alternative).every((token)', 'comparators(alternative).some((token)'],
+  ['one comparator of a conjunction suffices', N, 'alternative.every((comparator)', 'alternative.some((comparator)'],
+  ['the range is read lazily, so a defect behind a deciding comparator is never read', N, 'const alternatives = parseRange(range);\n\n  return alternatives.some((alternative) => alternative.every((comparator) => satisfiesComparator(parsed, comparator)));', "const alternatives = String(range).split('||').map(comparators);\n\n  return alternatives.some((alternative) => alternative.every((token) => satisfiesComparator(parsed, parseComparator(token))));"],
+  ['parseRange stops at the first alternative', N, 'return alternatives.map((tokens) => tokens.map(parseComparator));', 'return alternatives.slice(0, 1).map((tokens) => tokens.map(parseComparator));'],
   ['the v prefix is refused', N, '/^v?(\\d+)', '/^(\\d+)'],
 ];
 

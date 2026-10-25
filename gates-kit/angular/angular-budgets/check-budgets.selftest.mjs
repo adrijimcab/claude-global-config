@@ -69,12 +69,17 @@ function folderWith(text) {
 
 /** Runs `main` over a folder and returns `{ code, out, err }`. @es Corre `main` y devuelve salida y errores. */
 function run(dir) {
+  return runWith(dir, undefined);
+}
+
+/** Like `run`, with the cap table read from `configFile`. @es Como `run`, con la tabla de topes de `configFile`. */
+function runWith(dir, configFile) {
   const out = [];
   const err = [];
   let code;
 
   try {
-    code = main(dir, { log: (line) => out.push(line), error: (line) => err.push(line) });
+    code = main(dir, { log: (line) => out.push(line), error: (line) => err.push(line) }, configFile);
   } catch (error) {
     code = -1;
     err.push(`threw: ${error instanceof Error ? error.message : String(error)}`);
@@ -169,6 +174,53 @@ check('the targets spelling is checked too', run(folderWith({ projects: { app: p
   const caps = JSON.parse(readFileSync(path.join(HERE, 'config.json'), 'utf8')).caps;
 
   check('the caps are the measured 2mb, 8kb and 1mb', caps.initial.maximumError === '2mb' && caps.anyComponentStyle.maximumError === '8kb' && caps.anyScript.maximumError === '1mb' && Object.keys(caps).length === 3);
+}
+
+// Every budget of a type is checked, not only the first one declared. @es Se comprueba CADA presupuesto de un tipo.
+{
+  const initial = (maximumError) => ({ type: 'initial', maximumWarning: '1mb', maximumError });
+  const rest = budgetsOf(undefined, '8kb', '1mb');
+  const twoInitial = (first, second) => run(folderWith({ projects: { app: projectOf([initial(first), initial(second), ...rest]) } }));
+  const looser = twoInitial('2mb', '5mb');
+
+  check('a second budget of a type above the cap fails', looser.code === 1);
+  check('the looser second budget is the one named', looser.err.length === 1 && looser.err[0]?.includes('5mb'));
+  check('a first budget above the cap fails beside a fine second one', twoInitial('5mb', '2mb').code === 1);
+  check('two budgets of a type within the cap pass', twoInitial('2mb', '1mb').code === 0);
+  check('an invalid first budget is reported beside a fine second one', (() => { const result = twoInitial('large', '2mb'); return result.code === 1 && result.err.length === 1 && result.err[0]?.includes('large'); })());
+  check('a warning-only entry beside a fine budget is not an error', run(folderWith({ projects: { app: projectOf([{ type: 'initial', maximumWarning: '1mb' }, initial('2mb'), ...rest]) } })).code === 0);
+  check('two budgets of a type do not change the declaration count', twoInitial('2mb', '1mb').out[0]?.includes('3 budget'));
+}
+
+// An unreadable or malformed cap table makes the gate red with a reason, never green. @es Una tabla de topes
+// ilegible o mal formada pone el gate en rojo con motivo, nunca en verde.
+{
+  const good = folderWith({ projects: { app: projectOf(budgetsOf('2mb', '8kb', '1mb')) } });
+  const withConfig = (text) => {
+    const dir = folderWith(undefined);
+    const file = path.join(dir, 'config.json');
+
+    if (text !== undefined) writeFileSync(file, typeof text === 'string' ? text : JSON.stringify(text));
+
+    return runWith(good, file);
+  };
+  const cap = (maximumError) => ({ caps: { initial: { maximumError }, anyComponentStyle: { maximumError: '8kb' }, anyScript: { maximumError: '1mb' } } });
+
+  check('a cap that is not a size is red, not green', withConfig(cap('large')).code === 2);
+  check('a malformed cap names the type and the value', (() => { const result = withConfig(cap('large')); return result.err.length === 1 && result.err[0]?.includes('initial') && result.err[0]?.includes('large'); })());
+  check('a numeric cap is red', withConfig(cap(2097152)).code === 2);
+  check('a cap written as a one-item list is red', withConfig(cap(['2mb'])).code === 2);
+  check('a null cap table is red', withConfig({ caps: null }).code === 2);
+  check('a missing cap is red',withConfig({ caps: { initial: {} } }).code === 2);
+  check('a cap table with no types is red', withConfig({ caps: {} }).code === 2);
+  check('a config without caps is red', withConfig({}).code === 2);
+  check('a config that is not an object is red', withConfig('[]').code === 2);
+  check('a corrupt config is red with a reason, not a stack trace', (() => { const result = withConfig('{ not json'); return result.code === 2 && result.err.length === 1 && !result.err[0]?.startsWith('threw'); })());
+  check('an absent config is red with a reason', (() => { const result = withConfig(undefined); return result.code === 2 && result.err.length === 1 && !result.err[0]?.startsWith('threw'); })());
+  check('a config problem prints nothing on the success stream', withConfig(cap('large')).out.length === 0);
+  check('every config problem line carries its @es half', [cap('large'), '{ not json', {}].every((text) => withConfig(text).err.every((line) => line.includes(' @es '))));
+  check('a valid cap table in a custom file still passes', withConfig(cap('2mb')).code === 0);
+  check('a custom cap is the one compared', withConfig(cap('1mb')).code === 1);
 }
 
 // The CLI: exit codes pass through and the folder defaults to the current one.
