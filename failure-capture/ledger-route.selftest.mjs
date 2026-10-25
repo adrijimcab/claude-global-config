@@ -211,6 +211,73 @@ for (const [name, plan] of [
   check('a write that drops a lesson is NOT proved, and the ledger is restored as it was', !proof.ok && state.join('\n') === old.join('\n'), JSON.stringify([proof, state]));
 }
 
+// --- moving a lesson of a PROJECT into an area of the SAME project
+const PROJECT = { scope: 'demo', areas: { 'ui-testing': { about: 'x', paths: ['a'] } } };
+const projectLesson = (key) => `- [demo] 2026-09-14 — ${key} -> RULE: do it <!--fc:${key}#1-->`;
+const PROJECT_LEDGER = { scope: 'demo', lines: ['# Project ledger', '---', projectLesson('stay-key'), projectLesson('go-key'), ''] };
+const toProjectArea = (found, area = 'ui-testing', project = PROJECT) => planLessonRoute({ found, area, key: 'go-key', destination: undefined, header: AREA_HEADER, project });
+
+{
+  const plan = toProjectArea(locateLesson([PROJECT_LEDGER], 'go-key'));
+
+  check('a project lesson moves retagged to the project area, only its scope tag changes', plan.ok && plan.moved[0].line === projectLesson('go-key').replace('- [demo]', '- [ui-testing]'), JSON.stringify(plan));
+  check('...the project ledger loses exactly that line, in order', plan.source?.join('\n') === ['# Project ledger', '---', projectLesson('stay-key'), ''].join('\n'), plan.source?.join('\n'));
+  check('...and the retag is declared to the proof', plan.renamed?.get(projectLesson('go-key')) === projectLesson('go-key').replace('- [demo]', '- [ui-testing]'));
+}
+
+for (const [name, plan] of [
+  ['a [global] lesson into a project area', toProjectArea(locateLesson([GLOBAL_LEDGER], 'go-key'))],
+  ['a project lesson into a HOME area', planLessonRoute({ found: locateLesson([PROJECT_LEDGER], 'go-key'), area: 'guards', key: 'go-key', destination: undefined, header: AREA_HEADER, project: PROJECT })],
+  ['a lesson of ANOTHER project into this project\'s area', toProjectArea(locateLesson([{ scope: 'other', lines: [projectLesson('go-key').replace('- [demo]', '- [other]')] }], 'go-key'))],
+  ['a [global]-tagged line that sits in the project ledger', toProjectArea(locateLesson([{ scope: 'demo', lines: [lesson('go-key')] }], 'go-key'))],
+  ['a line tagged for ANOTHER scope that sits in the project ledger', toProjectArea(locateLesson([{ scope: 'demo', lines: [projectLesson('go-key').replace('- [demo]', '- [other]')] }], 'go-key'))],
+  ['a project area when the command runs in no project', toProjectArea(locateLesson([PROJECT_LEDGER], 'go-key'), 'ui-testing', null)],
+  ['an area another project declared', toProjectArea(locateLesson([PROJECT_LEDGER], 'go-key'), 'their-area')],
+  ['a stub of the promoted file into a project area', toProjectArea(locateLesson([STUBS_LEDGER], 'stub-key'))],
+]) check(`planLessonRoute REFUSES ${name}, bilingual`, !plan.ok && plan.problems.every((problem) => problem.includes(' @es ')), JSON.stringify(plan));
+
+check('a refusal into a project area says it is a PROJECT area, and into a home area a HOME area', toProjectArea(locateLesson([GLOBAL_LEDGER], 'go-key')).problems?.[0].includes('project area "ui-testing"') === true && toProjectArea(locateLesson([GLOBAL_LEDGER], 'go-key')).problems?.[0].includes('proyecto "ui-testing"') === true && at('stub-key').problems?.[0].includes('home area "guards"') === true, JSON.stringify([toProjectArea(locateLesson([GLOBAL_LEDGER], 'go-key')), at('stub-key')]));
+check('a refusal names the project areas among the areas', toProjectArea(locateLesson([PROJECT_LEDGER], 'go-key'), 'their-area').problems?.[0].includes('ui-testing') === true, JSON.stringify(toProjectArea(locateLesson([PROJECT_LEDGER], 'go-key'), 'their-area')));
+
+// --- the NO-LOSS proof is taken BEFORE the first write
+{
+  const SIDE = { source: GLOBAL_LEDGER.lines, destination: undefined };
+  const good = planLessonRoute({ found: locateLesson([GLOBAL_LEDGER], 'go-key'), area: 'guards', key: 'go-key', destination: undefined, header: AREA_HEADER });
+  const retagged = good.moved[0].line;
+  // `commitRoute` reports a plan that fails its own proof; the writes it makes are counted by the in-memory io.
+  // @es `commitRoute` informa de un plan que falla su propia prueba; las escrituras que hace las cuenta el io en memoria.
+  const attempt = (plan) => {
+    const world = memory(SIDE);
+    const proof = commitRoute({ before: SIDE, plan, io: world.io });
+
+    return { proof, writes: world.state.writes.length };
+  };
+  const clean = attempt(good);
+
+  check('a clean move is proved and written (destination, then source)', clean.proof.ok && clean.writes === 2, JSON.stringify(clean));
+
+  for (const [name, plan, named] of [
+    ['a DROPPED line (the source loses it, no destination gets it)', { ...good, destination: good.destination.filter((line) => line !== retagged) }, 'was lost'],
+    ['a DUPLICATED line (still in the source AND in the destination)', { ...good, source: GLOBAL_LEDGER.lines }, 'appeared'],
+    ['a line written TWICE in the destination', { ...good, destination: [...good.destination, retagged] }, 'appeared'],
+    ['a REWORDED line (the body changed on the way, the rename declared)', { ...good, destination: good.destination.map((line) => (line === retagged ? retagged.replace('do it', 'do something else') : line)), renamed: new Map([[lesson('go-key'), retagged.replace('do it', 'do something else')]]) }, 'reworded'],
+    ['a counter altered on the way', { ...good, destination: good.destination.map((line) => (line === retagged ? retagged.replace('#1', '#2') : line)) }, 'was lost'],
+  ]) {
+    const refused = attempt(plan);
+
+    check(`the proof REFUSES ${name} BEFORE writing anything, naming it, bilingual`, !refused.proof.ok && refused.writes === 0 && refused.proof.written === false && refused.proof.deficits.some((deficit) => deficit.includes(named) && deficit.includes(' @es ')), JSON.stringify(refused));
+  }
+
+  check('...and the command reports a refused plan as such: exit 1, nothing written', routeOutcome({ proof: attempt({ ...good, source: GLOBAL_LEDGER.lines }).proof, count: 1 }).complain === 'route.planUnproven');
+  check('...while an unproved WRITE keeps its own report', routeOutcome({ proof: { ok: false, deficits: ['x'] }, count: 1 }).complain === 'route.proofFailed');
+
+  const rename = { before: SIDE, after: { source: good.source, destination: good.destination } };
+
+  check('provesRoute refuses a declared rename of a line that has no scope tag to change', !provesRoute({ ...rename, renamed: new Map([...good.renamed, ['no tag at all', 'no tag at all']]) }).ok);
+  check('provesRoute accepts a rename that changes only the scope tag', provesRoute({ ...rename, renamed: good.renamed }).ok);
+  check('provesRoute refuses a declared rename that changes more than the scope tag, even when the written line matches it', !provesRoute({ ...rename, after: { ...rename.after, destination: good.destination.map((line) => (line === retagged ? retagged.replace('do it', 'do other') : line)) }, renamed: new Map([[lesson('go-key'), retagged.replace('do it', 'do other')]]) }).ok);
+}
+
 // --- what the command says
 check('a proved route is reported done, exit 0, with how many lines moved', routeOutcome({ proof: { ok: true }, count: 3 }).status === 0 && routeOutcome({ proof: { ok: true }, count: 3 }).say.join() === 'route.done,[object Object]' && routeOutcome({ proof: { ok: true }, count: 3 }).say[1].count === 3);
 const unproved = routeOutcome({ proof: { ok: false, deficits: ['a line was lost'] }, count: 3 });

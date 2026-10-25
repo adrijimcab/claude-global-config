@@ -57,14 +57,15 @@ import { GLOBAL_TARGET, PROJECT_TARGET, promotionFiles, promotionTargetOf } from
 import { PROMOTE_MESSAGES } from './promote-messages.mjs';
 import { promotionParity } from './promote-parity.mjs';
 import { facesByFile, staleFiles } from './text-growth.mjs';
-import { HEADER, homeLedgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, readLedgers, writeLedger } from './ledgers.mjs';
+import { HEADER, homeLedgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, projectAreaLedgerFiles, readLedgers, writeLedger } from './ledgers.mjs';
 import { commitHeaderRoute, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, routeOutcome } from './ledger-route.mjs';
 import { placeStub } from './stub-placement.mjs';
 import { PROMOTED_SCOPE, areaRulesFile, areaRulesHeader, areaScopes, isAreaScope, onDemandRulesFiles, stubScopeOf } from './ledger-routes.mjs';
 import { commitBlockRoute, findBlock, planBlockRoute } from './rule-block.mjs';
 import { withLock } from './ledger-lock.mjs';
+import { stampFile, writeJson } from './session-state.mjs';
 import { resolveLoopContext } from './loop-context.mjs';
-import { GLOBAL_SCOPE, projectOf } from './project.mjs';
+import { GLOBAL_SCOPE, areasOfLedger, projectOf } from './project.mjs';
 import { captureTextProblems, newLessonLine } from './tiered-capture.mjs';
 import { CAPTURE_MESSAGES } from './capture-messages.mjs';
 import { makeSpeaker } from '../bilingual-output/speaker.mjs';
@@ -87,7 +88,6 @@ const spoolDir = () => path.join(stateDirectory(), 'spool');
 const lockFile = () => path.join(stateDirectory(), 'ledger.lock');
 const incidentsFile = () => path.join(stateDirectory(), 'incidents.jsonl');
 const dismissalsFile = () => path.join(stateDirectory(), 'dismissals.jsonl');
-const lastCaptureFile = () => path.join(stateDirectory(), 'last-capture.json');
 // Read-only since `ledger-tiering-budget`: the record of promotions made by the OLD tool (`status` honours it).
 // @es Solo lectura desde `ledger-tiering-budget`: el registro de promociones de la herramienta ANTIGUA.
 const promotedFile = () => path.join(stateDirectory(), 'promoted.md');
@@ -238,7 +238,17 @@ function ledgerCache() {
 
     if (project === undefined) return Object.hasOwn(homeLedgerFiles(homedir()), entry.scope) ? home : undefined;
 
-    return [...home, load(project.scope, project.ledgerFile, HEADER(project.scope, PROJECT_LOADER))];
+    // The project's own area ledgers are part of its ledgers: a key that was routed into one is still found there,
+    // so a recurrence folds in where the lesson is. A project whose config cannot be read is left for its own turn.
+    // @es Los ledgers de área del propio proyecto son parte de sus ledgers: una clave enrutada a uno se encuentra allí
+    // y la recurrencia se suma donde está la lección. Un proyecto con config ilegible se deja para su propio turno.
+    const areas = areasOfLedger(project.ledgerFile);
+
+    if (areas === undefined) return undefined;
+
+    const areaLedgers = Object.entries(projectAreaLedgerFiles({ root: path.dirname(path.dirname(project.ledgerFile)), areas })).map(([scope, { file, header }]) => load(scope, file, header));
+
+    return [...home, load(project.scope, project.ledgerFile, HEADER(project.scope, PROJECT_LOADER)), ...areaLedgers];
   };
 }
 
@@ -333,10 +343,16 @@ function reconcile() {
   return outcome.held ? { folded: outcome.value, deferred: 0 } : { folded: [], deferred: pending.length };
 }
 
-/** Stamps that this session recorded something, so the turn guard can see it deterministically. @es Sella que esta sesión registró algo, para que el guard lo vea de forma determinista. */
+/**
+ * Stamps that this session recorded something, so the turn guard can see it deterministically. The stamp is the
+ * session's own file: another session's stamp never overwrites it.
+ * @es Sella que esta sesión registró algo, para que el guard lo vea de forma determinista. El sello es el fichero
+ * propio de la sesión: el sello de otra sesión nunca lo pisa.
+ */
 function stamp(sessionId, kind) {
-  ensureDirs();
-  writeFileSync(lastCaptureFile(), JSON.stringify({ session: sessionId ?? 'unknown', kind, at: Date.now() }), 'utf8');
+  const session = sessionId ?? 'unknown';
+
+  writeJson(stampFile(stateDirectory(), session), { session, kind, at: Date.now() });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -375,7 +391,10 @@ function commandCapture(args) {
   if (status === 0) {
     adviseOnBudget({
       measure: () => measureLoadedSet({ project: PROJECT, directory: process.cwd(), ceiling: args.ceiling }).verdict,
-      condense: () => describeOutcome(condenseLedgers({ keyMap: [], write: true })),
+      // A capture into a project's scope tidies that scope's ledger only, never the global one; a global capture
+      // tidies every ledger, as it always did. @es Una captura al alcance de un proyecto ordena solo el ledger de
+      // ese alcance, nunca el global; una captura global ordena todos los ledgers, como siempre.
+      condense: () => describeOutcome(condenseLedgers({ keyMap: [], write: true, scope: args.scope === GLOBAL_SCOPE ? undefined : args.scope })),
       print: (line) => speaker.data(line)
     });
   }
@@ -905,7 +924,10 @@ function headersRoute(ledgers) {
 /**
  * Moves what the router keeps apart (`ledger-routes.mjs`): `--stubs` moves every promoted stub of the loaded home
  * ledger to the file the harness does not load; `--key <key> --to <area>` moves a lesson to the path-scoped file of
- * an area, or, for a promoted lesson, the text of its rule to the area's rules file (its stub stays). Every line
+ * an area, or, for a promoted lesson, the text of its rule to the area's rules file (its stub stays). An area is a
+ * home area (for a `[global]` lesson) or one the project declares in `.claude/failure-capture.json` (for a lesson
+ * of that SAME project, into `.claude/rules/lessons-<area>.md`); a lesson never crosses projects nor goes between a
+ * project and the home. Before any write the plan is proved to lose, duplicate and reword nothing. Every line
  * moves byte for byte (a lesson only changes its scope tag). A dry run unless `--write` is given; under `--write`
  * it holds the ledger lock, writes, RE-READS both files from disk and proves nothing was lost or invented
  * (`ledger-route.mjs`, `rule-block.mjs`), restoring what it had when the proof fails. Exit 0 done or nothing to
@@ -913,7 +935,10 @@ function headersRoute(ledgers) {
  * @es Mueve lo que el enrutador mantiene aparte: `--stubs` mueve cada muñón promovido del ledger cargado del
  * home al fichero que el harness no carga; `--key <clave> --to <área>` mueve una lección al fichero con
  * alcance de ruta de un área o, si está promovida, el texto de su regla al fichero de reglas del área (su
- * muñón se queda). Toda línea se mueve byte a byte (una lección solo cambia su etiqueta de alcance). Simulacro
+ * muñón se queda). Un área es del home (para una lección `[global]`) o una que el proyecto declara en
+ * `.claude/failure-capture.json` (para una lección de ESE mismo proyecto, a `.claude/rules/lessons-<área>.md`);
+ * una lección nunca cruza proyectos ni va entre un proyecto y el home. Antes de escribir se prueba que el plan no
+ * pierde, duplica ni reescribe nada. Toda línea se mueve byte a byte (una lección solo cambia su etiqueta de alcance). Simulacro
  * salvo con `--write`; con `--write` toma el lock del ledger, escribe, RELEE ambos ficheros de disco y prueba
  * que no se perdió ni se inventó nada, y restaura lo que tenía si la prueba falla. Salida 0 hecho o nada que
  * mover, 1 rechazado o fallido, 2 ledger bloqueado.
@@ -947,7 +972,7 @@ function commandRoute(args) {
 
     const destination = ledgers.find((ledger) => ledger.scope === args.to);
 
-    return linesRoute({ source: found?.ledger, destination, plan: planLessonRoute({ found, area: args.to, key: args.key, destination: destination?.lines, header: destination?.header }) });
+    return linesRoute({ source: found?.ledger, destination, plan: planLessonRoute({ found, area: args.to, key: args.key, destination: destination?.lines, header: destination?.header, project: PROJECT === undefined ? undefined : { scope: PROJECT.scope, areas: PROJECT.areas } }) });
   };
 
   const route = () => {
@@ -1060,7 +1085,11 @@ function commandInit() {
 const loadLedgers = () => readLedgers(LEDGERS).filter((ledger) => ledger.lines !== undefined);
 
 /** Runs the condense over this project's ledgers, reading them under the ledger lock. @es Ejecuta el condense sobre los ledgers de este proyecto, leyéndolos bajo el lock del ledger. */
-const condenseLedgers = ({ keyMap, write }) => runCondense({ load: loadLedgers, keyMap, write, date: today(), runId: newRunId(), lockFile: lockFile(), preImageRoot: path.join(stateDirectory(), 'condense') });
+/**
+ * With a `scope`, only the ledger of that scope is condensed; without one, every ledger of the project is.
+ * @es Con un `scope`, solo se condensa el ledger de ese alcance; sin él, todos los ledgers del proyecto.
+ */
+const condenseLedgers = ({ keyMap, write, scope }) => runCondense({ load: () => loadLedgers().filter((ledger) => scope === undefined || ledger.scope === scope), keyMap, write, date: today(), runId: newRunId(), lockFile: lockFile(), preImageRoot: path.join(stateDirectory(), 'condense') });
 
 function commandCondense(args) {
   let keyMap = [];

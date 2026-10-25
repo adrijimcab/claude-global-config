@@ -29,10 +29,15 @@ export function resolveLoopContext({ directory, home }) {
 
   if (project !== undefined && isReservedScope(project.scope)) throw new Error(`the project scope "${project.scope}" is reserved: it names a scope of the home ledger (global, promoted or an area). @es el alcance de proyecto "${project.scope}" está reservado: nombra un alcance del ledger del home (global, promoted o un área).`);
 
+  const projectAreas = Object.keys(project?.areas ?? {});
+  const shadowing = projectAreas.filter((area) => isReservedScope(area) || area === project.scope);
+
+  if (shadowing.length > 0) throw new Error(`the project area "${shadowing[0]}" is reserved: it names a scope of the home ledger or the project's own scope. @es el área de proyecto "${shadowing[0]}" está reservada: nombra un alcance del ledger del home o el alcance propio del proyecto.`);
+
   return {
     project,
     ledgers: ledgerFiles({ project, home }),
     workerContracts: project?.workerContracts ?? [],
-    scopes: [GLOBAL_SCOPE, ...areaScopes(), ...(project === undefined ? [] : [project.scope])]
+    scopes: [GLOBAL_SCOPE, ...areaScopes(), ...(project === undefined ? [] : [project.scope, ...projectAreas])]
   };
 }

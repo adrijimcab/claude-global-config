@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * The decisions of the ledger lock and of the fold that takes it, each broken once, that
- * `ledger-lock.selftest.mjs` must catch. The runner and its rules live in `../mutation-proof/run-mutants.mjs`.
- * A blind spot here lets two writers overwrite each other's ledger lines in silence, or wedges every capture
- * behind a lock nobody will ever release.
+ * The decisions of the ledger lock adapter and of the fold that takes it, each broken once, that
+ * `ledger-lock.selftest.mjs` must catch. The decisions of the lock itself live in `../hook-state/file-lock.mjs`
+ * and are broken by `../hook-state/file-lock.mutants.mjs`. The runner and its rules live in
+ * `../mutation-proof/run-mutants.mjs`. A blind spot here lets two writers overwrite each other's ledger lines in
+ * silence, or wedges every capture behind a lock nobody will ever release.
  *
- * @es Las decisiones del lock del ledger y del pliegue que lo toma, rotas una a una. Un punto ciego aquí deja
- * que dos escritores se pisen líneas del ledger en silencio, o bloquea toda captura tras un lock que nadie
- * soltará.
+ * @es Las decisiones del adaptador del lock del ledger y del pliegue que lo toma, rotas una a una. Las del lock
+ * mismo viven en `../hook-state/file-lock.mjs` y las rompe `../hook-state/file-lock.mutants.mjs`.
  */
 
 import path from 'node:path';
@@ -17,34 +17,24 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const LOCK = 'failure-capture/ledger-lock.mjs';
 const COMMAND = 'failure-capture/capture.mjs';
-const REFUSE_HELD = 'if (!takeLock(lockFile, options)) return { held: false };';
-const RELEASE_ALWAYS = '} finally {\n    releaseLock(lockFile);\n  }';
 
 const MUTANTS = [
-  // --- taking: exclusive, bounded, and never stealing a live lock
-  ['taking is not exclusive, so a second writer is let in', LOCK, "openSync(lockFile, 'wx')", "openSync(lockFile, 'w')"],
-  ['every lock is stale, so a live holder is robbed', LOCK, 'return now() - statSync(lockFile).mtimeMs > staleAfterMs;', 'return true;'],
-  ['no lock is ever stale, so a dead writer wedges every later one', LOCK, 'return now() - statSync(lockFile).mtimeMs > staleAfterMs;', 'return false;'],
-  ['a stale lock is recognised but not broken', LOCK, 'if (isStale(lockFile, staleAfterMs, now)) releaseLock(lockFile);', 'if (false) releaseLock(lockFile);'],
-  ['a lock that vanishes while it is examined is an error', LOCK, '} catch {\n    return false;', '} catch (error) {\n    throw error;'],
-  ['the stale limit shrinks to a millisecond, so a fresh lock reads as dead', LOCK, 'export const STALE_AFTER_MS = 60_000;', 'export const STALE_AFTER_MS = 1;'],
-  ['the stale limit grows past any real age, so a dead lock is never broken', LOCK, 'export const STALE_AFTER_MS = 60_000;', 'export const STALE_AFTER_MS = 600_000_000;'],
-  ['one attempt too many is made', LOCK, 'attempt < attempts', 'attempt <= attempts'],
-  ['a failure other than "already exists" is waited out as if another writer held the lock', LOCK, "if (error?.code !== 'EEXIST') throw new Error(", "if (false) throw new Error("],
-  ['contention is thrown as a fault instead of waited out', LOCK, "error?.code !== 'EEXIST'", "error?.code === 'EEXIST'"],
-  ['the fault refusal loses its Spanish half', LOCK, '. @es no se pudo crear el lock del ledger', '. no se pudo crear el lock del ledger'],
-  ['the taker never pauses between attempts', LOCK, '      wait();', '      '],
-  ['the default retry bound shrinks to one attempt', LOCK, 'attempts = 40', 'attempts = 1'],
-
-  // --- releasing
-  ['releasing does nothing, so a lock outlives its writer', LOCK, 'rmSync(lockFile, { force: true });', 'void lockFile;'],
-  ['releasing a lock that is already gone is an error', LOCK, 'rmSync(lockFile, { force: true });', 'rmSync(lockFile);'],
-
-  // --- withLock: the work runs only under the lock, and the lock is always given back
-  ['the work runs even though the lock is held', LOCK, REFUSE_HELD, 'takeLock(lockFile, options);'],
-  ['a refused writer removes the holder\'s lock', LOCK, REFUSE_HELD, 'if (!takeLock(lockFile, options)) { releaseLock(lockFile); return { held: false }; }'],
-  ['the lock is not released when the work fails', LOCK, RELEASE_ALWAYS, '} catch (error) {\n    throw error;\n  } finally {\n  }'],
-  ['the lock is released only when the work fails', LOCK, RELEASE_ALWAYS, '} catch (error) {\n    releaseLock(lockFile);\n    throw error;\n  }'],
+  // --- the adapter: the same lock, said as the ledger's
+  ['taking does not take the state lock', LOCK, '    return stateLock.takeLock(lockFile, options);', '    return true;'],
+  ['the adapter drops the caller\'s options', LOCK, '    return stateLock.takeLock(lockFile, options);', '    return stateLock.takeLock(lockFile);'],
+  ['the ledger stale age is not the state lock\'s', LOCK, 'export const STALE_AFTER_MS = stateLock.STALE_AFTER_MS;', 'export const STALE_AFTER_MS = 30_000;'],
+  ['releasing does nothing', LOCK, 'export const { releaseLock } = stateLock;', 'export const releaseLock = () => undefined;'],
+  ['withLock runs the work without the lock', LOCK, '    return stateLock.withLock(lockFile, work, options);', '    return { held: true, value: work() };'],
+  ['a fault is not said as the ledger lock\'s', LOCK, "  if (!(error instanceof stateLock.LockFault) || (error.file !== lockFile && error.file !== `${lockFile}.breaker`)) return error;", '  return error;'],
+  ['every failure of the work is rewritten as a lock fault', LOCK, "  if (!(error instanceof stateLock.LockFault) || (error.file !== lockFile && error.file !== `${lockFile}.breaker`)) return error;\n", ''],
+  ['L4: a fault of any lock is said as the ledger lock\'s', LOCK, ' || (error.file !== lockFile && error.file !== `${lockFile}.breaker`)', ''],
+  ['L4: a fault of the ledger lock\'s breaker is not said as the ledger lock\'s', LOCK, ' && error.file !== `${lockFile}.breaker`', ''],
+  ['the ledger fault loses its Spanish half', LOCK, ' @es Falló el lock del ledger ${lockFile}: ${spanish}', ''],
+  ['the ledger fault puts the English text in its Spanish half', LOCK, 'const [english, spanish = english] = error.message.split', 'const [spanish, english = spanish] = error.message.split'],
+  ['the ledger fault loses its cause', LOCK, '{ cause: error.cause, file: error.file });', '{ file: error.file });'],
+  ['the ledger fault loses the file it is about', LOCK, '{ cause: error.cause, file: error.file });', '{ cause: error.cause });'],
+  ['takeLock lets a lock fault through unnamed', LOCK, '    return stateLock.takeLock(lockFile, options);\n  } catch (error) {\n    throw asLedgerFault(error, lockFile);', '    return stateLock.takeLock(lockFile, options);\n  } catch (error) {\n    throw error;'],
+  ['withLock lets a lock fault through unnamed', LOCK, '    return stateLock.withLock(lockFile, work, options);\n  } catch (error) {\n    throw asLedgerFault(error, lockFile);', '    return stateLock.withLock(lockFile, work, options);\n  } catch (error) {\n    throw error;'],
 
   // --- the fold that takes it
   ['the fold takes some other lock, so a held ledger lock is ignored', COMMAND, 'const outcome = withLock(lockFile(), () => {', "const outcome = withLock(path.join(stateDirectory(), 'other.lock'), () => {"],
@@ -55,9 +45,10 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'],
+  paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state', 'config-sync-guard'],
   selftest: 'failure-capture/ledger-lock.selftest.mjs',
   mutants: MUTANTS,
+  crashKills: 'fail',
 });
 
 process.exit(survivors === 0 ? 0 : 1);

@@ -34,13 +34,16 @@ export const MESSAGE_TABLE = {
   'plan-empty': { en: 'KEEP     {file}: empty, nothing to archive', es: 'MANTENER {file}: vacío, nada que archivar' },
   'plan-keep': { en: 'KEEP     {file}: operative ({reason})', es: 'MANTENER {file}: operativo ({reason})' },
   'plan-lock': { en: 'KEEP     {file}: a lock ({reason}); while it exists --apply is refused', es: 'MANTENER {file}: un lock ({reason}); mientras exista se rechaza --apply' },
+  'plan-prune': { en: 'REMOVE   {file}: past its age ({reason})', es: 'BORRAR   {file}: pasada su edad ({reason})' },
+  'plan-remove': { en: 'REMOVE   {file}: obsolete ({reason})', es: 'BORRAR   {file}: obsoleto ({reason})' },
+  removed: { en: 'Removed {file} ({reason}).', es: 'Borrado {file} ({reason}).' },
   'plan-unknown': {
     en: 'UNKNOWN  {file}: no known state kind; reported and left alone, never guessed',
     es: 'DESCONOCIDO {file}: ningún tipo de estado conocido; se informa y se deja intacto, nunca se adivina'
   },
   summary: {
-    en: '{archive} to archive, {keep} kept, {unknown} unknown.',
-    es: '{archive} por archivar, {keep} mantenidos, {unknown} desconocidos.'
+    en: '{archive} to archive, {remove} to remove, {keep} kept, {unknown} unknown.',
+    es: '{archive} por archivar, {remove} por borrar, {keep} mantenidos, {unknown} desconocidos.'
   },
   'nothing-to-do': { en: 'Nothing to rotate: every journal is already current.', es: 'Nada que rotar: cada journal ya está al día.' },
   'dry-run': { en: 'Dry run: nothing was changed. Run again with --apply to execute this plan.', es: 'Simulación: no se cambió nada. Vuelve a correr con --apply para ejecutar este plan.' },

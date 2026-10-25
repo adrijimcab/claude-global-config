@@ -112,19 +112,25 @@ export function locateLesson(ledgers, key) {
 }
 
 /**
- * What moving the global lesson `found` into the area `area` would do.
- * @param input `{ found, area, key, destination, header }` — `found` from `locateLesson` (or `undefined`); `destination` the area ledger's lines, `undefined` when its file does not exist.
+ * What moving the lesson `found` into the area `area` would do. A HOME area (`ledger-routes.mjs`) takes a lesson of
+ * the home ledger (`[global]`); a PROJECT area takes a lesson of the SAME project's ledger and nothing else, so a
+ * lesson never crosses from one project to another, from the home into a project, or from a project into the home.
+ * @param input `{ found, area, key, destination, header, project }` — `found` from `locateLesson` (or `undefined`); `destination` the area ledger's lines, `undefined` when its file does not exist; `project` `{ scope, areas }` of the project the command runs in, `undefined` outside one.
  * @returns `{ ok: true, moved: [{ key, line }], source, destination, renamed }` (`moved` empty when the lesson is already in the area) or `{ ok: false, problems }`.
- * @es `found` sale de `locateLesson` (o es `undefined`); `destination` son las líneas del ledger del área, `undefined` si su fichero no existe.
+ * @es Lo que haría mover la lección `found` al área `area`. Un área del HOME toma una lección del ledger del home (`[global]`); un área de PROYECTO toma una lección del ledger del MISMO proyecto y nada más: una lección nunca cruza de un proyecto a otro, del home a un proyecto ni de un proyecto al home. `found` sale de `locateLesson` (o es `undefined`); `destination` son las líneas del ledger del área, `undefined` si su fichero no existe; `project` es `{ scope, areas }` del proyecto donde corre el comando.
  */
-export function planLessonRoute({ found, area, key, destination, header }) {
+export function planLessonRoute({ found, area, key, destination, header, project }) {
   const refuse = (english, spanish) => ({ ok: false, problems: [`${english} @es ${spanish}`] });
-  const prefix = `${ENTRY_PREFIX}${GLOBAL_SCOPE}] `;
+  const projectAreas = Object.keys(project?.areas ?? {});
+  const ofProject = projectAreas.includes(area);
+  const sourceScope = ofProject ? project.scope : GLOBAL_SCOPE;
+  const prefix = `${ENTRY_PREFIX}${sourceScope}] `;
+  const allAreas = [...areaScopes(), ...projectAreas];
 
-  if (!isAreaScope(area)) return refuse(`"${String(area)}" is not an area (the areas are ${areaScopes().join(', ')}).`, `"${String(area)}" no es un área (las áreas son ${areaScopes().join(', ')}).`);
+  if (!isAreaScope(area) && !ofProject) return refuse(`"${String(area)}" is not an area (the areas are ${allAreas.join(', ')}).`, `"${String(area)}" no es un área (las áreas son ${allAreas.join(', ')}).`);
   if (found === undefined) return refuse(`no ledger holds the lesson "${key}".`, `ningún ledger tiene la lección "${key}".`);
   if (found.ledger.scope === area) return { ok: true, moved: [], source: found.ledger.lines, destination: destination ?? header.split('\n'), renamed: new Map() };
-  if (found.ledger.scope !== GLOBAL_SCOPE || !found.line.startsWith(prefix)) return refuse(`"${key}" is a lesson of scope "${found.ledger.scope}"; only a [global] lesson line moves to an area.`, `"${key}" es una lección del alcance "${found.ledger.scope}"; solo una línea de lección [global] se mueve a un área.`);
+  if (found.ledger.scope !== sourceScope || !found.line.startsWith(prefix)) return refuse(`"${key}" is a lesson of scope "${found.ledger.scope}"; only a [${sourceScope}] lesson line moves to the ${ofProject ? 'project' : 'home'} area "${area}" (a lesson never crosses projects, nor goes between a project and the home).`, `"${key}" es una lección del alcance "${found.ledger.scope}"; solo una línea de lección [${sourceScope}] se mueve al área ${ofProject ? 'de proyecto' : 'del home'} "${area}" (una lección nunca cruza proyectos ni va entre un proyecto y el home).`);
   if ((destination ?? []).some((line) => isEntry(line) && keyOfLine(line) === key)) return refuse(`"${key}" is already in the destination, so moving it would make one lesson two lines.`, `"${key}" ya está en el destino, así que moverla haría de una lección dos líneas.`);
 
   const line = `${ENTRY_PREFIX}${area}] ${found.line.slice(prefix.length)}`;
@@ -147,7 +153,19 @@ function difference(from, to) {
 }
 
 /**
- * The proof that a route lost and invented nothing.
+ * Whether `to` is `from` with ONLY the scope tag at its start replaced: `- [a] rest` against `- [b] rest`, the rest
+ * byte for byte. @es Si `to` es `from` con SOLO la etiqueta de alcance del inicio cambiada: el resto, byte a byte.
+ */
+function isTagRename(from, to) {
+  const tagEnd = (line) => line.indexOf('] ');
+
+  return tagEnd(from) !== -1 && from.slice(tagEnd(from)) === to.slice(tagEnd(to));
+}
+
+/**
+ * The proof that a route lost and invented nothing: every lesson line of the source before is, byte for byte, in
+ * the union of the source and the destination after, and nothing else is there. The one change a line may carry is
+ * the scope tag a move into an area makes, declared in `renamed`; a rename that changes anything else is refused.
  * @param input `{ before, after, renamed }` — each side `{ source, destination }` as line arrays; `after` is what was RE-READ from disk;
  *   `renamed` maps a line of `before` to the line it became (the scope tag of a lesson moved to an area), empty by default.
  * @returns `{ ok: true }` or `{ ok: false, deficits }`, each deficit a bilingual sentence naming what is wrong.
@@ -155,6 +173,7 @@ function difference(from, to) {
  */
 export function provesRoute({ before, after, renamed = new Map() }) {
   const entries = (side) => [...side.source, ...(side.destination ?? [])].filter(isEntry);
+  const rewordedRenames = [...renamed].filter(([from, to]) => !isTagRename(from, to));
   const expected = entries(before).map((line) => renamed.get(line) ?? line);
   const lost = difference(tally(expected), tally(entries(after)));
   const invented = difference(tally(entries(after)), tally(expected));
@@ -163,6 +182,7 @@ export function provesRoute({ before, after, renamed = new Map() }) {
   const deficits = [
     ...lost.map((line) => `a line was lost: ${line} @es se perdió una línea: ${line}`),
     ...invented.map((line) => `a line appeared that was not there: ${line} @es apareció una línea que no estaba: ${line}`),
+    ...rewordedRenames.map(([from]) => `a line was reworded, not only retagged: ${from.slice(0, 90)} @es una línea se reescribió, no solo cambió de etiqueta: ${from.slice(0, 90)}`),
     ...(sourceEntriesBefore.join('\n') === sourceEntriesAfter.join('\n') ? [] : ['the lines the source kept changed or changed order. @es las líneas que conservó el origen cambiaron o cambiaron de orden.']),
     ...(before.source.filter((line) => !isEntry(line)).join('\n') === after.source.filter((line) => !isEntry(line)).join('\n') ? [] : ['the text of the source that is not a lesson changed. @es cambió el texto del origen que no es una lección.']),
     ...((before.destination ?? []).filter((line) => !isEntry(line) && line !== '').every((line) => (after.destination ?? []).includes(line)) ? [] : ['the text of the destination that is not a lesson was lost. @es se perdió el texto del destino que no es una lección.']),
@@ -177,12 +197,21 @@ export function provesRoute({ before, after, renamed = new Map() }) {
  * never on what was planned, so it cannot be satisfied by the write it checks.
  * @param input `{ before, plan, io }` — `before` the `{ source, destination }` lines as they were; `plan` from a `plan…Route`;
  *   `io` `{ writeSource(lines), writeDestination(lines | undefined), readBack() }` (`undefined` removes the destination file).
- * @returns the proof: `{ ok: true }` or `{ ok: false, deficits }`; on `ok: false` both files were restored.
+ * @returns the proof: `{ ok: true }` or `{ ok: false, deficits }`; on `ok: false` both files were restored, or, when
+ *   `written` is `false`, never touched (the plan itself failed the proof).
  * @es Escribe una ruta planeada, RELEE ambos ficheros y la prueba, restaurando lo que había si la prueba falla.
  * Las escrituras son del llamante (`io`), para que una prueba pueda hacerlas mentir: la prueba se toma sobre lo
  * que da `readBack`, nunca sobre lo planeado.
  */
 export function commitRoute({ before, plan, io }) {
+  // The same proof, taken on the plan BEFORE any write: a plan that would drop, duplicate or reword a lesson line
+  // never reaches the disk. The proof after the write (below) still guards the write itself.
+  // @es La misma prueba, tomada sobre el plan ANTES de escribir: un plan que perdería, duplicaría o reescribiría
+  // una línea de lección nunca llega al disco. La prueba posterior sigue guardando la escritura misma.
+  const planned = provesRoute({ before, after: { source: plan.source, destination: plan.destination }, renamed: plan.renamed });
+
+  if (!planned.ok) return { ...planned, written: false };
+
   io.writeDestination(plan.destination);
   io.writeSource(plan.source);
 
@@ -206,7 +235,7 @@ export function commitRoute({ before, plan, io }) {
 export function routeOutcome({ proof, count }) {
   if (proof.ok) return { status: 0, say: ['route.done', { count }] };
 
-  return { status: 1, complain: 'route.proofFailed', deficits: proof.deficits };
+  return { status: 1, complain: proof.written === false ? 'route.planUnproven' : 'route.proofFailed', deficits: proof.deficits };
 }
 
 /**

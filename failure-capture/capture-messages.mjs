@@ -54,12 +54,13 @@ export const CAPTURE_MESSAGES = {
   'init.import.present': { en: 'project {scope}: import already present in {file}', es: 'proyecto {scope}: import ya presente en {file}' },
 
   'condense.keysInvalid': { en: 'condense REFUSED — --keys needs a JSON file of the form {"keys":[{"line":"...","key":"..."}]} ({detail}).', es: 'condense RECHAZADO: --keys necesita un fichero JSON de la forma {"keys":[{"line":"...","key":"..."}]} ({detail}).' },
-  'route.usage': { en: 'route REFUSED — say what to route, ONE of: --stubs (move every promoted stub out of the loaded home ledger), --key <key> --to <area> (move a lesson to an area, loaded only when its paths are read) or --headers (bring the header of every home ledger up to the declared one); and --write to do it (a dry run otherwise).', es: 'route RECHAZADO: indica qué enrutar, UNO de: --stubs (mueve cada muñón promovido fuera del ledger cargado del home), --key <clave> --to <área> (mueve una lección a un área, cargada solo cuando se leen sus rutas) o --headers (pone al día el encabezado de cada ledger del home con el declarado); y --write para hacerlo (simulacro si no).' },
+  'route.usage': { en: 'route REFUSED — say what to route, ONE of: --stubs (move every promoted stub out of the loaded home ledger), --key <key> --to <area> (move a lesson to an area, loaded only when its paths are read: a home area for a [global] lesson, or an area the project declares in .claude/failure-capture.json for a lesson of that same project) or --headers (bring the header of every home ledger up to the declared one); and --write to do it (a dry run otherwise).', es: 'route RECHAZADO: indica qué enrutar, UNO de: --stubs (mueve cada muñón promovido fuera del ledger cargado del home), --key <clave> --to <área> (mueve una lección a un área, cargada solo cuando se leen sus rutas: un área del home para una lección [global], o un área que el proyecto declara en .claude/failure-capture.json para una lección de ese mismo proyecto) o --headers (pone al día el encabezado de cada ledger del home con el declarado); y --write para hacerlo (simulacro si no).' },
   'route.refused': { en: 'route REFUSED — nothing was changed:', es: 'route RECHAZADO: no se cambió nada:' },
   'route.nothing': { en: 'route: nothing to move — everything is already where it belongs.', es: 'route: nada que mover: todo está ya donde le corresponde.' },
   'route.dry': { en: 'route (dry run): {count} item(s) would change, in {file}; add --write to do it:', es: 'route (simulacro): {count} elemento(s) cambiaría(n), en {file}; añade --write para hacerlo:' },
   'route.done': { en: 'route DONE: {count} item(s) changed; the files were re-read and no line was lost or invented.', es: 'route HECHO: {count} elemento(s) cambiado(s); se releyeron los ficheros y no se perdió ni se inventó ninguna línea.' },
   'route.proofFailed': { en: 'route FAILED — the re-read files do not prove the move lost nothing, so both were RESTORED as they were:', es: 'route FALLÓ: los ficheros releídos no prueban que el movimiento no perdió nada, así que ambos se RESTAURARON como estaban:' },
+  'route.planUnproven': { en: 'route REFUSED — the plan would lose, duplicate or reword a lesson line, so NOTHING was written:', es: 'route RECHAZADO: el plan perdería, duplicaría o reescribiría una línea de lección, así que NO se escribió NADA:' },
   'route.locked': { en: 'route REFUSED — the ledger is locked by another writer; re-run in a moment. Nothing was changed.', es: 'route RECHAZADO: el ledger está bloqueado por otro escritor; reintenta en un momento. No se cambió nada.' },
   'project.configUnreadable': { en: '{command} REFUSED — the project configuration cannot be read: {defect}. Nothing was changed.', es: '{command} RECHAZADO: no se puede leer la configuración del proyecto: {defect}. No se cambió nada.' },
 
@@ -79,6 +80,8 @@ export const CAPTURE_MESSAGES = {
       '  route     --stubs [--write]           move the promoted stubs out of the loaded home ledger into the file the harness does not load (dry run without --write)',
       '  route     --headers [--write]         bring the header of every home ledger up to the declared one (the lessons are untouched)',
       '  route     --key <key> --to <area> [--write]   move a lesson (or, once promoted, the text of its rule) to an area: a rules file the harness loads only when its paths are read',
+      '            an area is a home area (for a [global] lesson) or one this project declares as "areas": { "<name>": { "about": "...", "paths": ["<glob>"] } } in .claude/failure-capture.json',
+      '            (for a lesson of this same project, moved to .claude/rules/lessons-<name>.md); a lesson never crosses projects, and every write is refused unless no lesson line is lost, duplicated or reworded',
       '  budget   [--project <dir>]            measure the always-loaded instruction set against its ceiling (exit 0 within, 1 over, 2 not measured)',
       '  status   counts, ledger token cost, and which lessons are due for promotion',
       "  Exit 2 when the project's .claude/failure-capture.json is invalid (only the commands that read the project fail)."
@@ -98,6 +101,8 @@ export const CAPTURE_MESSAGES = {
       '  route: --stubs [--write] mueve los muñones promovidos fuera del ledger cargado del home al fichero que el harness no carga (simulacro sin --write)',
       '  route: --headers [--write] pone al día el encabezado de cada ledger del home con el declarado (las lecciones no se tocan)',
       '  route: --key <clave> --to <área> [--write] mueve una lección (o, ya promovida, el texto de su regla) a un área: un fichero de reglas que el harness carga solo cuando se leen sus rutas',
+      '         un área es del home (para una lección [global]) o una que este proyecto declara como "areas": { "<nombre>": { "about": "...", "paths": ["<glob>"] } } en .claude/failure-capture.json',
+      '         (para una lección de este mismo proyecto, movida a .claude/rules/lessons-<nombre>.md); una lección nunca cruza proyectos, y toda escritura se rechaza salvo que no se pierda, duplique ni reescriba ninguna línea de lección',
       '  budget: [--project <dir>] mide el conjunto de instrucciones siempre cargado frente a su techo (salida 0 dentro, 1 sobre el techo, 2 no medido)',
       '  status: recuentos, coste en tokens del ledger y qué lecciones tocan promoción',
       '  Salida 2 si el .claude/failure-capture.json del proyecto es inválido (solo fallan los comandos que leen el proyecto).'

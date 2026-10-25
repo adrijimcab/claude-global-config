@@ -17,10 +17,13 @@
  *            lift a block (`dismiss.mjs` `isLifted`), are written back into a fresh journal.
  *   KEEP     operative state a guard reads to decide: left in place.
  *   LOCK     a writer's lock: left in place, and its presence refuses `--apply`.
+ *   PRUNE    state that only matters while it is recent (a per-session stamp or cooldown, the temporary file of
+ *            an interrupted write): removed once older than the age its rule names, kept until then.
+ *   REMOVE   an obsolete file no code reads any more (a pre-split shared state file): removed.
  * A file no rule names is UNKNOWN: reported and left alone, never guessed.
  *
- * IDEMPOTENT. A moved file is gone, a journal that holds only the dismissals in force is current, and an empty
- * file has nothing to archive, so a second run plans nothing. An archive file that already exists (a second
+ * IDEMPOTENT. A moved or removed file is gone, a journal that holds only the dismissals in force is current, and
+ * an empty file has nothing to archive, so a second run plans nothing. An archive file that already exists (a second
  * rotation the same day) is appended to, never overwritten.
  *
  * Exit 0 plan printed or applied; 1 a move failed (the files reported before it were rotated, the rest are
@@ -32,7 +35,8 @@
  * sesión, descartes y pendientes vigentes). Por defecto `--dry-run` imprime el plan; `--apply` lo ejecuta y se
  * RECHAZA (salida 2, sin cambios) mientras haya una sesión viva de Claude Code registrada en `<home>/sessions/`
  * o exista un lock de estado. Cada fichero se clasifica EXPLÍCITAMENTE en `KINDS` (ARCHIVE, JOURNAL con los
- * descartes vigentes devueltos a un journal nuevo, KEEP, LOCK); uno que ninguna regla nombra es DESCONOCIDO: se
+ * descartes vigentes devueltos a un journal nuevo, KEEP, LOCK, PRUNE que se borra pasada la edad de su regla, y
+ * REMOVE, un fichero obsoleto que ya nadie lee y se borra); uno que ninguna regla nombra es DESCONOCIDO: se
  * informa y se deja, nunca se adivina. IDEMPOTENTE: una segunda corrida no planifica nada; un fichero de archivo
  * que ya existe se amplía, nunca se sobrescribe. Salida 0 plan o aplicado; 1 falló un movimiento; 2 rechazado.
  */
@@ -49,10 +53,16 @@ export const ARCHIVE = 'archive';
 export const JOURNAL = 'journal';
 export const KEEP = 'keep';
 export const LOCK = 'lock';
+export const PRUNE = 'prune';
+export const REMOVE = 'remove';
 export const UNKNOWN = 'unknown';
 
 /** Any mechanism. @es Cualquier mecanismo. */
 const ANY = '*';
+
+/** The ages a PRUNE rule names. @es Las edades que nombra una regla PRUNE. */
+const HOUR_MS = 60 * 60 * 1000;
+const WEEK_MS = 7 * 24 * HOUR_MS;
 
 /** The folder of a home that holds the archives. @es La carpeta del home que guarda los archivos. */
 export const ARCHIVE_FOLDER = 'state-archive';
@@ -61,10 +71,12 @@ export const ARCHIVE_FOLDER = 'state-archive';
 const SESSIONS_FOLDER = 'sessions';
 
 /**
- * Every known state kind: `[mechanism, pattern, kind, reason]`, first match wins. A pattern is a path relative to
- * the mechanism's state directory, `/`-separated; a segment `*` is any one segment, `*.ext` any one segment with
- * that ending, and a last segment `**` any one or more.
- * @es Cada tipo de estado conocido: `[mecanismo, patrón, tipo, motivo]`; gana la primera coincidencia.
+ * Every known state kind: `[mechanism, pattern, kind, reason]`, and for PRUNE a fifth element, the age in ms past
+ * which the file is removed; first match wins. A pattern is a path relative to the mechanism's state directory,
+ * `/`-separated; a segment `*` is any one segment, `*.ext` any one segment with that ending, and a last segment
+ * `**` any one or more.
+ * @es Cada tipo de estado conocido: `[mecanismo, patrón, tipo, motivo]`, y para PRUNE un quinto elemento, la edad
+ * en ms a partir de la cual se borra; gana la primera coincidencia.
  */
 export const KINDS = Object.freeze([
   ['agent-liveness', 'lifecycle.jsonl', ARCHIVE, 'subagent start and stop events; a rotation refuses while a session lives, so no agent is running'],
@@ -97,8 +109,13 @@ export const KINDS = Object.freeze([
   ['failure-capture', 'ledger.lock', LOCK, 'the ledger writers'],
   ['failure-capture', 'incidents.jsonl', KEEP, 'the recurrence evidence promotion counts'],
   ['failure-capture', 'dismissals.jsonl', KEEP, 'dismissals in force'],
-  ['failure-capture', 'last-capture.json', KEEP, 'the stamp the turn guard reads'],
-  ['failure-capture', 'guard-state.json', KEEP, "each scope's cooldown"],
+  ['failure-capture', 'ledger.lock.breaker', LOCK, 'the writer breaking a stale ledger lock'],
+  ['failure-capture', 'last-capture.json', REMOVE, 'obsolete: the one stamp every session shared, replaced by stamps/<session>.json'],
+  ['failure-capture', 'guard-state.json', REMOVE, 'obsolete: the one cooldown file every session shared, replaced by guard-state/<scope>.json'],
+  ['failure-capture', 'stamps/*.tmp', PRUNE, 'the temporary file of an interrupted stamp write', HOUR_MS],
+  ['failure-capture', 'guard-state/*.tmp', PRUNE, 'the temporary file of an interrupted cooldown write', HOUR_MS],
+  ['failure-capture', 'stamps/*', PRUNE, "a session's capture stamp, which the turn guard reads; a week old, its session is over", WEEK_MS],
+  ['failure-capture', 'guard-state/*', PRUNE, "a session's and agent's cooldown; a week old, its session is over", WEEK_MS],
   ['failure-capture', 'promoted.md', KEEP, 'promotions of the old tool, still read'],
   ['failure-capture', 'spool/*', KEEP, 'captures not yet folded into a ledger'],
   ['fleet-kit', 'handback/refusals.jsonl', KEEP, 'the refusal count that bounds the handback loop'],
@@ -125,7 +142,13 @@ export const KINDS = Object.freeze([
   ['worker-delegation-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['worktree-landing', 'red-logs/*', ARCHIVE, 'whole output of past red verifications, one file per refused landing'],
   [ANY, 'journal.jsonl', JOURNAL, 'hook journal'],
-  [ANY, 'fires.json', ARCHIVE, 'fires counter, reset with the journal whose rate it gives']
+  [ANY, 'fires.json', ARCHIVE, 'fires counter, reset with the journal whose rate it gives'],
+  [ANY, 'fires.json.lock', LOCK, 'a fires counter increment in flight'],
+  [ANY, 'fires-uncounted.jsonl', ARCHIVE, 'the runs a fires counter could not count, reset with the counter'],
+  [ANY, 'lock-faults.jsonl', ARCHIVE, 'the lock failures a hook that must not print recorded instead'],
+  [ANY, '*.lock.breaker', LOCK, 'a writer breaking a stale lock'],
+  [ANY, '*.lock.breaks.jsonl', ARCHIVE, 'the stale locks that were broken, and why'],
+  [ANY, '*.tmp', PRUNE, 'the temporary file of an interrupted write (a fires counter, a rotated journal)', HOUR_MS]
 ]);
 
 /** Whether one path segment matches one pattern segment. @es Si un segmento de ruta casa con uno de patrón. */
@@ -153,8 +176,11 @@ export function pathMatches(pattern, relative) {
 export function classify(mechanism, relative) {
   const rule = KINDS.find(([owner, pattern]) => (owner === mechanism || owner === ANY) && pathMatches(pattern, relative));
 
-  return rule === undefined ? { kind: UNKNOWN, reason: '' } : { kind: rule[2], reason: rule[3] };
+  return rule === undefined ? { kind: UNKNOWN, reason: '' } : { kind: rule[2], reason: rule[3], ...(rule[2] === PRUNE ? { maxAgeMs: rule[4] } : {}) };
 }
+
+/** The actions that change a file: it is moved into the archive or removed. @es Las acciones que cambian un fichero. */
+const CHANGING = new Set(['archive', 'journal', 'prune', 'remove']);
 
 /** Every file under `directory`, relative and `/`-separated, sorted; a link is listed (as UNKNOWN), never followed. @es Cada fichero bajo `directory`; un enlace se lista, nunca se sigue. */
 function filesUnder(directory, prefix = '') {
@@ -178,14 +204,15 @@ export const dismissalsIn = (text) => text.split('\n').filter((line) => recordOf
 /**
  * The plan for the Claude home `home`: one entry per file of every state directory,
  * `{ mechanism, file, source, kind, reason, action, carried? }`, with `action` one of `archive`, `journal`,
- * `keep`, `empty`, `current`, `lock`, `unknown`; sorted by mechanism, then file.
+ * `keep`, `empty`, `current`, `lock`, `prune` (a PRUNE file older than its age; a younger one is `keep`),
+ * `remove`, `unknown`; sorted by mechanism, then file. `now` is the clock a PRUNE age is measured by.
  * @es El plan para el home `home`: una entrada por fichero de cada directorio de estado.
  */
-export function planRotation(home) {
+export function planRotation(home, now = Date.now()) {
   return stateDirsUnder(home).flatMap(({ mechanism, directory }) =>
     filesUnder(directory).map((file) => {
       const source = path.join(directory, ...file.split('/'));
-      const { kind, reason } = classify(mechanism, file);
+      const { kind, reason, maxAgeMs } = classify(mechanism, file);
       const entry = { mechanism, file, source, kind, reason };
       const stats = lstatSync(source);
       const empty = stats.size === 0;
@@ -194,6 +221,7 @@ export function planRotation(home) {
 
       if (kind === ARCHIVE) return { ...entry, action: empty ? 'empty' : 'archive' };
       if (kind === LOCK) return { ...entry, action: 'lock' };
+      if (kind === PRUNE) return { ...entry, action: now - stats.mtimeMs > maxAgeMs ? 'prune' : 'keep' };
       if (kind !== JOURNAL) return { ...entry, action: kind };
       if (empty) return { ...entry, action: 'empty' };
 
@@ -270,14 +298,21 @@ function moveInto(source, target) {
   }
 }
 
-/** Executes the plan's moves into `archive`; returns how many files were rotated. @es Ejecuta los movimientos del plan. */
+/** Executes the plan's moves into `archive` and its removals; returns how many files were rotated. @es Ejecuta los movimientos y borrados del plan. */
 function applyPlan(plan, archive, speaker) {
   let count = 0;
 
-  for (const entry of plan.filter(({ action }) => action === 'archive' || action === 'journal')) {
+  for (const entry of plan.filter(({ action }) => CHANGING.has(action))) {
     const target = path.join(archive, entry.mechanism, ...entry.file.split('/'));
 
     try {
+      if (entry.action === 'prune' || entry.action === 'remove') {
+        rmSync(entry.source);
+        speaker.say('removed', { file: entry.source, reason: entry.reason });
+        count += 1;
+        continue;
+      }
+
       moveInto(entry.source, target);
       speaker.say('archived', { file: entry.source, target });
 
@@ -308,6 +343,8 @@ function sayEntry(speaker, entry) {
     empty: () => speaker.say('plan-empty', { file }),
     keep: () => speaker.say('plan-keep', { file, reason: entry.reason }),
     lock: () => speaker.say('plan-lock', { file, reason: entry.reason }),
+    prune: () => speaker.say('plan-prune', { file, reason: entry.reason }),
+    remove: () => speaker.say('plan-remove', { file, reason: entry.reason }),
     unknown: () => speaker.say('plan-unknown', { file })
   };
 
@@ -360,7 +397,7 @@ export function main(argv, { sink = console, now = Date.now(), alive = processAl
   if (statSync(options.home, { throwIfNoEntry: false })?.isDirectory() !== true) return refuse('no-home', { home: options.home });
 
   const archive = path.join(options.home, ARCHIVE_FOLDER, options.date);
-  const plan = planRotation(options.home);
+  const plan = planRotation(options.home, now);
   const blockers = blockersOf(options.home, plan, alive);
 
   if (options.apply && blockers.length > 0) {
@@ -373,9 +410,10 @@ export function main(argv, { sink = console, now = Date.now(), alive = processAl
   speaker.say('header', { home: options.home, archive, mode: options.apply ? '--apply' : '--dry-run' });
   for (const entry of plan) sayEntry(speaker, entry);
 
-  const moving = plan.filter(({ action }) => action === 'archive' || action === 'journal').length;
+  const moving = plan.filter(({ action }) => CHANGING.has(action)).length;
+  const removing = plan.filter(({ action }) => action === 'prune' || action === 'remove').length;
 
-  speaker.say('summary', { archive: moving, keep: plan.filter(({ action }) => !['archive', 'journal', 'unknown'].includes(action)).length, unknown: plan.filter(({ action }) => action === 'unknown').length });
+  speaker.say('summary', { archive: moving - removing, remove: removing, keep: plan.filter(({ action }) => !CHANGING.has(action) && action !== 'unknown').length, unknown: plan.filter(({ action }) => action === 'unknown').length });
 
   if (moving === 0) {
     speaker.say('nothing-to-do');

@@ -14,8 +14,10 @@ const MUTANTS = [
   ['stop_hook_active deja de acotar: puede bloquear dos veces', F, 'if (payload.stop_hook_active === true) return undefined;', ''],
   ['la orden sugerida vuelve a un cd suelto que la sesión principal no puede correr', F, '`     ( cd "${cwd}" && node', '`     cd "${cwd}" && node'],
   ['el cooldown desaparece', F, 'if (now - Number(previous.blockedAt) < COOLDOWN_MS) {', 'if (false) {'],
-  ['una captura sellada deja de liberar el turno', F, "if (stamped !== undefined && stamped.session === sessionId && Number(stamped.at) > Number(previous.seenAt)) {", 'if (false) {'],
-  ['una captura de OTRA sesión libera el turno', F, 'stamped.session === sessionId && ', ''],
+  ['una captura sellada deja de liberar el turno', F, 'if (stamped !== undefined && Number(stamped.at) > Number(previous.seenAt)) {', 'if (false) {'],
+  ['el sello se busca en el fichero de OTRA sesión', F, 'stampFile(stateDirectory(), sessionId)', "stampFile(stateDirectory(), 'otra')"],
+  ['el cooldown se LEE de un fichero compartido por todas las sesiones', F, 'const previous = readJson(cooldownFile(stateDirectory(), scopeKey),', "const previous = readJson(cooldownFile(stateDirectory(), 'compartido'),"],
+  ['el cooldown se ESCRIBE en un fichero compartido por todas las sesiones', F, 'writeJson(cooldownFile(stateDirectory(), scopeKey), value);', "writeJson(cooldownFile(stateDirectory(), 'compartido'), value);"],
   ['el marcador nunca se busca', F, 'if (marker === undefined) return undefined;', 'return undefined;'],
   ['el BOM ya no se quita', F, 'raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw', 'raw'],
   ['un payload ilegible pasa sin anotarse', F, '    recordError(error, raw);', ''],
@@ -25,7 +27,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['failure-capture', 'agent-contract-parity', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['failure-capture', 'agent-contract-parity', 'mutation-proof', 'hook-state', 'bilingual-output', 'config-sync-guard'],
   selftest: 'failure-capture/turn-guard.selftest.mjs',
   mutants: MUTANTS,
 });
