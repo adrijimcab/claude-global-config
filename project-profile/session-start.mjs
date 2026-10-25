@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 
-import { hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
+import { context, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 
 /** The directory a session starts in: payload `cwd`, then `CLAUDE_PROJECT_DIR`, then `fallback`. @es El directorio de inicio de la sesión. */
 export function sessionDirectory(payload, env, fallback) {
@@ -36,7 +36,7 @@ export function sessionDirectory(payload, env, fallback) {
  * @es La salida del hook para un payload crudo, o `undefined` si no hay nada que decir.
  */
 export async function sessionStartOutput(raw, { env = process.env, cwd = process.cwd(), home = homedir(), today } = {}) {
-  let context;
+  let line;
 
   try {
     const { readProfile } = await import('./profile.mjs');
@@ -45,15 +45,22 @@ export async function sessionStartOutput(raw, { env = process.env, cwd = process
 
     if (profile === undefined) return undefined;
 
-    context = profileLine(profile, { home, today });
+    line = profileLine(profile, { home, today });
   } catch (error) {
-    context = `Project profile could not be measured (${error instanceof Error ? error.message : String(error)}); versions are UNVERIFIED: run node ~/.claude/project-profile/profile.mjs. @es No se pudo medir el perfil del proyecto; las versiones están SIN VERIFICAR: ejecutar node ~/.claude/project-profile/profile.mjs.`;
+    line = `Project profile could not be measured (${error instanceof Error ? error.message : String(error)}); versions are UNVERIFIED: run node ~/.claude/project-profile/profile.mjs. @es No se pudo medir el perfil del proyecto; las versiones están SIN VERIFICAR: ejecutar node ~/.claude/project-profile/profile.mjs.`;
   }
 
-  return { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } };
+  return context('SessionStart', line);
 }
 
-/** Stdin as text; an unreadable stdin is an empty payload, so the profile is still measured. @es Stdin como texto; un stdin ilegible es un payload vacío, así que el perfil se mide igual. */
+/**
+ * Stdin as text. Unlike the other hooks, an unreadable stdin is an EMPTY payload, not silence: the profile is
+ * still measured from `CLAUDE_PROJECT_DIR` or the process directory, because a session that starts without a
+ * readable payload must not lose its version line. This is deliberate, so it is passed to `hookMain` as its seam.
+ * @es Stdin como texto. A diferencia de los otros hooks, un stdin ilegible es un payload VACÍO, no silencio: el
+ * perfil se mide igual desde `CLAUDE_PROJECT_DIR` o el directorio del proceso, porque una sesión que arranca sin
+ * un payload legible no debe perder su línea de versiones. Es deliberado, por eso se pasa a `hookMain` como costura.
+ */
 function readInput() {
   try {
     return readFileSync(0, 'utf8');

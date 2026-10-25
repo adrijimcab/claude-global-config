@@ -133,8 +133,8 @@ const MUTANTS = [
   ['CLAUDE_PROJECT_DIR is ignored', H, "return typeof env.CLAUDE_PROJECT_DIR === 'string' && env.CLAUDE_PROJECT_DIR !== '' ? env.CLAUDE_PROJECT_DIR : fallback;", 'return fallback;'],
   ['the payload is not read through the port parser', H, 'sessionDirectory(tryParsePayload(raw), env, cwd)', "sessionDirectory(raw.startsWith('{') ? JSON.parse(raw) : undefined, env, cwd)"],
   ['a project outside speaks', H, '    if (profile === undefined) return undefined;\n', ''],
-  ['a malfunction is silent', H, "  } catch (error) {\n    context = `Project profile could not be measured", "  } catch (error) {\n    return undefined;\n    context = `Project profile could not be measured"],
-  ['the output names another event', H, "hookEventName: 'SessionStart', additionalContext: context", "hookEventName: 'UserPromptSubmit', additionalContext: context"],
+  ['a malfunction is silent', H, "  } catch (error) {\n    line = `Project profile could not be measured", "  } catch (error) {\n    return undefined;\n    line = `Project profile could not be measured"],
+  ['the output names another event', H, "context('SessionStart', line)", "context('UserPromptSubmit', line)"],
   ['importing the hook runs it', H, 'runWhenMain(import.meta.url, hookMain(sessionStartOutput, readInput));', 'hookMain(sessionStartOutput, readInput)();'],
   ['the hook never runs as the main process', H, 'runWhenMain(import.meta.url, hookMain(sessionStartOutput, readInput));', ''],
 ];
