@@ -45,7 +45,16 @@ process.on('exit', () => {
   process.exitCode = 1;
 });
 
-const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./prompt.mjs');
+// The live rubric (what the hook runs), the v7 module and the v8f candidate, whose text the rubric checks below pin.
+// A missing module is an empty one, so its absence fails checks instead of crashing the run.
+const { MARKER, PROMPT: LIVE_PROMPT, TIMEOUT_SECONDS } = await import('./prompt.mjs');
+const V7 = await import('./rubrics/v7.mjs').catch(() => ({}));
+const { PROMPT = '', PROMPT_SIGNATURE = '' } = await import('./rubrics/v8f.mjs').catch(() => ({}));
+const { createHash } = await import('node:crypto');
+const sha256 = (text) => createHash('sha256').update(text ?? '').digest('hex');
+
+/** The sha256 of the v7 rubric text live on master on 2026-10-25. @es El sha256 del texto v7 vivo en master. */
+const V7_LIVE_SHA256 = 'edceb1c60fc251c65fefcab0b5361aea7ae2b41ebac829a735f54752cbe34ba4';
 const { JUDGES: GATE_JUDGES, hookCommand } = await import('../judge-gate/judges.mjs');
 const { MARKER: PREMISE_MARKER } = await import('../premise-judge/prompt.mjs');
 const { JUDGES, VOICE_MECHANISM, evaluate, journalJudgeBlocks } = await import('../premise-judge/journal-guard.mjs');
@@ -66,7 +75,8 @@ const commandHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks
 
 check('settings: exactly one command Stop hook runs the voice judge through the gate', commandHooks.length, 1);
 check('settings: its timeout is the pinned one', commandHooks[0]?.timeout, TIMEOUT_SECONDS);
-check('rubric: the gate runs this rubric, the single source', GATE_JUDGES.voice.prompt === PROMPT, true);
+check('rubric: the gate runs the live rubric of prompt.mjs, the single source', GATE_JUDGES.voice.prompt === LIVE_PROMPT, true);
+check('rubrics: v7 is byte for byte the text live on master, and the candidate is another text', [sha256(V7.PROMPT), V7.PROMPT_SIGNATURE, PROMPT_SIGNATURE, PROMPT !== V7.PROMPT], [V7_LIVE_SHA256, 'voice-judge rubric v7.', 'voice-judge rubric v8f.', true]);
 check('rubric: starts with its signature', PROMPT.startsWith(`${PROMPT_SIGNATURE}\n`), true);
 check('rubric: the signature is not the premise judge\'s', PROMPT_SIGNATURE.includes('premise-judge'), false);
 check('rubric: one $ and it is $ARGUMENTS', [PROMPT.split('$').length - 1, PROMPT.split('$ARGUMENTS').length - 1], [1, 1]);
@@ -86,7 +96,7 @@ check('rubric: voseo does not rescue a changelog', PROMPT.includes('Voseo does n
 check('rubric: prose that explains the why with a closing is the one exception', PROMPT.includes('full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands'), true);
 check('rubric: prose with a supporting list passes only when the mentor test is met', PROMPT.includes('when prose carries the message, the mentor test of rule 6 is met and a list only supports it (a few short items, or a command block the owner must run)'), true);
 check('rubric: unsure passes only for the tuteo and enumeration rules', PROMPT.includes('When unsure whether rule 4 or rule 8 applies, answer {"ok": true}.'), true);
-check('rubric: the signature is the v8 line', PROMPT_SIGNATURE, 'voice-judge rubric v8.');
+check('rubric: the signature is the v8f line', PROMPT_SIGNATURE, 'voice-judge rubric v8f.');
 check('rubric: tuteo fails only on a quoted tú or usted word, never on a reply with no second person', PROMPT.includes('Rule 4 fails only a tú or usted word that actually appears, and the reason must quote it: a reply with no second-person verb at all'), true);
 check('rubric: the mentor test needs every trait the reply needs observable', PROMPT.includes('which means every trait below that the reply needs is observable in it'), true);
 check('rubric: a reply fails when a trait it needs is absent', PROMPT.includes('Answer {"ok": false} when a trait the reply needs is absent.'), true);
@@ -180,7 +190,19 @@ check('measure: --rubric with an empty value is an error', await thrown(() => me
 const loaded = (file) => measure.loadRubric(file).catch((error) => ({ error: String(error?.message) }));
 
 check('measure: a rubric module brings its own prompt and marker', await loaded(goodRubric), { path: goodRubric, prompt: 'judge $ARGUMENTS', marker: 'X-JUDGE:' });
-check('measure: the current rubric loads with the marker of prompt.mjs', await loaded(measure.DEFAULT_RUBRIC).then((rubric) => [rubric.prompt === PROMPT, rubric.marker]), [true, MARKER]);
+check('measure: the current rubric loads with the marker of prompt.mjs', await loaded(measure.DEFAULT_RUBRIC).then((rubric) => [rubric.prompt === LIVE_PROMPT, rubric.marker]), [true, MARKER]);
+check('measure: --rubric measures v7 or the v8f candidate by name', [measure.rubricPathOf(['--rubric', 'v7']), measure.rubricPathOf(['--rubric', 'v8f'])], [path.join(HERE, 'rubrics', 'v7.mjs'), path.join(HERE, 'rubrics', 'v8f.mjs')]);
+check('measure: a named rubric loads its own text', [await loaded(measure.rubricPathOf(['--rubric', 'v7'])).then((rubric) => rubric.prompt === V7.PROMPT), await loaded(measure.rubricPathOf(['--rubric', 'v8f'])).then((rubric) => rubric.prompt === PROMPT)], [true, true]);
+
+// --- PROMOTION: the live rubric is v7 until measure.mjs records the ship bar MET for the exact live text.
+const metRecord = (prompt) => ({ promptSha256: sha256(prompt), met: true });
+
+check('promotion: v7 is always allowed live', measure.promotionAllowed(V7.PROMPT ?? 'v7', V7.PROMPT ?? 'v7', undefined), true);
+check('promotion: another rubric is allowed only with a MET record of its exact text', [measure.promotionAllowed(PROMPT, V7.PROMPT, undefined), measure.promotionAllowed(PROMPT, V7.PROMPT, { promptSha256: sha256(PROMPT), met: false }), measure.promotionAllowed(PROMPT, V7.PROMPT, metRecord(`${PROMPT} `)), measure.promotionAllowed(PROMPT, V7.PROMPT, metRecord(PROMPT))], [false, false, false, true]);
+check('promotion: the live rubric is allowed by the recorded ship bar', measure.promotionAllowed(LIVE_PROMPT, V7.PROMPT, measure.readShipBarRecord()), true);
+check('promotion: the hook runs v7 while the recorded ship bar has not passed', [measure.readShipBarRecord()?.met === true, LIVE_PROMPT === V7.PROMPT], [false, true]);
+check('promotion: the ship-bar record lives beside the rubrics', measure.SHIP_BAR_RECORD, path.join(HERE, 'ship-bar.json'));
+check('promotion: a ship-bar record names the rubric, its text hash, the verdict and the owner labels', measure.shipBarRecord({ path: '/r/v8f.mjs', prompt: 'P $ARGUMENTS' }, { met: false, en: 'not enough owner labels (2/10)' }, 2, 6, '2026-10-25'), { rubric: '/r/v8f.mjs', promptSha256: sha256('P $ARGUMENTS'), met: false, verdict: 'not enough owner labels (2/10)', ownerLabels: 2, runs: 6, measuredOn: '2026-10-25' });
 check('measure: a module with no PROMPT is an error', await thrown(() => measure.loadRubric(noPrompt)), `the rubric module ${noPrompt} exports no PROMPT string holding $ARGUMENTS`);
 check('measure: a PROMPT without $ARGUMENTS is an error', await thrown(() => measure.loadRubric(promptWithoutInput)), `the rubric module ${promptWithoutInput} exports no PROMPT string holding $ARGUMENTS`);
 check('measure: a module with no MARKER is an error', await thrown(() => measure.loadRubric(noMarker)), `the rubric module ${noMarker} exports no MARKER string`);
@@ -248,11 +270,18 @@ const pinnedCount = readdirSync(path.join(HERE, 'fixtures')).filter((name) => na
 console.log = (text) => printedLines.push(String(text));
 printedLines.splice(0);
 
-const prefixExit = await measure.main(['--rates', '--runs', '2', '--parallel', '3', '--prefix', 'held-owner-', '--rubric', goodRubric], { ask: fakeAsk }).catch((error) => `threw: ${error.message}`);
+const written = [];
+const writeRecord = (record) => written.push(record);
+const prefixExit = await measure.main(['--rates', '--runs', '2', '--parallel', '3', '--prefix', 'held-owner-', '--rubric', goodRubric], { ask: fakeAsk, writeRecord }).catch((error) => `threw: ${error.message}`);
 const prefixLines = printedLines.splice(0);
+const prefixAsked = asked.splice(0);
+const recordExit = await measure.main(['--rates', '--runs', '1', '--prefix', 'held-owner-', '--record', '--rubric', goodRubric, '--only', 'held-owner-red-5f411d3c-10181322'], { ask: fakeAsk, writeRecord }).catch((error) => `threw: ${error.message}`);
+
+printedLines.splice(0);
+check('measure: --rates writes the ship-bar record only with --record, for the rubric it measured', [recordExit, written.length, written[0]?.rubric, written[0]?.promptSha256, written[0]?.met, written[0]?.ownerLabels, written[0]?.runs, /^\d{4}-\d{2}-\d{2}$/.test(written[0]?.measuredOn ?? '')], [1, 1, goodRubric, sha256('judge $ARGUMENTS'), false, 1, 1, true]);
 
 console.log = consoleLog;
-check('measure: --prefix selects what --rates measures, plus every rule-4 pin, once per run', [prefixExit, asked.length, asked.filter((prompt) => prompt.includes('Ya tomé la decisión que me pidió Discovery')).length], [1, 2 * (1 + pinnedCount), 2]);
+check('measure: --prefix selects what --rates measures, plus every rule-4 pin, once per run', [prefixExit, prefixAsked.length, prefixAsked.filter((prompt) => prompt.includes('Ya tomé la decisión que me pidió Discovery')).length], [1, 2 * (1 + pinnedCount), 2]);
 check('measure: --parallel keeps that many model calls in flight, and no more', maxInFlight, 3);
 check('measure: a scored miss is printed with how it was judged', prefixLines.filter((line) => line.startsWith('    missed red held-owner-')), Array(2).fill('    missed red held-owner-red-5f411d3c-10181322, judged pass @es rojo no detectado held-owner-red-5f411d3c-10181322, juzgado pasa'));
 check('measure: --rates measures the held-out set by default, and the bar needs 10 owner labels', [measure.DEFAULT_PREFIX, measure.OWNER_LABELS_NEEDED], ['held-', 10]);

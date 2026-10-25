@@ -15,11 +15,27 @@ import { fileURLToPath } from 'node:url';
 
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
-const PROMPT = 'voice-judge/prompt.mjs';
+const PROMPT = 'voice-judge/rubrics/v8f.mjs';
+const LIVE = 'voice-judge/prompt.mjs';
+const V7 = 'voice-judge/rubrics/v7.mjs';
+const MARKER_FILE = 'voice-judge/marker.mjs';
 const GUARD = 'premise-judge/journal-guard.mjs';
 const MEASURE = 'voice-judge/measure.mjs';
 
 const MUTANTS = [
+  // --- WHICH RUBRIC IS LIVE, AND WHAT ALLOWS A PROMOTION.
+  ['the candidate v8f goes live without a MET ship-bar record', LIVE, "export { PROMPT, PROMPT_SIGNATURE } from './rubrics/v7.mjs';", "export { PROMPT, PROMPT_SIGNATURE } from './rubrics/v8f.mjs';"],
+  ['the live v7 text drifts from the one on master', V7, "'5. Answer {\"ok\": true} when the message is one or two lines with no status content.',", "'5. Answer {\"ok\": true} when the message is one or two short lines with no status content.',"],
+  ['--rubric no longer takes a rubric by name', MEASURE, 'return RUBRICS[value] ?? path.resolve(value);', 'return path.resolve(value);'],
+  ['the v8f name measures v7', MEASURE, "v8f: path.join(HERE, 'rubrics', 'v8f.mjs')", "v8f: path.join(HERE, 'rubrics', 'v7.mjs')"],
+  ['v7 needs a record to stay live', MEASURE, 'livePrompt === v7Prompt || ', ''],
+  ['a record that did not meet the bar allows a promotion', MEASURE, 'record?.met === true && ', 'record !== undefined && '],
+  ['a MET record of another text allows a promotion', MEASURE, ' && record.promptSha256 === sha256(livePrompt)', ''],
+  ['the record lives somewhere else', MEASURE, "path.join(HERE, 'ship-bar.json')", "path.join(HERE, 'ship-bar-other.json')"],
+  ['the record does not hash the rubric text', MEASURE, 'promptSha256: sha256(rubric.prompt)', "promptSha256: ''"],
+  ['--rates never writes the record', MEASURE, 'if (record !== undefined) record(', 'if (false) record('],
+  ['--rates writes the record without --record', MEASURE, "argv.includes('--record') ? writeRecord : undefined", 'writeRecord'],
+
   // --- THE RUBRIC AND ITS WIRING.
   ['the rubric stops telling the model it may see the rewrite after a block', PROMPT, "  '1. The input may be a first stop or the rewrite after a block (stop_hook_active true), and you judge both the same way, by the rules below.',\n", ''],
   ['the rubric asks the model to test stop_hook_active again', PROMPT, 'by the rules below.', 'by the rules below. If the input field stop_hook_active is true, answer ok.'],
@@ -51,8 +67,8 @@ const MUTANTS = [
   ['a short reply passes before voseo is judged', PROMPT, "'3. Answer {\"ok\": true} when the message is addressed", "'0. Answer {\"ok\": true} when it is one or two lines with no status content.',\n  '3. Answer {\"ok\": true} when the message is addressed"],
   ['the rubric spells the marker literally', PROMPT, 'starts with the word VOICE-JUDGE followed by a colon', 'starts with VOICE-JUDGE:'],
   ['the rubric loses its signature line', PROMPT, '  PROMPT_SIGNATURE,\n', ''],
-  ['the pinned timeout is not the settings one', PROMPT, 'TIMEOUT_SECONDS = 30', 'TIMEOUT_SECONDS = 20'],
-  ['the marker is not what the rubric spells', PROMPT, "MARKER = 'VOICE-JUDGE:'", "MARKER = 'VOICE JUDGE:'"],
+  ['the pinned timeout is not the settings one', LIVE, 'TIMEOUT_SECONDS = 30', 'TIMEOUT_SECONDS = 20'],
+  ['the marker is not what the rubric spells', MARKER_FILE, "MARKER = 'VOICE-JUDGE:'", "MARKER = 'VOICE JUDGE:'"],
 
   // --- RULE 4: UNACCENTED VOSEO AND THE FORMS TU AND VOS SHARE (DECISION 4).
   ['voseo typed without its accent can fail as tuteo', PROMPT, ' Voseo typed without its written accent is still voseo: a verb whose letters match the vos form once accents are ignored is read as that vos form, never as a tú form.', ''],
@@ -62,8 +78,8 @@ const MUTANTS = [
 
   // --- THE MENTOR TEST OF RUBRIC V8 AND ITS FEEDBACK.
   ['the rubric blocks prose with a supporting list', PROMPT, 'Answer {"ok": true} when prose carries the message, the mentor test of rule 6 is met and a list only supports it', 'Answer ok false when a list is present'],
-  ['the signature is still v1', PROMPT, "'voice-judge rubric v8.'", "'voice-judge rubric v1.'"],
-  ['the signature is the premise judge\'s', PROMPT, "'voice-judge rubric v8.'", "'premise-judge rubric v2.'"],
+  ['the signature is still v1', PROMPT, "'voice-judge rubric v8f.'", "'voice-judge rubric v1.'"],
+  ['the signature is the premise judge\'s', PROMPT, "'voice-judge rubric v8f.'", "'premise-judge rubric v2.'"],
   ['the rubric blocks when unsure about tuteo and enumerations', PROMPT, 'When unsure whether rule 4 or rule 8 applies, answer {"ok": true}.', 'When unsure whether rule 4 or rule 8 applies, answer ok false.'],
   ['the mentor test needs only one trait', PROMPT, 'which means every trait below that the reply needs is observable in it', 'which means one of these traits is observable in it'],
   ['a reply missing a trait passes', PROMPT, 'Answer {"ok": false} when a trait the reply needs is absent.', 'Answer {"ok": true} when a trait the reply needs is absent.'],
@@ -143,7 +159,7 @@ const MUTANTS = [
   // --- THE MODEL CALLS: ASYNCHRONOUS, BOUNDED, INJECTABLE.
   ['the model runs through the blocking spawn again', MEASURE, 'MODEL_SPAWN = spawnAsync;', 'MODEL_SPAWN = undefined;'],
   ['--parallel keeps one call in flight', MEASURE, 'Array.from({ length: parallel }, async', 'Array.from({ length: 1 }, async'],
-  ['--rates drops the injected model call', MEASURE, "Number(option('--parallel', '6')), rubric, ask);", "Number(option('--parallel', '6')), rubric);"],
+  ['--rates drops the injected model call', MEASURE, "Number(option('--parallel', '6')), rubric, ask, ", "Number(option('--parallel', '6')), rubric, undefined, "],
   ['--prefix is ignored', MEASURE, "option('--prefix', DEFAULT_PREFIX)", 'DEFAULT_PREFIX'],
   ['a scored miss loses how it was judged', MEASURE, "verdict: judgedFor(fixture).verdict, reason: judgedFor(fixture).reason", "verdict: true, reason: ''"],
   ['a missed red is printed without its verdict', MEASURE, ', judged ${shown(verdict)} @es rojo no detectado', ' @es rojo no detectado'],

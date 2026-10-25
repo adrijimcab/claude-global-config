@@ -6,8 +6,12 @@
  * script is the measurement of what the text DOES. It is a tool, not a gate: it calls a model (cost, latency,
  * nondeterminism), so no selftest runs a model through it; the selftest pins its pure parts (the rubric it loads,
  * the summary it prints). Usage:
- * `node voice-judge/measure.mjs [--runs N] [--model haiku] [--only id,id] [--rubric path/to/prompt.mjs]
- * [--rates [--prefix held-] [--parallel 6]]`. Every output starts with the path of the rubric it ran.
+ * `node voice-judge/measure.mjs [--runs N] [--model haiku] [--only id,id] [--rubric v7|v8f|path/to/rubric.mjs]
+ * [--rates [--prefix held-] [--parallel 6] [--record]]`. Every output starts with the path of the rubric it ran.
+ * `--record` writes the ship-bar verdict of the run, with the sha256 of the rubric text, to `ship-bar.json`, the
+ * record that alone allows a rubric other than v7 to go live (`prompt.mjs`).
+ * @es `--rubric` toma un nombre (v7, v8f) o una ruta; `--record` escribe el veredicto de la barra, con el sha256 del
+ * texto de la rúbrica, en `ship-bar.json`, el único registro que permite poner viva otra rúbrica que la v7.
  *
  * LABELS. A fixture's `expect` is `pass` or `fail`, a scored label, or `unadjudicated`. A scored label records who
  * set it in `labelledBy`: `owner` (the owner judged that very reply; `labelledOn` holds the date) or `author` (a
@@ -35,7 +39,8 @@
  * si la barra no se alcanza o no se puede calcular; con 2 si `--rubric` es incorrecto.
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -67,8 +72,43 @@ export function rubricPathOf(argv) {
     throw new Error('--rubric needs the path of a rubric module after it @es --rubric necesita a continuación la ruta de un módulo de rúbrica');
   }
 
-  return path.resolve(value);
+  return RUBRICS[value] ?? path.resolve(value);
 }
+
+/** The rubrics `--rubric` takes by name: the live v7 and the v8f candidate. @es Las rúbricas que `--rubric` toma por nombre. */
+export const RUBRICS = { v7: path.join(HERE, 'rubrics', 'v7.mjs'), v8f: path.join(HERE, 'rubrics', 'v8f.mjs') };
+
+/** Where `--record` writes the ship-bar verdict that promotion reads. @es Donde `--record` escribe el veredicto de la barra que lee la promoción. */
+export const SHIP_BAR_RECORD = path.join(HERE, 'ship-bar.json');
+
+/** The sha256 of a rubric text. @es El sha256 del texto de una rúbrica. */
+const sha256 = (text) => createHash('sha256').update(text).digest('hex');
+
+/**
+ * The record `--record` writes: the rubric measured, the sha256 of its text, the ship-bar verdict, the owner labels
+ * and runs it rested on, and the date. @es El registro que escribe `--record`: la rúbrica medida, el sha256 de su
+ * texto, el veredicto de la barra, las etiquetas del dueño y las corridas en que se apoyó, y la fecha.
+ */
+export const shipBarRecord = (rubric, bar, ownerLabels, runs, measuredOn) => ({ rubric: rubric.path, promptSha256: sha256(rubric.prompt), met: bar.met, verdict: bar.en, ownerLabels, runs, measuredOn });
+
+/** The ship-bar record on disk, or `undefined` when there is none. @es El registro de la barra en disco, o `undefined` si no hay. */
+export function readShipBarRecord() {
+  try {
+    return JSON.parse(readFileSync(SHIP_BAR_RECORD, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether `livePrompt` may be the live rubric: v7 always may; any other text only when `record` holds the ship bar
+ * MET for that exact text. @es Si `livePrompt` puede ser la rúbrica viva: la v7 siempre; cualquier otro texto solo
+ * cuando `record` tiene la barra ALCANZADA para ese texto exacto.
+ */
+export const promotionAllowed = (livePrompt, v7Prompt, record) => livePrompt === v7Prompt || (record?.met === true && record.promptSha256 === sha256(livePrompt));
+
+/** Writes the ship-bar record to `SHIP_BAR_RECORD`. @es Escribe el registro de la barra en `SHIP_BAR_RECORD`. */
+const writeShipBarRecord = (record) => writeFileSync(SHIP_BAR_RECORD, `${JSON.stringify(record, null, 2)}\n`);
 
 /**
  * The rubric module at `file`: its `PROMPT` (a string holding `$ARGUMENTS`) and its `MARKER` (a non-empty string),
@@ -281,7 +321,7 @@ async function judge(message, model, rubric, ask) {
  * ends with the ship-bar verdict of the owner set. @es La vista de calibración: ejecuta los fixtures `runs` veces,
  * `parallel` llamadas a la vez, imprime el resumen de cada corrida y cierra con el veredicto de la barra del dueño.
  */
-async function rates(fixtures, runs, model, parallel, rubric, ask) {
+async function rates(fixtures, runs, model, parallel, rubric, ask, record) {
   const jobs = fixtures.flatMap((fixture) => Array.from({ length: runs }, (_, run) => ({ fixture, run })));
   const results = new Map();
   let next = 0;
@@ -312,15 +352,18 @@ async function rates(fixtures, runs, model, parallel, rubric, ask) {
   const bar = shipBarOf(ownerSets);
 
   console.log(`rubric=${rubric.path} cost=$${cost.toFixed(4)} ship-bar(owner labels, every run: recall>=90% and precision>=95%)=${bar.en} @es rúbrica=${rubric.path} costo=$${cost.toFixed(4)} barra(etiquetas del dueño, toda corrida: recall>=90% y precisión>=95%)=${bar.es}`);
+  if (record !== undefined) record(shipBarRecord(rubric, bar, (ownerSets[0]?.red ?? 0) + (ownerSets[0]?.green ?? 0), runs, new Date().toISOString().slice(0, 10)));
 
   return bar.met ? 0 : 1;
 }
 
 /**
  * The command line: exit 0, 1 (a label or the ship bar missed) or 2 (a wrong `--rubric`). `ask` is the model call,
- * injected only by the selftest. @es La línea de comandos; `ask` es la llamada al modelo, que solo inyecta el selftest.
+ * injected only by the selftest, like `writeRecord`, what `--record` does with the ship-bar record.
+ * @es La línea de comandos; `ask` es la llamada al modelo y `writeRecord` lo que `--record` hace con el registro de
+ * la barra, y solo el selftest los inyecta.
  */
-export async function main(argv, { ask = askTheModel } = {}) {
+export async function main(argv, { ask = askTheModel, writeRecord = writeShipBarRecord } = {}) {
   const option = (name, fallback) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : fallback);
   let rubric;
 
@@ -338,7 +381,7 @@ export async function main(argv, { ask = askTheModel } = {}) {
   const only = option('--only', '')?.split(',').filter(Boolean);
   const fixtures = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json')).map((name) => JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8'))).filter((fixture) => only.length === 0 || only.includes(fixture.id));
 
-  if (argv.includes('--rates')) return rates(ratesFixtures(fixtures, option('--prefix', DEFAULT_PREFIX)), runs, model, Number(option('--parallel', '6')), rubric, ask);
+  if (argv.includes('--rates')) return rates(ratesFixtures(fixtures, option('--prefix', DEFAULT_PREFIX)), runs, model, Number(option('--parallel', '6')), rubric, ask, argv.includes('--record') ? writeRecord : undefined);
 
   let wrong = 0;
   let cost = 0;
