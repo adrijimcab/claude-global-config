@@ -543,9 +543,10 @@ const failing = (codes) => {
   check('K-E: a break that faults is thrown as itself, about the stale lock, and the breaker failure is only reported', [kept.threw, /could not be broken/.test(kept.message), kept.file, breakerReports.length], ['LockFault', true, faultTarget, 1]);
 
   const gone = stale();
-  const already = outcomeOf(() => lock.takeLock(gone, options({ remove: (target) => { rmSync(target, { force: true }); if (target.endsWith('.breaker')) throw failure('ENOENT'); } })));
+  breakerReports.length = 0;
+  const already = outcomeOf(() => lock.takeLock(gone, options({ remove: (target) => { rmSync(target, { force: true }); if (target.endsWith('.breaker')) throw failure('ENOENT'); }, report: tellTo })));
 
-  check('K-E: a breaker already gone at its release is no fault', already, true);
+  check('K-E: a breaker already gone at its release is no fault, and nothing is reported', [already, breakerReports.length], [true, 0]);
   lock.releaseLock(gone);
 }
 
@@ -579,6 +580,9 @@ const failing = (codes) => {
   };
 
   check('a stale lock still delete-pending when the budget is spent is not-held, never a "could not be broken" fault', outcomeOf(() => lock.takeLock(pendingStale, options({ platform: 'win32', attempts: 3, remove: pendingRemoval, spent: () => true }))), false);
+  // A create that is delete-pending with the budget spent: the take stops, never "could not be created".
+  // @es Una creación pendiente de borrado con el presupuesto agotado: la toma para, nunca «no se pudo crear».
+  check('a create still delete-pending when the budget is spent is not-held, never a "could not be created" fault', outcomeOf(() => lock.takeLock(file('spent-create'), options({ attempts: 3, create: failing(['EPERM']), spent: () => true }))), false);
   check('NEAR MISS: the same stale lock with budget to spare is still the fault after every attempt', outcomeOf(() => lock.takeLock(pendingStale, options({ platform: 'win32', attempts: 3, remove: pendingRemoval }))).threw, 'LockFault');
 }
 

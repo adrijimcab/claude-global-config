@@ -69,11 +69,11 @@ const MUTANTS = [
   ['the breaker release is not given the take\'s wait', L, 'remove, platform, report, wait };', 'remove, platform, report, wait: () => undefined };'],
 
   // --- the break journal (K-D says so)
-  ['a break is not journaled', L, '    if (outcome.removed) recordBreak(lockFile, lockFile, judged, settings);\n', ''],
+  ['a break is not journaled', L, '  if (outcome.removed) recordBreak(lockFile, lockFile, judged, settings);\n', ''],
   ['the removal of a dead breaker is not journaled', L, '      if (outcome.removed) recordBreak(lockFile, breaker, dead, settings);\n', ''],
   ['L2: a break journal that cannot be written fails the take', L, "  } catch (error) {\n    report(bilingual('lock-break-journal-fault'", "  } catch (error) {\n    throw error; report(bilingual('lock-break-journal-fault'"],
   ['L2: a break journal that cannot be written is not reported', L, "    report(bilingual('lock-break-journal-fault', {", "    void (bilingual('lock-break-journal-fault', {"],
-  ['L2: the default reporter of a take prints nothing', L, 'remove = removeFile, platform = process.platform, report = toStderr } = {}', 'remove = removeFile, platform = process.platform, report = () => undefined } = {}'],
+  ['L2: the default reporter of a take prints nothing', L, 'platform = process.platform, report = toStderr, spent', 'platform = process.platform, report = () => undefined, spent'],
   ['the reporter writes nothing to stderr', L, "const toStderr = (line) => process.stderr.write(`${line}\\n`);", 'const toStderr = (line) => void line;'],
   ['the journal names one reason for every break', L, 'reason: judged.reason, token', "reason: 'dead-owner', token"],
   ['the journal loses the age', L, 'const ageMs = Math.round(judged.ageMs);', 'const ageMs = 0;'],
@@ -110,7 +110,7 @@ const MUTANTS = [
   ['K-F: a fault message is its bare id, not the bilingual text', L, 'new LockFault(bilingual(id, {', 'new LockFault(id, ({'],
 
   // --- the attempts
-  ['the taker never pauses between attempts', L, '      wait();\n', ''],
+  ['the taker never pauses between attempts', L, '      wait();\n      if (spent()) return false;', '      if (spent()) return false;'],
   ['one attempt too many is made', L, 'attempt < attempts', 'attempt <= attempts'],
   ['the default retry bound shrinks to one attempt', L, 'attempts = 40', 'attempts = 1'],
 
