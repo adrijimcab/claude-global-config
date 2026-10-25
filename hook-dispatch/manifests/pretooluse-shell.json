@@ -6,6 +6,7 @@
     "../../exit-code-guard/guard.mjs",
     "../../collision-guard/guard.mjs",
     "../../commit-pathspec-guard/guard.mjs",
+    "../../commit-index-guard/pre-commit.mjs",
     "../../cwd-change-guard/guard.mjs",
     "../../vendored-edit-guard/guard.mjs",
     "../../review-cwd-guard/guard.mjs",

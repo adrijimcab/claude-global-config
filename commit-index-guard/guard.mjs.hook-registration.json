@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PostToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "after a successful `git commit` that named a pathspec, the repository's own pre-commit hook (lint-staged: eslint --fix, prettier) rewrites the working files and `git status` shows MM on the committed paths; the next commit swept the stale staged variant in (three Discovery reports, 2026-10-19 and after). Without this PostToolUse registration the agent is never told."
+}
