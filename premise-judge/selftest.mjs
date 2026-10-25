@@ -51,9 +51,13 @@ await new Promise((resolve) => setTimeout(resolve, 100));
 
 let passed = 0;
 const failures = [];
+const failedLabels = [];
 const check = (label, actual, expected) => {
   if (JSON.stringify(actual) === JSON.stringify(expected)) passed++;
-  else failures.push(`${label}: got ${JSON.stringify(actual)?.slice(0, 200)}, expected ${JSON.stringify(expected)?.slice(0, 200)}`);
+  else {
+    failures.push(`${label}: got ${JSON.stringify(actual)?.slice(0, 200)}, expected ${JSON.stringify(expected)?.slice(0, 200)}`);
+    failedLabels.push(label);
+  }
 };
 
 // --- WIRING. @es CABLEADO.
@@ -201,6 +205,33 @@ check('hook: a missing transcript fails open', (() => {
     }
   };
 
+  // A virtual platform clock for one call: `Date.now` and the sleep under the lock's pause (`Atomics.wait`) advance
+  // a counter instead of real time, so the hook's OWN default budget is proved by what it slept, never by how long
+  // a loaded machine took. @es Un reloj de plataforma virtual para una llamada: `Date.now` y el sueño bajo la pausa
+  // del lock (`Atomics.wait`) avanzan un contador en vez del tiempo real, así que el presupuesto POR DEFECTO del
+  // hook se prueba por lo que durmió, nunca por lo que tardó una máquina cargada.
+  const onVirtualClock = (action) => {
+    const realNow = Date.now;
+    const realWait = Atomics.wait;
+    const slept = [];
+    let virtual = realNow();
+
+    Date.now = () => virtual;
+    Atomics.wait = (_array, _index, _value, ms) => {
+      slept.push(ms);
+      virtual += ms;
+
+      return 'timed-out';
+    };
+
+    try {
+      return { value: action(), slept: slept.reduce((sum, ms) => sum + ms, 0), longest: Math.max(0, ...slept) };
+    } finally {
+      Date.now = realNow;
+      Atomics.wait = realWait;
+    }
+  };
+
   process.env.HOOK_STATE_DIR = ISOLATED;
 
   try {
@@ -220,21 +251,21 @@ check('hook: a missing transcript fails open', (() => {
     rmSync(firesPath(MECHANISM), { force: true });
     writeFileSync(`${firesPath(MECHANISM)}.lock`, '');
 
-    const started = Date.now();
-    const verdict = evaluate(JSON.stringify(stopPayload(both, { session_id: 'j3' })));
+    // Thirteen waits of 15 ms on the busy counter, none on the free one: 195 ms slept. @es Trece esperas de 15 ms.
+    const one = onVirtualClock(() => evaluate(JSON.stringify(stopPayload(both, { session_id: 'j3' }))));
 
-    check('J-1: a busy counter costs the hook at most about 200 ms and no block', [verdict, Date.now() - started < 1_500, count('voice-judge'), records(MECHANISM).length, records('voice-judge').length], [undefined, true, 2, 2, 3]);
+    check('J-1: a busy counter costs the hook at most its 200 ms budget of sleep, and no block', [one.value, one.slept, one.longest <= 15, count('voice-judge'), records(MECHANISM).length, records('voice-judge').length], [undefined, 195, true, 2, 2, 3]);
 
     // L5: BOTH counters held by other processes: the two judges share one budget, so the Stop waits about 200 ms
     // in all, not 200 ms per judge. @es L5: AMBOS contadores ocupados: los dos jueces comparten un presupuesto, así
     // que el Stop espera unos 200 ms en total, no 200 por juez.
     writeFileSync(`${firesPath('voice-judge')}.lock`, '');
 
-    const bothStarted = Date.now();
-    const bothVerdict = evaluate(JSON.stringify(stopPayload(both, { session_id: 'j4' })));
-    const bothSpent = Date.now() - bothStarted;
+    // One shared budget: 195 ms for the first judge, the last 5 for the second; a budget per judge would sleep 390.
+    // @es Un presupuesto compartido: 195 ms para el primer juez y los 5 restantes para el segundo; uno por juez, 390.
+    const two = onVirtualClock(() => evaluate(JSON.stringify(stopPayload(both, { session_id: 'j4' }))));
 
-    check('L5: two busy counters cost the Stop about 200 ms in all, and no block', [bothVerdict, bothSpent > 150, bothSpent < 330, records(MECHANISM).length, records('voice-judge').length], [undefined, true, true, 3, 4]);
+    check('L5: two busy counters cost the Stop 200 ms of sleep in all, not 200 per judge, and no block', [two.value, two.slept, two.longest <= 15, records(MECHANISM).length, records('voice-judge').length], [undefined, 200, true, 3, 4]);
   } finally {
     process.env.HOOK_STATE_DIR = saved;
     rmSync(ISOLATED, { recursive: true, force: true });
@@ -306,7 +337,10 @@ check('cli: --since drops older summaries', [recent.code, recent.report.withJudg
 check('cli: an unknown option is refused', (await run(['--nope'])).code, 2);
 check('cli: a date that is not one is refused', (await run(['--since', 'yesterday'])).code, 2);
 
-for (const failure of failures) console.log(`FAIL ${failure}`);
-console.log(`${passed}/${passed + failures.length} passed`);
+// A red run is never anonymous: the details go to stderr, and the last line of stdout, which every runner shows,
+// names each failing check. @es Una corrida roja nunca es anónima: el detalle va a stderr y la última línea de
+// stdout, la que muestra todo runner, nombra cada check que falló.
+for (const failure of failures) console.error(`FAIL ${failure}`);
+console.log(`${passed}/${passed + failures.length} passed${failedLabels.length === 0 ? '' : ` — FAILED: ${failedLabels.join(' | ')}`}`);
 summarised = true;
 process.exitCode = failures.length === 0 ? 0 : 1;

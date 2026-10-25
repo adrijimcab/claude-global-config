@@ -47,6 +47,7 @@ process.env.HOOK_CLAUDE_HOME = claudeRoot;
 
 let passed = 0;
 const failures = [];
+const failedNames = [];
 
 function check(name, actual, expected) {
   if (JSON.stringify(actual) === JSON.stringify(expected)) {
@@ -56,6 +57,7 @@ function check(name, actual, expected) {
   }
 
   failures.push(`${name} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  failedNames.push(name);
 }
 
 function thrown(action) {
@@ -225,7 +227,17 @@ try {
   notThrown(() => incrementFires('guard-v'));
   const spent = Date.now() - started;
 
-  check('J-1: with the real pause, a busy counter gives up after about 200 ms (more than 150, less than 350)', [spent > 150, spent < 350], [true, true]);
+  // The only check on real time: it proves the DEFAULT sleeper really sleeps, which no injected one can. The lower
+  // bound is the proof (the budget sleeps about 200 ms, so less than 150 means it did not sleep); load only makes a
+  // run longer, so it cannot redden it. The upper bound only separates the 200 ms budget from the lock's own
+  // default of 40 pauses of 50 ms (2 s): 1 s is five times the budget and half that default. How the budget is
+  // spent is proved with an injected clock below, never here.
+  // @es El único check con tiempo real: prueba que el durmiente POR DEFECTO duerme de verdad, algo que ninguno
+  // inyectado puede. La cota inferior es la prueba (el presupuesto duerme unos 200 ms; menos de 150 es que no
+  // durmió); la carga solo alarga una corrida, así que no la pone en rojo. La cota superior solo separa el
+  // presupuesto de 200 ms del valor por defecto del lock, 40 pausas de 50 ms (2 s): 1 s es cinco veces el
+  // presupuesto y la mitad de ese valor. Cómo se gasta el presupuesto se prueba abajo con un reloj inyectado.
+  check('J-1: with the real pause, a busy counter really sleeps and gives up well before the lock default (more than 150 ms, less than 1 s)', [spent > 150, spent < 1_000], [true, true]);
 
   mkdirSync(path.dirname(firesPath('guard-x')), { recursive: true });
   writeFileSync(firesPath('guard-x'), '{not json');
@@ -273,12 +285,16 @@ try {
     writeFileSync(`${firesPath(busyOne)}.lock`, '');
   }
 
-  const budget = journal.firesBudget?.();
-  const sharedStart = Date.now();
+  // On the injected clock and sleeper, so the bound is read from what the budget slept, never from how long a
+  // loaded machine took: one shared budget sleeps 200 ms for both (195 for the first, 5 for the second); a budget
+  // per counter would sleep 390. @es Con el reloj y el durmiente inyectados, la cota se lee de lo que durmió el
+  // presupuesto y nunca de lo que tardó una máquina cargada: compartido duerme 200 ms para ambos; uno por contador, 390.
+  let sharedNow = 0;
+  const sharedSlept = [];
+  const budget = journal.firesBudget?.({ now: () => sharedNow, sleep: (ms) => { sharedSlept.push(ms); sharedNow += ms; } });
   const sharedOutcomes = ['guard-s1', 'guard-s2'].map((one) => notThrown(() => incrementFires(one, { lock: budget })));
-  const sharedSpent = Date.now() - sharedStart;
 
-  check('L5: two busy counters under one shared budget are both not counted, in about 200 ms together', [sharedOutcomes, sharedSpent > 150, sharedSpent < 330], [[null, null], true, true]);
+  check('L5: two busy counters under one shared budget are both not counted, and sleep 200 ms together, not 200 each', [sharedOutcomes, sharedSlept.reduce((sum, ms) => sum + ms, 0), sharedSlept.every((ms) => ms <= 15)], [[null, null], 200, true]);
 
   let fakeNow = 0;
   const slept = [];
@@ -304,9 +320,12 @@ try {
   rmSync(scratch, { recursive: true, force: true });
 }
 
+// A red run is never anonymous: the details go to stderr, and the last line of stdout, which every runner shows,
+// names each failing check. @es Una corrida roja nunca es anónima: el detalle va a stderr y la última línea de
+// stdout, la que muestra todo runner, nombra cada check que falló.
 if (failures.length > 0) {
   for (const failure of failures) console.error(`FAIL: ${failure}`);
-  console.error(`${failures.length} failed, ${passed} passed`);
+  console.log(`${failures.length} failed, ${passed} passed — FAILED: ${failedNames.join(' | ')}`);
   process.exit(1);
 }
 
