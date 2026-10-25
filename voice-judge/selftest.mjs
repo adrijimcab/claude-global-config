@@ -90,9 +90,12 @@ check('rubric: the signature is the v8 line', PROMPT_SIGNATURE, 'voice-judge rub
 check('rubric: tuteo fails only on a quoted tú or usted word, never on a reply with no second person', PROMPT.includes('Rule 4 fails only a tú or usted word that actually appears, and the reason must quote it: a reply with no second-person verb at all'), true);
 check('rubric: the mentor test needs every trait the reply needs observable', PROMPT.includes('which means every trait below that the reply needs is observable in it'), true);
 check('rubric: a reply fails when a trait it needs is absent', PROMPT.includes('Answer {"ok": false} when a trait the reply needs is absent.'), true);
-check('rubric: (a) and (b) hold for every judged reply, (c) and (d) when it carries a decision, an explanation or a correction', PROMPT.includes('Which traits a reply needs: (a) and (b) hold for every reply rule 6 judges, and (c) and (d) are needed when the reply carries a decision, an explanation or a correction.'), true);
-check('rubric: a short operational reply needs (a), must not be a third-person log, and needs neither (c) nor (d)', PROMPT.includes('A short operational reply, at most one paragraph of status that carries no decision, no explanation and no correction, needs (a) and must not be a third-person log, which is all that (b) asks of a reply with no decision; it needs neither (c) nor (d).'), true);
-check('rubric: trait a follows the language of the reply, direct second person in English', PROMPT.includes('in the language of the reply: in Spanish, voseo aimed at him (the pronoun vos, a verb conjugated for vos, an imperative aimed at him); in English, direct second-person address to him; in either language woven into the sentences'), true);
+check('rubric: a one-paragraph reply with no decision needs only (a) and must not be a log', PROMPT.includes('Which traits a reply needs: a reply of one paragraph that carries no decision, no explanation and no correction needs only (a), and it must not be a log of what was done or of who did what;'), true);
+check('rubric: a reply longer than one paragraph needs all four whatever it carries', PROMPT.includes('every other reply needs all four, which means a reply longer than one paragraph whatever it carries, and a one-paragraph reply that carries a decision, an explanation or a correction.'), true);
+check('rubric: trait a follows the language of the reply, direct second person in English', PROMPT.includes('(a) It speaks to him as a person, in the language of the reply. In Spanish that is voseo aimed at him, through the pronoun vos, a verb conjugated for vos or an imperative aimed at him,') && PROMPT.includes('In English it is direct second-person address to him.'), true);
+check('rubric: trait a in Spanish needs the Rioplatense register, and neutral voseo is not it', PROMPT.includes('in a Rioplatense register: a warm, colloquial Argentine cadence and wording that sound spoken by a porteño mentor, with at least one natural Rioplatense expression; correct voseo in a neutral lexicon is not that register.'), true);
+check('rubric: a clitic te or a possessive tu counts as address only beside a vos verb or vos', PROMPT.includes('A clitic te or a possessive tu aimed at him counts as address only when the reply also has at least one verb conjugated for vos or the pronoun vos.'), true);
+check('rubric: in a reply of one or two sentences, a whole sentence of voseo is woven', PROMPT.includes('in a reply of one or two sentences, a whole sentence of voseo aimed at him is woven, not bolted.'), true);
 check('rubric: the mentor test lives inside rule 6, after the short-reply pass and before rule 7', PROMPT.indexOf('6. Mentor test') > PROMPT.indexOf('5. Answer') && PROMPT.indexOf('6. Mentor test') < PROMPT.indexOf('7. Otherwise'), true);
 check('rubric: trait a is speaking to him in the sentences, not one bolted-on token', PROMPT.includes('woven into the sentences, and not one token bolted onto the opening or the closing line'), true);
 check('rubric: a third-person log fails even with a voseo token at its start or end', PROMPT.includes('fails even when its first or last sentence carries a second-person token, because a token there is not speaking to him'), true);
@@ -100,32 +103,34 @@ check('rubric: trait b is the why as reasoning, not a log', PROMPT.includes('It 
 check('rubric: trait c is one of four forms of energy', PROMPT.includes('at least one rhetorical question, a deliberate emphasis on the point that matters, an image or an analogy, or a lesson stated as a principle for any future case'), true);
 check('rubric: trait d is a takeaway or a stance, never only a next step, a promise or an offer', PROMPT.includes('a next step alone, a promise to report back or an offer of more help is not a close that lands'), true);
 check('rubric: a closing question lands only after a stated stance or recommendation', PROMPT.includes('a closing question that asks him to decide lands only when the sentences just before it state a stance or a recommendation of the reply itself'), true);
-check('rubric: forms that tú and vos spell the same are never a tuteo failure', PROMPT.includes('A second-person present verb of one syllable has no separate stem and ending to stress, so the tú and the vos conjugations spell it the same: it is voseo too, never a tuteo failure, and a reason never quotes one as a tú form.'), true);
+check('rubric: a form tú and vos share in any tense is never a tuteo failure', PROMPT.includes('A verb form that the tú and the vos conjugations share in any tense is voseo too and never a tuteo failure: the preterite, the imperfect, the present subjunctive and every one-syllable present are shared, and a reason never quotes a shared form as a tú form.'), true);
+check('rubric: voseo typed without its accent is voseo', PROMPT.includes('Voseo typed without its written accent is still voseo: a verb whose letters match the vos form once accents are ignored is read as that vos form, never as a tú form.'), true);
 check('rubric: voseo is described by its grammar', PROMPT.includes('Voseo is correct and never a failure: a present-indicative verb conjugated for vos, stressed on its ending; an affirmative imperative conjugated for vos, stressed on its final vowel, with or without an attached clitic; the pronoun vos;'), true);
-check('rubric: a tú or usted failure is described by its grammar', PROMPT.includes('A tú failure is only an indicative verb of more than one syllable conjugated for tú, stressed on its stem, or an affirmative imperative conjugated for tú; a usted failure is a verb conjugated in the third person whose subject is the owner, or the possessive su or sus whose antecedent is the owner himself.'), true);
+check('rubric: a tú or usted failure is described by its grammar', PROMPT.includes('A tú failure is only a present-indicative verb or an affirmative imperative conjugated for tú whose letters differ from the vos form of the same verb even with accents ignored, such as a stem that splits into a diphthong where vos keeps a single vowel, or an imperative that drops the final vowel vos keeps; a usted failure is a verb conjugated in the third person whose subject is the owner, or the possessive su or sus whose antecedent is the owner himself.'), true);
 check('rubric: facts, a diagnosis and an admitted mistake are content, not the traits', PROMPT.includes('Facts, measurements, a diagnosis, an admitted mistake of this turn and a verdict on a result are content, not by themselves traits (b), (c) or (d).'), true);
-check('rubric: brevity governs length, never presence, for a short reply that carries a decision', PROMPT.includes('Brevity governs length, never presence: a short reply that carries a decision, an explanation or a correction needs all four exactly like a long one.'), true);
+check('rubric: brevity governs length, never presence, for a one-paragraph reply that carries a decision', PROMPT.includes('Brevity governs length, never presence: a one-paragraph reply that carries a decision, an explanation or a correction needs all four exactly like a long one.'), true);
 check('rubric: the tu and usted rule and the caricature rule are intact', [PROMPT.includes('addresses him with tú or usted forms'), PROMPT.includes('slang stacked for its own sake, more than one rhetorical question in a short reply, or capital letters used as decoration')], [true, true]);
 check('rubric: a caricature fails even when every trait is present', PROMPT.includes('A caricature fails as well, even when every trait is present:'), true);
 check('rubric: the old blanket pass for a short plain reply is gone', [PROMPT.includes('however short or plain'), PROMPT.includes('Never fail a reply merely because it could be warmer.')], [false, false]);
-check('rubric: no first-person-only pass and no neutral-register test remain', [PROMPT.includes('Neutral-register test'), PROMPT.includes('is a first-person voice'), PROMPT.includes('one or two natural')], [false, false, false]);
+check('rubric: no first-person-only pass remains, and a natural Rioplatense expression is required', [PROMPT.includes('Neutral-register test'), PROMPT.includes('is a first-person voice'), PROMPT.includes('with at least one natural Rioplatense expression')], [false, false, true]);
+check('rubric: the Rioplatense register is the floor a caricature overshoots', PROMPT.includes('and the Rioplatense register of (a) is the floor that a caricature overshoots.'), true);
 check('rubric: every double-quoted span is a token of the JSON answer, never a phrase to paste', [...new Set([...PROMPT.matchAll(/"([^"]*)"/g)].map((match) => match[1]))].sort(), ['<reason>', 'ok', 'reason']);
 check('rubric: it quotes nothing with guillemets, curly quotes or single quotes', [/[«»“”‘’]/u.test(PROMPT), PROMPT.replace('assistant\'s', '').includes('\'')], [false, false]);
-check('rubric: its only accented word is the pronoun name tú, so it holds no example word list', [...new Set(PROMPT.match(/\p{L}*[^\p{ASCII}]\p{L}*/gu))], ['tú']);
+check('rubric: its only accented words are the pronoun name tú and the register name porteño, so it holds no accented example word', [...new Set(PROMPT.match(/\p{L}*[^\p{ASCII}]\p{L}*/gu))].sort(), ['porteño', 'tú']);
+check('rubric: rules 4, 6 and 11 hold no parenthesised list of three or more words', PROMPT.split('\n').filter((line) => /^(4|6|11)\. /.test(line)).flatMap((line) => [...line.matchAll(/\(([^()]*)\)/g)].map((match) => match[1])).filter((inside) => inside.split(/,\s*|\s+(?:and|or)\s+/).length >= 3), []);
 check('rubric: the example word lists of rule 4 are gone', ['(tienes, tiene usted', '(tenés, podés, querés, vos)', '(tenés, probalo, fijate, decime)', '(das, ves, vas)', '(que sepas', '(ten, ven, haz)', 'cierro la unidad'].some((list) => PROMPT.includes(list)), false);
 check('rubric: a reply to a subagent or a peer still passes', PROMPT.includes('addressed to a subagent or a peer session rather than to the owner'), true);
-check('rubric: a present-subjunctive second-person form is voseo, never a tú failure', PROMPT.includes('A present-subjunctive second-person form is normal Rioplatense voseo and never a tú failure.'), true);
-check('rubric: the subjunctive sentence sits inside rule 4, before the rule 5 pass', PROMPT.indexOf('A present-subjunctive second-person form') < PROMPT.indexOf('5. Answer {"ok": true} when the message is one or two lines'), true);
+check('rubric: the shared-forms sentence sits inside rule 4, before the rule 5 pass', PROMPT.indexOf('A verb form that the tú and the vos conjugations share') > PROMPT.indexOf('4. When the message') && PROMPT.indexOf('A verb form that the tú and the vos conjugations share') < PROMPT.indexOf('5. Answer {"ok": true} when the message is one or two lines'), true);
 check('rubric: a Spanish reply with tu or usted forms fails', PROMPT.includes('answer {"ok": false} when it addresses him with tú or usted forms instead of Rioplatense voseo.'), true);
 check('rubric: quoted text, code and the words of other people do not count for voseo', PROMPT.includes('Quoted text, code and the words of other people do not count,'), true);
 check('rubric: su counts as usted only when its antecedent is the owner', PROMPT.includes('The possessive su or sus counts as usted only when its antecedent is the owner himself; judge it from the antecedent'), true);
 check('rubric: a su of a third person never asks to be turned into tu', PROMPT.includes('is never usted, so the reason must not ask to turn it into tu.'), true);
 check('rubric: tu alone is not a tuteo marker', PROMPT.includes('tu alone is normal in voseo and does not count'), true);
 check('rubric: impersonal officialese is cold and fails', PROMPT.includes('Impersonal officialese with no first-person voice is cold and fails too.'), true);
-check('rubric: rule 6 judges register and traits, never structure or length', PROMPT.includes('Rule 6 judges register and the presence of these traits, never structure or length.'), true);
+check('rubric: rule 6 judges register and traits, and the paragraph count only decides which traits a reply needs', PROMPT.includes('Rule 6 judges register and the presence of these traits; the paragraph count decides only which traits a reply needs, never on its own whether it passes.'), true);
 check('rubric: the reason names what is missing and where, in terms of the content', PROMPT.includes('then names what is missing and where, in terms of the content of that reply'), true);
 check('rubric: the reason never supplies a sentence, an opening, a closing or an expression', PROMPT.includes('The reason never writes, suggests or quotes a sentence, an opening, a closing or an expression for the rewrite to use, and gives no example wording'), true);
-check('rubric: the rewrite is in a Gentleman mentor voice in the language of the reply', PROMPT.includes('in a Gentleman mentor voice that speaks to the owner in the language of the reply, voseo in Spanish and direct second person in English.'), true);
+check('rubric: the rewrite is in a Gentleman mentor voice in the language of the reply', PROMPT.includes('in a Gentleman mentor voice that speaks to the owner in the language of the reply, Rioplatense voseo in Spanish and direct second person in English.'), true);
 check('rubric: the old reason template that listed voseo forms and a tone is gone', [PROMPT.includes('(vos, tenés, podés)'), PROMPT.includes('warm, pleasant')], [false, false]);
 check('rubric: the short-reply pass of rule 5 comes before the mentor test', PROMPT.indexOf('one or two lines with no status content') < PROMPT.indexOf('Mentor test'), true);
 check('rubric: the subject of a verb is checked before citing a tú form', PROMPT.includes('before citing a tú form check its subject'), true);
@@ -198,55 +203,70 @@ const ratesExit = await measure.main(['--rates', '--runs', '1', '--rubric', good
 
 console.log = consoleLog;
 check('measure: the matrix view starts and ends with the path of the active rubric', [matrixExit, matrixLines[0], matrixLines.at(-1)?.startsWith(`rubric=${goodRubric} runs=0 `)], [0, `rubric=${goodRubric}`, true]);
-check('measure: --rates names the active rubric and never meets the ship bar without a held-out fixture', [ratesExit, printedLines[0], printedLines.at(-1)], [1, `rubric=${goodRubric}`, `rubric=${goodRubric} cost=$0.0000 ship-bar(held-out set, every run: recall>=90% and precision>=95%)=NOT MET (no held-out fixture in this run)`]);
-check('measure: the held-out prefix', measure.HELD_OUT_PREFIX, 'held-');
+check('measure: --rates names the active rubric and never meets the ship bar without owner labels', [ratesExit, printedLines[0], printedLines.at(-1)], [1, `rubric=${goodRubric}`, `rubric=${goodRubric} cost=$0.0000 ship-bar(owner labels, every run: recall>=90% and precision>=95%)=not enough owner labels (0/10) @es faltan etiquetas del dueño (0/10)`]);
+check('measure: --rates measures the held-out set by default, and the bar needs 10 owner labels', [measure.DEFAULT_PREFIX, measure.OWNER_LABELS_NEEDED], ['held-', 10]);
+check('measure: --rates measures the requested prefix plus every rule-4 pin', [measure.ratesFixtures([{ id: 'held-a' }, { id: 'real-b' }, { id: 'real-c', pinsRule4: ['x'] }], 'held-').map((fixture) => fixture.id), measure.ratesFixtures([{ id: 'held-a' }, { id: 'real-b' }], 'real-').map((fixture) => fixture.id)], [['held-a', 'real-c'], ['real-b']]);
 check('measure: a block is read with the marker of the loaded rubric, with its reason', [measure.judgedOf('{"ok": false, "reason": "X-JUDGE: tuteo"}', 'X-JUDGE:'), measure.judgedOf('{"ok": false, "reason": "X-JUDGE: tuteo"}', MARKER), measure.judgedOf('{"ok": true}', 'X-JUDGE:')], [{ verdict: false, reason: 'X-JUDGE: tuteo' }, { verdict: null, reason: '' }, { verdict: true, reason: '' }]);
-check('measure: a reason cites rule 4 by tuteo, usted, a tú form or the rule number', ['VOICE-JUDGE: tuteo in the second line', 'VOICE-JUDGE: an Usted form', 'VOICE-JUDGE: the tú verb', 'VOICE-JUDGE: rule 4, quoted word', 'VOICE-JUDGE: regla 4, la palabra'].map(measure.citesRule4), [true, true, true, true, true]);
-check('measure: a mentor-test reason, the possessive tu, a tú inside a word and rule 40 do not cite rule 4', ['VOICE-JUDGE: trait (d) is absent, the close is only a next step', 'VOICE-JUDGE: the possessive tu of the closing line is a bolted token', 'VOICE-JUDGE: the verb actúa', 'VOICE-JUDGE: rule 40', 'VOICE-JUDGE: regla 40'].map(measure.citesRule4), [false, false, false, false, false]);
+check('measure: a reason cites rule 4 by tuteo, usted, a tú form named as such or the rule number', ['VOICE-JUDGE: tuteo in the second line', 'VOICE-JUDGE: an Usted form', 'VOICE-JUDGE: the tú verb', 'VOICE-JUDGE: a tu form in line 2', 'VOICE-JUDGE: a tu-form in line 2', 'VOICE-JUDGE: the tú-forms', 'VOICE-JUDGE: rule 4, quoted word', 'VOICE-JUDGE: regla 4, la palabra'].map((reason) => measure.citesRule4(reason)), [true, true, true, true, true, true, true, true]);
+check('measure: a mentor-test reason, the possessive tu, a tú inside a word and rule 40 do not cite rule 4', ['VOICE-JUDGE: trait (d) is absent, the close is only a next step', 'VOICE-JUDGE: the possessive tu of the closing line is a bolted token', 'VOICE-JUDGE: the verb actúa', 'VOICE-JUDGE: rule 40', 'VOICE-JUDGE: regla 40', 'VOICE-JUDGE: the tu formal close'].map((reason) => measure.citesRule4(reason)), [false, false, false, false, false, false]);
+check('measure: a reason that only quotes a pinned form cites rule 4, in any quotes and any case', ['VOICE-JUDGE: "das" in line 2', 'VOICE-JUDGE: «Queres» aimed at him', 'VOICE-JUDGE: \'ves\' is wrong'].map((reason) => measure.citesRule4(reason, ['das', 'queres', 'ves'])), [true, true, true]);
+check('measure: a pinned form inside a longer quote, or a quoted form that is not pinned, does not', ['VOICE-JUDGE: "das más margen" is a log line', 'VOICE-JUDGE: "dale" closes it'].map((reason) => measure.citesRule4(reason, ['das'])), [false, false]);
 
 const summaryFixtures = [
-  { id: 'r1', expect: 'fail' }, { id: 'r2', expect: 'fail' }, { id: 'r3', expect: 'fail' }, { id: 'r4', expect: 'fail' },
-  { id: 'g1', expect: 'pass' }, { id: 'g2', expect: 'pass', pinsRule4: true },
-  { id: 'o1', expect: 'owner-accepted' }, { id: 'o2', expect: 'owner-accepted' }, { id: 'o3', expect: 'owner-accepted' },
-  { id: 'b1', expect: 'borderline' },
-  { id: 'p1', expect: 'fail', pinsRule4: true }, { id: 'p2', expect: 'fail', pinsRule4: true },
+  { id: 'ow1', expect: 'fail', labelledBy: 'owner' }, { id: 'ow2', expect: 'pass', labelledBy: 'owner' }, { id: 'ow3', expect: 'fail', labelledBy: 'owner' },
+  { id: 'a1', expect: 'fail', labelledBy: 'author' }, { id: 'a2', expect: 'fail', labelledBy: 'author' },
+  { id: 'a3', expect: 'pass', labelledBy: 'author', pinsRule4: ['das'] }, { id: 'a4', expect: 'pass', labelledBy: 'author' },
+  { id: 'a5', expect: 'fail', labelledBy: 'author', pinsRule4: ['sepas'] }, { id: 'a6', expect: 'fail', labelledBy: 'author', pinsRule4: ['su'] },
+  { id: 'a7', expect: 'fail', labelledBy: 'author' },
+  { id: 'u1', expect: 'unadjudicated' }, { id: 'u2', expect: 'unadjudicated' }, { id: 'u3', expect: 'unadjudicated' },
 ];
 const summaryVerdicts = {
-  r1: { verdict: false, reason: 'VOICE-JUDGE: (c) absent' }, r2: { verdict: true, reason: '' }, r3: { verdict: false, reason: 'VOICE-JUDGE: tuteo' }, r4: { verdict: null, reason: '' },
-  g1: { verdict: true, reason: '' }, g2: { verdict: false, reason: 'VOICE-JUDGE: tuteo: das' },
-  o1: { verdict: false, reason: 'VOICE-JUDGE: (d) absent' }, o2: { verdict: true, reason: '' }, o3: { verdict: null, reason: '' },
-  b1: { verdict: null, reason: '' },
-  p1: { verdict: false, reason: 'VOICE-JUDGE: (b) is a log' }, p2: { verdict: false, reason: 'VOICE-JUDGE: usted in line 2' },
+  ow1: { verdict: false, reason: 'VOICE-JUDGE: (a) absent' }, ow2: { verdict: true, reason: '' }, ow3: { verdict: true, reason: '' },
+  a1: { verdict: false, reason: 'VOICE-JUDGE: (c) absent' }, a2: { verdict: null, reason: '' },
+  a3: { verdict: false, reason: 'VOICE-JUDGE: "das" in line 2' }, a4: { verdict: true, reason: '' },
+  a5: { verdict: false, reason: 'VOICE-JUDGE: (b) is a log' }, a6: { verdict: false, reason: 'VOICE-JUDGE: usted in line 2' },
+  a7: { verdict: false, reason: 'VOICE-JUDGE: tuteo' },
+  u1: { verdict: false, reason: 'VOICE-JUDGE: (d) absent' }, u2: { verdict: true, reason: '' }, u3: { verdict: null, reason: '' },
 };
 const summary = measure.summarise(summaryFixtures, (fixture) => summaryVerdicts[fixture.id]);
 
-check('measure: recall counts the fail fixtures, precision the pass ones, owner-accepted in neither', [summary.red, summary.missedRed, summary.green, summary.blockedGreen], [6, ['r2', 'r4'], 2, ['g2']]);
-check('measure: the owner-accepted fixtures the rubric blocks are counted apart, with their reasons, a malfunction not among them', [summary.accepted, summary.blockedAccepted], [3, [{ id: 'o1', reason: 'VOICE-JUDGE: (d) absent' }]]);
-check('measure: every borderline verdict is kept', summary.borderline, [{ id: 'b1', verdict: null }]);
-check('measure: a rule-4 false positive is a block citing rule 4 on a pinned fixture only', [summary.pinned, summary.rule4FalsePositives], [3, [{ id: 'g2', reason: 'VOICE-JUDGE: tuteo: das' }, { id: 'p2', reason: 'VOICE-JUDGE: usted in line 2' }]]);
-check('measure: a malfunction is counted', summary.malfunction, 3);
-check('measure: --rates prints every line of the summary', measure.ratesLines('run 1 held', summary), [
-  'run 1 held recall 66.7% (4/6) precision 50.0% (1/2) malfunction=3',
-  '    missed red    r2',
-  '    missed red    r4',
-  '    blocked green g2',
-  'run 1 held owner-accepted blocked 33.3% (1/3), the false-positive rate for the owner to adjudicate',
-  '    blocked owner-accepted o1: VOICE-JUDGE: (d) absent',
-  'run 1 held borderline verdicts (1, never counted)',
-  '    borderline ?    b1',
-  'run 1 held rule-4 false positives 2/3 pinned',
-  '    rule-4 false positive g2: VOICE-JUDGE: tuteo: das',
-  '    rule-4 false positive p2: VOICE-JUDGE: usted in line 2',
+check('measure: the owner set is scored on its own', summary.owner, { red: 2, missedRed: ['ow3'], green: 1, blockedGreen: [] });
+check('measure: the author set is scored on its own, a malfunction counted as missed', summary.author, { red: 5, missedRed: ['a2'], green: 2, blockedGreen: ['a3'] });
+check('measure: every unadjudicated verdict is kept with its reason, never scored', summary.unadjudicated, [{ id: 'u1', verdict: false, reason: 'VOICE-JUDGE: (d) absent' }, { id: 'u2', verdict: true, reason: '' }, { id: 'u3', verdict: null, reason: '' }]);
+check('measure: a rule-4 false positive is a block citing rule 4 on a pinned fixture only', [summary.pinned, summary.rule4FalsePositives], [3, [{ id: 'a3', reason: 'VOICE-JUDGE: "das" in line 2' }, { id: 'a6', reason: 'VOICE-JUDGE: usted in line 2' }]]);
+check('measure: a malfunction is counted', summary.malfunction, 2);
+check('measure: --rates prints every line of the summary, in both languages', measure.ratesLines(1, summary), [
+  'run 1 owner recall 50.0% (1/2) precision 100.0% (1/1) @es corrida 1 dueño: recall 50.0% (1/2), precisión 100.0% (1/1)',
+  '    missed red ow3 @es rojo no detectado',
+  'run 1 author recall 80.0% (4/5) precision 50.0% (1/2) @es corrida 1 autor: recall 80.0% (4/5), precisión 50.0% (1/2)',
+  '    missed red a2 @es rojo no detectado',
+  '    blocked green a3 @es verde bloqueado',
+  'run 1 unadjudicated blocked 33.3% (1/3), never scored, for the owner to label @es corrida 1 sin adjudicar: bloqueadas 33.3% (1/3), nunca puntúan, para que las etiquete el dueño',
+  '    FAIL u1: VOICE-JUDGE: (d) absent',
+  '    pass u2',
+  '    ?    u3',
+  'run 1 rule-4 false positives 2/3 pinned @es corrida 1 falsos positivos de la regla 4: 2/3 fijados',
+  '    rule-4 false positive a3 @es falso positivo de la regla 4: VOICE-JUDGE: "das" in line 2',
+  '    rule-4 false positive a6 @es falso positivo de la regla 4: VOICE-JUDGE: usted in line 2',
+  'run 1 malfunction=2 @es corrida 1 fallos de funcionamiento=2',
 ]);
 
-const bar = (red, missed, green, blocked) => measure.meetsShipBar({ red, missedRed: Array(missed).fill('x'), green, blockedGreen: Array(blocked).fill('x') });
+const set = (red, missed, green, blocked) => ({ red, missedRed: Array(missed).fill('x'), green, blockedGreen: Array(blocked).fill('x') });
 
-check('measure: the ship bar is recall 90% and precision 95%, both inclusive', [bar(10, 1, 20, 1), bar(10, 2, 20, 1), bar(10, 1, 20, 2)], [true, false, false]);
-check('measure: an empty side never meets the ship bar', [bar(0, 0, 20, 0), bar(10, 0, 0, 0)], [false, false]);
+check('measure: the ship bar is recall 90% and precision 95%, both inclusive', [measure.meetsShipBar(set(10, 1, 20, 1)), measure.meetsShipBar(set(10, 2, 20, 1)), measure.meetsShipBar(set(10, 1, 20, 2))], [true, false, false]);
+check('measure: an empty side never meets the ship bar', [measure.meetsShipBar(set(0, 0, 20, 0)), measure.meetsShipBar(set(10, 0, 0, 0))], [false, false]);
+check('measure: the ship bar is not computed below 10 owner labels, in both languages', [measure.shipBarOf([set(5, 0, 4, 0)]), measure.shipBarOf([])], [{ met: false, text: 'not enough owner labels (9/10) @es faltan etiquetas del dueño (9/10)' }, { met: false, text: 'not enough owner labels (0/10) @es faltan etiquetas del dueño (0/10)' }]);
+check('measure: from 10 owner labels the ship bar is MET only when every run meets it', [measure.shipBarOf([set(5, 0, 5, 0), set(5, 0, 5, 0)]), measure.shipBarOf([set(5, 0, 5, 0), set(5, 1, 5, 0)])], [{ met: true, text: 'MET @es ALCANZADA' }, { met: false, text: 'NOT MET @es NO ALCANZADA' }]);
 
 const fixtureFiles = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json')).map((name) => ({ name, fixture: JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8')) }));
+const byId = Object.fromEntries(fixtureFiles.map(({ fixture }) => [fixture.id, fixture]));
+const wordIn = (form, message) => new RegExp(`(^|[^\\p{L}])${form}([^\\p{L}]|$)`, 'iu').test(message);
 
-check('fixtures: every label is one of the four classes', fixtureFiles.filter(({ fixture }) => !['pass', 'fail', 'owner-accepted', 'borderline'].includes(fixture.expect)).map(({ name }) => name), []);
+check('fixtures: every label is pass, fail or unadjudicated', fixtureFiles.filter(({ fixture }) => !['pass', 'fail', 'unadjudicated'].includes(fixture.expect)).map(({ name }) => name), []);
+check('fixtures: every scored label names who set it, owner or author, and an unadjudicated one names nobody', fixtureFiles.filter(({ fixture }) => (fixture.expect === 'unadjudicated' ? fixture.labelledBy !== undefined : !['owner', 'author'].includes(fixture.labelledBy))).map(({ name }) => name), []);
+check('fixtures: an owner label carries its date, and no other label does', fixtureFiles.filter(({ fixture }) => (fixture.labelledBy === 'owner' ? !/^\d{4}-\d{2}-\d{2}$/.test(fixture.labelledOn ?? '') : fixture.labelledOn !== undefined)).map(({ name }) => name), []);
+check('fixtures: every rule-4 pin lists forms that appear in its message', fixtureFiles.filter(({ fixture }) => fixture.pinsRule4 !== undefined && !(Array.isArray(fixture.pinsRule4) && fixture.pinsRule4.length > 0 && fixture.pinsRule4.every((form) => wordIn(form, fixture.message)))).map(({ name }) => name), []);
+check('fixtures: the owner calibration of 2026-10-19 is recorded', [byId['held-owner-red-5f411d3c-10181322'], byId['held-v8-green-c4d7f854-10182025']].map((fixture) => [fixture?.expect, fixture?.labelledBy, fixture?.labelledOn]), [['fail', 'owner', '2026-10-19'], ['pass', 'owner', '2026-10-19']]);
 check('fixtures: every file is named for its id', fixtureFiles.filter(({ name, fixture }) => `${fixture.id}.json` !== name).map(({ name }) => name), []);
 
 const sidecar = JSON.parse(readFileSync(path.join(HERE, '..', 'premise-judge', 'journal-guard.mjs.hook-registration.json'), 'utf8'));
