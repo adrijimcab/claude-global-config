@@ -55,25 +55,25 @@ const MUTANTS = [
   ['a quoted tool mention reads as an order', I, 'if (!isInside(quotes, at) && !isProhibition(', 'if (!isProhibition('],
 
   // The hook shim `guard.mjs` is a deciding module too (it is dispatched): what the harness reads. NOT mutated,
-  // by measurement: the `catch` in `main` that allows a delegation when `evaluate` throws, because no payload
+  // by measurement: the `catch` in `evaluateOrAllow` that allows a delegation when `evaluate` throws, because no payload
   // makes `evaluate` throw, so no fixture reaches it.
-  // @es El shim `guard.mjs` también decide: lo que lee el harness. No se muta el `catch` de `main`: ningún payload hace lanzar a `evaluate`.
-  ['a BOM-prefixed payload is read as garbage', G, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
-  ['the BOM strip cuts into the payload', G, 'raw.slice(1) : raw', 'raw.slice(2) : raw'],
-  ['every payload reads as unreadable', G, 'payload = JSON.parse(text);', 'payload = JSON.parse(text.slice(0, 0));'],
+  // @es El shim `guard.mjs` también decide: lo que lee el harness. No se muta el `catch` de `evaluateOrAllow`: ningún payload hace lanzar a `evaluate`.
+  // Retired, pinned by hook-io's own mutants: the BOM strip ('the BOM is not stripped', 'the BOM test strips
+  // any first character'), the decision value ('deny does not say deny') and the event ('deny names the wrong
+  // event'). The mutants below keep the shim's own use of the port.
+  // @es Retirados, fijados por los mutantes de hook-io: el BOM, el valor de la decisión y el evento.
+  ['every payload reads as unreadable', G, 'const payload = tryParsePayload(raw);', "const payload = tryParsePayload('');"],
   ['a payload with no brief is inspected all the same', G, 'if (brief === undefined) return undefined;', ''],
   ['a brief the decision allows is refused all the same', G, 'if (refusal === undefined) return undefined;', `if (refusal === undefined) return ${DENY};`],
-  ['a refusal asks instead of denying', G, "permissionDecision: 'deny',", "permissionDecision: 'ask',"],
-  ['a refusal names the wrong hook event', G, "hookEventName: 'PreToolUse',", "hookEventName: 'PostToolUse',"],
-  ['every refusal gives one reason, whatever it found', G, 'permissionDecisionReason: reason(refusal)', "permissionDecisionReason: 'BRIEF-FEASIBILITY REFUSED this call.'"],
+  ['every refusal gives one reason, whatever it found', G, 'return deny(reason(refusal));', "return deny('BRIEF-FEASIBILITY REFUSED this call.');"],
   ['the denied-command face is not named', G, "'DENIED COMMAND — ", "'COMMAND — "],
   ['the Spanish half of the denied-command face is lost', G, '@es COMANDO DENEGADO — ', '@es COMANDO — '],
   ['the worktree face is not named', G, "'WORKTREE INSIDE A WORKTREE — ", "'WORKTREE — "],
   ['the tooling-path face is not named', G, "'RELATIVE TOOLING PATH — ", "'TOOLING PATH — "],
   ['a finding names the wrong line', G, '`  line ${lineNumber}: ${line.trim()}`', '`  line ${lineNumber + 1}: ${line.trim()}`'],
   ['a finding offers the detail as the alternative', G, '`  instead: ${alternative}`', '`  instead: ${detail}`'],
-  ['the process prints nothing for a refusal', G, 'if (output !== undefined) console.log(JSON.stringify(output));', "if (output !== undefined) console.log('');"],
-  ['importing the guard runs it as a process', G, 'process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))', 'true']
+  ['the process prints nothing for a refusal', G, 'const standalone = hookMain(evaluateOrAllow);', 'const standalone = hookMain(() => undefined);'],
+  ['importing the guard runs it as a process', G, 'runWhenMain(import.meta.url, () => standalone().then(() => process.exit(0)));', 'standalone().then(() => process.exit(0));']
 ];
 
 const P = 'brief-feasibility/preflight.mjs';
@@ -90,7 +90,7 @@ const PREFLIGHT_MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const paths = ['brief-feasibility', 'brief-provenance', 'hook-payloads', 'shell-command', 'hook-dispatch', 'hook-state', 'bilingual-output'];
+const paths = ['brief-feasibility', 'brief-provenance', 'hook-io', 'hook-payloads', 'shell-command', 'hook-dispatch', 'hook-state', 'bilingual-output'];
 const survivors =
   runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/selftest.mjs', mutants: MUTANTS, crashKills: 'fail' }) +
   runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/preflight.selftest.mjs', mutants: PREFLIGHT_MUTANTS, crashKills: 'fail' });
