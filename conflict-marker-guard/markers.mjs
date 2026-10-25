@@ -44,7 +44,7 @@ export function markerKindOf(line) {
 export function isLabelled(line) {
   const kind = markerKindOf(line);
 
-  return kind !== undefined && kind !== MIDDLE && line.slice(kind.length).trim().length > 0;
+  return kind !== undefined && line.slice(kind.length).trim().length > 0;
 }
 
 /** Whether `filePath` is under one of the declared fixture prefixes (each ends with `/`). @es Si la ruta está bajo un prefijo de fixtures declarado. */

@@ -404,6 +404,8 @@ for (const step of STEPS) {
   report(reason.includes('CONFLICT-MARKER GUARD REFUSED') && reason.includes('@es CONFLICT-MARKER GUARD RECHAZÓ'), 'the refusal carries English and its @es mirror');
   report(reason.indexOf('CONFLICT-MARKER GUARD REFUSED') < reason.indexOf('@es CONFLICT-MARKER GUARD RECHAZÓ'), 'English comes first');
   report(reason.includes('(<<<<<<< ======= >>>>>>>)'), 'the refusal says which marker kinds were found');
+  report(reason.includes('ONE marker of any kind') && reason.includes('cuenta con UNA') && reason.includes('marca de cualquier tipo'), 'the refusal says an unmerged file counts with one marker, once per language');
+  report(reason.includes('(never valid for an unmerged file)') && reason.includes('(nunca vale para un fichero sin fusionar)') && reason.split('fixture-paths.json').length === 3, 'the refusal says where to declare data fixtures, once per language');
   report(reason.includes('resolve the conflict') && reason.includes('retry') && reason.includes('resolver el conflicto') && reason.includes('reintentar'), 'it says to resolve the conflict and retry, once per language');
   report(reason.includes('Medido') && reason.includes('commitearía') && reason.includes('olvidada'), 'the Spanish half keeps its accents');
   report(journalText().slice(before).includes('"verdict":"deny"'), 'a refusal is journaled');
@@ -497,13 +499,13 @@ for (const step of STEPS) {
   };
   const context = { toplevel: 'C:/r', inProgress: false };
 
-  indexConflicts(listing('R100\0old.txt\0new.txt\0M\0m.txt\0A\0a.txt\0'), context, []);
+  indexConflicts(listing('R100\0old.txt\0new.txt\0M\0m.txt\0C075\0c-src.txt\0c-dst.txt\0A\0a.txt\0'), context, []);
 
   const [first, second] = asked;
 
   report(first.includes('-G^(<<<<<<<|=======|>>>>>>>)') && first.includes('--name-status') && first.includes('-z') && first.includes('-M') && first.includes('--no-relative') && first.includes('--literal-pathspecs') && first.includes('core.quotePath=false'), 'the prefilter is `-G` on the three marker shapes, with renames, and pinned');
   report(['-U0', '--no-relative', '--src-prefix=a/', '--dst-prefix=b/', '-M', '--no-color', '--no-ext-diff', '--no-textconv', '--literal-pathspecs', '--cached'].every((flag) => second.includes(flag)), 'the patch pins every switch the user configuration could change');
-  report(second.slice(second.indexOf('--') + 1).join(',') === 'old.txt,new.txt,m.txt,a.txt', 'the patch is restricted to the candidates, a rename SOURCE included');
+  report(second.slice(second.indexOf('--') + 1).join(',') === 'old.txt,new.txt,m.txt,c-src.txt,c-dst.txt,a.txt', 'the patch is restricted to the candidates, a rename or copy SOURCE included');
 
   asked.length = 0;
   indexConflicts(listing(Array.from({ length: MAX_PATHSPEC + 1 }, (_, index) => `M\0p${index}.txt\0`).join('')), context, []);
@@ -534,7 +536,30 @@ for (const step of STEPS) {
 
   report(idle.inProgress === false && idle.toplevel === 'C:/r', 'repositoryContext: no state file, nothing in progress, and the top level is the first line');
   report(repositoryContext(() => ({ status: 128, stdout: '', stderr: 'fatal: not a git repository' }), 'C:/x').failure?.includes('git rev-parse: git exited 128') === true, 'repositoryContext: a directory that is no repository is a failure');
-  report(repositoryContext(rev('C:/r\n'), 'C:/r', () => true).inProgress === false, 'repositoryContext: only the four listed paths are state files');
+  report(repositoryContext(rev('C:/r\n'), 'C:/r', () => true).inProgress === false, 'repositoryContext: an empty line is no state file');
+  report(repositoryContext(rev(`${revOutput}.git/EXTRA_STATE\n`), 'C:/r', (file) => slash(file).endsWith('EXTRA_STATE')).inProgress === false, 'repositoryContext: only the four listed paths are state files');
+
+  const lsCalls = [];
+
+  unmergedConflicts((args, options) => {
+    lsCalls.push([args, options.cwd]);
+
+    return { status: 0, stdout: '', stderr: '' };
+  }, { toplevel: 'C:/top' });
+  report(lsCalls.length === 1 && lsCalls[0][0].join(' ') === 'ls-files -u -z --full-name' && lsCalls[0][1] === 'C:/top', 'unmergedConflicts lists the unmerged paths from the top level, relative to it');
+
+  // An add whose directory cannot be followed is not remembered as staging (and asks git nothing).
+  calls.length = 0;
+  evaluate(bash(clean.repoDir, `cd "$X" && git add -A; git -C "${slash(clean.repoDir)}" commit -m x`), { run: (args, options) => {
+    calls.push(args);
+
+    return clean.run(args, options);
+  } });
+  report(calls.length === 2, 'an add after an unfollowable cd asks git nothing');
+
+  const fromSub = reasonOf(decide(configured, bash(`${slash(configured.repoDir)}/sub`, 'git commit -m x')));
+
+  report(fromSub.includes('/repo:') && !fromSub.includes('/sub:'), 'the refusal names the repository top level, not the directory the command ran in');
 
   // The worktree reader streams: chunks, multibyte characters across a chunk edge, a last line with no newline.
   const sample = path.join(plainDirectory, 'stream.txt');
@@ -578,8 +603,18 @@ for (const step of STEPS) {
   report(conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n'))?.line === 2 && conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n')).kinds.join() === '=======,>>>>>>>', 'conflictIn: two kinds are a conflict, at the first marker line, with the kinds seen');
   report(conflictIn(numberedLines('a\n<<<<<<< HEAD\nb\n'))?.line === 2 && conflictIn(numberedLines('a\nb\n>>>>>>> 9f8e7d6\n'))?.line === 3, 'conflictIn: one labelled `<<<<<<< x` or `>>>>>>> x` line is a conflict on its own');
   report(conflictIn(numberedLines('a\n=======\nb\n'), { unmerged: true })?.line === 2 && conflictIn(numberedLines('a\n<<<<<<<\n'), { unmerged: true })?.line === 2, 'conflictIn: for an unmerged file ONE marker of any kind is a conflict');
-  report(conflictIn(numberedLines('a\nb\n'), { unmerged: true }) === undefined && conflictIn([], { unmerged: true }) === undefined, 'conflictIn: an unmerged file with no marker is clean');
-  report(isLabelled('<<<<<<< HEAD') && isLabelled('>>>>>>> 9f8e7d6') && !isLabelled('<<<<<<<') && !isLabelled('>>>>>>> ') && !isLabelled('=======') && !isLabelled('plain'), 'isLabelled: seven characters, a space and a label; a bare run or `=======` is not');
+  report(conflictIn(numberedLines('a\nb\n'), { unmerged: true }) === undefined && (() => { try { return conflictIn([], { unmerged: true }); } catch { return 'threw'; } })() === undefined, 'conflictIn: an unmerged file with no marker is clean');
+  const labelled = (line) => {
+    try {
+      return isLabelled(line);
+    } catch {
+      return 'threw';
+    }
+  };
+
+  report(labelled('<<<<<<< HEAD') === true && labelled('>>>>>>> 9f8e7d6') === true && labelled('<<<<<<<') === false && labelled('>>>>>>> ') === false && labelled('=======') === false && labelled('plain') === false, 'isLabelled: seven characters, a space and a label; a bare run or `=======` is not, and a plain line never throws');
+  report(isDeclaredFixture('x/a/fixtures/b.txt', ['a/fixtures/']) === false, 'isDeclaredFixture: the prefix must START the path');
+  report(conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n'), { unmerged: true }).kinds.join() === '=======', 'conflictIn: the scan of an unmerged file stops at the first marker');
   report(isDeclaredFixture('a/fixtures/b.txt', ['a/fixtures/']) && !isDeclaredFixture('b/fixtures/b.txt', ['a/fixtures/']) && !isDeclaredFixture('a/fixtures.txt', ['a/fixtures/']) && !isDeclaredFixture('x', []), 'isDeclaredFixture: a declared prefix, never a segment name anywhere');
 
   const patch = ['diff --git a/n.txt b/n.txt', 'new file mode 100644', '--- /dev/null', '+++ b/n.txt', '@@ -0,0 +1 @@', '+n', 'diff --git a/d.txt b/d.txt', 'deleted file mode 100644', '--- a/d.txt', '+++ /dev/null', '@@ -1 +0,0 @@', '-d', 'diff --git a/x.txt b/x.txt', 'index 1..2 100644', '--- a/x.txt', '+++ b/x.txt', '@@ -1,2 +1,0 @@', '-gone', '-gone2', '@@ -5,0 +6,3 @@', '+++ twin header', '+two', '\\ No newline at end of file', '+three'].join('\n');
