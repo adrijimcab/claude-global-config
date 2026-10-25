@@ -8,11 +8,7 @@
  * `evaluator` queda atado a él.
  */
 
-<<<<<<< HEAD
-import { appendFileSync, mkdirSync } from 'node:fs';
-=======
-import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
->>>>>>> fix/locks-one-port
+import { appendFileSync, closeSync, mkdirSync, openSync, readSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { evaluator as portEvaluator } from '../../hook-io/hook-io.mjs';
