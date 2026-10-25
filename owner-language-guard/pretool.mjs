@@ -12,22 +12,12 @@
  * hook. FALLA ABIERTO ante cualquier fallo propio.
  */
 
-import { readFileSync } from 'node:fs';
-
 import { isSubagentCaller, isUnderSubagentDirectory } from '../hook-caller/identify-caller.mjs';
-import { deny, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
+import { deny, hookMain, parseFailureMessage, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { englishParagraphs } from './decide.mjs';
 import { readInterstitialTexts } from './interstitial.mjs';
 import { recordLastRun } from './last-run.mjs';
 import { speaker } from './pretool-messages.mjs';
-
-/**
- * Why a run failed, as the trace records it: the underlying parse error when the port wrapped one, so the trace
- * keeps the position the parser reported.
- * @es Por qué falló una corrida, como la registra la traza: el error de parseo de fondo si el puerto envolvió uno,
- * para que la traza conserve la posición que informó el parser.
- */
-const failureMessage = (error) => (error instanceof Error ? (error.cause ?? error).message : String(error));
 
 /**
  * Decides one raw PreToolUse payload: the hook output (or `undefined` to allow) and the trace of the run.
@@ -71,7 +61,7 @@ export function evaluate(raw, readTexts = readInterstitialTexts) {
   try {
     result = judge(raw, readTexts);
   } catch (error) {
-    result = { output: undefined, trace: { verdict: 'error', error: failureMessage(error) } };
+    result = { output: undefined, trace: { verdict: 'error', error: parseFailureMessage(error) } };
   }
 
   recordLastRun({ ...result.trace, ms: Date.now() - started });
@@ -79,15 +69,4 @@ export function evaluate(raw, readTexts = readInterstitialTexts) {
   return result.output;
 }
 
-runWhenMain(import.meta.url, () => {
-  let output;
-
-  try {
-    output = evaluate(readFileSync(0, 'utf8'));
-  } catch {
-    output = undefined;
-  }
-
-  if (output !== undefined) process.stdout.write(JSON.stringify(output));
-  process.exitCode = 0;
-});
+runWhenMain(import.meta.url, hookMain(evaluate));

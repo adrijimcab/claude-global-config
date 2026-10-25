@@ -46,13 +46,15 @@ const MUTANTS = [
   ['the refusal is not a deny', `${G}/pretool.mjs`, "output: deny(speaker.line('english-before-tool', { excerpt: first.excerpt })),", "output: { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask' } },"],
   ['the BOM is not stripped', `${G}/pretool.mjs`, 'parsePayload(raw)', 'JSON.parse(raw)'],
   ['a failure of its own blocks the call', `${G}/pretool.mjs`, "result = { output: undefined, trace: { verdict: 'error'", "result = { output: { decision: 'block' }, trace: { verdict: 'error'"],
-  ['the CLI does not print the deny', `${G}/pretool.mjs`, 'if (output !== undefined) process.stdout.write(JSON.stringify(output));', ''],
-  ['the CLI does not run as the main process', `${G}/pretool.mjs`, 'runWhenMain(import.meta.url, () => {', 'void ((url, main) => {'],
+  // RETIRED with the move onto hook-io: 'the CLI does not print the deny'. Printing the decision is `hookMain`'s
+  // and `hook-io/hook-io.mutants.mjs` pins it: 'hookMain never prints the decision'.
+  // @es RETIRADO con el paso a hook-io: imprimir la decisión es de `hookMain` y lo fija 'hookMain never prints the decision'.
+  ['the CLI does not run as the main process', `${G}/pretool.mjs`, 'runWhenMain(import.meta.url, hookMain(evaluate));', ''],
 
   ['the last-run trace is never written', `${G}/pretool.mjs`, 'recordLastRun({ ...result.trace, ms: Date.now() - started });', ''],
   ['the trace drops the tool_use id', `${G}/pretool.mjs`, "toolUseId: typeof payload?.tool_use_id === 'string' ? payload.tool_use_id : undefined,", 'toolUseId: undefined,'],
   ['the trace drops the transcript path', `${G}/pretool.mjs`, "transcriptPath: typeof transcript === 'string' ? transcript : undefined,", 'transcriptPath: undefined,'],
-  ['the trace drops the error message', `${G}/pretool.mjs`, 'error: failureMessage(error)', 'error: undefined'],
+  ['the trace drops the error message', `${G}/pretool.mjs`, 'error: parseFailureMessage(error)', 'error: undefined'],
   ['the trace reports every skip as allow', `${G}/pretool.mjs`, "verdict: 'skipped:subagent'", "verdict: 'allow'"],
   ['the trace reports no transcript as allow', `${G}/pretool.mjs`, "verdict: 'skipped:no-transcript'", "verdict: 'allow'"],
   ['the trace reports a refusal as allow', `${G}/pretool.mjs`, "verdict: 'deny', judged: paragraphs.length", "verdict: 'allow', judged: paragraphs.length"],

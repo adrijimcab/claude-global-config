@@ -46,7 +46,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { blockStop, parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
+import { blockStop, hookMain, parseFailureMessage, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { abandonmentsFor, defaultStateDir } from './abandon.mjs';
 import { delegationsInFinalTurn } from './turn-delegations.mjs';
 import { unlaunchedDelegations } from './unlaunched.mjs';
@@ -192,20 +192,13 @@ export function evaluate(raw) {
     return main(parsePayload(raw));
   } catch (error) {
     // A guard that throws must never wedge a session — but it must not do so invisibly either. A parse failure
-    // is recorded with the parser's own message (the port keeps it as the error's cause).
+    // is recorded with the parser's own message (`parseFailureMessage`).
     // @es Un guard que peta jamás debe atascar la sesión, pero tampoco callar. Un fallo de parseo se anota con el
-    // mensaje propio del parser (el puerto lo guarda como causa del error).
-    note(defaultStateDir(), { event: 'malfunction', error: error instanceof Error ? (error.cause ?? error).message : String(error), rawLength: raw.length });
+    // mensaje propio del parser (`parseFailureMessage`).
+    note(defaultStateDir(), { event: 'malfunction', error: parseFailureMessage(error), rawLength: raw.length });
 
     return undefined;
   }
 }
 
-async function run() {
-  const output = evaluate(await readStdin());
-
-  if (output !== undefined) process.stdout.write(JSON.stringify(output));
-  process.exit(0);
-}
-
-runWhenMain(import.meta.url, run);
+runWhenMain(import.meta.url, hookMain(evaluate));

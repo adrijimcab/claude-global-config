@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-import { parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
+import { parseFailureMessage, parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
 import { stateDir as stateDirOf } from '../hook-state/locations.mjs';
 
 /** How many characters of each end of the message a record keeps. @es Cuántos caracteres de cada extremo guarda un registro. */
@@ -61,8 +61,8 @@ export function evaluate(raw, { stateDir = defaultStateDir(), now = new Date() }
     // The port strips the BOM PowerShell 5.1 prepends. @es El puerto quita el BOM que antepone PowerShell 5.1.
     append(stateDir, recordOf(parsePayload(raw), now));
   } catch (error) {
-    // A parse failure keeps the parser's own message, the port's error cause. @es Un fallo de parseo conserva el mensaje del parser, la causa del error del puerto.
-    append(stateDir, { at: now.toISOString(), malfunction: error instanceof Error ? (error.cause ?? error).message : String(error), rawLength: raw.length });
+    // A parse failure keeps the parser's own message (`parseFailureMessage`). @es Un fallo de parseo conserva el mensaje del parser, la causa del error del puerto.
+    append(stateDir, { at: now.toISOString(), malfunction: parseFailureMessage(error), rawLength: raw.length });
   }
 
   return undefined;

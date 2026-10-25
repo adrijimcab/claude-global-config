@@ -19,7 +19,7 @@
  * `malfunction`; una escritura que falla se traga. Un evento que no es ni start ni stop se ignora.
  */
 
-import { parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
+import { parseFailureMessage, parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
 import { appendLifecycle, START, STOP } from './lifecycle-log.mjs';
 
 /** The hook events this recorder understands, and what each one records. @es Los eventos que entiende y qué registra cada uno. */
@@ -73,8 +73,8 @@ export function evaluate(raw, { now = new Date() } = {}) {
 
     if (line !== undefined) record(line);
   } catch (error) {
-    // A parse failure keeps the parser's own message, the port's error cause. @es Un fallo de parseo conserva el mensaje del parser, la causa del error del puerto.
-    record({ event: 'malfunction', time: now.toISOString(), why: error instanceof Error ? (error.cause ?? error).message : String(error), rawLength: raw.length });
+    // A parse failure keeps the parser's own message (`parseFailureMessage`). @es Un fallo de parseo conserva el mensaje del parser, la causa del error del puerto.
+    record({ event: 'malfunction', time: now.toISOString(), why: parseFailureMessage(error), rawLength: raw.length });
   }
 
   return undefined;

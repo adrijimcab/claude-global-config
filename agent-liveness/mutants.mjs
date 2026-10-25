@@ -65,7 +65,7 @@ const MUTANTS = [
   ['the agent transcript is not recorded', R, 'transcript: textOf(payload.agent_transcript_path),', ''],
   ['the payload keys are not recorded', R, 'keys: Object.keys(payload).sort()\n  };', 'keys: []\n  };'],
   ['a BOM is not stripped', R, 'lineOf(parsePayload(raw), now)', 'lineOf(JSON.parse(raw), now)'],
-  ['garbage is not recorded', R, "    record({ event: 'malfunction', time: now.toISOString(), why: error instanceof Error", "    void ({ event: 'malfunction', time: now.toISOString(), why: error instanceof Error"],
+  ['garbage is not recorded', R, "    record({ event: 'malfunction', time: now.toISOString(), why: parseFailureMessage", "    void ({ event: 'malfunction', time: now.toISOString(), why: parseFailureMessage"],
   ['a write failure throws out of the recorder', R, "  } catch {\n    /* recording is best effort", "  } catch (error) {\n    throw error; /* recording is best effort"],
   ['the recorder blocks', R, '  return undefined;\n}\n\nasync function run()', "  return { decision: 'block', reason: 'recorded' };\n}\n\nasync function run()"]
 ];

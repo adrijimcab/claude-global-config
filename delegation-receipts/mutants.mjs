@@ -72,7 +72,7 @@ const MUTANTS = [
   ['stop_hook_active no longer bounds it, so the obligation can be raised twice', 'delegation-receipts/guard.mjs', 'if (payload?.stop_hook_active === true) return;', ''],
   ['the independent cooldown is gone', 'delegation-receipts/guard.mjs', 'if (now - previous < COOLDOWN_MS) {', 'if (false) {'],
   ['a BOM-prefixed payload is swallowed, so a failed parse reads as a clean turn', 'delegation-receipts/guard.mjs', 'return main(parsePayload(raw));', 'return main(JSON.parse(raw));'],
-  ['the guard no longer runs when the file is EXECUTED', 'delegation-receipts/guard.mjs', 'runWhenMain(import.meta.url, run);', ''],
+  ['the guard no longer runs when the file is EXECUTED', 'delegation-receipts/guard.mjs', 'runWhenMain(import.meta.url, hookMain(evaluate));', ''],
 
   // --- THE REFUSAL'S OWN CONTENT. A control that decides correctly but explains poorly gets routed
   //     around, which is the same end state as one that cannot fire, reached by another road.

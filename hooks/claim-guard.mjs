@@ -43,7 +43,7 @@
  * comprobó es la afirmación, no la evidencia. Las dos clases comparten el único bloqueo por turno.
  */
 
-import { blockStop, parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
+import { blockStop, hookMain, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 
 const HIGH_RISK = [
   // Spanish — claims of non-existence / absolutes about the system
@@ -220,18 +220,6 @@ export function evaluate(raw) {
   );
 }
 
-const main = async () => {
-  let raw;
-  try {
-    raw = await readStdin();
-  } catch {
-    process.exit(0);
-  }
-  const output = evaluate(raw);
-  if (output !== undefined) process.stdout.write(JSON.stringify(output));
-  process.exit(0);
-};
-
 // Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
-// leería el stdin del importador y lo cortaría con process.exit(0) a mitad de camino.
-runWhenMain(import.meta.url, main);
+// leería el stdin del importador.
+runWhenMain(import.meta.url, hookMain(evaluate));

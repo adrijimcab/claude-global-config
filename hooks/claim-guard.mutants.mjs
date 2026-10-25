@@ -113,8 +113,10 @@ const MUTANTS = [
   ['the premise reason loses its Spanish half', GUARD, '@es Premisa atribuida ("${matched}")', 'Premisa atribuida ("${matched}")'],
   ['the premise context stops repeating the phrase that tripped', GUARD, 'on the attributed premise: "${matched}".', 'on the attributed premise: "?".'],
   ['the premise context stops citing the rule', GUARD, "(rules/00-owner-mandates.md).',", "().',"],
-  ['the process prints nothing when it blocks', GUARD, 'process.stdout.write(JSON.stringify(output));', "process.stdout.write('');"],
-  ['importing the guard runs it as a process', GUARD, 'runWhenMain(import.meta.url, main);', 'main();'],
+  // RETIRED with the move onto hook-io: 'the process prints nothing when it blocks'. Printing the decision is
+  // `hookMain`'s and `hook-io/hook-io.mutants.mjs` pins it: 'hookMain never prints the decision'.
+  // @es RETIRADO con el paso a hook-io: imprimir la decisión es de `hookMain` y lo fija 'hookMain never prints the decision'.
+  ['importing the guard runs it as a process', GUARD, 'runWhenMain(import.meta.url, hookMain(evaluate));', 'hookMain(evaluate)();'],
 ];
 
 const survivors = runMutants({
