@@ -353,7 +353,9 @@ check('fixtures: the two-sentence control passes, its whole voseo sentence woven
 check('fixtures: the te-only real reply stays unadjudicated, with the clitic reading recorded', [byId['real-v8-red-5f411d3c-10050356']?.expect, /only address to him is the clitic te/.test(byId['real-v8-red-5f411d3c-10050356']?.source ?? '')], ['unadjudicated', true]);
 check('fixtures: every real reply is unadjudicated unless the owner labelled it', fixtureFiles.filter(({ fixture }) => /^(real|held)-/.test(fixture.id) && fixture.expect !== 'unadjudicated' && fixture.labelledBy !== 'owner').map(({ name }) => name), []);
 check('fixtures: a source never runs two sentences together', fixtureFiles.filter(({ fixture }) => /[a-z]\.[0-9a-z]{4,}/.test((fixture.source ?? '').replace(/\b[\w-]+\.(?:mjs|json|md|ts)\b/g, ''))).map(({ name }) => name), []);
-check('fixtures: every file is named for its id',fixtureFiles.filter(({ name, fixture }) => `${fixture.id}.json` !== name).map(({ name }) => name), []);
+check('fixtures: the owner labels of 2026-10-25 (Log L16) are recorded, two passes and eight fails', [['held-green-5f411d3c-10111846', 'fail'], ['held-v8-green-5f411d3c-10182239', 'fail'], ['held-green-5f411d3c-10111821', 'pass'], ['held-v8-red-5f411d3c-10181521', 'fail'], ['held-v8-red-664a8a26-10182039', 'fail'], ['held-green-5f411d3c-10111648', 'fail'], ['held-green-5f411d3c-10181535', 'fail'], ['held-v8-red-664a8a26-10182209', 'pass'], ['held-v8-red-c4d7f854-10182016', 'fail'], ['held-green-5f411d3c-10181320', 'fail']].filter(([id, expect]) => byId[id]?.expect !== expect || byId[id]?.labelledBy !== 'owner' || byId[id]?.labelledOn !== '2026-10-25').map(([id]) => id), []);
+check('fixtures: the owner set holds 12 labels', fixtureFiles.filter(({ fixture }) => fixture.labelledBy === 'owner' && fixture.id.startsWith('held-')).length, 12);
+check('fixtures: every file is named for its id', fixtureFiles.filter(({ name, fixture }) => `${fixture.id}.json` !== name).map(({ name }) => name), []);
 
 const sidecar = JSON.parse(readFileSync(path.join(HERE, '..', 'premise-judge', 'journal-guard.mjs.hook-registration.json'), 'utf8'));
 
