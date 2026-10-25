@@ -24,7 +24,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { advise, blockStop, deny, evaluator, hookMain, parsePayload, readStdin, runWhenMain, tryParsePayload } from './hook-io.mjs';
+import { advise, blockStop, deny, evaluator, hookMain, parseFailureMessage, parsePayload, readStdin, runWhenMain, tryParsePayload } from './hook-io.mjs';
 
 let passed = 0;
 const failures = [];
@@ -86,6 +86,9 @@ async function main() {
   check('parse: the message carries both languages', [invalid.message.includes(' @es '), /invalid|Invalid/.test(invalid.message.split(' @es ')[0]), /inválid/.test(invalid.message.split(' @es ')[1])], [true, true, true]);
   check('parse: empty text throws the same bilingual error', empty.message.includes(' @es '), true);
   check('parse: the parser cause is kept', invalid.cause instanceof SyntaxError, true);
+  check('failure message: a wrapped parse error reports the parser message, not the wrapper', parseFailureMessage(invalid), invalid.cause.message);
+  check('failure message: an error without a cause reports its own message', parseFailureMessage(new Error('boom')), 'boom');
+  check('failure message: a thrown non-error is its text', parseFailureMessage('plain'), 'plain');
 
   // --- stdin ---
   const stream = new PassThrough();

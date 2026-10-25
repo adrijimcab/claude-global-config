@@ -22,8 +22,10 @@ const MUTANTS = [
   ['the parse error loses its Spanish half', H, ' @es Payload de hook inválido: no es JSON.', ''],
   ['the parse error loses its English half', H, 'Invalid hook payload: not JSON.', ''],
   ['the parse error loses its cause', H, '{ cause }', '{}'],
-  ['the tolerant parse rethrows', H, '  } catch {\n    return undefined;\n  }\n}\n\n/** All', '  } catch (error) {\n    throw error;\n  }\n}\n\n/** All'],
+  ['the tolerant parse rethrows', H, '  } catch {\n    return undefined;\n  }\n}\n\n/**\n * Why', '  } catch (error) {\n    throw error;\n  }\n}\n\n/**\n * Why'],
   ['the tolerant parse turns a valid null into undefined', H, 'return parsePayload(raw);', 'return parsePayload(raw) ?? undefined;'],
+  ['the failure message reports the wrapper, not the parser cause', H, '(error.cause ?? error).message', 'error.message'],
+  ['the failure message of a non-error is dropped', H, ': String(error));\n\n/** All', ': undefined);\n\n/** All'],
 
   // --- stdin ---
   ['the stream is decoded as latin1', H, "toString('utf8');\n}\n\n/** A PreToolUse", "toString('latin1');\n}\n\n/** A PreToolUse"],

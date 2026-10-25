@@ -33,6 +33,14 @@ export function tryParsePayload(raw) {
   }
 }
 
+/**
+ * Why a run failed, as a journal records it: the message of the parser's own error when `parsePayload` wrapped one
+ * (its cause), else the error's message, else the text of a thrown non-error.
+ * @es Por qué falló una corrida, como la anota un diario: el mensaje del error propio del parser si `parsePayload`
+ * envolvió uno (su causa), si no el mensaje del error, si no el texto de lo lanzado que no es un error.
+ */
+export const parseFailureMessage = (error) => (error instanceof Error ? (error.cause ?? error).message : String(error));
+
 /** All of a stream (stdin by default) as UTF-8 text. @es Todo un stream (stdin por defecto) como texto UTF-8. */
 export async function readStdin(stream = process.stdin) {
   const chunks = [];
