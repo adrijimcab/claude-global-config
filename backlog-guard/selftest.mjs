@@ -27,6 +27,8 @@ import { fileURLToPath } from 'node:url';
 
 import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs } from './dismiss.mjs';
 import { decide } from './decide.mjs';
+import { advanceTurnWindow } from './turn-window.mjs';
+import { DEGRADED_KIND, journalDegraded, refusalsFile } from './degradation-journal.mjs';
 import { dismissalsFile, dismissedSince } from './dismissals.mjs';
 import { findCandidate } from './announcement.mjs';
 import { findPendingMarker, PENDING_MARKERS } from './markers.mjs';
@@ -92,15 +94,17 @@ function settle(fn) {
   }
 }
 
-function verdict(payload, { offset = 0, tail = '', size = undefined, store = {}, storeErrors = {} } = {}) {
-  const writes = [];
+function verdict(payload, { offset = 0, tail = '', store = {}, storeErrors = {} } = {}) {
+  const reads = [];
   const lookups = [];
   const degraded = [];
   const decision = settle(() => decide(payload, {
-    readState: () => (offset === undefined ? undefined : { offset }),
-    writeState: (sessionId, state) => writes.push({ sessionId, state }),
-    readTail: () => tail,
-    sizeOf: () => size,
+    readState: () => (offset === undefined ? undefined : { turnStart: offset, offset: offset + 1000 }),
+    readTail: (transcriptPath, from) => {
+      reads.push(from);
+
+      return tail;
+    },
     resolveTopicKey: (id) => {
       lookups.push(id);
 
@@ -111,7 +115,7 @@ function verdict(payload, { offset = 0, tail = '', size = undefined, store = {},
     reportDegraded: (info) => degraded.push(info)
   }));
 
-  return { result: decision === 'threw' ? 'threw' : decision === undefined ? 'allow' : 'deny', writes, lookups, degraded };
+  return { result: decision === 'threw' ? 'threw' : decision === undefined ? 'allow' : 'deny', reads, lookups, degraded };
 }
 
 /** One transcript line holding an engram tool call, in the real nested shape. @es Una línea de transcript con una llamada de herramienta de engram, con la forma anidada real. */
@@ -284,7 +288,7 @@ check('empty message -> allow', verdict(stopPayload('')).result, 'allow');
 
 // ---------------------------------------------------------------------------------------------
 // STATE 6: stop_hook_active. The prefilter no longer stands aside on a continued stop (the judge gate caps
-// the blocks per turn): it judges the rewrite from the offset the turn's first stop left, and moves nothing.
+// the blocks per turn): it judges the rewrite over the whole current turn, from the turn start.
 // ---------------------------------------------------------------------------------------------
 check('a continued stop with a pending phrase and no save still owes the judge', verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '' }).result, 'deny');
 check('a continued stop with a save after the block passes', verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master"}}' }).result, 'allow');
@@ -298,20 +302,68 @@ check('a payload with no message passes', verdict({ session_id: 's-1' }).result,
 check('a non-string message passes', verdict({ session_id: 's-1', last_assistant_message: 42 }).result, 'allow');
 
 // ---------------------------------------------------------------------------------------------
-// DIAGNOSTICS: the offset advances at the FIRST stop of a turn, on every path, so the NEXT turn's window
-// starts fresh — proven by inspecting the `writes` the injected `writeState` captured.
+// THE TURN WINDOW (`turn-window.mjs`). Every stop moves `offset` to the transcript's end; a first stop also opens
+// the turn at the previous stop's end (`turnStart`), and a continued stop keeps it. So the window of a stop is
+// the whole current turn, a save made after a block counts for that turn only, and the next turn starts after
+// it. `decide()` only READS the window: it writes nothing.
+// @es LA VENTANA DEL TURNO: cada parada lleva `offset` al final del transcript; una primera parada además abre el
+// turno en el final de la parada anterior (`turnStart`) y una continuada lo conserva. La ventana es el turno
+// entero, un guardado posterior a un bloqueo cuenta solo para ese turno y el siguiente empieza después.
 // ---------------------------------------------------------------------------------------------
 {
-  const { writes } = verdict(stopPayload(CLEAN_MESSAGE), { size: 4242 });
-  check('the offset advances to the current transcript size even when nothing was pending', writes[0]?.state?.offset, 4242);
+  const advanced = (payload, state, size) => {
+    const writes = [];
+    const read = [];
+
+    settle(() => advanceTurnWindow(payload, { readState: (sessionId) => (read.push(sessionId), state), writeState: (sessionId, next) => writes.push([sessionId, next]), sizeOf: () => size }));
+
+    return { writes, read };
+  };
+
+  check('a first stop opens the turn where the previous stop ended and moves the offset to the end', advanced(stopPayload(CLEAN_MESSAGE), { turnStart: 5, offset: 10 }, 30).writes, [['s-1', { turnStart: 10, offset: 30 }]]);
+  check('a continued stop keeps the turn start and moves the offset to the end', advanced(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { turnStart: 10, offset: 30 }, 50).writes, [['s-1', { turnStart: 10, offset: 50 }]]);
+  check('a continued stop over a state with no turn start opens it at the stored offset', advanced(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { offset: 30 }, 50).writes, [['s-1', { turnStart: 30, offset: 50 }]]);
+  check('a first sighting opens the turn at zero', advanced(stopPayload(CLEAN_MESSAGE), undefined, 7).writes, [['s-1', { turnStart: 0, offset: 7 }]]);
+  check('an unmeasurable transcript keeps the offset where it was', advanced(stopPayload(CLEAN_MESSAGE), { turnStart: 5, offset: 10 }, undefined).writes, [['s-1', { turnStart: 10, offset: 10 }]]);
+  check('a payload with no session is kept under unknown', advanced({ last_assistant_message: 'x' }, undefined, 3).writes, [['unknown', { turnStart: 0, offset: 3 }]]);
+  check('the state is read for the session of the payload', advanced(stopPayload(CLEAN_MESSAGE, { sessionId: 's-9' }), undefined, 1).read, ['s-9']);
+  check('a state whose fields are not numbers is a first sighting', advanced(stopPayload(CLEAN_MESSAGE, { stopHookActive: true }), { turnStart: 'x', offset: 'y' }, 4).writes, [['s-1', { turnStart: 0, offset: 4 }]]);
+  check('decide reads the transcript from the turn start, not from the offset', verdict(stopPayload(PENDING_MESSAGE), { offset: 3 }).reads, [3]);
+  check('decide over a state with no turn start reads the whole transcript', settle(() => {
+    const reads = [];
+
+    decide(stopPayload(PENDING_MESSAGE), { readState: () => ({ offset: 9 }), readTail: (transcriptPath, from) => (reads.push(from), ''), resolveTopicKey: () => ({ error: 'not-found' }) });
+
+    return reads;
+  }), [0]);
 }
+
+// ---------------------------------------------------------------------------------------------
+// THE DEGRADATION JOURNAL (`degradation-journal.mjs`): a fail-open over an unreadable store leaves one line in the
+// refusal journal, with the session, the store errors and the transcript; a line that cannot be written costs the
+// evidence, never the decision. @es EL JOURNAL DE DEGRADACIONES: un fallo abierto deja una línea; si no se puede
+// escribir, se pierde la evidencia, nunca la decisión.
+// ---------------------------------------------------------------------------------------------
 {
-  const { writes } = verdict(stopPayload(PENDING_MESSAGE), { tail: '', size: 9999 });
-  check('the offset advances even when the turn owes the judge', writes[0]?.state?.offset, 9999);
-}
-{
-  const { writes } = verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '', size: 12345 });
-  check('a continued stop never moves the offset', writes, []);
+  const parsedOrTorn = (line) => {
+    try {
+      return JSON.parse(line);
+    } catch {
+      return 'torn';
+    }
+  };
+  const readJournal = () => (existsSync(refusalsFile()) ? readFileSync(refusalsFile(), 'utf8').split('\n').filter((line) => line !== '').map(parsedOrTorn) : []);
+  const before = readJournal().length;
+
+  journalDegraded(stopPayload(PENDING_MESSAGE, { sessionId: 's-degraded', transcriptPath: 't.jsonl' }), { errors: ['store-unreadable'] }, { now: () => new Date(Date.UTC(2026, 9, 19, 12)) });
+
+  const lines = readJournal();
+
+  check('a fail-open is journaled once, with its kind, session, errors, transcript and time', [lines.length - before, lines.at(-1)], [1, { at: '2026-10-19T12:00:00.000Z', session: 's-degraded', kind: 'store-unreadable-fail-open', errors: ['store-unreadable'], transcript: 't.jsonl' }]);
+  check('the journal is the backlog-guard refusal journal, which rotation archives', [path.basename(refusalsFile()), path.basename(path.dirname(refusalsFile())), DEGRADED_KIND], ['refusals.jsonl', 'backlog-guard', 'store-unreadable-fail-open']);
+  check('a line that cannot be written never throws', settle(() => journalDegraded(stopPayload(PENDING_MESSAGE), { errors: [1n] })), undefined);
+  check('a line that cannot be written leaves no line', readJournal().length, lines.length);
+  check('the journal time defaults to now', (journalDegraded(stopPayload(PENDING_MESSAGE), { errors: ['query-failed'] }), Math.abs(Date.parse(readJournal().at(-1)?.at) - Date.now()) < 60000), true);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -319,7 +371,7 @@ check('a non-string message passes', verdict({ session_id: 's-1', last_assistant
 // ---------------------------------------------------------------------------------------------
 check(
   'an unreadable transcript (tail undefined) fails OPEN, never a false block',
-  settle(() => decide(stopPayload(PENDING_MESSAGE), { readState: () => undefined, writeState: () => {}, readTail: () => undefined, sizeOf: () => undefined })) === undefined,
+  settle(() => decide(stopPayload(PENDING_MESSAGE), { readState: () => undefined, readTail: () => undefined })) === undefined,
   true
 );
 
@@ -402,7 +454,12 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
     process.env.ENGRAM_DATA_DIR = dataDir;
 
     try {
-      return { code: 0, finding: decide(stopPayload(message, { sessionId, transcriptPath, stopHookActive }), { reportDegraded: (info) => degradedReports.push(info) }) };
+      const payload = stopPayload(message, { sessionId, transcriptPath, stopHookActive });
+
+      // The gate's order: the window moves on every stop, then the prefilter decides. @es El orden de la compuerta.
+      advanceTurnWindow(payload);
+
+      return { code: 0, finding: decide(payload, { reportDegraded: (info) => degradedReports.push(info) }) };
     } catch {
       return { code: 'threw', finding: undefined };
     } finally {
@@ -441,8 +498,15 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
   // the SAME pending phrase now passes, because this time the save genuinely sits in this turn.
   appendToFile(transcriptPath, '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"updated with the finding"}}\n');
   check('END TO END turn 2 continued (saved after the block): the continued stop passes', verdictOf(runGuard(PENDING_MESSAGE, { stopHookActive: true })), '0/allow');
+  // Turn 3: the save made after turn 2's block belongs to turn 2. A new pending announcement in turn 3 owes again.
+  // @es Turno 3: el guardado posterior al bloqueo del turno 2 es del turno 2; un anuncio nuevo del turno 3 vuelve a deber.
+  appendToFile(transcriptPath, '{"type":"assistant","text":"turn 3, a different finding"}\n');
+  check('END TO END turn 3 (pending phrase, the only save was made after turn 2\'s block): owes the judge', verdictOf(runGuard(PENDING_MESSAGE)), '0/deny');
+  appendToFile(transcriptPath, '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"turn 3 finding"}}\n');
+  check('END TO END turn 3 continued (saved after its own block): passes', verdictOf(runGuard(PENDING_MESSAGE, { stopHookActive: true })), '0/allow');
+  appendToFile(transcriptPath, '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"turn 3b, saved before its stop"}}\n');
   const turn3 = runGuard(PENDING_MESSAGE);
-  check('END TO END turn 3 (pending phrase, save genuinely IN this turn): allowed', verdictOf(turn3), '0/allow');
+  check('END TO END turn 3b (pending phrase, save genuinely IN this turn): allowed', verdictOf(turn3), '0/allow');
 
   // Turns 4-7: the mem_update face against a REAL (constructed, disposable) engram sqlite store reached
   // through `ENGRAM_DATA_DIR`, in REAL separate processes. No earlier read of the master id exists
@@ -630,6 +694,10 @@ check('findCandidate of a non-string is undefined', findCandidate(undefined), un
 // de selftests el home es un sandbox, así que el árbol bajo prueba se lee de `SELFTEST_TREE`.
 {
   check('the lexical Stop guard and its registration sidecar are gone', [existsSync(path.join(HERE, 'guard.mjs')), existsSync(path.join(HERE, 'guard.mjs.hook-registration.json'))], [false, false]);
+
+  const dismissHeader = readFileSync(path.join(HERE, 'dismiss.mjs'), 'utf8').split('*/')[0];
+
+  check('the dismiss command\'s header names the pending judge that prints it, in both languages, and no deleted guard', [dismissHeader.includes('Records a dismissal of a pending-judge block'), dismissHeader.includes('@es Registra el descarte de un bloqueo del juez de pendientes'), dismissHeader.includes('`../pending-judge/appendix.mjs`'), dismissHeader.includes('guard.mjs')], [true, true, true, false]);
 
   const tree = process.env.SELFTEST_TREE || path.join(homedir(), '.claude');
   const manifestPath = path.join(tree, 'hook-dispatch', 'manifests', 'stop.json');

@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 /**
- * Records a dismissal of a backlog-guard block, with a stated reason — the escape hatch named in
- * `guard.mjs`'s own block message.
+ * Records a dismissal of a pending-judge block, with a stated reason — option B of the instructions that follow
+ * every block of that judge (`../pending-judge/appendix.mjs`, which prints this command with the session and the
+ * marker that fired). A dismissal recorded after the turn's block ends the question for that turn
+ * (`../pending-judge/prefilter.mjs` reads it back through `dismissals.mjs`).
  *
- * NEVER A SILENT ESCAPE, same discipline as `failure-capture/capture.mjs dismiss`: a false positive
- * from a heuristic marker set is expected and tolerated (see `markers.mjs`'s own docblock on why
- * "pendiente"/"todo" widen past their bare word), but tolerating it costs a WRITTEN reason, because the
- * dismissal log is the only evidence that could ever justify narrowing the marker set later.
+ * NEVER A SILENT ESCAPE, same discipline as `failure-capture/capture.mjs dismiss`: a wrong block is expected
+ * and tolerated, but tolerating it costs a WRITTEN reason, because the dismissal log is the only evidence of
+ * where the judge or its broad prefilter (`markers.mjs`) is wrong.
  *
- * @es Registra el descarte de un bloqueo de backlog-guard, con un motivo. NUNCA un escape silencioso: un
- * falso positivo se tolera, pero cuesta un motivo ESCRITO — el registro de descartes es la única
- * evidencia que podría justificar más adelante estrechar el conjunto de marcadores.
+ * @es Registra el descarte de un bloqueo del juez de pendientes, con un motivo: la opción B de las instrucciones
+ * que siguen a cada bloqueo de ese juez (`../pending-judge/appendix.mjs`, que imprime este comando con la sesión
+ * y el marcador que saltó). Un descarte registrado después del bloqueo del turno cierra la pregunta de ese turno
+ * (lo relee `../pending-judge/prefilter.mjs`). NUNCA un escape silencioso: un bloqueo equivocado se tolera, pero
+ * cuesta un motivo ESCRITO, porque el registro de descartes es la única evidencia de dónde se equivocan el juez o
+ * su prefiltro amplio.
  */
 
 import { appendFileSync, mkdirSync } from 'node:fs';

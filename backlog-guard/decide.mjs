@@ -7,15 +7,16 @@
  *
  * THE PROPERTY THIS CHECKS: did the final message of THIS turn LOOK LIKE it announces something
  * pending (`markers.mjs`), and did a master-backlog `mem_save` (`master-save.mjs`) happen SINCE the
- * transcript position recorded at the end of the PREVIOUS turn (`state.mjs`)? Both halves are
+ * start of the CURRENT turn, as `turn-window.mjs` recorded it (`turnStart`)? This function only READS that
+ * window; the pending judge's gate moves it on every Stop before deciding anything. Both halves are
  * heuristics on purpose — a command hook cannot judge whether a finding is real or whether a save's
  * CONTENT actually captures it, only whether the shapes are present. `grep localiza, NO dictamina`.
  *
  * WHY THE WINDOW IS PER-TURN, not per-session like `engram-persistence/guard.mjs`'s "since last
  * satisfaction". A save made in an earlier turn must NOT silently cover a NEW pending announcement in a
  * later one — the owner directive is "every finding, in the turn it appears", not "at least one save
- * somewhere in the session". Reading only the transcript bytes since the last turn's offset is what
- * makes the check see that: an earlier save sits before the offset and cannot satisfy this turn.
+ * somewhere in the session". Reading only the transcript bytes since the turn start is what makes the
+ * check see that: an earlier save sits before the turn start and cannot satisfy this turn.
  *
  * FAILS OPEN on every unmeasurable case: no transcript, an unreadable file, a malformed payload. A
  * guard able to wedge a turn end is a larger hazard than the finding it might miss — the same bound
@@ -45,9 +46,10 @@
  *
  * @es LA DECISIÓN: ¿puede terminar este turno, o un hallazgo pendiente anunciado debe primero el
  * backlog maestro? Comprueba si el mensaje final de ESTE turno anuncia algo pendiente y si hubo un
- * guardado de backlog maestro DESDE la posición de transcript registrada al final del turno ANTERIOR —
- * nunca «en algún punto de la sesión», porque la directiva es «cada hallazgo, en el turno en que
- * aparece». FALLA ABIERTO ante cualquier caso no medible.
+ * guardado de backlog maestro DESDE el inicio del turno ACTUAL que registró `turn-window.mjs`
+ * (`turnStart`) — nunca «en algún punto de la sesión», porque la directiva es «cada hallazgo, en el turno
+ * en que aparece». Esta función solo LEE la ventana; la compuerta del juez la mueve en toda parada antes de
+ * decidir. FALLA ABIERTO ante cualquier caso no medible.
  */
 
 import { resolveTopicKeyById } from '../backlog-owner-guard/resolve-topic-key.mjs';
@@ -55,7 +57,7 @@ import { findCandidate } from './announcement.mjs';
 import { judgeMasterUpdates } from './master-update.mjs';
 import { hasMasterDocumentCommit } from './backlog-document-save.mjs';
 import { hasMasterBacklogSave } from './master-save.mjs';
-import { readOffsetState, readTranscriptTail, transcriptSize, writeOffsetState } from './state.mjs';
+import { readOffsetState, readTranscriptTail } from './state.mjs';
 
 /**
  * The PREFILTER decision over a parsed Stop payload, as `{ marker, sessionId, transcriptPath }` when the turn
@@ -69,20 +71,15 @@ export function decide(
   payload,
   {
     readState = readOffsetState,
-    writeState = writeOffsetState,
     readTail = readTranscriptTail,
-    sizeOf = transcriptSize,
     resolveTopicKey = resolveTopicKeyById,
     reportDegraded = () => {}
   } = {}
 ) {
-  // A continued stop (`stop_hook_active`) is a rewrite after a block: its window still starts where the turn's
-  // first stop left the offset, so a save made after the block counts, and it never moves the offset. How many
-  // times a turn may be blocked is the judge gate's cap, not this function's.
-  // @es Una parada continuada es el reescrito tras un bloqueo: su ventana sigue empezando donde la primera
-  // parada del turno dejó el offset, así que un guardado posterior cuenta, y nunca lo mueve. Cuántas veces se
-  // bloquea un turno lo fija el tope de la compuerta, no esta función.
-  const continued = payload?.stop_hook_active === true;
+  // The window is the whole current turn, from its start, on a first stop and on a continued one alike, so a save
+  // made after a block counts for that turn. How many times a turn may be blocked is the judge gate's cap.
+  // @es La ventana es el turno actual entero, desde su inicio, en una primera parada y en una continuada, así que
+  // un guardado posterior a un bloqueo cuenta para ese turno. Cuántas veces se bloquea lo fija la compuerta.
   const message = typeof payload?.last_assistant_message === 'string' ? payload.last_assistant_message : '';
   const marker = findCandidate(message);
 
@@ -90,13 +87,8 @@ export function decide(
   const transcriptPath = payload?.transcript_path;
 
   const state = readState(sessionId);
-  const offset = typeof state?.offset === 'number' ? state.offset : 0;
-  const currentSize = sizeOf(transcriptPath);
-  const tail = readTail(transcriptPath, offset);
-
-  // The window for THIS turn is consumed at its first stop, either way: the next genuinely new turn must not
-  // re-read content this turn already judged.
-  if (!continued) writeState(sessionId, { offset: currentSize ?? offset });
+  const turnStart = typeof state?.turnStart === 'number' ? state.turnStart : 0;
+  const tail = readTail(transcriptPath, turnStart);
 
   // No pending phrase at all: nothing owed this turn, regardless of what was just learned.
   if (marker === undefined) return undefined;

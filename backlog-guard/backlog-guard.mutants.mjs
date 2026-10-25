@@ -25,13 +25,29 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const MUTANTS = [
   // --- the window of the turn
-  ['a continued stop stands aside again instead of being judged from the first stop\'s offset', 'decide.mjs', 'const continued = payload?.stop_hook_active === true;', 'const continued = payload?.stop_hook_active === true;\n  if (continued) return undefined;'],
-  ['a continued stop moves the offset, so the rewrite\'s own save is lost to the next read', 'decide.mjs', 'if (!continued) writeState(', 'if (true) writeState('],
-  ['the first stop stops moving the offset', 'decide.mjs', 'if (!continued) writeState(', 'if (false) writeState('],
+  ['a continued stop stands aside again instead of being judged over its turn', 'decide.mjs', "  const message = typeof payload?.last_assistant_message === 'string'", "  if (payload?.stop_hook_active === true) return undefined;\n  const message = typeof payload?.last_assistant_message === 'string'"],
+  ['the prefilter reads from the last stop instead of the turn start, so a save made before a block is lost', 'decide.mjs', 'const tail = readTail(transcriptPath, turnStart);', "const tail = readTail(transcriptPath, typeof state?.offset === 'number' ? state.offset : 0);"],
+  ['a continued stop opens a new turn, so the save made after the block is out of the window', 'turn-window.mjs', "payload?.stop_hook_active === true ? positionOr(state?.turnStart, previousEnd) : previousEnd", 'previousEnd'],
+  ['a first stop keeps the old turn start, so an earlier turn\'s save satisfies a later one', 'turn-window.mjs', "payload?.stop_hook_active === true ? positionOr(state?.turnStart, previousEnd) : previousEnd", 'positionOr(state?.turnStart, previousEnd)'],
+  ['a continued stop over a state with no turn start opens it at zero', 'turn-window.mjs', 'positionOr(state?.turnStart, previousEnd) : previousEnd', 'positionOr(state?.turnStart, 0) : previousEnd'],
+  ['the offset never moves to the transcript end', 'turn-window.mjs', 'offset: sizeOf(payload?.transcript_path) ?? previousEnd', 'offset: previousEnd'],
+  ['an unmeasurable transcript resets the offset to zero', 'turn-window.mjs', 'sizeOf(payload?.transcript_path) ?? previousEnd', 'sizeOf(payload?.transcript_path) ?? 0'],
+  ['the previous stop\'s end is forgotten', 'turn-window.mjs', 'const previousEnd = positionOr(state?.offset, 0);', 'const previousEnd = 0;'],
+  ['a stored position that is not a number is trusted', 'turn-window.mjs', "(typeof value === 'number' ? value : fallback)", '(value ?? fallback)'],
+  ['the window is kept for another session', 'turn-window.mjs', '? payload.session_id : \'unknown\'', "? 'other' : 'unknown'"],
+  ['the fail-open journal loses its kind', 'degradation-journal.mjs', 'kind: DEGRADED_KIND, ', ''],
+  ['the fail-open journal loses the store errors', 'degradation-journal.mjs', 'errors, transcript:', 'transcript:'],
+  ['the fail-open journal loses the session', 'degradation-journal.mjs', 'session: payload?.session_id, ', ''],
+  ['the fail-open journal loses the transcript', 'degradation-journal.mjs', ', transcript: payload?.transcript_path', ''],
+  ['the fail-open journal is not stamped now', 'degradation-journal.mjs', 'now = () => new Date()', 'now = () => new Date(0)'],
+  ['the fail-open journal throws when it cannot write', 'degradation-journal.mjs', '  } catch {\n    // A journal', '  } catch (error) {\n    throw error;\n    // A journal'],
+  ['the fail-open journal is another file than the rotated one', 'degradation-journal.mjs', "'refusals.jsonl'", "'degraded.jsonl'"],
+  ['the fail-open journal lines are not ended', 'degradation-journal.mjs', '`${line}\\n`', 'line'],
+  ['the window is never written', 'turn-window.mjs', '  writeState(sessionId, { turnStart, offset:', '  void ({ turnStart, offset:'],
   ['the pending-phrase requirement is gone: every turn reaches the judge', 'decide.mjs', 'const marker = findCandidate(message);', 'const marker = "x";'],
   ['a master-backlog save no longer satisfies a pending announcement', 'decide.mjs', 'if (hasMasterBacklogSave(tail) || hasMasterDocumentCommit(tail)) return undefined;', ''],
   ['an unreadable transcript stops failing open and reaches the judge instead', 'decide.mjs', 'if (tail === undefined) return undefined;', ''],
-  ['the per-turn offset always reads as zero, so an EARLIER turn\'s save always satisfies a LATER one', 'decide.mjs', "const offset = typeof state?.offset === 'number' ? state.offset : 0;", 'const offset = 0;'],
+  ['the turn start always reads as zero, so an EARLIER turn\'s save always satisfies a LATER one', 'decide.mjs', "const turnStart = typeof state?.turnStart === 'number' ? state.turnStart : 0;", 'const turnStart = 0;'],
   ['the save-tool-name requirement is dropped: a bare topic_key anywhere in the tail now counts as a save', 'master-save.mjs', 'if (!tail.includes(SAVE_TOOL_MARKER)) return false;', ''],
   ['the "-master" suffix stops mattering: any backlog/* topic_key satisfies, including a per-item note', 'master-save.mjs', "return typeof value === 'string' && value.startsWith(BACKLOG_NAMESPACE_PREFIX) && value.endsWith(MASTER_SUFFIX) && value.length > BACKLOG_NAMESPACE_PREFIX.length + MASTER_SUFFIX.length;", "return typeof value === 'string' && value.startsWith(BACKLOG_NAMESPACE_PREFIX);"],
 
@@ -108,7 +124,7 @@ const FLEET_ROOT = path.resolve(HERE, '..');
 const survivors = runMutants({
   fleetRoot: FLEET_ROOT,
   paths: [
-    ...['decide.mjs', 'markers.mjs', 'backlog-document-save.mjs', 'prose.mjs', 'announcement.mjs', 'master-save.mjs', 'master-update.mjs', 'state.mjs', 'dismiss.mjs', 'dismissals.mjs', 'replay.mjs', 'selftest.mjs'].map((file) => `${THIS_DIRECTORY}/${file}`),
+    ...['decide.mjs', 'markers.mjs', 'backlog-document-save.mjs', 'prose.mjs', 'announcement.mjs', 'master-save.mjs', 'master-update.mjs', 'state.mjs', 'turn-window.mjs', 'degradation-journal.mjs', 'dismiss.mjs', 'dismissals.mjs', 'replay.mjs', 'selftest.mjs'].map((file) => `${THIS_DIRECTORY}/${file}`),
     `${THIS_DIRECTORY}/fixtures`,
     'backlog-owner-guard/resolve-topic-key.mjs',
     'hook-state', 'bilingual-output'
