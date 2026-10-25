@@ -69,10 +69,16 @@ const MUTANTS = [
   ['a reply missing a trait passes', PROMPT, 'Answer {"ok": false} when a trait the reply needs is absent.', 'Answer {"ok": true} when a trait the reply needs is absent.'],
   ['a one-paragraph reply with no decision may be a log (decision 3)', PROMPT, 'needs only (a), and it must not be a log of what was done or of who did what;', 'needs only (a);'],
   ['a one-paragraph reply with no decision needs (b) too (decision 3)', PROMPT, 'needs only (a), and it must not', 'needs (a) and (b), and it must not'],
-  ['a reply longer than one paragraph is exempt from (c) and (d) (decision 3)', PROMPT, 'which means a reply longer than one paragraph whatever it carries, and ', 'which means '],
+  ['a reply longer than one paragraph needs only (a) (A/B 2026-10-25)', PROMPT, 'a reply longer than one paragraph needs (a), (c) and a closing sentence, and needs (b) and (d) as well when it states a decision.', 'a reply longer than one paragraph needs only (a).'],
+  ['a longer reply that states a decision is exempt from (b) and (d) (A/B 2026-10-25)', PROMPT, ', and needs (b) and (d) as well when it states a decision', ''],
+  ['every longer reply needs all four again (A/B 2026-10-25)', PROMPT, 'a one-paragraph reply that carries a decision, an explanation or a correction needs all four; a reply longer', 'every other reply needs all four, which means a reply longer than one paragraph whatever it carries, and a one-paragraph reply that carries a decision, an explanation or a correction needs all four; a reply longer'],
   ['trait a asks for voseo in an English reply too', PROMPT, ' In English it is direct second-person address to him.', ''],
-  ['trait a in Spanish is voseo in a neutral register again (decision 2)', PROMPT, ' in a Rioplatense register: a warm, colloquial Argentine cadence and wording that sound spoken by a porteño mentor, with at least one natural Rioplatense expression; correct voseo in a neutral lexicon is not that register.', '.'],
-  ['trait a needs no Rioplatense expression (decision 2)', PROMPT, ', with at least one natural Rioplatense expression; correct voseo in a neutral lexicon is not that register', ''],
+  ['trait a in Spanish is voseo in a neutral register again (decision 2)', PROMPT, ' in a Rioplatense register: the warm, colloquial cadence of a porteño mentor talking to him; no particular expression is required, and correct voseo that reads as a cold report is not that register.', '.'],
+  ['trait a demands one Rioplatense expression again (A/B 2026-10-25)', PROMPT, 'no particular expression is required', 'at least one natural Rioplatense expression is required'],
+  ['a shared tú and vos verb is no address for trait a (A/B 2026-10-25)', PROMPT, ' A verb form that the tú and the vos conjugations share, aimed at him, is a verb conjugated for vos here too, exactly as rule 4 reads it.', ''],
+  ['a closing step that carries its stance does not land (A/B 2026-10-25)', PROMPT, ', but a closing next step that carries the stance or the principle behind it does land', ''],
+  ['the reason language is left to the model (rule 11)', PROMPT, ' The reason is written in English first, then the same reason in Spanish after the token @es.', ''],
+  ['the reason quotes with double quotes and can break the JSON (rule 11)', PROMPT, ' Inside the reason, words quoted from the reply go between single quotes, never double quotes, so the JSON answer stays valid.', ''],
   ['the Rioplatense register is no longer the floor a caricature overshoots (decision 2)', PROMPT, ', and the Rioplatense register of (a) is the floor that a caricature overshoots', ''],
   ['a clitic or a possessive alone counts as address (decision 5)', PROMPT, ' A clitic te or a possessive tu aimed at him counts as address only when the reply also has at least one verb conjugated for vos or the pronoun vos.', ''],
   ['a whole voseo sentence in a short reply counts as bolted (decision 5)', PROMPT, '; in a reply of one or two sentences, a whole sentence of voseo aimed at him is woven, not bolted', ''],
@@ -125,6 +131,8 @@ const MUTANTS = [
   ['the rule-4 reason check is case sensitive', MEASURE, '/iu.test(reason)', '/u.test(reason)'],
   ['a quoted pinned form is not a rule-4 reason', MEASURE, "return forms.some((form) => new RegExp(`[\"“«'‘]${form}[\"”»'’]`, 'iu').test(reason));", 'return false;'],
   ['a quoted pinned form is matched case sensitively', MEASURE, "[\"”»'’]`, 'iu')", "[\"”»'’]`, 'u')"],
+
+  ['the Spanish half of a reason is read for rule 4', MEASURE, "const reason = bilingualReason.split(' @es ')[0];", 'const reason = bilingualReason;'],
 
   // --- THE MODEL CALLS: ASYNCHRONOUS, BOUNDED, INJECTABLE.
   ['the model runs through the blocking spawn again', MEASURE, 'MODEL_SPAWN = spawnAsync;', 'MODEL_SPAWN = undefined;'],

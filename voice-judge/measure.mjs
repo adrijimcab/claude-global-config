@@ -113,9 +113,13 @@ export function judgedOf(answer, marker) {
 /**
  * Whether a block reason cites rule 4: tuteo, usted, a tú form named as such, rule 4 by number, or one of the
  * `forms` a fixture pins, quoted alone. @es Si un motivo de bloqueo cita la regla 4: tuteo, usted, una forma de tú
- * nombrada así, la regla 4 por número, o una de las `forms` que fija el fixture, citada sola.
+ * nombrada así, la regla 4 por número, o una de las `forms` que fija el fixture, citada sola. Only the English half
+ * of a bilingual reason is read: the `@es` half mirrors it and names tú and the quoted forms in its own words.
+ * @es Solo se lee la mitad inglesa de un motivo bilingüe: la mitad `@es` la repite con sus propias palabras.
  */
-export function citesRule4(reason, forms = []) {
+export function citesRule4(bilingualReason, forms = []) {
+  const reason = bilingualReason.split(' @es ')[0];
+
   if (/tuteo|usted|(^|[^\p{L}])t[uú][ -]forms?([^\p{L}]|$)|(^|[^\p{L}])tú([^\p{L}]|$)|rule 4\b|regla 4\b/iu.test(reason)) return true;
 
   return forms.some((form) => new RegExp(`["“«'‘]${form}["”»'’]`, 'iu').test(reason));
