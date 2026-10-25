@@ -9,6 +9,16 @@
  * Los módulos se importan dentro del try para que incluso la falta de un archivo hermano caiga ahí.
  *
  *   node guard.mjs [--overlay-check <check.mjs>]     (el flag solo lo usa el selftest)
+ *
+ * hook-io: the port (`../hook-io/hook-io.mjs`) is imported DYNAMICALLY inside `evaluate`, and `main()` stays
+ * hand-rolled, on purpose: the selftest "CLI: sibling modules missing" requires this guard to survive a missing
+ * sibling and report it, and a static import of the port would crash it at load. Its parse-failure message
+ * keeps the parser's own text (the `cause` of the port's error) for the same reason: the port may be the
+ * module that is missing.
+ * @es hook-io: el puerto se importa de forma DINÁMICA dentro de `evaluate` y `main()` sigue a mano, a propósito:
+ * el selftest "CLI: sibling modules missing" exige que esta guardia sobreviva a un hermano que falta y lo informe,
+ * y un import estático del puerto la tumbaría al cargar. El mensaje de fallo de parseo conserva el texto del propio
+ * parser (la `cause` del error del puerto) por lo mismo: el módulo que falta podría ser el puerto.
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
