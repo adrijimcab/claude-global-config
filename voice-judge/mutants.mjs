@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * The decisions of the voice judge, each broken once, that `selftest.mjs` must catch: the wiring of the rubric
- * and how the shared journal guard tells the voice judge's blocks from the premise judge's. The runner lives in
- * `../mutation-proof/run-mutants.mjs` and mutates a COPY. Every kill is an assertion kill (`crashKills: 'fail'`).
+ * The decisions of the voice judge, each broken once, that `selftest.mjs` must catch: the wiring of the rubric,
+ * the pure parts of `measure.mjs` and how the shared journal guard tells the voice judge's blocks from the premise
+ * judge's. The runner lives in `../mutation-proof/run-mutants.mjs` and mutates a COPY. Every kill is an assertion
+ * kill (`crashKills: 'fail'`).
  *
- * @es Las decisiones del juez de voz, rotas una a una, que su selftest debe cazar: el cableado de la rúbrica y
- * cómo la guardia de journal compartida distingue los bloqueos del juez de voz de los de premisas.
+ * @es Las decisiones del juez de voz, rotas una a una, que su selftest debe cazar: el cableado de la rúbrica, las
+ * partes puras de `measure.mjs` y cómo la guardia de journal compartida distingue los bloqueos del juez de voz de
+ * los de premisas.
  */
 
 import path from 'node:path';
@@ -34,13 +36,12 @@ const MUTANTS = [
   ['the rubric drops the prose exception', PROMPT, 'The one exception is a body whose full-sentence paragraphs explain the why of the decisions and that ends with a closing sentence that lands.', ''],
   ['the rubric stops looking at what carries the reply', PROMPT, 'Look at what CARRIES it:', 'Look at it:'],
   ['a reply with no second person can fail as tuteo', PROMPT, ' Rule 4 fails only a tú or usted word that actually appears, and the reason must quote it: a reply with no second-person verb at all, written in the first and the third person, is not tuteo.', ''],
-  ['a present-subjunctive second-person form can fail as tuteo', PROMPT, ' A present-subjunctive second-person form is normal Rioplatense voseo and never a tú failure.', ''],
-  ['every su counts as usted whatever its antecedent', PROMPT, ' The possessive su or sus counts as usted only when its antecedent is the owner himself; judge it from the antecedent, and a su that belongs to a third person (a session, a worker, a tool) is never usted, so the reason must not ask to turn it into tu.', ''],
+  ['every su counts as usted whatever its antecedent', PROMPT, ' The possessive su or sus counts as usted only when its antecedent is the owner himself; judge it from the antecedent, and a su that belongs to a third person such as a session, a worker or a tool is never usted, so the reason must not ask to turn it into tu.', ''],
   ['voseo is described by example words again, not by its grammar', PROMPT, 'a present-indicative verb conjugated for vos, stressed on its ending', 'a voseo verb'],
-  ['a tú failure is described by example words again, not by its grammar', PROMPT, 'conjugated for tú, stressed on its stem, or an affirmative imperative conjugated for tú;', 'a tú verb;'],
+  ['a tú failure is described by example words again, not by its grammar', PROMPT, 'A tú failure is only a present-indicative verb or an affirmative imperative conjugated for tú whose letters differ from the vos form of the same verb even with accents ignored', 'A tú failure is a tú verb'],
   ['the rubric quotes a Spanish phrase again', PROMPT, 'a verb whose subject is a thing or a third person is not a tú form.', 'a verb whose subject is a thing or a third person ("el juez revisa") is not a tú form.'],
   ['the rubric quotes a phrase with guillemets', PROMPT, 'a verb whose subject is a thing or a third person is not a tú form.', 'a verb whose subject is a thing or a third person («el juez revisa») is not a tú form.'],
-  ['the rubric lists an accented example word again', PROMPT, 'the pronoun vos; and the possessive tu,', 'the pronoun vos (tenés); and the possessive tu,'],
+  ['the rubric lists an accented example word again', PROMPT, 'the pronoun vos; and the possessive tu,', 'the pronoun vos, as in tenés; and the possessive tu,'],
   ['the rubric allows impossible', PROMPT, 'Never set the field impossible.', 'Set the field impossible when the owner repeats himself.'],
   ['the rubric asks for length', PROMPT, 'Never ask for a longer message for its own sake: ask only for what is missing.', 'Ask for a longer message.'],
   ['the rubric stops failing tu and usted forms', PROMPT, 'when it addresses him with tú or usted forms', 'when it addresses him in Spanish'],
@@ -53,6 +54,12 @@ const MUTANTS = [
   ['the pinned timeout is not the settings one', PROMPT, 'TIMEOUT_SECONDS = 30', 'TIMEOUT_SECONDS = 20'],
   ['the marker is not what the rubric spells', PROMPT, "MARKER = 'VOICE-JUDGE:'", "MARKER = 'VOICE JUDGE:'"],
 
+  // --- RULE 4: UNACCENTED VOSEO AND THE FORMS TU AND VOS SHARE (DECISION 4).
+  ['voseo typed without its accent can fail as tuteo', PROMPT, ' Voseo typed without its written accent is still voseo: a verb whose letters match the vos form once accents are ignored is read as that vos form, never as a tú form.', ''],
+  ['a form tú and vos share can fail as tuteo', PROMPT, ' A verb form that the tú and the vos conjugations share in any tense is voseo too and never a tuteo failure: the preterite, the imperfect, the present subjunctive and every one-syllable present are shared, and a reason never quotes a shared form as a tú form.', ''],
+  ['a one-syllable present is no longer a shared form', PROMPT, 'the present subjunctive and every one-syllable present are shared', 'the present subjunctive are shared'],
+  ['an unaccented vos verb can be quoted as a tú failure', PROMPT, 'whose letters differ from the vos form of the same verb even with accents ignored', 'whose letters differ from the vos form of the same verb'],
+
   // --- THE MENTOR TEST OF RUBRIC V8 AND ITS FEEDBACK.
   ['the rubric blocks prose with a supporting list', PROMPT, 'Answer {"ok": true} when prose carries the message, the mentor test of rule 6 is met and a list only supports it', 'Answer ok false when a list is present'],
   ['the signature is still v1', PROMPT, "'voice-judge rubric v8.'", "'voice-judge rubric v1.'"],
@@ -60,31 +67,36 @@ const MUTANTS = [
   ['the rubric blocks when unsure about tuteo and enumerations', PROMPT, 'When unsure whether rule 4 or rule 8 applies, answer {"ok": true}.', 'When unsure whether rule 4 or rule 8 applies, answer ok false.'],
   ['the mentor test needs only one trait', PROMPT, 'which means every trait below that the reply needs is observable in it', 'which means one of these traits is observable in it'],
   ['a reply missing a trait passes', PROMPT, 'Answer {"ok": false} when a trait the reply needs is absent.', 'Answer {"ok": true} when a trait the reply needs is absent.'],
-  ['energy and a landing close are needed on every reply again', PROMPT, 'and (c) and (d) are needed when the reply carries a decision, an explanation or a correction.', 'and (c) and (d) hold for every reply too.'],
-  ['a short operational reply needs every trait again', PROMPT, ' A short operational reply, at most one paragraph of status that carries no decision, no explanation and no correction, needs (a) and must not be a third-person log, which is all that (b) asks of a reply with no decision; it needs neither (c) nor (d).', ''],
-  ['trait a asks for voseo in an English reply too', PROMPT, 'in the language of the reply: in Spanish, voseo aimed at him (the pronoun vos, a verb conjugated for vos, an imperative aimed at him); in English, direct second-person address to him; in either language woven', 'voseo aimed at him (the pronoun vos, a verb conjugated for vos, an imperative aimed at him) woven'],
+  ['a one-paragraph reply with no decision may be a log (decision 3)', PROMPT, 'needs only (a), and it must not be a log of what was done or of who did what;', 'needs only (a);'],
+  ['a one-paragraph reply with no decision needs (b) too (decision 3)', PROMPT, 'needs only (a), and it must not', 'needs (a) and (b), and it must not'],
+  ['a reply longer than one paragraph is exempt from (c) and (d) (decision 3)', PROMPT, 'which means a reply longer than one paragraph whatever it carries, and ', 'which means '],
+  ['trait a asks for voseo in an English reply too', PROMPT, ' In English it is direct second-person address to him.', ''],
+  ['trait a in Spanish is voseo in a neutral register again (decision 2)', PROMPT, ' in a Rioplatense register: a warm, colloquial Argentine cadence and wording that sound spoken by a porteño mentor, with at least one natural Rioplatense expression; correct voseo in a neutral lexicon is not that register.', '.'],
+  ['trait a needs no Rioplatense expression (decision 2)', PROMPT, ', with at least one natural Rioplatense expression; correct voseo in a neutral lexicon is not that register', ''],
+  ['the Rioplatense register is no longer the floor a caricature overshoots (decision 2)', PROMPT, ', and the Rioplatense register of (a) is the floor that a caricature overshoots', ''],
+  ['a clitic or a possessive alone counts as address (decision 5)', PROMPT, ' A clitic te or a possessive tu aimed at him counts as address only when the reply also has at least one verb conjugated for vos or the pronoun vos.', ''],
+  ['a whole voseo sentence in a short reply counts as bolted (decision 5)', PROMPT, '; in a reply of one or two sentences, a whole sentence of voseo aimed at him is woven, not bolted', ''],
   ['any closing question counts as a close that lands', PROMPT, ', and a closing question that asks him to decide lands only when the sentences just before it state a stance or a recommendation of the reply itself', ''],
-  ['das, ves and vas fail as tuteo', PROMPT, ' A second-person present verb of one syllable has no separate stem and ending to stress, so the tú and the vos conjugations spell it the same: it is voseo too, never a tuteo failure, and a reason never quotes one as a tú form.', ''],
-  ['a one-syllable verb can be quoted as a tú failure', PROMPT, 'A tú failure is only an indicative verb of more than one syllable conjugated for tú,', 'A tú failure is only an indicative verb conjugated for tú,'],
   ['a voseo token at the start or the end counts as speaking to him', PROMPT, ', and not one token bolted onto the opening or the closing line', ''],
   ['a third-person log with a voseo token passes', PROMPT, ' A reply that narrates workers, judges or sessions in the third person, a log of who did what and what is running, fails even when its first or last sentence carries a second-person token, because a token there is not speaking to him.', ''],
   ['a log of what was done counts as the why', PROMPT, ', in sentences that connect a cause to a choice, and not as a log of what was done', ''],
   ['energy is no longer one of four forms', PROMPT, 'at least one rhetorical question, a deliberate emphasis on the point that matters, an image or an analogy, or a lesson stated as a principle for any future case', 'a pleasant tone'],
   ['a next step is a close that lands', PROMPT, '; a next step alone, a promise to report back or an offer of more help is not a close that lands', ''],
   ['a fact or a diagnosis counts as a trait', PROMPT, ' Facts, measurements, a diagnosis, an admitted mistake of this turn and a verdict on a result are content, not by themselves traits (b), (c) or (d).', ''],
-  ['a short reply that carries a decision is exempt from the mentor test', PROMPT, 'Brevity governs length, never presence: a short reply that carries a decision, an explanation or a correction needs all four exactly like a long one. ', ''],
+  ['a one-paragraph reply that carries a decision is exempt from the mentor test', PROMPT, ' Brevity governs length, never presence: a one-paragraph reply that carries a decision, an explanation or a correction needs all four exactly like a long one.', ''],
   ['the rubric stops failing impersonal officialese', PROMPT, ' Impersonal officialese with no first-person voice is cold and fails too.', ''],
-  ['the rubric lets slang caricatures pass', PROMPT, ' A caricature fails as well, even when every trait is present: slang stacked for its own sake, more than one rhetorical question in a short reply, or capital letters used as decoration; one deliberate emphasis is energy, a pile of them is noise.', ''],
+  ['the rubric lets slang caricatures pass', PROMPT, 'slang stacked for its own sake, more than one rhetorical question in a short reply, or capital letters used as decoration', 'nothing stacked'],
   ['a caricature that meets every trait passes', PROMPT, 'A caricature fails as well, even when every trait is present:', 'A caricature fails as well:'],
-  ['the rubric judges the mentor test by structure and length', PROMPT, 'Rule 6 judges register and the presence of these traits, never structure or length.', 'Rule 6 judges structure and length.'],
+  ['the rubric judges the mentor test by structure and length', PROMPT, 'Rule 6 judges register and the presence of these traits; the paragraph count decides only which traits a reply needs, never on its own whether it passes.', 'Rule 6 judges structure and length.'],
+  ['rule 11 gets a parenthesised list of three words (decision 6)', PROMPT, 'which closing line is only a next step,', 'which closing line (step, promise, offer) is only a next step,'],
   ['the reason stops naming what is missing and where', PROMPT, 'then names what is missing and where, in terms of the content of that reply: which trait of rule 6 is absent', 'then says what to rewrite: which trait of rule 6 is absent'],
   ['the reason may supply a sentence for the rewrite', PROMPT, 'The reason never writes, suggests or quotes a sentence, an opening, a closing or an expression for the rewrite to use, and gives no example wording: ', ''],
   ['the reason template lists voseo forms again', PROMPT, 'voseo in Spanish and direct second person in English.', 'voseo in Spanish (vos, tenés, podés) and direct second person in English.'],
   ['the rubric drops the mentor voice', PROMPT, 'in a Gentleman mentor voice that speaks to the owner in the language of the reply', 'in a neutral voice'],
-  ['the rewrite is asked for voseo whatever the language of the reply', PROMPT, 'in the language of the reply, voseo in Spanish and direct second person in English.', 'in voseo.'],
+  ['the rewrite is asked for voseo whatever the language of the reply', PROMPT, 'in the language of the reply, Rioplatense voseo in Spanish and direct second person in English.', 'in voseo.'],
   ['the reason template quotes a phrase to paste', PROMPT, 'and gives no example wording: ', 'and gives no example wording beyond "dale": '],
 
-  // --- THE MEASUREMENT TOOL: THE RUBRIC IT LOADS AND THE SUMMARY IT PRINTS.
+  // --- THE MEASUREMENT TOOL: THE RUBRIC IT LOADS.
   ['--rubric followed by a flag is read as its path', MEASURE, " || value.startsWith('--')", ''],
   ['--rubric with no value falls through', MEASURE, "value === undefined || value === '' || ", ''],
   ['--rubric with an empty value is read as its path', MEASURE, " || value === ''", ''],
@@ -97,30 +109,48 @@ const MUTANTS = [
   ['a module that cannot be loaded is not named', MEASURE, '`the rubric module ${file} cannot be loaded: ${error?.message ?? error} @es', '`the rubric cannot be loaded @es'],
   ['a wrong --rubric exits 0', MEASURE, '    return 2;\n', '    return 0;\n'],
   ['a wrong --rubric is not printed', MEASURE, '    console.error(String(error?.message ?? error));\n\n    return 2;', '    return 2;'],
-  ['the active rubric is not printed first', MEASURE, '  console.log(`rubric=${rubric.path}`);\n', ''],
-  ['a run with no held-out fixture meets the ship bar', MEASURE, '    if (!meetsShipBar(held)) ships = false;\n', ''],
-  ['the held-out prefix is the tuning one', MEASURE, "HELD_OUT_PREFIX = 'held-'", "HELD_OUT_PREFIX = 'real-'"],
-  ['a block reason is dropped', MEASURE, "return { verdict: false, reason: read.reason };", "return { verdict: false, reason: '' };"],
+  ['the active rubric is not printed first', MEASURE, '  console.log(`rubric=${rubric.path} @es rúbrica=${rubric.path}`);\n', ''],
+  ['a block reason is dropped', MEASURE, 'return { verdict: false, reason: read.reason };', "return { verdict: false, reason: '' };"],
+
+  // --- WHAT CITES RULE 4 (DECISION 6).
   ['tuteo is not a rule-4 reason', MEASURE, '/tuteo|usted|', '/usted|'],
   ['usted is not a rule-4 reason', MEASURE, '|usted|', '|'],
+  ['a tu form named as such is not a rule-4 reason', MEASURE, '|(^|[^\\p{L}])t[uú][ -]forms?([^\\p{L}]|$)', ''],
+  ['a hyphenated tu-form is not a rule-4 reason', MEASURE, 't[uú][ -]forms?', 't[uú] forms?'],
   ['a tú form is not a rule-4 reason', MEASURE, '|(^|[^\\p{L}])tú([^\\p{L}]|$)', ''],
   ['a tú inside a word is a rule-4 reason', MEASURE, '(^|[^\\p{L}])tú([^\\p{L}]|$)', 'tú'],
   ['rule 4 by number is not a rule-4 reason', MEASURE, '|rule 4\\b|', '|'],
   ['rule 40 is a rule-4 reason', MEASURE, 'rule 4\\b', 'rule 4'],
   ['regla 4 is not a rule-4 reason', MEASURE, '|regla 4\\b/iu', '/iu'],
   ['the rule-4 reason check is case sensitive', MEASURE, '/iu.test(reason)', '/u.test(reason)'],
-  ['owner-accepted fixtures count as precision', MEASURE, "const green = of('pass');", "const green = fixtures.filter((fixture) => fixture.expect === 'pass' || fixture.expect === 'owner-accepted');"],
-  ['an owner-accepted pass counts as blocked', MEASURE, "accepted.filter((fixture) => judgedFor(fixture).verdict === false)", 'accepted.filter((fixture) => judgedFor(fixture).verdict !== true)'],
-  ['borderline verdicts are dropped', MEASURE, "borderline: of('borderline').map(", 'borderline: [].map('],
-  ['a rule-4 reason on any fixture is a false positive', MEASURE, 'fixture.pinsRule4 === true && judgedFor(fixture).verdict === false && citesRule4', 'judgedFor(fixture).verdict === false && citesRule4'],
+  ['a quoted pinned form is not a rule-4 reason', MEASURE, "return forms.some((form) => new RegExp(`[\"“«'‘]${form}[\"”»'’]`, 'iu').test(reason));", 'return false;'],
+  ['a quoted pinned form is matched case sensitively', MEASURE, "[\"”»'’]`, 'iu')", "[\"”»'’]`, 'u')"],
+
+  // --- WHO LABELLED WHAT, AND THE SHIP BAR (DECISION 1).
+  ['the owner set is every fixture', MEASURE, "owner: scored(fixtures.filter((fixture) => fixture.labelledBy === 'owner'), judgedFor)", 'owner: scored(fixtures, judgedFor)'],
+  ['the author set is the owner set', MEASURE, "fixture.labelledBy === 'author'", "fixture.labelledBy === 'owner'"],
+  ['unadjudicated verdicts are dropped', MEASURE, "fixture.expect === 'unadjudicated'", "fixture.expect === 'borderline'"],
+  ['a rule-4 reason on any fixture is a false positive', MEASURE, 'pinned.filter((fixture) => judgedFor(fixture).verdict === false && citesRule4(', 'fixtures.filter((fixture) => judgedFor(fixture).verdict === false && citesRule4('],
+  ['the pinned forms are not read for a rule-4 reason', MEASURE, 'citesRule4(judgedFor(fixture).reason, fixture.pinsRule4)', 'citesRule4(judgedFor(fixture).reason)'],
   ['a missed red is only a pass, never a malfunction', MEASURE, 'red.filter((fixture) => judgedFor(fixture).verdict !== false)', 'red.filter((fixture) => judgedFor(fixture).verdict === true)'],
+  ['a malfunction is not what is counted', MEASURE, 'fixtures.filter((fixture) => judgedFor(fixture).verdict === null).length', 'fixtures.filter((fixture) => judgedFor(fixture).verdict === false).length'],
   ['the recall bar is lower', MEASURE, '>= 0.9 &&', '> 0.9 &&'],
   ['the precision bar is lower', MEASURE, '>= 0.95;', '> 0.95;'],
   ['an empty side meets the ship bar', MEASURE, '(whole === 0 ? 0 : part / whole)', '(whole === 0 ? 1 : part / whole)'],
-  ['the owner-accepted line is not printed', MEASURE, "    `${label} owner-accepted blocked ${percent(summary.blockedAccepted.length, summary.accepted)} (${summary.blockedAccepted.length}/${summary.accepted}), the false-positive rate for the owner to adjudicate`,\n", ''],
-  ['the blocked owner-accepted replies are not listed', MEASURE, "    ...summary.blockedAccepted.map(({ id, reason }) => `    blocked owner-accepted ${id}: ${reason}`),\n", ''],
-  ['the borderline verdicts are not printed', MEASURE, "    ...summary.borderline.map(({ id, verdict }) => `    borderline ${shown(verdict).padEnd(4)} ${id}`),\n", ''],
-  ['the rule-4 false positives are not listed', MEASURE, "    ...summary.rule4FalsePositives.map(({ id, reason }) => `    rule-4 false positive ${id}: ${reason}`),\n", ''],
+  ['the ship bar needs 9 owner labels', MEASURE, 'OWNER_LABELS_NEEDED = 10', 'OWNER_LABELS_NEEDED = 9'],
+  ['the ship bar is computed with any number of owner labels', MEASURE, 'if (labels < OWNER_LABELS_NEEDED)', 'if (labels < 0)'],
+  ['one run meeting the bar is enough', MEASURE, 'ownerSets.every(meetsShipBar)', 'ownerSets.some(meetsShipBar)'],
+  ['--rates measures the tuning set by default', MEASURE, "DEFAULT_PREFIX = 'held-'", "DEFAULT_PREFIX = 'real-'"],
+  ['--rates leaves the rule-4 pins out', MEASURE, 'fixture.id.startsWith(prefix) || Array.isArray(fixture.pinsRule4)', 'fixture.id.startsWith(prefix)'],
+  ['--rates ignores the requested prefix', MEASURE, 'fixture.id.startsWith(prefix) ||', 'fixture.id.startsWith(DEFAULT_PREFIX) ||'],
+
+  // --- WHAT --rates AND THE MATRIX PRINT, IN BOTH LANGUAGES (DECISION 6).
+  ['the author set is not printed', MEASURE, "    ...scoredLines(run, 'author', 'autor', summary.author),\n", ''],
+  ['the unadjudicated verdicts are not listed', MEASURE, "    ...summary.unadjudicated.map(({ id, verdict, reason }) => `    ${shown(verdict).padEnd(4)} ${id}${reason === '' ? '' : `: ${reason}`}`),\n", ''],
+  ['the rule-4 false positives are not listed', MEASURE, '    ...summary.rule4FalsePositives.map(({ id, reason }) => `    rule-4 false positive ${id} @es falso positivo de la regla 4: ${reason}`),\n', ''],
+  ['a matrix row loses its Spanish half', MEASURE, ' @es ${CUMPLIDO[met]} ${fixture.id} esperado=', ' esperado='],
+  ['the matrix summary loses its Spanish half', MEASURE, ' @es rúbrica=${rubric.path} corridas=', ' corridas='],
+  ['the ship-bar line loses its Spanish half', MEASURE, ' @es rúbrica=${rubric.path} costo=', ' costo='],
 
   // --- THE SHARED JOURNAL GUARD, FOR THE VOICE JUDGE.
   ['the guard does not journal the voice judge', GUARD, '  { mechanism: VOICE_MECHANISM, marker: VOICE_MARKER },\n', ''],
