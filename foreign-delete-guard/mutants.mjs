@@ -210,8 +210,6 @@ const MUTANTS = [
   ['an empty foreign folder is not foreign', FOREIGN, 'if (!owned) foreign.push(directory);', ''],
   ['an empty owned folder is foreign', FOREIGN, 'if (!owned) foreign.push(directory);', 'foreign.push(directory);'],
   ['a folder that cannot be listed is not foreign', FOREIGN, '} catch {\n      foreign.push(directory);\n      return;\n    }', '} catch {\n      return;\n    }'],
-  ['ownership is asked for every entry of an owned folder', FOREIGN, 'const childOwned = owned || ownership.ownsCanonical(canonicalChild);', 'const childOwned = ownership.ownsCanonical(canonicalChild);'],
-  ['ownership of a folder is not inherited by what it holds', FOREIGN, 'const childOwned = owned || ownership.ownsCanonical(canonicalChild);', 'const childOwned = owned;'],
   ['links inside a folder are not looked at', FOREIGN, 'if (entry.isSymbolicLink()) {', 'if (false) {'],
   ['subfolders keep no ownership while they are walked', FOREIGN, 'walk(child, canonicalChild, childOwned);', 'walk(child, canonicalChild, false);'],
   ['an owned file inside a walked folder is foreign', FOREIGN, '} else if (!childOwned) {', '} else {'],

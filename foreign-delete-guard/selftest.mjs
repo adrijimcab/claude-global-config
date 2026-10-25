@@ -34,7 +34,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,19 +42,20 @@ import { fileURLToPath } from 'node:url';
 import { messageProblems } from '../bilingual-output/message.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
 import { canonical } from '../shared-temp-guard/shared-temp-targets.mjs';
-import { agentKeyOf, BIRTH_TOLERANCE_MS, bornAt, readCreations, recordCreations, vouchedFor } from './authored-journal.mjs';
+import { agentKeyOf, bornInside, confirmCall, identityOf, readJournal, recordCall, sameIdentity } from './authored-journal.mjs';
 import { creationsOfCall, ownershipOf, pendingCreations } from './authorship.mjs';
 import { creationTargets } from './creation-targets.mjs';
 import { deletionTargets, previewFrom } from './deletion-targets.mjs';
 import { foreignLeaves } from './foreign-paths.mjs';
 import { evaluate } from './guard.mjs';
 import { judgeDeletion } from './judge.mjs';
-import { linkedWorktreeRoot, tenancyWorktree } from './own-tree.mjs';
+import { declaredPaths, linkedWorktreeRoot, tenancyWorktree } from './own-tree.mjs';
 import { MESSAGES, refusalText } from './refusal.mjs';
 import { braceExpansion, expandPath, wildcardMatch } from './wildcards.mjs';
 
 isolateState('fdg');
 
+const EMPTY = { confirmed: new Map(), intervals: [] };
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.join(HERE, 'guard.mjs');
 
@@ -131,12 +132,37 @@ const upperDrive = (value) => value.charAt(0).toUpperCase() + value.slice(1);
 
 /** The agent's call reaches the guard while `files` are absent, then they appear: how a session makes a file. @es La llamada llega con los ficheros ausentes y luego aparecen. */
 function announce(payload, ...effects) {
-  evaluate(JSON.stringify(payload));
+  const id = `toolu_${(callCounter += 1)}`;
+
+  tick();
+  evaluate(JSON.stringify({ ...payload, hook_event_name: 'PreToolUse', tool_use_id: id }));
+  tick();
 
   for (const effect of effects) {
-    if (effect.endsWith('/')) mkdirSync(effect, { recursive: true });
+    if (typeof effect === 'function') effect();
+    else if (effect.endsWith('/')) mkdirSync(effect, { recursive: true });
     else put(effect);
   }
+
+  tick();
+  evaluate(JSON.stringify({ ...payload, hook_event_name: 'PostToolUse', tool_use_id: id }));
+  tick();
+}
+
+/** The call reached the guard but never completed (another guard denied it, or it crashed): no PostToolUse. @es La llamada llegó al guard pero no se completó. */
+function announceWithoutCompleting(payload, ...effects) {
+  tick();
+  evaluate(JSON.stringify({ ...payload, hook_event_name: 'PreToolUse', tool_use_id: `toolu_${(callCounter += 1)}` }));
+  tick();
+
+  for (const effect of effects) effect();
+}
+
+let callCounter = 0;
+
+/** Waits a few milliseconds so that file births and call intervals never share a clock tick. @es Espera unos milisegundos para que nacimientos e intervalos no compartan un tic de reloj. */
+function tick(milliseconds = 4) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
 const agentWrites = (file) => announce(asAgent('Write', { file_path: file, content: 'x' }), file);
@@ -166,21 +192,16 @@ try {
   agentWrites(at('mine.mjs'));
   agentWrites(at('mine-too.mjs'));
   announce(bash(`echo hi > ${p('mine.txt')}`), at('mine.txt'));
-  announce(pwsh(`New-Item -ItemType Directory -Path '${at('mydir')}'`), `${at('mydir')}/`);
+  announce(pwsh(`New-Item -ItemType Directory -Path '${at('mydir')}'`), `${at('mydir')}/`, at('mydir', 'out.log')); // out.log: dropped by a child process of the call
   agentWrites(at('mydir', 'a.txt'));
-  put(at('mydir', 'out.log')); // dropped by a child process inside the folder the agent made
-  announce(bash(`mkdir -p ${p('work')}`), `${at('work')}/`);
-  put(at('work', 'built.bin')); // dropped by a child process inside the folder the agent made
+  announce(bash(`mkdir -p ${p('work')}`), `${at('work')}/`, at('work', 'built.bin'));
   agentWrites(at('shared', 'y.txt'));
-  announce(bash(`cp -r src ${p('copied')}`), `${at('copied')}/`);
-  put(at('copied', 'z.txt'));
+  announce(bash(`cp -r src ${p('copied')}`), `${at('copied')}/`, at('copied', 'z.txt'));
   agentWrites(at('tick`x.txt'));
   agentWrites(at('casedir', 'Upper.TXT'));
   announce(bash(`cp ${p('mine.mjs')} ${p('dropdir')}/`), at('dropdir', 'mine.mjs'));
   announce(asAgent('Bash', { command: `cp ${p('mine.mjs')} .` }, { cwd: at('dropdir2') }), at('dropdir2', 'mine.mjs'));
-  announce(bash(`mkdir ${p('linkdir')} ${p('linkdir2')}`), `${at('linkdir')}/`, `${at('linkdir2')}/`);
-  link(path.join(ROOT, 'outside'), at('linkdir', 'out'));
-  link(at('mydir'), at('linkdir2', 'in'));
+  announce(bash(`mkdir ${p('linkdir')} ${p('linkdir2')}`), `${at('linkdir')}/`, `${at('linkdir2')}/`, () => link(path.join(ROOT, 'outside'), at('linkdir', 'out')), () => link(at('mydir'), at('linkdir2', 'in')));
   link(at('mydir'), at('holder', 'lnk-owned')); // a link in a foreign folder, to a target the agent owns
   announce(bash(`mkdir ${p('ownempty')}`), `${at('ownempty')}/`);
 
@@ -229,21 +250,41 @@ try {
   expect('allow', bash(`mkdir ${p('fresh')} && touch ${p('fresh', 'f.txt')} && rm -rf ${p('fresh')}`), 'a folder made and removed in one line deletes nothing that exists');
   expect('allow', bash(`echo x > ${p('brand-new.txt')} && rm ${p('brand-new.txt')}`), 'a file that does not exist yet deletes nothing');
 
-  // --- by effect: the birth time of the file decides ---------------------------------------------------
+  // --- the judges' scenarios: authorship is confirmed by the agent's own COMPLETED call -----------------
   const foreignCanonical = canonical(at('provision.mjs'));
-  const born = bornAt(foreignCanonical);
 
-  recordCreations('timing', [foreignCanonical], born + 3_600_000);
-  expect('deny', { ...bash(`rm ${p('provision.mjs')}`), agent_id: 'timing' }, 'a record newer than the file\'s birth does not vouch for it');
+  announceWithoutCompleting(asAgent('Write', { file_path: at('ghost.txt'), content: 'x' }), () => put(at('ghost.txt')));
+  expect('deny', bash(`rm ${p('ghost.txt')}`), 'a call another guard denied never completes, so a file that appears at its target is foreign');
 
-  recordCreations('timing2', [foreignCanonical], born - 3_600_000);
-  expect('allow', { ...bash(`rm ${p('provision.mjs')}`), agent_id: 'timing2' }, 'a record older than the file\'s birth vouches for it');
+  announce(bash(`false && touch ${p('failed.txt')}`));
+  put(at('failed.txt'));
+  expect('deny', bash(`rm ${p('failed.txt')}`), 'a command whose creation never happened confirms nothing, so a file that appears there is foreign');
 
-  recordCreations('timing3', [foreignCanonical], born + BIRTH_TOLERANCE_MS - 100);
-  expect('allow', { ...bash(`rm ${p('provision.mjs')}`), agent_id: 'timing3' }, 'a birth within the clock tolerance before the record still counts');
+  agentWrites(at('recreate.txt'));
+  expect('allow', bash(`rm ${p('recreate.txt')}`), 'a file the agent wrote is its own while it is the same file');
+  rmSync(at('recreate.txt'));
+  tick();
+  put(at('recreate.txt'));
+  expect('deny', bash(`rm ${p('recreate.txt')}`), 'a file deleted and recreated by someone else has a new identity and is foreign');
 
-  recordCreations('timing4', [foreignCanonical], born + BIRTH_TOLERANCE_MS + 100);
-  expect('deny', { ...bash(`rm ${p('provision.mjs')}`), agent_id: 'timing4' }, 'a birth beyond the clock tolerance before the record does not count');
+  announce(bash(`mkdir -p ${p('sharedroot')}`), `${at('sharedroot')}/`, at('sharedroot', 'child.txt'));
+  put(at('sharedroot', 'foreign.txt'));
+  tick();
+  announce(bash('make build'), at('sharedroot', 'during.txt'));
+  tick();
+  put(at('sharedroot', 'after.txt'));
+  expect('allow', bash(`rm ${p('sharedroot', 'child.txt')}`), 'a file a child process dropped during the call that made the folder is the agent\'s');
+  expect('deny', bash(`rm ${p('sharedroot', 'foreign.txt')}`), 'a file another actor put in the agent\'s folder outside its calls is foreign');
+  expect('deny', bash(`rm ${p('sharedroot', 'after.txt')}`), 'a file another actor put there after the agent\'s last call is foreign');
+  expect('deny', bash(`rm -rf ${p('sharedroot')}`), 'a shared root the agent happened to make first does not capture what others put in it');
+  expect('allow', bash(`rm ${p('sharedroot', 'during.txt')}`), 'KNOWN LIMIT: a file written during one of the agent\'s own calls is taken for its child process\'s');
+
+  agentWrites(at('moveme.txt'));
+  announce(bash(`mv ${p('moveme.txt')} ${p('moved.txt')}`), () => renameSync(at('moveme.txt'), at('moved.txt')));
+  expect('allow', bash(`rm ${p('moved.txt')}`), 'the destination of the agent\'s own move is confirmed by the file identity, which a rename keeps');
+  expect('deny', bash(`mv ${p('provision.mjs')} ${p('stolen.txt')}`), 'moving a foreign file removes it from where it is (and would launder it as the agent\'s)');
+  expect('deny', pwsh(`Move-Item '${at('provision.mjs')}' '${at('stolen.txt')}'`), 'the same with Move-Item');
+  expect('allow', bash(`mv ${p('mine.txt')} ${p('mine-renamed.txt')}`), 'moving the agent\'s own file');
 
   // --- who is judged and the failure modes -----------------------------------------------------------
   expect('allow', { ...bash(`rm ${p('provision.mjs')}`), agent_id: undefined, transcript_path: path.join(ROOT, 'session', 'subagents', 'nope.jsonl') }, 'a subagent that cannot be told apart is not judged');
@@ -433,6 +474,12 @@ try {
   expect('deny', inTree(otherWorktree, rmOld(otherWorktree)), 'another actor\'s worktree is not the agent\'s tenancy', { records: harness(worktree) });
   expect('deny', inTree(worktree, rmOld(worktree)), 'a brief that declares a different worktree', { records: byBrief(`TENANCY: ${slashes(otherWorktree)}`) });
   expect('deny', inTree(worktree, rmOld(worktree)), 'a brief with no TENANCY line', { records: byBrief('Please tidy the repository.') });
+  expect('deny', inTree(worktree, rmOld(worktree)), 'a brief that names the worktree only by its folder name declares no path', { records: byBrief('TENANCY: wt-mine') });
+  expect('deny', inTree(worktree, rmOld(worktree)), 'a brief that declares a same-named worktree elsewhere grants nothing', { records: byBrief(`TENANCY: ${slashes(path.join(ROOT, 'elsewhere', 'wt-mine'))}`) });
+  expect('allow', inTree(worktree, rmOld(worktree)), 'a brief that declares the path in Git Bash spelling and quotes', { records: byBrief(`TENANCY: "${gitBash(worktree)}", checkout`) });
+  expect('allow', inTree(worktree, rmOld(worktree)), 'a brief that declares two paths, one of them this worktree', { records: byBrief(`TENANCY: ${slashes(otherWorktree)} ${slashes(worktree)}`) });
+  check('declaredPaths: only absolute paths of TENANCY lines count, canonical', declaredPaths(`Intro\nTENANCY: wt-mine, ${slashes(worktree)} (see)\nnot a TENANCY line ${slashes(otherWorktree)}`).join() === canonical(worktree));
+  check('declaredPaths: a TENANCY line with no colon or no path declares nothing', declaredPaths('TENANCY\nTENANCY: none').length === 0);
   expect('deny', inTree(worktree, rmOld(worktree)), 'a brief claim is ignored when the harness names a worktree', { records: () => [{ id: 'agent-abc', worktreePath: otherWorktree, transcript: brief(`TENANCY: ${slashes(worktree)}`) }] });
   expect('deny', inTree(submodule, rmOld(submodule)), 'a submodule is never a tenancy worktree even when the record names it', { records: harness(submodule) });
   expect('deny', asAgent('Bash', { command: 'rm src/x.ts' }, { cwd: mainCheckout }), 'a file of the MAIN checkout (a .git directory is not a linked worktree)', { records: harness(mainCheckout) });
@@ -496,14 +543,15 @@ try {
   check('judge: a deletion over the walk limit is refused as unresolvable', judged(`rm -rf ${p('shared')}`, { limit: 1 })?.code === 'limit');
   check('judge: a walk exactly at the limit is judged, not refused', judged(`rm -rf ${p('shared')}`, { limit: 2 })?.kind === 'foreign');
   check('judge: the foreign verdict lists each foreign file once', judged(`rm ${p('provision.mjs')} ${p('provision.mjs')}`)?.files?.length === 1);
-  check('judge: the journal it is given decides', judged(`rm ${p('provision.mjs')}`, { journalOf: () => new Map([[foreignCanonical, Date.now() - 3_600_000]]) }) === undefined);
+  check('judge: the journal it is given decides', judged(`rm ${p('provision.mjs')}`, { journalOf: () => ({ confirmed: new Map([[foreignCanonical, identityOf(foreignCanonical)]]), intervals: [] }) }) === undefined);
+  check('judge: the identity reader it is given decides', judged(`rm ${p('provision.mjs')}`, { journalOf: () => ({ confirmed: new Map([[foreignCanonical, { id: '1:1', born: 5 }]]), intervals: [] }), identify: () => ({ id: '1:1', born: 5 }) }) === undefined);
 
-  const mineOnly = ownershipOf(new Map([[canonical(at('shared', 'y.txt')), Date.now() - 3_600_000]]), undefined);
+  const mineOnly = ownershipOf(readJournal('abc'), undefined);
   const sharedFolder = foreignLeaves(at('shared'), mineOnly, 2);
 
   check('foreignLeaves: only the foreign file of a mixed folder', sharedFolder.foreign.length === 1 && sharedFolder.foreign[0].endsWith('x.txt') && !sharedFolder.exceeded);
-  check('foreignLeaves: a walk past the limit is exceeded', foreignLeaves(at('shared'), ownershipOf(new Map(), undefined), 1).exceeded);
-  check('foreignLeaves: a path that does not exist holds nothing', foreignLeaves(at('nothing'), ownershipOf(new Map(), undefined)).foreign.length === 0);
+  check('foreignLeaves: a walk past the limit is exceeded', foreignLeaves(at('shared'), ownershipOf(EMPTY, undefined), 1).exceeded);
+  check('foreignLeaves: a path that does not exist holds nothing', foreignLeaves(at('nothing'), ownershipOf(EMPTY, undefined)).foreign.length === 0);
 
   // --- the decision units ----------------------------------------------------------------------------
   check('wildcard: * matches a run', wildcardMatch('a*c', 'abbbc') && !wildcardMatch('a*c', 'abbbd'));
@@ -542,6 +590,16 @@ try {
 
   const targetsOf = (command, dialect = 'bash') => deletionTargets(command, dialect, SCRATCH);
   const names = (entries) => entries.map((entry) => (entry.path === undefined ? '(unresolvable)' : path.basename(entry.path)));
+  expect('deny', bash(`cmd //c del ${p('provision.mjs')}`), 'Git Bash spells cmd /c as //c: the script is read and the foreign file refused');
+  expect('allow', bash(`cmd //c del ${p('mine.mjs')}`), 'cmd //c del of the agent\'s own file');
+  expect('deny', bash(`cmd //c del ${SCRATCH}\\*.mjs`), 'cmd //c with a backslash path is refused as unresolvable');
+  expect('deny', bash(`cmd //k del ${p('provision.mjs')}`), 'cmd //k');
+  expect('deny', bash(`cd "$X" && cmd //c del ${p('provision.mjs')}`), 'cmd //c after a cd that cannot be followed');
+  check('targets: cmd //c and //k scripts are read, in any case', ['cmd //c', 'cmd //k', 'CMD //C'].every((launcher) => targetsOf(`${launcher} del ${p('provision.mjs')}`).some((target) => target.path !== undefined && path.basename(target.path) === 'provision.mjs')));
+  check('targets: cmd //c with a backslash reports the reason', targetsOf('cmd //c del C:\\a\\b.txt').some((target) => target.unresolvable === 'backslash'));
+  check('targets: cmd //c that deletes nothing reports nothing', targetsOf('cmd //c echo hi').length === 0);
+  check('targets: a move reports its sources, not its destination', names(targetsOf(`mv ${p('mine.mjs')} ${p('mine.txt')} ${p('shared')}`)).join() === 'mine.mjs,mine.txt' && names(targetsOf(`Move-Item -Destination ${p('shared')} ${p('mine.mjs')}`, 'powershell')).join() === 'mine.mjs');
+  check('targets: a move with a target folder option', names(targetsOf(`mv -t ${p('shared')} ${p('mine.mjs')}`)).join() === 'mine.mjs');
 
   check('targets: rm names its operands only', targetsOf(`rm -rf -v ${p('mine.mjs')}`).map((target) => path.basename(target.path)).join() === 'mine.mjs');
   check('targets: a command with no deleter has none', targetsOf('ls -la').length === 0);
@@ -623,10 +681,6 @@ try {
   check('creation: a PowerShell cmdlet or alias nested under Bash keeps PowerShell grammar', ['Copy-Item', 'Move-Item', 'cpi', 'mi'].every((alias) => names(creationTargets(`${alias} -Destination ${p('shared')} ${p('mine.mjs')}`, 'bash', SCRATCH)).join() === 'mine.mjs'));
   check('journal: a transcript name must be agent-<id>.jsonl', agentKeyOf({ transcript_path: '/x/session.jsonl' }) === undefined && agentKeyOf({ transcript_path: '/x/agent-77ff.json' }) === undefined && agentKeyOf({ transcript_path: '/x/xagent-77ff.jsonl' }) === undefined);
 
-  mkdirSync(stateDir('foreign-delete-guard'), { recursive: true });
-  writeFileSync(path.join(stateDir('foreign-delete-guard'), 'planted.jsonl'), '{"path":"p","at":1}\n');
-  check('journal: an unsafe key reads nothing, not even a file it would reach by climbing', readCreations('../planted').size === 0);
-
   const writeCall = (file) => ({ tool_name: 'Write', tool_input: { file_path: file, content: 'x' }, cwd: SCRATCH });
 
   check('pending: a Write of an absent file is recorded, canonical', pendingCreations(writeCall(at('absent.txt'))).join() === canonical(at('absent.txt')));
@@ -643,39 +697,70 @@ try {
   check('journal: the agent id wins over the transcript name', agentKeyOf({ agent_id: 'first', transcript_path: '/x/agent-second.jsonl' }) === 'first');
   check('journal: the journal lives in the isolated state folder, one file per agent', existsSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'abc.jsonl')));
 
-  recordCreations('torn', [canonical(at('mine.mjs'))], 5);
+  // --- the journal on its own, with injected identities ------------------------------------------------
+  mkdirSync(stateDir('foreign-delete-guard'), { recursive: true });
+  writeFileSync(path.join(stateDir('foreign-delete-guard'), 'planted.jsonl'), '{"k":"confirm","id":"c","path":"p","ino":"1:1","born":1}\n');
+  check('journal: an unsafe key reads nothing, not even a file it would reach by climbing', readJournal('../planted').confirmed.size === 0);
+  check('journal: an agent with no journal has an empty one', readJournal('nobody-yet').confirmed.size === 0 && readJournal('nobody-yet').intervals.length === 0);
+
+  const fakeFiles = new Map([['/a', { id: '9:9', born: 100 }]]);
+  const identify = (target) => fakeFiles.get(target);
+
+  recordCall('unit', 'c1', 1000, ['/a', '/b']);
+  confirmCall('unit', 'c1', 2000, identify);
+  recordCall('unit', 'c2', 3000, ['/a']); // never completes
+
+  const unit = readJournal('unit');
+
+  check('journal: a completed call confirms the targets that exist, with identity and birth, and discards the rest', unit.confirmed.get('/a')?.id === '9:9' && unit.confirmed.get('/a')?.born === 100 && !unit.confirmed.has('/b'));
+  check('journal: a completed call leaves its interval, an unfinished one does not', unit.intervals.length === 1 && unit.intervals[0].start === 1000 && unit.intervals[0].end === 2000);
+  confirmCall('unit', 'never-started', 4000, identify);
+  check('journal: a call that never started confirms nothing and ends nothing', readJournal('unit').intervals.length === 1);
+  confirmCall('unit', undefined, 5000, identify);
+  check('journal: without a call id the latest open call is the one', readJournal('unit').intervals.length === 2 && readJournal('unit').intervals[1].start === 3000 && readJournal('unit').intervals[1].end === 5000);
+  confirmCall('unit', undefined, 6000, identify);
+  confirmCall('unit', 'c1', 7000, identify);
+  check('journal: a call that already ended is not ended again', readJournal('unit').intervals.length === 2);
+
   mkdirSync(path.join(stateDir('foreign-delete-guard'), 'authored'), { recursive: true });
-  appendFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'torn.jsonl'), '{torn\n{"path":1,"at":5}\n{"path":"p","at":"x"}\n');
-  recordCreations('torn', [canonical(at('mine.mjs'))], 9);
-  recordCreations('maxed', [canonical(at('mine.mjs'))], 9);
-  recordCreations('maxed', [canonical(at('mine.mjs'))], 5);
+  appendFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'torn.jsonl'), '{torn\n{"k":"confirm","id":"x","path":1,"ino":"1:1","born":1}\n{"k":"confirm","id":"x","path":"p","ino":"1:1","born":"x"}\n{"k":"start","id":"s","at":"x"}\n{"k":"end","id":"s","at":5}\n{"k":"mystery","id":"q"}\n');
+  recordCall('torn', 'c', 10, ['/t']);
+  confirmCall('torn', 'c', 20, (target) => (target === '/t' ? { id: '2:2', born: 15 } : undefined));
+  check('journal: a torn or malformed line hides nothing around it and adds nothing', readJournal('torn').confirmed.size === 1 && readJournal('torn').confirmed.get('/t').born === 15 && readJournal('torn').intervals.length === 1);
 
-  check('journal: a torn or malformed line hides nothing around it and adds nothing', readCreations('torn').get(canonical(at('mine.mjs'))) === 9 && readCreations('torn').size === 1);
-  check('journal: the latest time wins, not the last line', readCreations('maxed').get(canonical(at('mine.mjs'))) === 9);
+  recordCall('../escape', 'c', 1, ['/x']);
+  recordCall('start-only', 'c', 1, []);
+  check('journal: an unsafe key writes nothing', !existsSync(path.join(stateDir('foreign-delete-guard'), 'escape.jsonl')));
+  check('journal: a call with no targets still leaves its start, whose interval matters', existsSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'start-only.jsonl')));
 
-  const statOf = (birthtimeMs, ctimeMs) => () => ({ birthtimeMs, ctimeMs });
-  const unrecorded = [];
+  const same = { id: '9:9', born: 100 };
 
-  check('journal: a birth time of zero falls back to the change time', bornAt('x', statOf(0, 123)) === 123 && bornAt('x', statOf(50, 99)) === 50);
-  check('journal: a path that cannot be statted has no birth time', bornAt('x', () => { throw new Error('ENOENT'); }) === undefined);
-  check('journal: a path nobody recorded is answered without touching the file system', vouchedFor(new Map(), 'x', () => { unrecorded.push('statted'); return { birthtimeMs: 1, ctimeMs: 1 }; }) === false && unrecorded.length === 0);
-  check('journal: a recorded path that no longer exists is not vouched for', vouchedFor(new Map([['x', 0]]), 'x', () => { throw new Error('ENOENT'); }) === false);
-  check('journal: the birth time is compared with the record minus the tolerance', vouchedFor(new Map([['x', 10_000]]), 'x', statOf(10_000 - BIRTH_TOLERANCE_MS, 0)) === true && vouchedFor(new Map([['x', 10_000]]), 'x', statOf(10_000 - BIRTH_TOLERANCE_MS - 1, 0)) === false);
-  check('journal: an agent with no journal has an empty map', readCreations('nobody-yet').size === 0 && readCreations('../x').size === 0);
-  recordCreations('../escape', [canonical(at('mine.mjs'))], 1);
-  recordCreations('empty-key-list', [], 1);
-  check('journal: an unsafe key writes nothing and an empty list creates no file', !existsSync(path.join(stateDir('foreign-delete-guard'), 'escape.jsonl')) && !existsSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'empty-key-list.jsonl')));
+  check('identity: the same id and birth is the same file, nothing else is', sameIdentity('/a', same, identify) && !sameIdentity('/a', { id: '9:8', born: 100 }, identify) && !sameIdentity('/a', { id: '9:9', born: 101 }, identify) && !sameIdentity('/nothing', same, identify));
+  check('identity: a birth inside an interval counts, at either end', bornInside('/a', [{ start: 100, end: 200 }], identify) && bornInside('/a', [{ start: 50, end: 100 }], identify) && !bornInside('/a', [{ start: 101, end: 200 }], identify) && !bornInside('/a', [{ start: 1, end: 99 }], identify) && !bornInside('/nothing', [{ start: 0, end: 1e9 }], identify));
+  check('identity: any one of several intervals is enough', bornInside('/a', [{ start: 1, end: 5 }, { start: 90, end: 110 }], identify));
+  check('identity: a link has its own identity, not its target\'s', identityOf(at('linkdir', 'out')).id !== identityOf(path.join(ROOT, 'outside')).id);
+  check('identity: a path that does not exist has none', identityOf(at('nothing-here')) === undefined);
+  check('identity: id is device:inode, and a birth of zero falls back to the change time', identityOf('x', () => ({ dev: 1n, ino: 2n, birthtimeMs: 0n, ctimeMs: 77n })).born === 77 && identityOf('x', () => ({ dev: 1n, ino: 2n, birthtimeMs: 50n, ctimeMs: 77n })).born === 50 && identityOf('x', () => ({ dev: 1n, ino: 2n, birthtimeMs: 50n, ctimeMs: 77n })).id === '1:2');
 
-  const mine = readCreations('abc');
+  const mine = readJournal('abc');
+  const fakeTree = new Map([['/d', { id: '1:1', born: 1 }], ['/d/f', { id: '2:2', born: 15 }], ['/d/late', { id: '3:3', born: 25 }], ['/d/e', { id: '4:4', born: 2 }], ['/d/e/g', { id: '5:5', born: 16 }]]);
+  const journalOfTree = (folderIdentity) => ({ confirmed: new Map([['/d', folderIdentity]]), intervals: [{ start: 10, end: 20 }] });
+  const ownsInTree = (folderIdentity, target) => ownershipOf(journalOfTree(folderIdentity), undefined, (candidate) => fakeTree.get(candidate)).ownsCanonical(target);
+
+  check('ownership: below a folder the agent made, what was born inside its call intervals is owned', ownsInTree({ id: '1:1', born: 1 }, '/d/f') && ownsInTree({ id: '1:1', born: 1 }, '/d/e/g'));
+  check('ownership: below a folder the agent made, what was born outside its call intervals is foreign', !ownsInTree({ id: '1:1', born: 1 }, '/d/late') && !ownsInTree({ id: '1:1', born: 1 }, '/d/e'));
+  check('ownership: a folder whose identity changed owns nothing below it', !ownsInTree({ id: '1:0', born: 1 }, '/d/f') && !ownsInTree({ id: '1:1', born: 2 }, '/d/f'));
+  check('ownership: a confirmed path is owned whatever its birth, while its identity holds', ownsInTree({ id: '1:1', born: 1 }, '/d'));
+  check('ownership: a higher confirmed folder still counts when a lower one changed identity', ownershipOf({ confirmed: new Map([['/d', { id: '1:1', born: 1 }], ['/d/e', { id: '0:0', born: 0 }]]), intervals: [{ start: 10, end: 20 }] }, undefined, (candidate) => fakeTree.get(candidate)).ownsCanonical('/d/e/g'));
+
 
   check('ownership: a vouched file is owned', ownershipOf(mine, undefined).owns(at('mine.mjs')));
-  check('ownership: something under a vouched folder is owned', ownershipOf(mine, undefined).owns(at('work', 'deep', 'built.bin')));
+  check('ownership: something under a vouched folder is owned', ownershipOf(mine, undefined).owns(at('work', 'built.bin')));
   check('ownership: a sibling that only shares a prefix is not owned', !ownershipOf(mine, undefined).owns(`${at('mine.mjs')}x`) && !ownershipOf(mine, undefined).owns(at('mine.mjs.bak')));
   check('ownership: a foreign file is not owned', !ownershipOf(mine, undefined).owns(at('provision.mjs')));
-  check('ownership: the scratchpad root is not owned, a folder the agent made is', !ownershipOf(mine, undefined).owns(SCRATCH) && ownershipOf(mine, undefined).owns(at('mydir', 'anything.log')));
+  check('ownership: the scratchpad root is not owned, a folder the agent made is', !ownershipOf(mine, undefined).owns(SCRATCH) && ownershipOf(mine, undefined).owns(at('mydir', 'out.log')));
   check('ownership: writing a file INTO a folder does not make the folder the agent\'s', ownershipOf(mine, undefined).owns(at('shared', 'y.txt')) && !ownershipOf(mine, undefined).owns(at('shared', 'x.txt')) && !ownershipOf(mine, undefined).owns(at('shared')));
-  check('ownership: the tenancy worktree is owned when given', ownershipOf(new Map(), worktree).owns(path.join(worktree, 'a', 'b.ts')) && !ownershipOf(new Map(), worktree).owns(path.join(otherWorktree, 'a')));
-  check('ownership: a record whose path no longer exists vouches for nothing', !ownershipOf(new Map([[canonical(at('gone.txt')), 0]]), undefined).owns(at('gone.txt')));
+  check('ownership: the tenancy worktree is owned when given', ownershipOf(EMPTY, worktree).owns(path.join(worktree, 'a', 'b.ts')) && !ownershipOf(EMPTY, worktree).owns(path.join(otherWorktree, 'a')));
 
   check('linkedWorktreeRoot: a linked worktree from a subfolder', linkedWorktreeRoot(path.join(worktree, 'src', 'sub')) === worktree);
   check('linkedWorktreeRoot: the main checkout, a submodule and a stray .git file have none', linkedWorktreeRoot(path.join(mainCheckout, 'src')) === undefined && linkedWorktreeRoot(path.join(submodule, 'src')) === undefined && linkedWorktreeRoot(pointedElsewhere) === undefined);
@@ -684,11 +769,8 @@ try {
   check('linkedWorktreeRoot: a gitdir line needs its prefix, and a backslash spelling counts', linkedWorktreeRoot(noPrefix) === undefined && linkedWorktreeRoot(backslashed) === backslashed);
 
   const dangling = foreignLeaves(at('linkdir', 'out'), ownershipOf(mine, undefined), 100, readdirSync, () => { throw new Error('ENOENT'); });
-  const calls = [];
-  const counting = { ownsCanonical: (candidate) => { calls.push(candidate); return true; } };
 
   check('foreignLeaves: a link that cannot be resolved is foreign even inside an owned folder', foreignLeaves(at('linkdir'), ownershipOf(mine, undefined), 100, readdirSync, () => { throw new Error('ENOENT'); }).foreign.length === 1 && dangling.foreign.length === 1);
-  check('foreignLeaves: inside an owned folder ownership is asked once, not for every entry', foreignLeaves(at('nested'), counting, 100).foreign.length === 0 && calls.length === 1, `${calls.length} questions`);
 
   const listed = [];
   const countingList = (directory, options) => {
@@ -697,10 +779,10 @@ try {
     return readdirSync(directory, options);
   };
 
-  foreignLeaves(at('nested'), ownershipOf(new Map(), undefined), 1, countingList);
+  foreignLeaves(at('nested'), ownershipOf(EMPTY, undefined), 1, countingList);
   check('foreignLeaves: the walk stops as soon as the budget is spent', listed.length === 2, `${listed.length} folders read`);
 
-  const unreadable = foreignLeaves(at('shared'), ownershipOf(new Map(), undefined), 100, () => {
+  const unreadable = foreignLeaves(at('shared'), ownershipOf(EMPTY, undefined), 100, () => {
     throw new Error('EACCES');
   });
 
@@ -763,7 +845,7 @@ try {
   check('shim: a delegated rm of a foreign file is denied on stdout, exit 0', viaShim.status === 0 && viaShim.stdout.includes('"permissionDecision":"deny"'), viaShim.stderr);
   check('shim: the main session prints nothing, exit 0', viaShimMain.status === 0 && viaShimMain.stdout === '');
   check('shim: a delegated rm of an own file prints nothing, exit 0', viaShimQuiet.status === 0 && viaShimQuiet.stdout === '');
-  check('shim: a delegated Write prints nothing and journals the file, exit 0', viaShimWrite.status === 0 && viaShimWrite.stdout === '' && readCreations('abc').has(canonical(at('via-shim.txt'))));
+  check('shim: a delegated Write prints nothing and journals the file, exit 0', viaShimWrite.status === 0 && viaShimWrite.stdout === '' && readFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'abc.jsonl'), 'utf8').toLowerCase().includes('via-shim.txt'));
 } finally {
   // Junctions go first and alone: removing a junction removes the link, never what it points at.
   for (const where of links) {

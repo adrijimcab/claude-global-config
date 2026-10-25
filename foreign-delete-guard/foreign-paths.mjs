@@ -98,7 +98,7 @@ export function foreignLeaves(candidate, ownership, limit = MAX_ENTRIES, list = 
 
       const child = path.join(directory, entry.name);
       const canonicalChild = `${canonicalDirectory}/${folded(entry.name)}`;
-      const childOwned = owned || ownership.ownsCanonical(canonicalChild);
+      const childOwned = ownership.ownsCanonical(canonicalChild);
 
       if (entry.isSymbolicLink()) {
         if (linkIsForeign(child, childOwned)) foreign.push(child);

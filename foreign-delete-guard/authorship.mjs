@@ -91,20 +91,12 @@ export function ownershipOf(journal, ownTreeRoot, identify = identityOf) {
 
   /** Whether the canonical path, or a confirmed folder above it, makes it the agent's. @es Si la ruta, o una carpeta confirmada sobre ella, la hace del agente. */
   const ownsCanonical = (canonicalPath) => {
-    let bornInsideAnInterval;
-
     for (let current = canonicalPath; ; ) {
       if (current === treeRoot) return true;
 
       const confirmed = journal.confirmed.get(current);
 
-      if (confirmed !== undefined && sameIdentity(current, confirmed, identify)) {
-        if (current === canonicalPath) return true;
-
-        bornInsideAnInterval ??= bornInside(canonicalPath, journal.intervals, identify);
-
-        if (bornInsideAnInterval) return true;
-      }
+      if (confirmed !== undefined && sameIdentity(current, confirmed, identify) && (current === canonicalPath || bornInside(canonicalPath, journal.intervals, identify))) return true;
 
       const slash = current.lastIndexOf('/');
 
