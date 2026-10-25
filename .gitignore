@@ -117,6 +117,9 @@
 !/review-cwd-guard/
 !/review-cwd-guard/**
 /review-cwd-guard/state/
+!/commit-cadence-guard/
+!/commit-cadence-guard/**
+/commit-cadence-guard/state/
 !/stash-watch/
 !/stash-watch/**
 /stash-watch/state/
