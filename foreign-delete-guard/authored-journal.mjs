@@ -1,50 +1,57 @@
 /**
- * The journal of what each delegated agent CREATED, kept by effect and not by what a command's words say.
+ * The journal of what each delegated agent CREATED, kept by effect and confirmed by the agent's own completed call.
  *
- * THE DESIGN. On every call a delegated agent makes that can create a file, the guard records each creation
- * target that does NOT exist at that moment (`creations.mjs` says which) with the time of the call. Authorship is
- * then decided later from the file system itself: a path is the agent's only if it is in that agent's journal,
- * it exists now, and its birth time is at or after the recorded time (less a small tolerance for file systems
- * with coarse clocks). Everything else is not the agent's, whatever any command said:
+ * THE DESIGN, in three records per call, all in one journal per agent (keyed by the harness's `agent_id`, in this
+ * mechanism's state folder through the one state-location port `hook-state/locations.mjs`, classified for rotation
+ * in `hook-state/rotate.mjs`):
  *
- *   - a path that existed when the call was made is never recorded, so `mkdir -p <shared folder>`,
- *     `touch <shared>/*.mjs`, an append to an existing file or `cp x <existing folder>` claim nothing;
- *   - a write that was denied or failed leaves no file, so nothing matches;
- *   - what a folder holds counts as the agent's only through a folder the agent really made (an ancestor in the
- *     journal), never through a folder it merely wrote a file into.
+ *   1. PreToolUse writes `start` (the call id and its start time) and one `target` per creation target that does
+ *      NOT exist at that moment (`authorship.mjs` says which). Nothing is owned yet.
+ *   2. PostToolUse, which only fires for a call that really ran, writes `confirm` for each of those targets that
+ *      exists NOW, with the file's IDENTITY (device and inode, the Windows file id included, read with `lstat` so a
+ *      link is judged as a link) and its birth time, and writes `end`. A target that does not exist at that moment
+ *      (a call another guard denied, a command that failed, `false && touch p`) is never confirmed and is simply
+ *      discarded.
+ *   3. A path is the agent's only if its CURRENT identity and birth equal a confirmed one: a file deleted and
+ *      recreated by someone else has a new identity and is foreign. Rename keeps identity, so a file the agent
+ *      moved is still its own, and the destination of a move is confirmed at PostToolUse by that identity.
  *
- * ONE JOURNAL PER AGENT, keyed by the harness's `agent_id`, in this mechanism's state folder through the one
- * state-location port (`hook-state/locations.mjs`), classified for rotation in `hook-state/rotate.mjs`.
+ * INTERVALS. Each completed call also leaves its `[start, end]` interval. What lies below a folder the agent made
+ * is the agent's only if the agent recorded it itself, or if it was BORN inside one of the agent's own call
+ * intervals (what its child processes dropped there). Anything born outside those intervals is foreign, so a shared
+ * folder the agent happened to make first never captures what other actors put in it afterwards.
  *
- * STATED LIMIT. A path recorded as absent and then created by SOMEONE ELSE before the agent's own call ran (or
- * after a failed call) has a birth time after the record and counts as the agent's. The window is one tool call.
- * A journal that cannot be written loses evidence, never a decision: the agent then owns less, so the guard
- * refuses more.
+ * STATED LIMITS. An actor that writes into such a folder DURING one of the agent's calls is mistaken for the
+ * agent's child process: the window is one tool call. A call with a `start` and no `end` (a crash) leaves no
+ * interval, so what it dropped is foreign. A journal that cannot be written loses evidence, never a decision: the
+ * agent then owns less, so the guard refuses more.
  *
- * @es El journal de lo que cada agente delegado CREÓ, llevado por efecto y no por lo que dicen las palabras de un
- * comando. EL DISEÑO: en cada llamada de un agente delegado que puede crear un fichero, el guard anota cada
- * objetivo de creación que NO existe en ese instante, con la hora de la llamada. La autoría se decide después
- * desde el propio sistema de ficheros: una ruta es del agente solo si está en su journal, existe ahora y su hora
- * de nacimiento es igual o posterior a la anotada (menos una tolerancia para relojes toscos). Todo lo demás no es
- * del agente, diga lo que diga cualquier comando: lo que ya existía al llamar nunca se anota (`mkdir -p` sobre
- * una carpeta compartida, `touch dir/*.mjs`, añadir a un fichero existente o `cp x carpeta` no reclaman nada);
- * una escritura denegada o fallida no deja fichero; y el contenido de una carpeta es del agente solo por una
- * carpeta que él hizo de verdad. UN JOURNAL POR AGENTE, con la clave `agent_id`, en la carpeta de estado de este
- * mecanismo por el único puerto de ubicaciones, clasificado en `rotate.mjs`. LÍMITE: una ruta anotada como
- * ausente y creada por OTRO antes de que corra la llamada del agente cuenta como suya; la ventana es una llamada.
- * Un journal que no se puede escribir pierde evidencia, nunca una decisión: el agente posee menos y se rechaza más.
+ * @es El journal de lo que cada agente delegado CREÓ, llevado por efecto y confirmado por la llamada COMPLETADA del
+ * propio agente. EL DISEÑO, tres registros por llamada, en un journal por agente (clave `agent_id`, en la carpeta
+ * de estado de este mecanismo por el único puerto de ubicaciones, clasificado en `rotate.mjs`): (1) PreToolUse
+ * escribe `start` y un `target` por cada objetivo de creación que NO existe en ese instante; todavía no es de
+ * nadie. (2) PostToolUse, que solo se dispara para una llamada que corrió de verdad, escribe `confirm` por cada
+ * objetivo que existe AHORA, con la IDENTIDAD del fichero (dispositivo e inodo, también el id de fichero de
+ * Windows, leída con `lstat` para juzgar un enlace como enlace) y su hora de nacimiento, y escribe `end`; un
+ * objetivo que no existe entonces (llamada denegada por otro guard, comando fallido, `false && touch p`) no se
+ * confirma y se descarta. (3) Una ruta es del agente solo si su identidad y nacimiento ACTUALES igualan a una
+ * confirmada: un fichero borrado y recreado por otro tiene identidad nueva y es ajeno; renombrar conserva la
+ * identidad, así que un fichero que el agente movió sigue siendo suyo. INTERVALOS: cada llamada completada deja su
+ * intervalo `[start, end]`; lo que cuelga de una carpeta que el agente hizo es suyo solo si lo anotó él o NACIÓ
+ * dentro de uno de sus intervalos (lo que dejaron sus procesos hijo); lo nacido fuera es ajeno, así que una
+ * carpeta compartida que el agente hizo primero nunca captura lo que otros ponen después. LÍMITES: un actor que
+ * escribe en esa carpeta DURANTE una llamada del agente se confunde con un proceso hijo (la ventana es una
+ * llamada); una llamada con `start` y sin `end` (caída) no deja intervalo; un journal que no se puede escribir
+ * pierde evidencia, nunca una decisión: el agente posee menos y se rechaza más.
  */
 
-import { appendFileSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { appendFileSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { stateDir } from '../hook-state/locations.mjs';
 
 /** The sub-folder of the mechanism's state that holds the per-agent journals. @es La subcarpeta con los journals por agente. */
 const JOURNAL_FOLDER = 'authored';
-
-/** How far before the recorded time a birth time may fall and still count, for coarse file-system clocks. @es Cuánto antes de la hora anotada puede caer un nacimiento y contar. */
-export const BIRTH_TOLERANCE_MS = 2000;
 
 /** A plain key: letters, digits, dash and underscore. @es Una clave simple. */
 const isPlainKey = (key) => typeof key === 'string' && key.length > 0 && [...key].every((character) => 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-'.includes(character));
@@ -70,76 +77,137 @@ export function agentKeyOf(payload) {
 }
 
 /**
- * Appends one record per canonical path to the agent's journal. A journal that cannot be written loses the
- * evidence and nothing else.
- * @param {string} agentKey The key from `agentKeyOf`.
- * @param {string[]} canonicalPaths The creation targets that did not exist.
- * @param {number} at The time of the call, in milliseconds.
- * @es Anota un registro por ruta canónica en el journal del agente.
+ * What a path IS, not what it is called: `{ id, born }` from `lstat` (a link is not followed), where `id` is
+ * `device:inode` (on Windows the volume serial and the file id) and `born` its birth time in milliseconds, falling
+ * back to the change time on a file system with none. `undefined` when nothing exists there.
+ * @es Qué ES una ruta, no cómo se llama: `{ id, born }` de `lstat` (no sigue enlaces); `id` es `dispositivo:inodo` y
+ * `born` su hora de nacimiento en ms, con la de cambio si el sistema no la tiene. `undefined` si no existe nada.
  */
-export function recordCreations(agentKey, canonicalPaths, at = Date.now()) {
-  if (!isPlainKey(agentKey) || canonicalPaths.length === 0) return;
+export function identityOf(target, stat = lstatSync) {
+  try {
+    const status = stat(target, { bigint: true });
+
+    return { id: `${status.dev}:${status.ino}`, born: Number(status.birthtimeMs > 0n ? status.birthtimeMs : status.ctimeMs) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Appends lines to an agent's journal; a journal that cannot be written loses the evidence and nothing else. @es Añade líneas al journal del agente; si no se puede escribir se pierde evidencia, nada más. */
+function append(agentKey, records) {
+  if (!isPlainKey(agentKey) || records.length === 0) return;
 
   try {
     mkdirSync(path.dirname(journalFile(agentKey)), { recursive: true });
-    appendFileSync(journalFile(agentKey), canonicalPaths.map((target) => `${JSON.stringify({ path: target, at })}\n`).join(''), 'utf8');
+    appendFileSync(journalFile(agentKey), records.map((record) => `${JSON.stringify(record)}\n`).join(''), 'utf8');
   } catch {
     // evidence lost, never a decision
   }
 }
 
-/**
- * The agent's records as a map from canonical path to the latest recorded time. An unreadable journal or a torn
- * line yields nothing for it.
- * @es Los registros del agente como mapa de ruta canónica a la última hora anotada.
- */
-export function readCreations(agentKey) {
-  const recorded = new Map();
-
-  if (!isPlainKey(agentKey)) return recorded;
+/** The parsed records of an agent's journal, in order; an unreadable journal or a torn line yields none for it. @es Los registros leídos del journal; uno ilegible o una línea rota no aportan nada. */
+function recordsOf(agentKey) {
+  if (!isPlainKey(agentKey)) return [];
 
   let text;
 
   try {
     text = readFileSync(journalFile(agentKey), 'utf8');
   } catch {
-    return recorded;
+    return [];
   }
+
+  const records = [];
 
   for (const line of text.split('\n')) {
     try {
       const record = JSON.parse(line);
 
-      if (typeof record?.path === 'string' && Number.isFinite(record.at)) recorded.set(record.path, Math.max(record.at, recorded.get(record.path) ?? 0));
+      if (typeof record?.k === 'string' && typeof record.id === 'string') records.push(record);
     } catch {
       continue;
     }
   }
 
-  return recorded;
-}
-
-/** When a path was born, or `undefined` when it does not exist; a file system with no birth time falls back to the change time. @es Cuándo nació una ruta. */
-export function bornAt(target, stat = statSync) {
-  try {
-    const status = stat(target);
-
-    return status.birthtimeMs > 0 ? status.birthtimeMs : status.ctimeMs;
-  } catch {
-    return undefined;
-  }
+  return records;
 }
 
 /**
- * Whether the journal vouches for a canonical path: it is recorded, exists now, and was born at or after the
- * recorded time (less the tolerance). A path nobody recorded is answered without touching the file system; a
- * path that no longer exists has no birth time, and an undefined time is never at or after anything.
- * @es Si el journal responde por una ruta canónica: está anotada, existe ahora y nació en o después de la hora
- * anotada. Una ruta que nadie anotó se responde sin tocar el sistema de ficheros; una que ya no existe no tiene
- * hora de nacimiento, y una hora indefinida nunca es igual o posterior a nada.
+ * PreToolUse: the call starts. Records `start` and each creation target that does not exist yet.
+ * @param {string} agentKey The key from `agentKeyOf`.
+ * @param {string} callId The call's `tool_use_id`, or a made-up one.
+ * @param {number} at The start time in milliseconds.
+ * @param {string[]} canonicalTargets The creation targets that did not exist.
+ * @es PreToolUse: empieza la llamada. Anota `start` y cada objetivo de creación que aún no existe.
  */
-export function vouchedFor(recorded, canonicalPath, stat = statSync) {
-  const at = recorded.get(canonicalPath);
+export function recordCall(agentKey, callId, at, canonicalTargets) {
+  append(agentKey, [{ k: 'start', id: callId, at }, ...canonicalTargets.map((target) => ({ k: 'target', id: callId, path: target }))]);
+}
 
-  return at !== undefined && bornAt(canonicalPath, stat) >= at - BIRTH_TOLERANCE_MS;
+/**
+ * PostToolUse: the call completed. Confirms, with identity and birth, each of its recorded targets that exists now,
+ * and records `end`. Without a call id the latest call that has a `start` and no `end` is the one. A call this
+ * journal never saw start confirms nothing.
+ * @es PostToolUse: la llamada se completó. Confirma, con identidad y nacimiento, cada objetivo anotado que existe
+ * ahora, y anota `end`. Sin id de llamada es la última con `start` y sin `end`. Una llamada que no empezó aquí no confirma nada.
+ */
+export function confirmCall(agentKey, callId, at, identify = identityOf) {
+  const records = recordsOf(agentKey);
+  const ended = new Set(records.filter((record) => record.k === 'end').map((record) => record.id));
+  const open = records.filter((record) => record.k === 'start' && !ended.has(record.id));
+  const id = callId ?? open.at(-1)?.id;
+
+  if (id === undefined || !open.some((record) => record.id === id)) return;
+
+  const confirmations = [];
+
+  for (const record of records) {
+    if (record.k !== 'target' || record.id !== id) continue;
+
+    const identity = identify(record.path);
+
+    if (identity !== undefined) confirmations.push({ k: 'confirm', id, path: record.path, ino: identity.id, born: identity.born });
+  }
+
+  append(agentKey, [...confirmations, { k: 'end', id, at }]);
+}
+
+/**
+ * The agent's confirmed paths (canonical path to the latest `{ id, born }`) and the intervals of its completed
+ * calls.
+ * @es Las rutas confirmadas del agente (ruta canónica a su última `{ id, born }`) y los intervalos de sus llamadas completadas.
+ */
+export function readJournal(agentKey) {
+  const records = recordsOf(agentKey);
+  const confirmed = new Map();
+  const starts = new Map();
+  const intervals = [];
+
+  for (const record of records) {
+    if (record.k === 'confirm' && typeof record.path === 'string' && typeof record.ino === 'string' && Number.isFinite(record.born)) confirmed.set(record.path, { id: record.ino, born: record.born });
+    if (record.k === 'start' && Number.isFinite(record.at)) starts.set(record.id, record.at);
+    if (record.k === 'end' && Number.isFinite(record.at) && starts.has(record.id)) intervals.push({ start: starts.get(record.id), end: record.at });
+  }
+
+  return { confirmed, intervals };
+}
+
+/**
+ * Whether `target` is, right now, the very file the journal confirmed: same identity and same birth.
+ * @es Si `target` es, ahora mismo, el mismo fichero que el journal confirmó: misma identidad y mismo nacimiento.
+ */
+export function sameIdentity(target, confirmed, identify = identityOf) {
+  const identity = identify(target);
+
+  return identity !== undefined && identity.id === confirmed.id && identity.born === confirmed.born;
+}
+
+/**
+ * Whether `target` was born inside one of the agent's own call intervals.
+ * @es Si `target` nació dentro de uno de los intervalos de las llamadas del propio agente.
+ */
+export function bornInside(target, intervals, identify = identityOf) {
+  const born = identify(target)?.born;
+
+  return born !== undefined && intervals.some((interval) => born >= interval.start && born <= interval.end);
 }

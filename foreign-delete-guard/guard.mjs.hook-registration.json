@@ -7,7 +7,15 @@
     {
       "event": "PreToolUse",
       "matcher": "Write|MultiEdit"
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Bash|PowerShell"
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Write|MultiEdit"
     }
   ],
-  "why": "Third measured occurrence (2026-10-19, Discovery report) of worker-temp-file-collided-across-sessions: writers told to delete the scratch scripts after removed the orchestrator's provision.mjs, engram-save.mjs, mirror-odd.mjs, split-backlog.mjs and contrast.mjs from the shared session scratchpad root. shared-temp-guard stops a delegated agent writing into the shared TEMP root; this guard stops it deleting a file it did not create. Authorship is recorded by effect in a per-agent journal: on Bash and PowerShell the guard judges a deletion and records what the call creates; on Write and MultiEdit it only records. The main session is never judged."
+  "why": "Third measured occurrence (2026-10-19, Discovery report) of worker-temp-file-collided-across-sessions: writers told to delete the scratch scripts after removed the orchestrator's provision.mjs, engram-save.mjs, mirror-odd.mjs, split-backlog.mjs and contrast.mjs from the shared session scratchpad root. shared-temp-guard stops a delegated agent writing into the shared TEMP root; this guard stops it deleting a file it did not create. Authorship is recorded by effect in a per-agent journal and confirmed by the agent's own completed call: PreToolUse (Bash, PowerShell, Write, MultiEdit) judges a deletion and records the call's start and its absent creation targets; PostToolUse on the same tools confirms the targets that now exist with their file identity and records the call's end, which a call another guard denied or a command that failed never reaches. The main session is never judged."
 }

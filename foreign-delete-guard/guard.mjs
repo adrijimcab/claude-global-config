@@ -40,7 +40,7 @@ import { fileURLToPath } from 'node:url';
 
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
 import { dialectOfTool } from '../shell-command/shell-command.mjs';
-import { agentKeyOf, recordCreations } from './authored-journal.mjs';
+import { agentKeyOf, confirmCall, recordCall } from './authored-journal.mjs';
 import { pendingCreations } from './authorship.mjs';
 import { judgeDeletion } from './judge.mjs';
 import { refusalText } from './refusal.mjs';
@@ -62,20 +62,29 @@ export function evaluate(raw, deps = {}) {
 
   if (!isSubagentCaller(payload)) return undefined;
 
-  const dialect = dialectOfTool(payload?.tool_name);
-  const command = payload?.tool_input?.command;
-
   try {
+    if (payload?.hook_event_name === 'PostToolUse') {
+      // The call completed: confirm what it really created. @es La llamada se completó: confirmar lo que creó de verdad.
+      confirmCall(agentKeyOf(payload), payload.tool_use_id, Date.now());
+
+      return undefined;
+    }
+
+    const dialect = dialectOfTool(payload?.tool_name);
+    const command = payload?.tool_input?.command;
     const verdict = dialect === undefined || typeof command !== 'string' ? undefined : judge(payload, dialect, command, deps);
 
     if (verdict !== undefined) return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: refusalText(verdict) } };
 
-    // The call is allowed: record what it creates, AFTER the decision, so it can never authorize its own line.
-    recordCreations(agentKeyOf(payload), pendingCreations(payload)); // an agent that cannot be told apart has no safe key: nothing is written
+    // The call is allowed: record its start and what it is about to create, AFTER the decision, so it can never
+    // authorize its own line. An agent that cannot be told apart has no safe key and nothing is written.
+    // @es La llamada se permite: se anota su inicio y lo que va a crear, DESPUÉS de decidir, para que nunca
+    // autorice su propia línea. Un agente que no se distingue no tiene clave segura y no se escribe nada.
+    recordCall(agentKeyOf(payload), payload.tool_use_id ?? `pre-${Date.now()}-${process.pid}`, Date.now(), pendingCreations(payload));
 
     return undefined;
   } catch {
-    return undefined; // fail open: a malfunction of the decision must never block a call
+    return undefined; // fail open: a malfunction of the decision must never block a call. @es Falla ABIERTO: una avería de la decisión nunca bloquea una llamada.
   }
 }
 

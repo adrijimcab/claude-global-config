@@ -1,0 +1,6 @@
+{
+  "event": "PostToolUse",
+  "guards": [
+    "../../foreign-delete-guard/guard.mjs"
+  ]
+}

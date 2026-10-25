@@ -21,7 +21,7 @@
  */
 
 import { callDirectory } from '../write-targets/tool-call-writes.mjs';
-import { agentKeyOf, readCreations } from './authored-journal.mjs';
+import { agentKeyOf, identityOf, readJournal } from './authored-journal.mjs';
 import { ownershipOf } from './authorship.mjs';
 import { deletionTargets, gitCleanPreview } from './deletion-targets.mjs';
 import { foreignLeaves, MAX_ENTRIES } from './foreign-paths.mjs';
@@ -31,11 +31,11 @@ import { tenancyWorktree } from './own-tree.mjs';
  * @param {object} payload The parsed `PreToolUse` payload of a delegated agent's shell call.
  * @param {string} dialect `bash` or `powershell`.
  * @param {string} command The shell line.
- * @param {{ cleanPreview?: Function, journalOf?: Function, records?: Function, limit?: number }} [seams] Injectable git, journal, fleet-record and walk edges.
+ * @param {{ cleanPreview?: Function, journalOf?: Function, identify?: Function, records?: Function, limit?: number }} [seams] Injectable git, journal, fleet-record and walk edges.
  * @returns {{ kind: 'foreign', via: string, files: string[] } | { kind: 'unresolved', code: string, via: string } | undefined} `undefined` lets the call run.
  * @es `undefined` deja correr la llamada.
  */
-export function judgeDeletion(payload, dialect, command, { cleanPreview = gitCleanPreview, journalOf = readCreations, records, limit = MAX_ENTRIES } = {}) {
+export function judgeDeletion(payload, dialect, command, { cleanPreview = gitCleanPreview, journalOf = readJournal, identify = identityOf, records, limit = MAX_ENTRIES } = {}) {
   const cwd = callDirectory(payload);
   const targets = deletionTargets(command, dialect, cwd, { cleanPreview });
 
@@ -49,7 +49,7 @@ export function judgeDeletion(payload, dialect, command, { cleanPreview = gitCle
 
   if (agentKey === undefined) return undefined;
 
-  const ownership = ownershipOf(journalOf(agentKey), tenancyWorktree({ cwd, agentKey, records }));
+  const ownership = ownershipOf(journalOf(agentKey), tenancyWorktree({ cwd, agentKey, records }), identify);
   const foreign = new Map();
 
   for (const target of targets) {

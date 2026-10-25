@@ -145,15 +145,25 @@ function powershellCopyOperands(args) {
 }
 
 /**
+ * The grammar, the sources and the destination of a copy or move line: PowerShell's when the dialect is
+ * PowerShell or the command is one of its cmdlets or aliases, bash's otherwise.
+ * @es La gramática, los orígenes y el destino de una línea de copia o movimiento: la de PowerShell si el dialecto
+ * lo es o el comando es uno de sus cmdlets o alias, la de bash si no.
+ */
+export function copyOperands(name, args, dialect) {
+  const powershell = dialect === DIALECTS.POWERSHELL || name.includes('-') || name === 'cpi' || name === 'mi';
+
+  return { grammar: powershell ? DIALECTS.POWERSHELL : DIALECTS.BASH, ...(powershell ? powershellCopyOperands(args) : bashCopyOperands(args)) };
+}
+
+/**
  * The files a copy or move drops INTO an existing folder: `folder/<name of each source>`, never the folder itself.
  * A destination that is not an existing folder is the destination file, which the shared write parser reports.
  * @es Los ficheros que una copia o un movimiento deja DENTRO de una carpeta existente: `carpeta/<nombre de cada
  * origen>`, nunca la carpeta. Un destino que no es una carpeta existente es el fichero destino, que ya informa el parser.
  */
 function droppedIntoFolder(name, args, directory, dialect, platform) {
-  const powershell = dialect === DIALECTS.POWERSHELL || name.includes('-') || name === 'cpi' || name === 'mi';
-  const grammar = powershell ? DIALECTS.POWERSHELL : DIALECTS.BASH;
-  const { sources, destination } = powershell ? powershellCopyOperands(args) : bashCopyOperands(args);
+  const { grammar, sources, destination } = copyOperands(name, args, dialect);
 
   if (destination === undefined) return [];
 

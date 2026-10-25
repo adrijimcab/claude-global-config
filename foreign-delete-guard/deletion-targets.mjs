@@ -39,10 +39,24 @@ import path from 'node:path';
 import { commandWordIndex, DIALECTS, executableName, simpleCommands } from '../shell-command/shell-command.mjs';
 import { gitInvocations } from '../shell-command/git-invocations.mjs';
 import { withWorkingDirectories } from '../cherry-pick-guard/working-directory.mjs';
+import { copyOperands } from './creation-targets.mjs';
 import { resolveOperand } from './operand-paths.mjs';
 
 /** The executables whose operands are files to delete. @es Los ejecutables cuyos operandos son ficheros a borrar. */
 const REMOVERS = new Set(['rm', 'rmdir', 'unlink', 'del', 'erase', 'rd', 'remove-item', 'ri']);
+
+/**
+ * The executables that MOVE files: the source stops being where it was, which is a deletion of the source and the
+ * way a foreign file could be laundered into the agent's own (the destination is confirmed by identity, and a
+ * rename keeps identity). Their sources are judged like the operands of a remover.
+ * @es Los ejecutables que MUEVEN ficheros: el origen deja de estar donde estaba, lo que es un borrado del origen y
+ * la forma de blanquear un fichero ajeno como propio (el destino se confirma por identidad y renombrar la
+ * conserva). Sus orígenes se juzgan como los operandos de un borrador.
+ */
+const MOVERS = new Set(['mv', 'move-item', 'move', 'mi']);
+
+/** The flags of `cmd` that run a script, in both spellings (Git Bash turns `/c` into `//c`). @es Las banderas de `cmd` que ejecutan un script, en las dos grafías. */
+const CMD_SCRIPT_FLAGS = ['/c', '/k', '//c', '//k'];
 
 /** The names that only PowerShell has, so their arguments are read with PowerShell's grammar. @es Los nombres solo de PowerShell. */
 const POWERSHELL_ONLY = new Set(['remove-item', 'ri']);
@@ -212,12 +226,26 @@ function findTargets(args, directory, dialect, platform) {
  * antes de que este módulo la vea; esa gramática es del dueño del parser vendorizado, y mientras no se arregle en
  * origen el borrado se rechaza como no resoluble en vez de juzgarse sobre una ruta falsa.
  */
-function cmdTargets(args, text, dialect) {
-  const flagAt = args.findIndex((word) => ['/c', '/k'].includes(word.toLowerCase()));
+function cmdTargets(args, text, dialect, directory, options) {
+  const flagAt = args.findIndex((word) => CMD_SCRIPT_FLAGS.includes(word.toLowerCase()));
+  const script = args.slice(flagAt + 1).join(' ');
 
-  if (flagAt === -1 || !text.includes('\\') || !runsRemover(args.slice(flagAt + 1).join(' '), dialect)) return [];
+  if (flagAt === -1 || !runsRemover(script, dialect)) return [];
+  if (text.includes('\\')) return [{ path: undefined, unresolvable: 'backslash', via: 'cmd /c' }];
 
-  return [{ path: undefined, unresolvable: 'backslash', via: 'cmd /c' }];
+  // The shared parser unwraps `/c` and `/k` itself, but not Git Bash's `//c`: that script is read here.
+  // @es El parser compartido desenvuelve `/c` y `/k`, pero no el `//c` de Git Bash: ese script se lee aquí.
+  if (!args[flagAt].startsWith('//')) return [];
+  if (directory === undefined) return [{ path: undefined, unresolvable: 'directory', via: 'cmd //c' }];
+
+  return deletionTargets(script, DIALECTS.BASH, directory, options);
+}
+
+/** The entries of one move command: each of its sources. @es Las entradas de un comando de movimiento: cada uno de sus orígenes. */
+function moveTargets(name, args, directory, dialect, platform) {
+  const { grammar, sources } = copyOperands(name, args, dialect);
+
+  return sources.flatMap((raw) => resolveOperand(raw, directory, name, grammar, platform));
 }
 
 /** The entry of one `xargs` command that runs a remover: its operands are on standard input. @es La entrada de un `xargs` que ejecuta un borrador. */
@@ -349,7 +377,8 @@ export function deletionTargets(script, dialect, cwd, { platform = process.platf
     if (REMOVERS.has(name)) found.push(...removerTargets(name, args, directory, dialect, platform));
     if (name === 'find') found.push(...findTargets(args, directory, dialect, platform));
     if (name === 'xargs') found.push(...xargsTargets(args, dialect));
-    if (name === 'cmd') found.push(...cmdTargets(args, command.text, dialect));
+    if (name === 'cmd') found.push(...cmdTargets(args, command.text, dialect, directory, { platform, cleanPreview }));
+    if (MOVERS.has(name)) found.push(...moveTargets(name, args, directory, dialect, platform));
   }
 
   found.push(...gitCleanTargets(script, dialect, cwd, platform, cleanPreview));

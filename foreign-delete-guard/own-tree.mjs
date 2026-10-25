@@ -8,9 +8,10 @@
  * when one of these two records, both kept by the fleet and only read here, says it is the agent's:
  *   - the harness's own record for an isolated agent: `agent-<id>.meta.json` carries its `worktreePath`
  *     (`agent-liveness/liveness.mjs` `agentRecords`); or
- *   - the `TENANCY:` line of the brief the agent was given, read with the very parser `brief-tenancy` enforces
- *     (`declarationOf`) from the first record of the agent's transcript (`briefOf`), only for an agent whose meta
- *     names no worktree. A worktree is told apart by its folder name, as the fleet does.
+ *   - the `TENANCY:` lines of the brief the agent was given, read with the lines `brief-tenancy` enforces
+ *     (`tenancyLines`) from the first record of the agent's transcript (`briefOf`), only for an agent whose meta
+ *     names no worktree. The declaration must carry the worktree's FULL PATH: a bare folder name matches a
+ *     same-named worktree anywhere, so it grants nothing.
  * No record, or a record for another worktree, means no exemption. The record is found by the agent's id, never
  * by the payload's `transcript_path`, which a subagent payload may point at the main session's transcript.
  *
@@ -23,8 +24,9 @@
  * del scratchpad, el checkout principal, la raíz temporal y el worktree de cualquier otro actor. ES SU TENENCIA,
  * y nada más laxo: el worktree enlazado en que está su directorio de trabajo cuando uno de estos dos registros de
  * la flota (solo se leen) dice que es suyo: el `worktreePath` del `meta.json` del harness para un agente aislado,
- * o la línea `TENANCY:` de su brief leída con el parser de `brief-tenancy` (`declarationOf`) del primer registro
- * de su transcript, solo si el meta no nombra ningún worktree. Sin registro, o con registro de otro worktree, no
+ * o las líneas `TENANCY:` de su brief leídas con las de `brief-tenancy` (`tenancyLines`) del primer registro de
+ * su transcript, solo si el meta no nombra ningún worktree; la declaración debe llevar la RUTA COMPLETA, porque un
+ * nombre de carpeta suelto casa con un worktree homónimo en cualquier sitio y no concede nada. Sin registro, o con registro de otro worktree, no
  * hay exención. El registro se busca por el id del agente, nunca por el `transcript_path` del payload. UN WORKTREE
  * ENLAZADO, no cualquier fichero `.git`: un submódulo también lo tiene como fichero (`.git/modules/...`); solo el
  * `gitdir:` que apunta a `.git/worktrees/` es un worktree que se le puede dar a un agente.
@@ -34,7 +36,8 @@ import { lstatSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { agentRecords, briefOf } from '../agent-liveness/liveness.mjs';
-import { declarationOf } from '../brief-tenancy/tenancy-declaration.mjs';
+import { tenancyLines } from '../brief-tenancy/tenancy-declaration.mjs';
+import { nativeSpelling } from '../cherry-pick-guard/working-directory.mjs';
 import { canonical } from '../shared-temp-guard/shared-temp-targets.mjs';
 
 /** The folder pair in a linked worktree's `gitdir:` line. @es El par de carpetas en la línea `gitdir:` de un worktree enlazado. */
@@ -87,5 +90,45 @@ export function tenancyWorktree({ cwd, agentKey, records = agentRecords }) {
   if (record === undefined) return undefined;
   if (record.worktreePath !== '') return canonical(record.worktreePath) === canonical(root) ? root : undefined;
 
-  return declarationOf(briefOf(record.transcript), root) === 'present' ? root : undefined;
+  return declaredPaths(briefOf(record.transcript)).includes(canonical(root)) ? root : undefined;
+}
+
+/** The characters that separate the words of a `TENANCY:` declaration. @es Los caracteres que separan las palabras de una declaración `TENANCY:`. */
+const WORD_SEPARATORS = ' \t\r,;"\'`()';
+
+/**
+ * The absolute paths a brief's `TENANCY:` lines declare, canonical. A word counts only if it is an absolute path
+ * (a drive path or one starting with a slash, Git Bash spellings translated): a line that names a worktree only by
+ * its folder name declares no path, so it grants nothing, and a same-named worktree elsewhere never matches. The
+ * lines are the ones `brief-tenancy` enforces (`tenancyLines`).
+ * @es Las rutas absolutas que declaran las líneas `TENANCY:` de un brief, en forma canónica. Una palabra cuenta solo
+ * si es una ruta absoluta: una línea que nombra un worktree solo por el nombre de su carpeta no declara ninguna
+ * ruta y no concede nada, y un worktree homónimo en otro sitio nunca casa. Las líneas son las que exige
+ * `brief-tenancy` (`tenancyLines`).
+ */
+export function declaredPaths(briefText) {
+  const declared = [];
+
+  for (const rest of tenancyLines(briefText)) {
+    const colon = rest.indexOf(':');
+
+    if (colon === -1) continue;
+
+    let word = '';
+
+    for (const character of `${rest.slice(colon + 1)} `) {
+      if (!WORD_SEPARATORS.includes(character)) {
+        word += character;
+        continue;
+      }
+
+      const native = nativeSpelling(word);
+
+      if (word.length > 0 && path.isAbsolute(native)) declared.push(canonical(native));
+
+      word = '';
+    }
+  }
+
+  return declared;
 }

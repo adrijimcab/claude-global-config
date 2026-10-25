@@ -9,10 +9,10 @@
  * moment of the call is recorded (`pendingCreations`), which is what makes the claim a fact about the file
  * system: a command that merely NAMES an existing path claims nothing.
  *
- * WHAT IS OWNED. A path the journal vouches for (recorded, exists, born after the record), or anything below such
- * a path (a folder the agent made owns what it holds); and the agent's own tenancy worktree (`own-tree.mjs`).
- * Writing a file INTO a folder does not make the folder the agent's. The shared scratchpad root is therefore
- * never owned, and a folder is the agent's only if it made the folder.
+ * WHAT IS OWNED. A path the agent's journal confirmed and whose identity is unchanged; what lies below a folder it
+ * made, only when it was born inside one of the agent's own call intervals; and the agent's own tenancy worktree
+ * (`own-tree.mjs`). Writing a file INTO a folder does not make the folder the agent's, and a folder the agent made
+ * does not capture what other actors put in it outside the agent's calls (`authored-journal.mjs`).
  *
  * @es QUIÉN CREÓ QUÉ, por efecto. Convierte una llamada en las rutas que está a punto de CREAR y el journal del
  * agente en la pregunta del guard: «¿es esta ruta del agente?». UNA LLAMADA CREA: el objetivo de `Write` o
@@ -20,9 +20,10 @@
  * `mkdir`, `touch`, `New-Item` y el fichero que una copia o un movimiento deja en una carpeta existente. NO crea:
  * el objetivo de `Edit`/`NotebookEdit` ni de `sed -i`. Solo se anota un objetivo que NO existe al llamar
  * (`pendingCreations`), lo que hace de la reclamación un hecho del sistema de ficheros: un comando que solo NOMBRA
- * una ruta existente no reclama nada. ES PROPIO: lo que el journal avala (anotado, existe, nació después) o lo que
- * cuelga de ello, y el worktree de tenencia del agente. Escribir un fichero DENTRO de una carpeta no la hace del
- * agente: la raíz compartida del scratchpad nunca es propia.
+ * una ruta existente no reclama nada. ES PROPIO: una ruta que el journal del agente confirmó y cuya identidad no
+ * cambió; lo que cuelga de una carpeta que él hizo, solo si nació dentro de un intervalo de sus propias llamadas; y
+ * el worktree de tenencia del agente. Escribir un fichero DENTRO de una carpeta no la hace del agente, y una
+ * carpeta que él hizo no captura lo que otros actores ponen fuera de sus llamadas.
  */
 
 import { lstatSync } from 'node:fs';
@@ -30,7 +31,7 @@ import { lstatSync } from 'node:fs';
 import { toolCallWrites, callDirectory } from '../write-targets/tool-call-writes.mjs';
 import { dialectOfTool } from '../shell-command/shell-command.mjs';
 import { canonical } from '../shared-temp-guard/shared-temp-targets.mjs';
-import { vouchedFor } from './authored-journal.mjs';
+import { bornInside, identityOf, sameIdentity } from './authored-journal.mjs';
 import { creationTargets } from './creation-targets.mjs';
 
 /** The `via` the shared write parser gives the tools that create a file, and the in-place edit that does not. @es El `via` del parser compartido. */
@@ -75,17 +76,35 @@ export function pendingCreations(call) {
 
 /**
  * The ownership the journal and the tenancy give: `owns` / `ownsCanonical` answer whether a path is the agent's.
- * @param {Map<string, number>} recorded The agent's journal (`readCreations`).
+ * A path is owned when it is the tenancy worktree or below it; when it is a confirmed path whose identity is
+ * unchanged; or when it lies below such a confirmed folder AND was born inside one of the agent's own call
+ * intervals (what its child processes dropped there).
+ * @param {{ confirmed: Map<string, { id: string, born: number }>, intervals: Array<{ start: number, end: number }> }} journal The agent's journal (`readJournal`).
  * @param {string | undefined} ownTreeRoot The agent's own tenancy worktree, when it has one.
- * @es La propiedad que dan el journal y la tenencia.
+ * @param {Function} [identify] The identity reader, injectable.
+ * @es La propiedad que dan el journal y la tenencia. Es propia la que está en el worktree de tenencia; una ruta
+ * confirmada cuya identidad no cambió; o la que cuelga de una carpeta confirmada Y nació dentro de un intervalo
+ * de las llamadas del propio agente (lo que dejaron sus procesos hijo).
  */
-export function ownershipOf(recorded, ownTreeRoot) {
+export function ownershipOf(journal, ownTreeRoot, identify = identityOf) {
   const treeRoot = ownTreeRoot === undefined ? undefined : canonical(ownTreeRoot);
 
-  /** Whether the canonical path, or any folder above it, is the tenancy worktree or is vouched for. @es Si la ruta, o alguna carpeta sobre ella, es el worktree de tenencia o está avalada. */
+  /** Whether the canonical path, or a confirmed folder above it, makes it the agent's. @es Si la ruta, o una carpeta confirmada sobre ella, la hace del agente. */
   const ownsCanonical = (canonicalPath) => {
+    let bornInsideAnInterval;
+
     for (let current = canonicalPath; ; ) {
-      if (current === treeRoot || vouchedFor(recorded, current)) return true;
+      if (current === treeRoot) return true;
+
+      const confirmed = journal.confirmed.get(current);
+
+      if (confirmed !== undefined && sameIdentity(current, confirmed, identify)) {
+        if (current === canonicalPath) return true;
+
+        bornInsideAnInterval ??= bornInside(canonicalPath, journal.intervals, identify);
+
+        if (bornInsideAnInterval) return true;
+      }
 
       const slash = current.lastIndexOf('/');
 
