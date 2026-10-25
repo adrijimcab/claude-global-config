@@ -85,7 +85,7 @@ const MUTANTS = [
   ['the phrase named is looked for in the raw message, inline code included', GUARD, 'const matched = prose.match(tripped)[0];', 'const matched = message.match(tripped)[0];'],
 
   // --- THE DECISION: when the turn is blocked.
-  ['a BOM-prefixed payload is no longer decoded', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
+  ['a BOM-prefixed payload is no longer decoded', GUARD, 'payload = parsePayload(raw);', 'payload = JSON.parse(raw);'],
   ['a turn that already blocked once blocks again', GUARD, '  if (payload?.stop_hook_active === true) return undefined;\n', ''],
   ['a message that is not text is read as text', GUARD, "typeof payload?.last_assistant_message === 'string' ?", 'true ?'],
   ['a message with no risk phrase is not let through', GUARD, 'HIGH_RISK.find((pattern) => pattern.test(message));\n  if (tripped === undefined) return undefined;', 'HIGH_RISK.find((pattern) => pattern.test(message));'],
@@ -96,9 +96,14 @@ const MUTANTS = [
   ['a message with no finding is blocked', GUARD, '  if (findings.length === 0) return undefined;\n', ''],
 
   // --- THE OUTPUT: what the blocked turn reads.
-  ['the verdict is not a block', GUARD, "decision: 'block',", "decision: 'allow',"],
+  // RETIRED with the move onto hook-io: 'the verdict is not a block' and 'the context is declared for another hook
+  // event'. The words `decision: 'block'` and `hookEventName: 'Stop'` now live in `blockStop`, and
+  // `hook-io/hook-io.mutants.mjs` pins them: 'blockStop does not block', 'blockStop names the wrong event'.
+  // The guard's own arguments to `blockStop` (reason, context) stay pinned by the mutants below.
+  // @es RETIRADOS con el paso a hook-io: 'the verdict is not a block' y 'the context is declared for another hook
+  // event'. Las palabras viven ahora en `blockStop` y las fijan 'blockStop does not block' y 'blockStop names the
+  // wrong event' de `hook-io/hook-io.mutants.mjs`; los argumentos de la guarda a `blockStop` siguen fijados abajo.
   ['the reason stops naming the phrase that tripped', GUARD, 'claim ("${matched}") stated', 'claim ("?") stated'],
-  ['the context is declared for another hook event', GUARD, "hookEventName: 'Stop',", "hookEventName: 'SubagentStop',"],
   ['the context stops repeating the phrase that tripped', GUARD, 'TRIPPED on the phrase: "${matched}".', 'TRIPPED on the phrase: "?".'],
   ['the context stops promising it fires once per turn', GUARD, "const ONCE_PER_TURN = 'This guard fires at most once per turn — it will not fire again after this pass.';", "const ONCE_PER_TURN = 'This guard fires.';"],
   ['the once-per-turn notice is not appended', GUARD, '[...findings.map((finding) => finding.context), ONCE_PER_TURN]', '[...findings.map((finding) => finding.context)]'],
@@ -109,7 +114,7 @@ const MUTANTS = [
   ['the premise context stops repeating the phrase that tripped', GUARD, 'on the attributed premise: "${matched}".', 'on the attributed premise: "?".'],
   ['the premise context stops citing the rule', GUARD, "(rules/00-owner-mandates.md).',", "().',"],
   ['the process prints nothing when it blocks', GUARD, 'process.stdout.write(JSON.stringify(output));', "process.stdout.write('');"],
-  ['importing the guard runs it as a process', GUARD, 'path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))', 'true'],
+  ['importing the guard runs it as a process', GUARD, 'runWhenMain(import.meta.url, main);', 'main();'],
 ];
 
 const survivors = runMutants({

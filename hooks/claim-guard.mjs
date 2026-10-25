@@ -43,8 +43,7 @@
  * comprobó es la afirmación, no la evidencia. Las dos clases comparten el único bloqueo por turno.
  */
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { blockStop, parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
 
 const HIGH_RISK = [
   // Spanish — claims of non-existence / absolutes about the system
@@ -120,12 +119,6 @@ const ATTRIBUTED_PREMISE = [
 ];
 
 const ONCE_PER_TURN = 'This guard fires at most once per turn — it will not fire again after this pass.';
-
-const readStdin = async () => {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  return Buffer.concat(chunks).toString('utf8');
-};
 
 /**
  * The absolute/negative claim the message ships without evidence, as `{ reason, context }`, or `undefined`.
@@ -208,7 +201,7 @@ function attributedPremise(message) {
 export function evaluate(raw) {
   let payload;
   try {
-    payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
+    payload = parsePayload(raw);
   } catch {
     return undefined; // never let a malformed payload wedge the session
   }
@@ -221,14 +214,10 @@ export function evaluate(raw) {
 
   if (findings.length === 0) return undefined;
 
-  return {
-    decision: 'block',
-    reason: findings.map((finding) => finding.reason).join(' '),
-    hookSpecificOutput: {
-      hookEventName: 'Stop',
-      additionalContext: [...findings.map((finding) => finding.context), ONCE_PER_TURN].join('\n\n'),
-    },
-  };
+  return blockStop(
+    findings.map((finding) => finding.reason).join(' '),
+    [...findings.map((finding) => finding.context), ONCE_PER_TURN].join('\n\n'),
+  );
 }
 
 const main = async () => {
@@ -245,4 +234,4 @@ const main = async () => {
 
 // Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
 // leería el stdin del importador y lo cortaría con process.exit(0) a mitad de camino.
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
+runWhenMain(import.meta.url, main);
