@@ -3,21 +3,26 @@
  * a folder is judged by what it holds: it passes when every file under it is owned, and the folder (or any
  * subfolder) that is empty and not owned is itself foreign, because removing it removes somebody else's folder.
  *
- * A symbolic link or junction is a leaf and is never followed: deleting the link does not delete its target, and
- * walking into it could read a whole other tree (a Windows junction is a reparse point; the lesson
- * `recursive-delete-followed-a-junction` is why).
+ * LINKS ARE LEAVES AND THEY ARE CHECKED EVEN INSIDE AN OWNED FOLDER. A symbolic link or junction is never
+ * followed: deleting the link does not delete its target in the shell's `rm`, but a recursive PowerShell
+ * `Remove-Item` through a junction has deleted the target's contents, and the lesson
+ * `recursive-delete-followed-a-junction` is why this walk never descends into one. So the whole tree of an owned
+ * folder is walked too, and a link whose target lies outside what the agent owns is reported foreign: owning the
+ * folder does not make a junction in it a safe thing to delete recursively.
  *
  * A path that does not exist is nothing to delete. A folder that cannot be listed counts as foreign, and a walk
  * past `MAX_ENTRIES` is reported as `exceeded` so the caller refuses what it could not finish checking.
  *
  * @es Cuáles de los ficheros que borraría un borrado NO son del agente. Una ruta que existe y no es propia es
  * ajena; una carpeta se juzga por lo que contiene: pasa si todo lo de dentro es propio, y la carpeta (o
- * subcarpeta) vacía y no propia es ajena en sí. Un enlace simbólico o una junction es una hoja y no se sigue.
- * Una ruta que no existe no es nada que borrar. Una carpeta ilegible cuenta como ajena y un recorrido que pasa de
- * `MAX_ENTRIES` se informa como `exceeded` para que el llamador rechace lo que no pudo terminar de comprobar.
+ * subcarpeta) vacía y no propia es ajena en sí. LOS ENLACES SON HOJAS Y SE COMPRUEBAN INCLUSO DENTRO DE UNA
+ * CARPETA PROPIA: nunca se siguen, pero un `Remove-Item` recursivo de PowerShell a través de una junction ha
+ * borrado el contenido del destino, así que también se recorre el árbol de una carpeta propia y un enlace cuyo
+ * destino queda fuera de lo propio se informa como ajeno. Una ruta que no existe no es nada que borrar. Una
+ * carpeta ilegible cuenta como ajena y un recorrido que pasa de `MAX_ENTRIES` se informa como `exceeded`.
  */
 
-import { lstatSync, readdirSync } from 'node:fs';
+import { lstatSync, readdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import { canonical } from '../shared-temp-guard/shared-temp-targets.mjs';
@@ -33,10 +38,11 @@ const folded = (name) => (process.platform === 'win32' ? name.toLowerCase() : na
  * @param {{ ownsCanonical: (canonicalPath: string) => boolean }} ownership The agent's ownership.
  * @param {number} [limit] The walk budget.
  * @param {Function} [list] The directory listing, injectable so a selftest can make a folder unreadable.
+ * @param {Function} [resolve] The link resolution, injectable so a selftest can make a link dangle.
  * @returns {{ foreign: string[], exceeded: boolean }} The paths in it the agent does not own.
  * @es Las rutas de `candidate` que el agente no posee.
  */
-export function foreignLeaves(candidate, ownership, limit = MAX_ENTRIES, list = readdirSync) {
+export function foreignLeaves(candidate, ownership, limit = MAX_ENTRIES, list = readdirSync, resolve = realpathSync) {
   let status;
 
   try {
@@ -45,15 +51,32 @@ export function foreignLeaves(candidate, ownership, limit = MAX_ENTRIES, list = 
     return { foreign: [], exceeded: false };
   }
 
-  const root = canonical(candidate);
+  /** Whether a link is foreign: it is not owned, or its target is outside what is owned (or cannot be resolved). @es Si un enlace es ajeno. */
+  const linkIsForeign = (link, linkOwned) => {
+    if (!linkOwned) return true;
 
-  if (ownership.ownsCanonical(root)) return { foreign: [], exceeded: false };
-  if (!status.isDirectory()) return { foreign: [candidate], exceeded: false };
+    try {
+      return !ownership.ownsCanonical(canonical(resolve(link)));
+    } catch {
+      return true;
+    }
+  };
+
+  if (status.isSymbolicLink()) {
+    const lexical = `${canonical(path.dirname(candidate))}/${folded(path.basename(candidate))}`;
+
+    return { foreign: linkIsForeign(candidate, ownership.ownsCanonical(lexical)) ? [candidate] : [], exceeded: false };
+  }
+
+  const root = canonical(candidate);
+  const rootOwned = ownership.ownsCanonical(root);
+
+  if (!status.isDirectory()) return { foreign: rootOwned ? [] : [candidate], exceeded: false };
 
   const foreign = [];
   let seen = 0;
 
-  const walk = (directory, canonicalDirectory) => {
+  const walk = (directory, canonicalDirectory, owned) => {
     let entries;
 
     try {
@@ -64,7 +87,7 @@ export function foreignLeaves(candidate, ownership, limit = MAX_ENTRIES, list = 
     }
 
     if (entries.length === 0) {
-      foreign.push(directory);
+      if (!owned) foreign.push(directory);
       return;
     }
 
@@ -75,15 +98,19 @@ export function foreignLeaves(candidate, ownership, limit = MAX_ENTRIES, list = 
 
       const child = path.join(directory, entry.name);
       const canonicalChild = `${canonicalDirectory}/${folded(entry.name)}`;
+      const childOwned = owned || ownership.ownsCanonical(canonicalChild);
 
-      if (ownership.ownsCanonical(canonicalChild)) continue;
-
-      if (entry.isDirectory()) walk(child, canonicalChild);
-      else foreign.push(child);
+      if (entry.isSymbolicLink()) {
+        if (linkIsForeign(child, childOwned)) foreign.push(child);
+      } else if (entry.isDirectory()) {
+        walk(child, canonicalChild, childOwned);
+      } else if (!childOwned) {
+        foreign.push(child);
+      }
     }
   };
 
-  walk(candidate, root);
+  walk(candidate, root, rootOwned);
 
   return { foreign, exceeded: seen > limit };
 }

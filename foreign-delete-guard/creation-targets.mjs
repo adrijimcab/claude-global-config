@@ -16,6 +16,7 @@
  * scratchpad.
  */
 
+import { lstatSync } from 'node:fs';
 import path from 'node:path';
 
 import { withWorkingDirectories } from '../cherry-pick-guard/working-directory.mjs';
@@ -89,6 +90,100 @@ function newItemOperands(args) {
   return (bases.length > 0 ? bases : ['.']).flatMap((base) => names.map((name) => path.join(base, name)));
 }
 
+/** The copy and move commands, whose destination may be an existing folder. @es Los comandos de copia y movimiento. */
+const COPIERS = new Set(['cp', 'mv', 'copy-item', 'copy', 'cpi', 'move-item', 'move', 'mi']);
+
+/** PowerShell Copy-Item/Move-Item parameters that take a value. @es Parámetros de Copy-Item/Move-Item con valor. */
+const COPY_VALUE_PARAMETERS = new Set(['-path', '-literalpath', '-destination', '-filter', '-include', '-exclude', '-credential', '-stream']);
+
+/** The sources and the destination of a `cp`/`mv` line. @es Los orígenes y el destino de una línea `cp`/`mv`. */
+function bashCopyOperands(args) {
+  const operands = [];
+  let targetDirectory;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const word = args[index];
+
+    if (word === '-t' || word === '--target-directory') {
+      targetDirectory = args[index + 1];
+      index += 1;
+    } else if (word.startsWith('--target-directory=')) {
+      targetDirectory = word.slice('--target-directory='.length);
+    } else if (word === '-S' || word === '--suffix') {
+      index += 1;
+    } else if (!isOption(word)) {
+      operands.push(word);
+    }
+  }
+
+  return targetDirectory === undefined ? { sources: operands.slice(0, -1), destination: operands.at(-1) } : { sources: operands, destination: targetDirectory };
+}
+
+/** The sources and the destination of a PowerShell Copy-Item/Move-Item line. @es Los orígenes y el destino de una línea Copy-Item/Move-Item. */
+function powershellCopyOperands(args) {
+  const named = [];
+  const positional = [];
+  let destination;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const word = args[index];
+    const parameter = word.toLowerCase();
+
+    if (!word.startsWith('-')) {
+      positional.push(word);
+    } else if (COPY_VALUE_PARAMETERS.has(parameter)) {
+      if (parameter === '-destination') destination = args[index + 1];
+      if (parameter === '-path' || parameter === '-literalpath') named.push(args[index + 1]);
+
+      index += 1;
+    }
+  }
+
+  const sources = named.length > 0 ? named : destination === undefined ? positional.slice(0, -1) : positional;
+
+  return { sources, destination: destination ?? positional.at(-1) };
+}
+
+/**
+ * The files a copy or move drops INTO an existing folder: `folder/<name of each source>`, never the folder itself.
+ * A destination that is not an existing folder is the destination file, which the shared write parser reports.
+ * @es Los ficheros que una copia o un movimiento deja DENTRO de una carpeta existente: `carpeta/<nombre de cada
+ * origen>`, nunca la carpeta. Un destino que no es una carpeta existente es el fichero destino, que ya informa el parser.
+ */
+function droppedIntoFolder(name, args, directory, dialect, platform) {
+  const powershell = dialect === DIALECTS.POWERSHELL || name.includes('-') || name === 'cpi' || name === 'mi';
+  const grammar = powershell ? DIALECTS.POWERSHELL : DIALECTS.BASH;
+  const { sources, destination } = powershell ? powershellCopyOperands(args) : bashCopyOperands(args);
+
+  if (destination === undefined) return [];
+
+  const folders = resolveOperand(destination, directory, name, grammar, platform).filter((entry) => entry.path !== undefined && isFolder(entry.path));
+
+  const origins = sources.flatMap((raw) => resolveOperand(raw, directory, name, grammar, platform)).filter((entry) => entry.path !== undefined && exists(entry.path));
+
+  return folders.flatMap((folder) => origins.map((origin) => ({ path: path.join(folder.path, path.basename(origin.path)), via: name })));
+}
+
+/** Whether anything exists at `target`, a link included. @es Si existe algo en `target`, enlace incluido. */
+function exists(target) {
+  try {
+    lstatSync(target);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether `target` is an existing folder (a link is not followed). @es Si `target` es una carpeta existente. */
+function isFolder(target) {
+  try {
+    return lstatSync(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * @param {string} script The shell line exactly as the tool received it.
  * @param {string} dialect `bash` or `powershell`.
@@ -112,6 +207,8 @@ export function creationTargets(script, dialect, cwd, platform = process.platfor
     const grammar = isNewItem ? DIALECTS.POWERSHELL : dialect;
 
     for (const raw of operands) created.push(...resolveOperand(raw, directory, name, grammar, platform).filter((entry) => entry.path !== undefined));
+
+    if (COPIERS.has(name)) created.push(...droppedIntoFolder(name, args, directory, dialect, platform));
   }
 
   return created;

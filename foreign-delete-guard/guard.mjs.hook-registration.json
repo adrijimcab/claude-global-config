@@ -3,7 +3,11 @@
     {
       "event": "PreToolUse",
       "matcher": "Bash|PowerShell"
+    },
+    {
+      "event": "PreToolUse",
+      "matcher": "Write|MultiEdit"
     }
   ],
-  "why": "Third measured occurrence (2026-10-19, Discovery report) of worker-temp-file-collided-across-sessions: writers told to delete the scratch scripts after removed the orchestrator's provision.mjs, engram-save.mjs, mirror-odd.mjs, split-backlog.mjs and contrast.mjs from the shared session scratchpad root. shared-temp-guard stops a delegated agent writing into the shared TEMP root; this guard stops it deleting a file it did not create (authorship read from its own transcript). The main session is never judged."
+  "why": "Third measured occurrence (2026-10-19, Discovery report) of worker-temp-file-collided-across-sessions: writers told to delete the scratch scripts after removed the orchestrator's provision.mjs, engram-save.mjs, mirror-odd.mjs, split-backlog.mjs and contrast.mjs from the shared session scratchpad root. shared-temp-guard stops a delegated agent writing into the shared TEMP root; this guard stops it deleting a file it did not create. Authorship is recorded by effect in a per-agent journal: on Bash and PowerShell the guard judges a deletion and records what the call creates; on Write and MultiEdit it only records. The main session is never judged."
 }

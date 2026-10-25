@@ -177,21 +177,47 @@ function findStarts(args) {
 }
 
 /** Which deleting action a `find` carries, or `undefined`. @es Qué acción de borrado lleva un `find`, o `undefined`. */
-function findDeletion(args) {
+function findDeletion(args, dialect) {
   if (args.includes('-delete')) return 'find -delete';
 
-  const exec = args.findIndex((word, index) => FIND_EXEC_ACTIONS.has(word) && REMOVERS.has(executableName(args[index + 1] ?? '')));
+  /**
+   * An `-exec` family action runs a remover when the words after it, read as a command line, do: the shared
+   * parser unwraps `sh -c`, `env`, `sudo` and the like, exactly as it does for `xargs`, and a `;` terminator ends
+   * the command it belongs to.
+   * @es Una acción de la familia `-exec` ejecuta un borrador cuando lo hacen las palabras que le siguen, leídas
+   * como línea de comandos: el parser compartido desenvuelve `sh -c`, `env`, `sudo` y similares, igual que en `xargs`.
+   */
+  const exec = args.findIndex((word, index) => FIND_EXEC_ACTIONS.has(word) && runsRemover(args.slice(index + 1).join(' '), dialect));
 
   return exec === -1 ? undefined : `find ${args[exec]} ${executableName(args[exec + 1])}`;
 }
 
 /** The entries of one `find` command: every start path, as a subtree. @es Las entradas de un `find`: cada ruta de inicio, como subárbol. */
 function findTargets(args, directory, dialect, platform) {
-  const via = findDeletion(args);
+  const via = findDeletion(args, dialect);
 
   if (via === undefined) return [];
 
   return findStarts(args).flatMap((raw) => resolveOperand(raw, directory, via, dialect, platform));
+}
+
+/**
+ * The entry of a `cmd /c ...` command that runs a remover while its text holds a backslash. The shared parser reads
+ * the script of a nested `cmd /c` with bash escapes, so every backslash of a Windows path in it is eaten before
+ * this module sees the path (`del C:\a\b\*.mjs` arrives as `C:ab*.mjs`) and the deletion cannot be located. That
+ * grammar belongs to the vendored parser's owner; until it is fixed at the source such a deletion is refused as
+ * unresolvable instead of judged on a wrong path.
+ * @es La entrada de un `cmd /c ...` que ejecuta un borrador y cuyo texto lleva una barra invertida. El parser
+ * compartido lee el script de un `cmd /c` anidado con escapes de bash y se come las barras de una ruta de Windows
+ * antes de que este módulo la vea; esa gramática es del dueño del parser vendorizado, y mientras no se arregle en
+ * origen el borrado se rechaza como no resoluble en vez de juzgarse sobre una ruta falsa.
+ */
+function cmdTargets(args, text, dialect) {
+  const flagAt = args.findIndex((word) => ['/c', '/k'].includes(word.toLowerCase()));
+
+  if (flagAt === -1 || !text.includes('\\') || !runsRemover(args.slice(flagAt + 1).join(' '), dialect)) return [];
+
+  return [{ path: undefined, unresolvable: 'backslash', via: 'cmd /c' }];
 }
 
 /** The entry of one `xargs` command that runs a remover: its operands are on standard input. @es La entrada de un `xargs` que ejecuta un borrador. */
@@ -323,6 +349,7 @@ export function deletionTargets(script, dialect, cwd, { platform = process.platf
     if (REMOVERS.has(name)) found.push(...removerTargets(name, args, directory, dialect, platform));
     if (name === 'find') found.push(...findTargets(args, directory, dialect, platform));
     if (name === 'xargs') found.push(...xargsTargets(args, dialect));
+    if (name === 'cmd') found.push(...cmdTargets(args, command.text, dialect));
   }
 
   found.push(...gitCleanTargets(script, dialect, cwd, platform, cleanPreview));

@@ -1,34 +1,67 @@
 /**
- * The linked git worktree a delegated agent stands in, if any. A worker's worktree is its own by tenancy (the
- * fleet gives one worker one worktree), so deleting inside it is ordinary work on its own tree (a refactor
- * removes tracked files, a build output is rebuilt) and is not what this guard protects. What it protects is the
- * folders SHARED between actors: the session scratchpad root, the main checkout, the temp root.
+ * The worktree an agent was GIVEN: its tenancy. Deleting inside the worktree an agent was assigned is ordinary
+ * work on its own tree (a refactor removes tracked files, a build output is rebuilt), so it is not what this
+ * guard protects. What it protects is every folder SHARED between actors: the session scratchpad root, the main
+ * checkout, the temp root, and any other actor's worktree.
  *
- * HOW A LINKED WORKTREE IS TOLD FROM THE MAIN CHECKOUT. In a linked worktree `.git` is a FILE (`gitdir: ...`); in
- * the main checkout it is a directory. The walk goes up from the working directory and stops at the first
- * `.git`; a directory means the main checkout and there is no own tree. File-system reads only, no git process.
+ * WHAT COUNTS AS THE AGENT'S TENANCY, and nothing looser. The linked worktree its working directory stands in,
+ * when one of these two records, both kept by the fleet and only read here, says it is the agent's:
+ *   - the harness's own record for an isolated agent: `agent-<id>.meta.json` carries its `worktreePath`
+ *     (`agent-liveness/liveness.mjs` `agentRecords`); or
+ *   - the `TENANCY:` line of the brief the agent was given, read with the very parser `brief-tenancy` enforces
+ *     (`declarationOf`) from the first record of the agent's transcript (`briefOf`), only for an agent whose meta
+ *     names no worktree. A worktree is told apart by its folder name, as the fleet does.
+ * No record, or a record for another worktree, means no exemption. The record is found by the agent's id, never
+ * by the payload's `transcript_path`, which a subagent payload may point at the main session's transcript.
  *
- * @es El worktree enlazado de git en el que está un agente delegado, si lo hay. El worktree de un worker es suyo
- * por tenencia (la flota da un worktree por worker), así que borrar dentro es trabajo ordinario sobre su árbol;
- * lo que este guard protege son las carpetas COMPARTIDAS entre actores: la raíz del scratchpad de la sesión, el
- * checkout principal y la raíz temporal. CÓMO SE DISTINGUE: en un worktree enlazado `.git` es un FICHERO
- * (`gitdir: ...`); en el checkout principal es un directorio. Se sube desde el directorio de trabajo hasta el
- * primer `.git`; un directorio significa checkout principal y no hay árbol propio. Solo lecturas del sistema de
- * ficheros, ningún proceso git.
+ * A LINKED WORKTREE, not any `.git` file. Git keeps `.git` as a file in a linked worktree (`gitdir: <repo>/.git/
+ * worktrees/<name>`) and also in a submodule (`gitdir: <repo>/.git/modules/<name>`). Only the first is a worktree
+ * an agent can be given; the walk checks where the `gitdir:` points. File-system reads only, no git process.
+ *
+ * @es El worktree que se le DIO a un agente: su tenencia. Borrar dentro del worktree asignado es trabajo
+ * ordinario sobre su propio árbol; lo que este guard protege son las carpetas COMPARTIDAS entre actores: la raíz
+ * del scratchpad, el checkout principal, la raíz temporal y el worktree de cualquier otro actor. ES SU TENENCIA,
+ * y nada más laxo: el worktree enlazado en que está su directorio de trabajo cuando uno de estos dos registros de
+ * la flota (solo se leen) dice que es suyo: el `worktreePath` del `meta.json` del harness para un agente aislado,
+ * o la línea `TENANCY:` de su brief leída con el parser de `brief-tenancy` (`declarationOf`) del primer registro
+ * de su transcript, solo si el meta no nombra ningún worktree. Sin registro, o con registro de otro worktree, no
+ * hay exención. El registro se busca por el id del agente, nunca por el `transcript_path` del payload. UN WORKTREE
+ * ENLAZADO, no cualquier fichero `.git`: un submódulo también lo tiene como fichero (`.git/modules/...`); solo el
+ * `gitdir:` que apunta a `.git/worktrees/` es un worktree que se le puede dar a un agente.
  */
 
-import { lstatSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+
+import { agentRecords, briefOf } from '../agent-liveness/liveness.mjs';
+import { declarationOf } from '../brief-tenancy/tenancy-declaration.mjs';
+import { canonical } from '../shared-temp-guard/shared-temp-targets.mjs';
+
+/** The folder pair in a linked worktree's `gitdir:` line. @es El par de carpetas en la línea `gitdir:` de un worktree enlazado. */
+const LINKED_GITDIR_MARK = '/.git/worktrees/';
+
+/** Whether the `.git` file at `gitFile` points into a repository's `.git/worktrees/`. @es Si el fichero `.git` apunta a `.git/worktrees/`. */
+function pointsIntoWorktrees(gitFile) {
+  try {
+    const line = readFileSync(gitFile, 'utf8').split('\n')[0].trim();
+
+    return line.startsWith('gitdir:') && line.slice('gitdir:'.length).split('\\').join('/').includes(LINKED_GITDIR_MARK);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * @param {string} cwd The agent's working directory.
- * @returns {string | undefined} The root of its linked worktree, or `undefined` when it stands in the main checkout or outside any repository.
- * @es La raíz de su worktree enlazado, o `undefined` si está en el checkout principal o fuera de todo repositorio.
+ * @returns {string | undefined} The root of the LINKED worktree it stands in, or `undefined` for the main checkout, a submodule or no repository.
+ * @es La raíz del worktree ENLAZADO en que está, o `undefined` para el checkout principal, un submódulo o ningún repositorio.
  */
 export function linkedWorktreeRoot(cwd) {
   for (let current = path.resolve(cwd); ; ) {
     try {
-      return lstatSync(path.join(current, '.git')).isFile() ? current : undefined;
+      const gitEntry = path.join(current, '.git');
+
+      return lstatSync(gitEntry).isFile() && pointsIntoWorktrees(gitEntry) ? current : undefined;
     } catch {
       const parent = path.dirname(current);
 
@@ -37,4 +70,22 @@ export function linkedWorktreeRoot(cwd) {
       current = parent;
     }
   }
+}
+
+/**
+ * @param {{ cwd: string, agentKey: string, records?: () => Array<object> }} input The agent and where it stands.
+ * @returns {string | undefined} The root of the worktree the fleet's records give the agent, or `undefined`.
+ * @es La raíz del worktree que los registros de la flota dan al agente, o `undefined`.
+ */
+export function tenancyWorktree({ cwd, agentKey, records = agentRecords }) {
+  const root = linkedWorktreeRoot(cwd);
+
+  if (root === undefined) return undefined;
+
+  const record = records().find((candidate) => candidate.id === `agent-${agentKey}`);
+
+  if (record === undefined) return undefined;
+  if (record.worktreePath !== '') return canonical(record.worktreePath) === canonical(root) ? root : undefined;
+
+  return declarationOf(briefOf(record.transcript), root) === 'present' ? root : undefined;
 }

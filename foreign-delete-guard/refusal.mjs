@@ -23,6 +23,10 @@ const REASONS = {
     en: 'the folder it runs in is only known when the command runs',
     es: 'la carpeta en la que corre solo se conoce al ejecutar el comando'
   },
+  backslash: {
+    en: 'a nested cmd /c script loses the backslashes of its Windows paths when it is read, so the paths it deletes cannot be known',
+    es: 'un script de cmd /c anidado pierde las barras invertidas de sus rutas de Windows al leerse, así que no se pueden saber las rutas que borra'
+  },
   stdin: {
     en: 'its targets arrive through standard input',
     es: 'sus objetivos llegan por la entrada estándar'
