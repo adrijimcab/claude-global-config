@@ -34,6 +34,8 @@ const MUTANTS = [
   ['a dismiss message id is renamed', T, "'already-dismissed': {", "'already-dismissed-x': {"],
   ['a message id is renamed', T, "'bad-mechanism': {", "'bad-mechanisms': {"],
   ['the break-journal fault no longer says the lock was taken', T, ' The lock was taken all the same.', ''],
+  ['the breaker release fault no longer says who clears the breaker', T, ' It is left for a later break to clear once this process has exited.', ''],
+  ['the breaker release fault loses its Spanish half', T, "es: 'No se pudo soltar el breaker {file} ({code}): {detail}. Queda para que una rotura posterior lo quite cuando este proceso haya terminado.'", "es: ''"],
   ['the lock fault no longer says it is not contention', T, '. This is a fault, not another writer holding it.', '.'],
   ['the ceiling break message no longer names the reused pid', T, ': a reused pid must not wedge the lock.', '.'],
   ['the lock fault message loses its Spanish half', T, "es: 'No se pudo crear el lock {file} ({code}): {detail}. Es un fallo, no otro escritor que lo tiene.'", "es: ''"],

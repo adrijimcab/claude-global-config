@@ -52,6 +52,10 @@ export const MESSAGE_TABLE = {
     en: 'The lock {file} could not be released ({code}): {detail}.',
     es: 'No se pudo soltar el lock {file} ({code}): {detail}.'
   },
+  'lock-breaker-release-fault': {
+    en: 'The breaker {file} could not be released ({code}): {detail}. It is left for a later break to clear once this process has exited.',
+    es: 'No se pudo soltar el breaker {file} ({code}): {detail}. Queda para que una rotura posterior lo quite cuando este proceso haya terminado.'
+  },
   'lock-broken-dead-owner': {
     en: 'The lock {file} was {ageMs} ms old and its owner pid {pid} is gone; it was broken.',
     es: 'El lock {file} tenía {ageMs} ms y su dueño, el pid {pid}, ya no existe; se rompió.'

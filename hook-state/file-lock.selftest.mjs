@@ -483,9 +483,64 @@ const failing = (codes) => {
 
   check('K-E: a removal of the stale lock that fails for another reason is a fault, bilingual', [eio.threw, eio.code, /could not be broken/.test(eio.message), / @es /.test(eio.message)], ['LockFault', 'EIO', true, true]);
 
-  const release = outcomeOf(() => lock.takeLock(stale(), options({ remove: failsFor((target) => target.endsWith('.breaker')) })));
+  // The breaker's own release: retried in place while it may clear, and never failing a take whose stale lock is
+  // already gone. @es El soltado del propio breaker: se reintenta mientras pueda pasar, y nunca hace fallar una toma
+  // cuyo lock caducado ya no está.
+  const breakerReports = [];
+  const tellTo = (line) => breakerReports.push(line);
+  const lockGoneBreakerFails = stale();
+  const release = outcomeOf(() => lock.takeLock(lockGoneBreakerFails, options({ remove: failsFor((target) => target.endsWith('.breaker')), report: tellTo })));
 
-  check('K-E: a breaker that cannot be released is a fault, bilingual', [release.threw, release.code, /could not be released/.test(release.message), / @es /.test(release.message)], ['LockFault', 'EIO', true, true]);
+  check('K-E: a breaker that cannot be released after the stale lock is gone does not fail the take: it is reported once, bilingual, naming the breaker', [release, breakerReports.length, /breaker .*could not be released \(EIO\)/.test(breakerReports[0] ?? ''), (breakerReports[0] ?? '').includes(`${lockGoneBreakerFails}.breaker`), / @es /.test(breakerReports[0] ?? '')], [true, 1, true, true, true]);
+  lock.releaseLock(lockGoneBreakerFails);
+  rmSync(`${lockGoneBreakerFails}.breaker`, { force: true });
+
+  let transientWaits = 0;
+  let breakerRefusals = 0;
+  const breakerPendingOnce = (target) => {
+    if (target.endsWith('.breaker') && breakerRefusals === 0) {
+      breakerRefusals += 1;
+      throw failure('EPERM');
+    }
+    rmSync(target, { force: true });
+  };
+  const transientTarget = stale();
+
+  breakerReports.length = 0;
+  check('K-E: on Windows a breaker release that is delete-pending once is retried in place: the lock is taken, the breaker is gone, nothing is reported (two waits: one retry, one pause of the take)', [outcomeOf(() => lock.takeLock(transientTarget, options({ platform: 'win32', remove: breakerPendingOnce, report: tellTo, wait: () => { transientWaits += 1; } }))), existsSync(`${transientTarget}.breaker`), breakerReports.length, transientWaits], [true, false, 0, 2]);
+  lock.releaseLock(transientTarget);
+
+  let persistentWaits = 0;
+  const persistentTarget = stale();
+
+  breakerReports.length = 0;
+  check('K-E: on Windows a breaker release that stays delete-pending is tried three times, then reported once, and the take still succeeds (three waits: two retries, one pause of the take)', [outcomeOf(() => lock.takeLock(persistentTarget, options({ platform: 'win32', remove: (target) => { if (target.endsWith('.breaker')) throw failure('EPERM'); rmSync(target, { force: true }); }, report: tellTo, wait: () => { persistentWaits += 1; } }))), persistentWaits, breakerReports.length, /could not be released \(EPERM\)/.test(breakerReports[0] ?? '')], [true, 3, 1, true]);
+  lock.releaseLock(persistentTarget);
+  rmSync(`${persistentTarget}.breaker`, { force: true });
+
+  let posixWaits = 0;
+  const posixTarget = stale();
+
+  breakerReports.length = 0;
+  check('K-E: on POSIX a breaker release EPERM is not retried, and is reported once the stale lock is gone (one wait: the pause of the take only)', [outcomeOf(() => lock.takeLock(posixTarget, options({ platform: 'linux', remove: (target) => { if (target.endsWith('.breaker')) throw failure('EPERM'); rmSync(target, { force: true }); }, report: tellTo, wait: () => { posixWaits += 1; } }))), posixWaits, breakerReports.length], [true, 1, 1]);
+  lock.releaseLock(posixTarget);
+  rmSync(`${posixTarget}.breaker`, { force: true });
+
+  // The stale lock still there (its own removal is pending) and the breaker cannot be released: the break did
+  // nothing, so that is a fault. @es El lock caducado sigue (su borrado está pendiente) y el breaker no se suelta: la
+  // rotura no hizo nada, así que es un fallo.
+  const bothStuck = outcomeOf(() => lock.takeLock(stale(), options({ platform: 'win32', remove: (target) => { throw failure(target.endsWith('.breaker') ? 'EIO' : 'EPERM'); } })));
+
+  check('K-E: a breaker that cannot be released while the stale lock is still there is a fault, bilingual', [bothStuck.threw, bothStuck.code, /could not be released/.test(bothStuck.message), / @es /.test(bothStuck.message)], ['LockFault', 'EIO', true, true]);
+
+  // A break that faults keeps its own fault: a breaker that then cannot be released never replaces it.
+  // @es Una rotura que falla conserva su propio fallo: un breaker que luego no se suelta nunca lo sustituye.
+  const faultTarget = stale();
+
+  breakerReports.length = 0;
+  const kept = outcomeOf(() => lock.takeLock(faultTarget, options({ remove: () => { throw failure('EIO'); }, report: tellTo })));
+
+  check('K-E: a break that faults is thrown as itself, about the stale lock, and the breaker failure is only reported', [kept.threw, /could not be broken/.test(kept.message), kept.file, breakerReports.length], ['LockFault', true, faultTarget, 1]);
 
   const gone = stale();
   const already = outcomeOf(() => lock.takeLock(gone, options({ remove: (target) => { rmSync(target, { force: true }); if (target.endsWith('.breaker')) throw failure('ENOENT'); } })));

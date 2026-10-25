@@ -28,9 +28,10 @@
  * created"), never "another writer holds it". The break path escalates the same way: a stale lock or a dead
  * breaker whose removal stays `EPERM`/`EBUSY` (only `EBUSY` on POSIX, where an unlink `EPERM` is a fault at once)
  * through every attempt is a fault ("could not be broken"). Any other failure, and any failure of the breaker
- * path that is not contention, is thrown as a `LockFault`. What must never fail a take or a finished work (the
- * break journal, the release after the work) is reported instead, bilingual, on stderr by default. Every message
- * is bilingual (`message-table.mjs`).
+ * path that is not contention, is thrown as a `LockFault`. The breaker's own release after a break is retried in
+ * place while it may clear. What must never fail a take or a finished work (the break journal, a breaker that
+ * cannot be released once the stale lock is gone, the release after the work) is reported instead, bilingual,
+ * through `report` (stderr by default). Every message is bilingual (`message-table.mjs`).
  *
  * @es El único lock de todo escritor de estado: el derecho exclusivo a leer-modificar-escribir un fichero, que
  * toman los contadores de hook-state y, por el adaptador `failure-capture/ledger-lock.mjs`, los escritores de
@@ -45,9 +46,10 @@
  * el token Y la identidad (fecha e inodo) que se juzgaron. Lo residual: releer y borrar son dos llamadas al
  * sistema. FALLOS: `EEXIST` es contienda; `EPERM` y `EBUSY` (Windows) se reintentan, y si persisten en TODOS los
  * intentos es un fallo, nunca «otro escritor lo tiene»; la rotura escala igual (en POSIX un `EPERM` de unlink es
- * un fallo al instante); cualquier otro fallo es un `LockFault`. Lo que nunca debe hacer fallar una toma ni un
- * trabajo terminado (el registro de roturas, soltar tras el trabajo) se informa, bilingüe, en stderr. Todo
- * mensaje es bilingüe.
+ * un fallo al instante); cualquier otro fallo es un `LockFault`. Soltar el propio breaker tras una rotura se
+ * reintenta en el sitio mientras pueda pasar. Lo que nunca debe hacer fallar una toma ni un trabajo terminado (el
+ * registro de roturas, un breaker que no se suelta con el lock caducado ya quitado, soltar tras el trabajo) se
+ * informa, bilingüe, por `report` (stderr por defecto). Todo mensaje es bilingüe.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -74,6 +76,16 @@ const DELETE_PENDING = new Set(['EPERM', 'EBUSY']);
  * solo `EBUSY`, porque allí un `EPERM` de unlink es un fallo de permisos que no pasa.
  */
 const removalPending = (platform) => (platform === 'win32' ? DELETE_PENDING : new Set(['EBUSY']));
+
+/**
+ * How many times the breaker's own release is tried before a pending failure counts as persistent. The breaker is
+ * this process's file, so a delete that is merely pending clears within a tick or two; and past this bound the
+ * failure is only reported once the stale lock is gone, so more tries would change no outcome.
+ * @es Cuántas veces se intenta soltar el breaker antes de que un fallo pendiente cuente como persistente. El breaker
+ * es de este proceso, así que un borrado pendiente pasa en uno o dos ticks; y pasado este límite el fallo solo se
+ * informa si el lock caducado ya no está, así que más intentos no cambiarían nada.
+ */
+const BREAKER_RELEASE_ATTEMPTS = 3;
 
 /** Writes one report line to the standard error. @es Escribe una línea de informe en stderr. */
 const toStderr = (line) => process.stderr.write(`${line}\n`);
@@ -255,14 +267,52 @@ function breakStale(lockFile, judged, settings) {
     throw fault('lock-break-fault', breaker, error);
   }
 
+  let outcome;
+
   try {
-    const outcome = removeIfStill(lockFile, judged, settings);
+    outcome = removeIfStill(lockFile, judged, settings);
+  } catch (error) {
+    // The break's own fault is what the caller must see; a breaker that cannot be released then is only told.
+    // @es El fallo de la propia rotura es lo que debe ver quien llama; un breaker que no se suelta entonces solo se informa.
+    releaseBreaker(breaker, token, false, settings);
 
-    if (outcome.removed) recordBreak(lockFile, lockFile, judged, settings);
+    throw error;
+  }
 
-    return outcome.pending;
-  } finally {
-    releaseToken(breaker, token, settings.remove);
+  if (outcome.removed) recordBreak(lockFile, lockFile, judged, settings);
+
+  releaseBreaker(breaker, token, !outcome.removed, settings);
+
+  return outcome.pending;
+}
+
+/**
+ * Releases the breaker this process holds, retrying in place with the take's wait while the failure may clear by
+ * waiting (the platform's removal codes), up to `BREAKER_RELEASE_ATTEMPTS`. A failure that persists is thrown only
+ * when `escalate` (the stale lock is still there, so the break did nothing); once the stale lock is gone, or the
+ * break already failed, it is reported, bilingual, and the take goes on. A breaker left behind holds this
+ * process's pid, so a later break clears it by the same rule once this process has exited.
+ * @es Suelta el breaker de este proceso, reintentando en el sitio con la espera de la toma mientras el fallo pueda
+ * pasar esperando, hasta `BREAKER_RELEASE_ATTEMPTS`. Un fallo que persiste solo se lanza con `escalate` (el lock
+ * caducado sigue ahí); con el lock ya quitado, o con la rotura ya fallida, se informa, bilingüe, y la toma sigue.
+ */
+function releaseBreaker(breaker, token, escalate, { remove, platform, wait, report }) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      releaseToken(breaker, token, remove);
+
+      return;
+    } catch (error) {
+      if (removalPending(platform).has(error?.cause?.code) && attempt < BREAKER_RELEASE_ATTEMPTS) {
+        wait();
+        continue;
+      }
+      if (escalate) throw error;
+
+      report(bilingual('lock-breaker-release-fault', { file: breaker, code: String(error?.cause?.code ?? 'unknown'), detail: error?.cause instanceof Error ? error.cause.message : String(error?.cause) }));
+
+      return;
+    }
   }
 }
 
@@ -278,7 +328,7 @@ function breakStale(lockFile, judged, settings) {
  * camino del breaker falla por algo que no pasa esperando.
  */
 export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_MS, ceilingMs = staleAfterMs * CEILING_FACTOR, now = Date.now, wait = pauseFor(50), isAlive = processExists, create = createWithToken, remove = removeFile, platform = process.platform, report = toStderr } = {}) {
-  const settings = { staleAfterMs, ceilingMs, now, isAlive, create, remove, platform, report };
+  const settings = { staleAfterMs, ceilingMs, now, isAlive, create, remove, platform, report, wait };
   const token = newToken();
   let held = false;
   let pending;
