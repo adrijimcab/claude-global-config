@@ -16,16 +16,14 @@
  * aviso nunca queda a ciegas.
  */
 
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
+import { parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
 import { speaker } from './messages.mjs';
 import { originHeadState } from './origin-head-state.mjs';
 
 const SYNC_COMMAND = path.join(import.meta.dirname, 'sync.mjs');
-const withoutBom = (raw) => (raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
 /** The notice each drifted verdict gets; a verdict with none (in sync, ungoverned, no repository) is silence. @es El aviso de cada veredicto con deriva; un veredicto sin aviso (sincronizado, sin gobierno, sin repositorio) es silencio. */
 const NOTICE_BY_VERDICT = { set: 'drift-set', 'missing-remote-ref': 'drift-missing-ref' };
 
@@ -35,7 +33,7 @@ const NOTICE_BY_VERDICT = { set: 'drift-set', 'missing-remote-ref': 'drift-missi
  */
 export function evaluate(raw) {
   try {
-    const payload = JSON.parse(withoutBom(raw));
+    const payload = parsePayload(raw);
 
     if (isSubagentCaller(payload)) return undefined;
 
@@ -58,11 +56,12 @@ export function evaluate(raw) {
   }
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+/** Stdin in, the notice (or nothing) out; it always leaves with 0. @es Entra stdin, sale el aviso (o nada); siempre sale con 0. */
+async function main() {
   let output;
 
   try {
-    output = evaluate(readFileSync(0, 'utf8'));
+    output = evaluate(await readStdin());
   } catch {
     output = undefined;
   }
@@ -70,3 +69,5 @@ if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.reso
   if (output !== undefined) process.stdout.write(JSON.stringify(output));
   process.exitCode = 0;
 }
+
+runWhenMain(import.meta.url, main);

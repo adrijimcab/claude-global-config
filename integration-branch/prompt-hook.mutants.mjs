@@ -7,6 +7,11 @@
  * @es Campaña de mutantes del aviso de deriva de la rama de integración: cada mutante rompe UNA decisión y
  * `prompt-hook.selftest.mjs` debe ponerse en rojo por un check fallido, nunca por un crash. Sin runner
  * compartido sale con 2 (NO MEDIDO), nunca un veredicto.
+ *
+ * Retired: "runs when imported" and "BOM is not stripped" are pinned by hook-io's own mutants ('main runs
+ * always', 'main never runs'; the BOM mutants of `parsePayload`), since the entry check and the parser moved
+ * into the port. @es Retirados: «corre al importarse» y «el BOM no se quita» los fijan los mutantes propios de
+ * hook-io, porque la comprobación de entrada y el parser pasaron al puerto.
  */
 
 import { existsSync } from 'node:fs';
@@ -32,11 +37,11 @@ const MUTANTS = [
   ['an unset origin/HEAD is not tolerated', HOOK, "const current = state.current ?? '(unset @es sin fijar)';", 'const current = state.current;'],
   ['the notice is delivered for the wrong event', HOOK, "hookEventName: 'UserPromptSubmit'", "hookEventName: 'PreToolUse'"],
   ['the notice blocks the prompt', HOOK, '    return {\n      hookSpecificOutput: {', "    return {\n      decision: 'block',\n      hookSpecificOutput: {"],
-  ['a failure of its own blocks the prompt', HOOK, '  } catch {\n    return undefined;\n  }\n}\n\nif', '  } catch {\n    return { decision: "block" };\n  }\n}\n\nif'],
-  ['the BOM is not stripped', HOOK, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
+  ['a failure of its own blocks the prompt', HOOK, '  } catch {\n    return undefined;\n  }\n}\n\n/** Stdin', '  } catch {\n    return { decision: "block" };\n  }\n}\n\n/** Stdin'],
+  ['the payload is not read through the port parser', HOOK, 'const payload = parsePayload(raw);', 'const payload = JSON.parse(raw);'],
   ['the CLI does not print the notice', HOOK, 'if (output !== undefined) process.stdout.write(JSON.stringify(output));', ''],
   ['the CLI exits non-zero', HOOK, 'process.exitCode = 0;', 'process.exitCode = 1;'],
-  ['the CLI does not run as the main process', HOOK, 'if (process.argv[1] !== undefined && path.resolve', 'if (false && path.resolve'],
+  ['the CLI does not run as the main process', HOOK, 'runWhenMain(import.meta.url, main);', ''],
 
   // messages.mjs: the English and the Spanish half each carry the command that fixes the drift
   ['the English notice drops the sync command', MESSAGES, 'will start from the wrong branch. Fix it with: node "{sync}" "{main}"', 'will start from the wrong branch. Fix it with: node "{sync}"'],

@@ -131,13 +131,12 @@ const MUTANTS = [
   ['CLAUDE_PROJECT_DIR wins over the payload cwd', H, "if (typeof payload?.cwd === 'string' && payload.cwd !== '') return payload.cwd;", ''],
   ['an empty cwd is used', H, " && payload.cwd !== '') return payload.cwd;", ') return payload.cwd;'],
   ['CLAUDE_PROJECT_DIR is ignored', H, "return typeof env.CLAUDE_PROJECT_DIR === 'string' && env.CLAUDE_PROJECT_DIR !== '' ? env.CLAUDE_PROJECT_DIR : fallback;", 'return fallback;'],
-  ['a BOM breaks the payload', H, "return JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);", 'return JSON.parse(raw);'],
+  ['the payload is not read through the port parser', H, 'sessionDirectory(tryParsePayload(raw), env, cwd)', "sessionDirectory(raw.startsWith('{') ? JSON.parse(raw) : undefined, env, cwd)"],
   ['a project outside speaks', H, '    if (profile === undefined) return undefined;\n', ''],
   ['a malfunction is silent', H, "  } catch (error) {\n    context = `Project profile could not be measured", "  } catch (error) {\n    return undefined;\n    context = `Project profile could not be measured"],
   ['the output names another event', H, "hookEventName: 'SessionStart', additionalContext: context", "hookEventName: 'UserPromptSubmit', additionalContext: context"],
-  ['a symlinked run is not the main module', H, 'return realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url));', 'return path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));'],
-  ['importing the hook runs it', H, 'if (isMain()) {', 'if (true) {'],
-  ['the hook prints nothing', H, "if (output !== undefined) process.stdout.write(`${JSON.stringify(output)}\\n`);", ''],
+  ['importing the hook runs it', H, 'runWhenMain(import.meta.url, hookMain(sessionStartOutput, readInput));', 'hookMain(sessionStartOutput, readInput)();'],
+  ['the hook never runs as the main process', H, 'runWhenMain(import.meta.url, hookMain(sessionStartOutput, readInput));', ''],
 ];
 
 const survivors = runMutants({

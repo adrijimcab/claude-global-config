@@ -19,25 +19,16 @@
  * una línea, porque un perfil que no se pudo medir no debe parecer «no es un proyecto JS/TS».
  */
 
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
+import { hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 
 /** The directory a session starts in: payload `cwd`, then `CLAUDE_PROJECT_DIR`, then `fallback`. @es El directorio de inicio de la sesión. */
 export function sessionDirectory(payload, env, fallback) {
   if (typeof payload?.cwd === 'string' && payload.cwd !== '') return payload.cwd;
 
   return typeof env.CLAUDE_PROJECT_DIR === 'string' && env.CLAUDE_PROJECT_DIR !== '' ? env.CLAUDE_PROJECT_DIR : fallback;
-}
-
-/** The parsed payload, or `undefined` when it is not JSON (a UTF-8 BOM is tolerated). @es El payload parseado, o `undefined`. */
-export function payloadOf(raw) {
-  try {
-    return JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -50,7 +41,7 @@ export async function sessionStartOutput(raw, { env = process.env, cwd = process
   try {
     const { readProfile } = await import('./profile.mjs');
     const { profileLine } = await import('./summary-line.mjs');
-    const profile = readProfile(sessionDirectory(payloadOf(raw), env, cwd), { home });
+    const profile = readProfile(sessionDirectory(tryParsePayload(raw), env, cwd), { home });
 
     if (profile === undefined) return undefined;
 
@@ -62,29 +53,13 @@ export async function sessionStartOutput(raw, { env = process.env, cwd = process
   return { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } };
 }
 
-/** Whether this module is the process entry point, through symlinks too. @es Si este módulo es el punto de entrada del proceso, también a través de enlaces. */
-function isMain() {
-  if (process.argv[1] === undefined) return false;
-
+/** Stdin as text; an unreadable stdin is an empty payload, so the profile is still measured. @es Stdin como texto; un stdin ilegible es un payload vacío, así que el perfil se mide igual. */
+function readInput() {
   try {
-    return realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url));
+    return readFileSync(0, 'utf8');
   } catch {
-    return path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+    return '';
   }
 }
 
-if (isMain()) {
-  let raw = '';
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    raw = '';
-  }
-
-  const output = await sessionStartOutput(raw);
-
-  if (output !== undefined) process.stdout.write(`${JSON.stringify(output)}\n`);
-
-  process.exitCode = 0;
-}
+runWhenMain(import.meta.url, hookMain(sessionStartOutput, readInput));

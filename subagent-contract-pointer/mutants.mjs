@@ -73,7 +73,7 @@ const MUTANTS = [
   ['a project with files is told none was found', TEXT, 'const contract = located.files.length > 0', 'const contract = located.files.length < 0'],
   // The hook / El hook
   ['the hook answers for another event', HOOK, "hookEventName: 'SubagentStart'", "hookEventName: 'PreToolUse'"],
-  ['the hook does not strip a byte-order mark', HOOK, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
+  ['the hook does not read the payload through the port parser', HOOK, 'const payload = parsePayload(raw);', 'const payload = JSON.parse(raw);'],
   ['the hook delivers nothing', HOOK, 'additionalContext: workerPointer(payload, env)', "additionalContext: ''"]
 ];
 
