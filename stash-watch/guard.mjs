@@ -52,7 +52,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { blockStop, parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
+import { blockStop, hookMain, parseFailureMessage, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { stateDir as stateDirOf } from '../hook-state/locations.mjs';
 import { describeStashes } from './report.mjs';
 import { stashInventory } from './stashes.mjs';
@@ -209,26 +209,10 @@ export function evaluate(raw) {
   try {
     return decide(parsePayload(raw), { stateDir: defaultStateDir() });
   } catch (error) {
-    // A payload that is not JSON journals the parser's own message (the `cause` of the port's error).
-    // @es Un payload que no es JSON anota el mensaje del propio parser (la `cause` del error del puerto).
-    const original = error?.cause ?? error;
-
-    note(defaultStateDir(), { event: 'malfunction', stage: 'payload', error: original instanceof Error ? original.message : String(original), rawLength: raw.length });
+    note(defaultStateDir(), { event: 'malfunction', stage: 'payload', error: parseFailureMessage(error), rawLength: raw.length });
 
     return undefined;
   }
 }
 
-/**
- * Standalone process: stdin in, the decision out WITHOUT a trailing newline (the shape this hook has always
- * printed; the port's `hookMain` adds one).
- * @es Proceso independiente: stdin entra, la decisión sale SIN salto final (la forma que siempre imprimió; `hookMain` del puerto añade uno).
- */
-async function run() {
-  const output = evaluate(await readStdin());
-
-  if (output !== undefined) process.stdout.write(JSON.stringify(output));
-  process.exit(0);
-}
-
-runWhenMain(import.meta.url, run);
+runWhenMain(import.meta.url, hookMain(evaluate));
