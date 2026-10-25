@@ -61,6 +61,8 @@ const MUTANTS = [
   ['the dismissals in force are archived', R, "['backlog-guard', 'dismissals.jsonl', KEEP, 'dismissals in force']", "['backlog-guard', 'dismissals.jsonl', ARCHIVE, 'dismissals in force']"],
   ['the session markers are archived', R, "['backlog-guard', '*.json', KEEP, \"a session's transcript offset\"]", "['backlog-guard', '*.json', ARCHIVE, \"a session's transcript offset\"]"],
   ['the handback refusal count is archived', R, "['fleet-kit', 'handback/refusals.jsonl', KEEP, 'the refusal count that bounds the handback loop'],\n", ''],
+  ['the lock of a running full chain is archived, so a rotation would move it under a running chain', R, "['full-chain-lock', 'chain.lock', LOCK,", "['full-chain-lock', 'chain.lock', ARCHIVE,"],
+  ['the holder record of a full chain is kept forever', R, "['full-chain-lock', 'holder.json', REMOVE,", "['full-chain-lock', 'holder.json', KEEP,"],
   ['the hook journal is archived whole, its dismissals lost', R, "[ANY, 'journal.jsonl', JOURNAL, 'hook journal']", "[ANY, 'journal.jsonl', ARCHIVE, 'hook journal']"],
   ['the fires counter lock is archived', R, "[ANY, 'fires.json.lock', LOCK,", "[ANY, 'fires.json.lock', ARCHIVE,"],
   ['the fires counter is kept', R, "[ANY, 'fires.json', ARCHIVE,", "[ANY, 'fires.json', KEEP,"],

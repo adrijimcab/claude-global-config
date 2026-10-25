@@ -124,6 +124,8 @@ export const KINDS = Object.freeze([
   ['fleet-kit', 'repos/*/run.lock', LOCK, 'a running gate'],
   ['fleet-kit', 'repos/*/verdicts/*', KEEP, 'the gate verdicts a landing reads'],
   ['fleet-kit', 'repos/*/diff-coverage/**', ARCHIVE, 'output of past coverage runs'],
+  ['full-chain-lock', 'chain.lock', LOCK, 'a full chain running under the machine-wide lock'],
+  ['full-chain-lock', 'holder.json', REMOVE, 'the record of the chain that held the lock; a rotation refuses while the lock exists, so what is left is orphaned'],
   ['hook-dispatch', 'errors.jsonl', ARCHIVE, 'dispatcher malfunction journal'],
   ['integrated-worktree-guard', 'observed.jsonl', ARCHIVE, 'observation journal'],
   ['integrated-worktree-guard', 'noticed.json', KEEP, 'the worktree sets each session was shown'],

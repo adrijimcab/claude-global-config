@@ -1,0 +1,116 @@
+/**
+ * Every sentence the full-chain lock prints or refuses with, as ONE table consumed through
+ * `bilingual-output/speaker.mjs`: English first, then the Spanish half marked `@es`. The speaker refuses a table
+ * with a message that lacks a half, and an id the table does not carry throws.
+ *
+ * @es Cada frase que imprime o con la que rechaza el lock de cadenas completas, como UNA tabla consumida por
+ * `bilingual-output/speaker.mjs`: inglés primero y luego la mitad española marcada `@es`. El speaker rechaza una
+ * tabla con un mensaje al que le falta una mitad, y un id que la tabla no lleva lanza un error.
+ */
+
+import { makeSpeaker } from '../bilingual-output/speaker.mjs';
+
+/** The messages. Placeholders are `{name}`. @es Los mensajes; los marcadores son `{name}`. */
+export const MESSAGES = {
+  waiting: {
+    en: 'FULL-CHAIN LOCK: waiting. Another full chain runs on this machine: chain {holderChain} of project {holderProject}, session {holderSession}, pid {holderPid}, started {holderStartedAt}. Waiting up to {waitSeconds}s for it to finish; nothing runs meanwhile.',
+    es: 'LOCK DE CADENAS COMPLETAS: esperando. Otra cadena completa corre en esta máquina: cadena {holderChain} del proyecto {holderProject}, sesión {holderSession}, pid {holderPid}, iniciada {holderStartedAt}. Se espera hasta {waitSeconds}s a que termine; mientras tanto no se ejecuta nada.'
+  },
+  'waiting-unreadable': {
+    en: 'FULL-CHAIN LOCK: waiting. Another full chain holds the lock on this machine and its record is not readable yet. Waiting up to {waitSeconds}s; nothing runs meanwhile.',
+    es: 'LOCK DE CADENAS COMPLETAS: esperando. Otra cadena completa tiene el lock en esta máquina y su registro aún no se puede leer. Se espera hasta {waitSeconds}s; mientras tanto no se ejecuta nada.'
+  },
+  'wait-expired': {
+    en: 'FULL-CHAIN LOCK: gave up after {waitSeconds}s. The lock is still held by chain {holderChain} of project {holderProject}, session {holderSession}, pid {holderPid}, started {holderStartedAt}. Your command did NOT run (a full chain never runs unlocked). Retry when that chain ends, or raise --wait-seconds.',
+    es: 'LOCK DE CADENAS COMPLETAS: se desistió tras {waitSeconds}s. El lock sigue en manos de la cadena {holderChain} del proyecto {holderProject}, sesión {holderSession}, pid {holderPid}, iniciada {holderStartedAt}. Tu comando NO se ejecutó (una cadena completa nunca corre sin lock). Reintenta cuando esa cadena termine, o sube --wait-seconds.'
+  },
+  'wait-expired-unreadable': {
+    en: 'FULL-CHAIN LOCK: gave up after {waitSeconds}s. The lock is still held and its holder record is not readable. Your command did NOT run (a full chain never runs unlocked). Retry later, or raise --wait-seconds.',
+    es: 'LOCK DE CADENAS COMPLETAS: se desistió tras {waitSeconds}s. El lock sigue ocupado y el registro de su dueño no se puede leer. Tu comando NO se ejecutó (una cadena completa nunca corre sin lock). Reintenta más tarde, o sube --wait-seconds.'
+  },
+  'lock-fault': {
+    en: 'FULL-CHAIN LOCK: the lock could not be taken because of a fault, not because another chain holds it: {detail} Your command did NOT run (a full chain never runs unlocked).',
+    es: 'LOCK DE CADENAS COMPLETAS: el lock no se pudo tomar por un fallo, no porque otra cadena lo tenga: {detail} Tu comando NO se ejecutó (una cadena completa nunca corre sin lock).'
+  },
+  'run-failed': {
+    en: 'FULL-CHAIN LOCK: the command could not be run because of an internal error: {detail} The lock was released.',
+    es: 'LOCK DE CADENAS COMPLETAS: el comando no se pudo ejecutar por un error interno: {detail} El lock se soltó.'
+  },
+  'release-failed': {
+    en: 'FULL-CHAIN LOCK: the command finished, but releasing the lock failed: {detail} The exit code of your command is unchanged. A dead holder is broken by the next chain after the stale age.',
+    es: 'LOCK DE CADENAS COMPLETAS: el comando terminó, pero soltar el lock falló: {detail} El código de salida de tu comando no cambió. El siguiente que llegue rompe un dueño muerto pasada la edad de caducidad.'
+  },
+  'spawn-failed': {
+    en: 'FULL-CHAIN LOCK: the command could not be started ({code}): {detail}. The lock was released.',
+    es: 'LOCK DE CADENAS COMPLETAS: no se pudo iniciar el comando ({code}): {detail}. El lock se soltó.'
+  },
+  'unsafe-argument': {
+    en: 'FULL-CHAIN LOCK: the argument {argument} holds a double quote or a percent sign, which a Windows .cmd launcher cannot carry safely. Run the command with a plain argument or call the program directly.',
+    es: 'LOCK DE CADENAS COMPLETAS: el argumento {argument} lleva comillas dobles o un signo de porcentaje, que un lanzador .cmd de Windows no puede transportar con seguridad. Ejecuta el comando con un argumento simple o llama al programa directamente.'
+  },
+  usage: {
+    en: 'FULL-CHAIN LOCK usage: node run.mjs --chain <name> [--project <name>] [--session <id>] [--wait-seconds <n>] [--poll-ms <n>] -- <command> [args...]',
+    es: 'USO DEL LOCK DE CADENAS COMPLETAS: node run.mjs --chain <nombre> [--project <nombre>] [--session <id>] [--wait-seconds <n>] [--poll-ms <n>] -- <comando> [args...]'
+  },
+  'usage-no-separator': {
+    en: 'FULL-CHAIN LOCK: the command must follow a "--" separator.',
+    es: 'LOCK DE CADENAS COMPLETAS: el comando debe ir después de un separador "--".'
+  },
+  'usage-unknown-flag': {
+    en: 'FULL-CHAIN LOCK: unknown flag {flag}.',
+    es: 'LOCK DE CADENAS COMPLETAS: flag desconocido {flag}.'
+  },
+  'usage-missing-value': {
+    en: 'FULL-CHAIN LOCK: the flag {flag} needs a value.',
+    es: 'LOCK DE CADENAS COMPLETAS: el flag {flag} necesita un valor.'
+  },
+  'usage-bad-number': {
+    en: 'FULL-CHAIN LOCK: the flag {flag} must be a positive number, got {value}.',
+    es: 'LOCK DE CADENAS COMPLETAS: el flag {flag} debe ser un número positivo, se recibió {value}.'
+  },
+  'usage-no-chain': {
+    en: 'FULL-CHAIN LOCK: --chain is required and must not be empty.',
+    es: 'LOCK DE CADENAS COMPLETAS: --chain es obligatorio y no puede estar vacío.'
+  },
+  'usage-no-command': {
+    en: 'FULL-CHAIN LOCK: the command after "--" is missing or empty.',
+    es: 'LOCK DE CADENAS COMPLETAS: falta el comando tras "--" o está vacío.'
+  },
+  'config-invalid': {
+    en: 'The full-chain declaration {file} is not valid: {problem}.',
+    es: 'La declaración de cadenas completas {file} no es válida: {problem}.'
+  },
+  refusal: {
+    en: [
+      'FULL-CHAIN GUARD REFUSED this command: {command} is a full chain ({chain}, project {project}) and runs only through the machine-wide lock.',
+      '',
+      'WHY. Every full chain (build:ci-pr, the coverage suites, mutation, a11y, the whole selftest runner) is heavy on memory;',
+      'two at once starved the machine (a background gate run was reaped for low memory on 2026-10-05). The rule was kept by',
+      'hand, through messages between sessions; this lock keeps it by mechanism: one chain at a time on this machine.',
+      '',
+      'USE INSTEAD, replacing that command by:',
+      '',
+      '  {wrapped}',
+      '',
+      'It waits (bounded, --wait-seconds, default {defaultWaitSeconds}) while another chain runs, prints who holds the lock, runs your',
+      'command with its exact exit code and releases the lock on every exit path.'
+    ],
+    es: [
+      'FULL-CHAIN GUARD RECHAZÓ este comando: {command} es una cadena completa ({chain}, proyecto {project}) y corre solo por el lock de toda la máquina.',
+      '',
+      'POR QUÉ. Toda cadena completa (build:ci-pr, las suites con cobertura, mutación, a11y, el runner de selftests entero) consume',
+      'mucha memoria; dos a la vez ahogaron la máquina (una corrida de gates en segundo plano fue cerrada por poca memoria el',
+      '2026-10-05). La regla se cumplía a mano, con mensajes entre sesiones; este lock la cumple por mecanismo: una cadena a la vez.',
+      '',
+      'USAR EN SU LUGAR, reemplazando ese comando por:',
+      '',
+      '  {wrapped}',
+      '',
+      'Espera (acotado, --wait-seconds, por defecto {defaultWaitSeconds}) mientras otra cadena corre, muestra quién tiene el lock, ejecuta tu',
+      'comando con su código de salida exacto y suelta el lock en toda salida.'
+    ]
+  }
+};
+
+/** The speaker of this table. @es El speaker de esta tabla. */
+export const speak = (sink = console) => makeSpeaker(MESSAGES, sink);

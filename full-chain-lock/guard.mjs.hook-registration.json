@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a full chain (build:ci-pr, the coverage suites, mutation, a11y, the whole selftest runner) is heavy on memory and was serialised across sessions by hand, through messages; on 2026-10-05 a background gate run was reaped for low memory when two ran at once. This guard refuses one run without the machine-wide lock and names the runner command."
+}
