@@ -29,10 +29,10 @@
  * este repositorio las prohíbe. FALLA ABIERTO ante todo fallo propio.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
-import { resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { reason, refusalFor } from './decision.mjs';
 
@@ -66,26 +66,15 @@ function journal(entry) {
   }
 }
 
-function allow() {
-  process.exit(0);
-}
-
 /**
  * La salida de hook para un payload crudo, o `undefined`. Exportada para que
  * `~/.claude/hook-dispatch/dispatch.mjs` la corra en su propio proceso; ejecutada directamente, la
  * misma función corre como hook propio (`main`, abajo).
  */
 export async function evaluate(raw) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    // A PowerShell-written payload can carry a UTF-8 BOM, which makes JSON.parse throw.
-    const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-
-    payload = JSON.parse(text);
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   // A missing carrier map fails OPEN, which would disable this guard SILENTLY — so `selftest.mjs`
   // asserts that it resolves and that it covers every tool the registration routes here. That is what
@@ -110,37 +99,20 @@ export async function evaluate(raw) {
     checkouts: refusal.checkouts.map(({ checkout, tenancy, declaration }) => ({ checkout, state: tenancy.state, declaration }))
   });
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: reason(refusal, brief.surface, brief.toolName)
-    }
-  };
-
-  process.exit(0);
+  return deny(reason(refusal, brief.surface, brief.toolName));
 }
 
-function main() {
-  let raw;
-
+/** `evaluate` for the standalone hook: a malfunction of this guard allows the call. @es `evaluate` para el hook independiente: un fallo propio de la guardia deja pasar la llamada. */
+const evaluateOrAllow = async (raw) => {
   try {
-    raw = readFileSync(0, 'utf8');
+    return await evaluate(raw);
   } catch {
-    process.exit(0);
+    return undefined;
   }
+};
 
-  Promise.resolve()
-    .then(() => evaluate(raw))
-    .then((output) => {
-      if (output !== undefined) console.log(JSON.stringify(output));
-    })
-    .catch(() => {
-      /* un fallo propio de la guardia deja pasar la llamada */
-    })
-    .finally(() => process.exit(0));
-}
+const standalone = hookMain(evaluateOrAllow);
 
-// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
-// leería el stdin del importador y lo cortaría con process.exit(0) a mitad de camino.
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) main();
+// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), el hook no corre:
+// leería el stdin del importador. El proceso termina con estado 0.
+runWhenMain(import.meta.url, () => standalone().then(() => process.exit(0)));

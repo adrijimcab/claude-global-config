@@ -63,16 +63,20 @@ const MUTANTS = [
   ['a message is worded as a delegation', REFUSAL, 'line(`header-${brief.surface}`', "line('header-delegation'"],
   ['the delegation heading is worded as a message', REFUSAL, "BRIEF-ROUTE REFUSED this delegation ({tool})", "BRIEF-ROUTE REFUSED this message ({tool})"],
   // The shim / El shim
-  ['the shim does not strip a byte-order mark', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
-  ['the shim allows a refusal', GUARD, "permissionDecision: 'deny'", "permissionDecision: 'allow'"],
-  ['the shim answers for another event', GUARD, "hookEventName: 'PreToolUse'", "hookEventName: 'Stop'"],
+  // Retired, pinned by hook-io's own mutants: the BOM strip ('the BOM is not stripped'), the decision value
+  // ('deny does not say deny') and the event ('deny names the wrong event'). This shim now only parses and
+  // emits through the port.
+  // @es Retirados, fijados por los mutantes de hook-io: el BOM, el valor de la decisión y el evento. El shim
+  // solo parsea y emite por el puerto.
+  ['the shim does not parse through the tolerant port', GUARD, 'const payload = tryParsePayload(raw);', 'const payload = JSON.parse(raw);'],
+  ['the shim never emits through the deny envelope', GUARD, 'return deny(reason);', 'return undefined;'],
   ['the shim judges a tool that carries no brief', GUARD, 'if (brief === undefined) return undefined;', ''],
   ['the shim never refuses', GUARD, 'if (reason === undefined) return undefined;', 'return undefined;']
 ];
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['brief-route', 'brief-provenance', 'brief-feasibility', 'hook-dispatch', 'hook-payloads', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['brief-route', 'brief-provenance', 'brief-feasibility', 'hook-dispatch', 'hook-io', 'hook-payloads', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'brief-route/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

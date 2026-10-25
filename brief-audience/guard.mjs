@@ -46,10 +46,10 @@
  * brief bien formado termina dando una orden al worker.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { inspectPayload } from './audience.mjs';
 
@@ -115,16 +115,9 @@ function deciderReason(refusal) {
  * `undefined`. Exportada para que `~/.claude/hook-dispatch/dispatch.mjs` la corra en su propio proceso.
  */
 export function evaluate(raw) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    // A PowerShell-written payload can carry a UTF-8 BOM, which makes JSON.parse throw.
-    const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-
-    payload = JSON.parse(text);
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   let refusal;
 
@@ -138,29 +131,9 @@ export function evaluate(raw) {
 
   journal({ at: new Date().toISOString(), session: payload?.session_id, tool: refusal.toolName, field: refusal.field, kind: refusal.kind, tag: refusal.tag, found: refusal.found, length: refusal.length });
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: refusal.kind === 'markup' ? markupReason(refusal) : deciderReason(refusal)
-    }
-  };
+  return deny(refusal.kind === 'markup' ? markupReason(refusal) : deciderReason(refusal));
 }
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-}
-
-// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
-// leería el stdin del importador y lo cortaría con process.exit(0) a mitad de camino.
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) main();
+// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), el hook no corre:
+// leería el stdin del importador.
+runWhenMain(import.meta.url, hookMain(evaluate));

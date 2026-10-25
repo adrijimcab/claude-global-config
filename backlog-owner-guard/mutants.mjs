@@ -57,12 +57,15 @@ const MUTANTS = [
 
   // --- guard.mjs: the shim itself ---
   ['the allow/refuse branch is inverted: an allowed call is journalled and denied, a refused one is let through', 'backlog-owner-guard/guard.mjs', 'if (refusal === undefined) return undefined;', 'if (refusal !== undefined) return undefined;'],
-  ['the hook decision is flipped from deny to allow', 'backlog-owner-guard/guard.mjs', "permissionDecision: 'deny',", "permissionDecision: 'allow',"]
+  // The deny envelope (decision value, event) is pinned by hook-io's own mutants 'deny does not say deny' and
+  // 'deny names the wrong event'; here the shim must still EMIT it.
+  // @es El sobre deny (valor, evento) lo fijan los mutantes de hook-io; aquí el shim debe seguir EMITIÉNDOLO.
+  ['the refusal is never emitted: a refused call is let through', 'backlog-owner-guard/guard.mjs', 'return deny(reason(refusal));', 'return undefined;']
 ];
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['backlog-owner-guard', 'backlog-guard', 'hook-caller', 'hook-state', 'bilingual-output'],
+  paths: ['backlog-owner-guard', 'backlog-guard', 'hook-caller', 'hook-io', 'hook-state', 'bilingual-output'],
   selftest: 'backlog-owner-guard/selftest.mjs',
   mutants: MUTANTS
 });
