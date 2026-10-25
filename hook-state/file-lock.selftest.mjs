@@ -285,6 +285,7 @@ const failing = (codes) => {
   writeFileSync(`${target}.breaker`, `${String(deadPid)}:breaker`);
   backdate(`${target}.breaker`, AT, STALE + 10_000);
   check('K-B: a breaker left by a dead process does not wedge the lock', [outcomeOf(() => lock.takeLock(target, options({ attempts: 5 }))), existsSync(`${target}.breaker`)], [true, false]);
+  check('K-B: ...and the dead breaker\'s removal is journaled too, naming the breaker', breaksOf(target).map((one) => [path.basename(one.file), one.reason]), [[`${path.basename(target)}.breaker`, 'dead-owner'], [path.basename(target), 'dead-owner']]);
   lock.releaseLock(target);
 }
 
@@ -440,6 +441,15 @@ const failing = (codes) => {
   check('L1: on Windows an EPERM that clears is retried and the lock taken', outcomeOf(() => lock.takeLock(once, options({ platform: 'win32', attempts: 5, remove: eperOnce }))), true);
   lock.releaseLock(once);
 
+  const vanished = stale();
+  const goneAtRemoval = (target) => {
+    rmSync(target, { force: true });
+    if (!target.endsWith('.breaker')) throw failure('ENOENT');
+  };
+
+  check('a stale lock already gone when its removal runs is no fault, and the lock is taken next', outcomeOf(() => lock.takeLock(vanished, options({ platform: 'linux', remove: goneAtRemoval }))), true);
+  lock.releaseLock(vanished);
+
   // A break that failed once and then found a LIVE holder is contention, not a fault.
   // @es Una rotura que falló una vez y luego encontró un dueño VIVO es contienda, no un fallo.
   const relived = stale();
@@ -507,6 +517,19 @@ const failing = (codes) => {
   check('L2: a stale lock is still broken and taken when its break cannot be journaled', outcomeOf(() => lock.takeLock(target, options({ report: (line) => reported.push(line) }))), true);
   check('L2: ...and the failed journal is reported once, bilingual, naming the lock', [reported.length, /could not be journaled/.test(reported[0] ?? ''), (reported[0] ?? '').includes(target), / @es /.test(reported[0] ?? '')], [1, true, true, true]);
   lock.releaseLock(target);
+
+  // Without a reporter, the report goes to the standard error of the process. @es Sin reportero, va a stderr.
+  const lockPath = path.join(scratch, 'journal-stderr.lock');
+
+  writeFileSync(lockPath, `${String(deadPid)}:x`);
+  backdate(lockPath, Date.now(), STALE + 10_000);
+  mkdirSync(`${lockPath}.breaks.jsonl`);
+
+  const script = `import { takeLock } from ${JSON.stringify(new URL('./file-lock.mjs', import.meta.url).href)};
+process.stdout.write(String(takeLock(${JSON.stringify(lockPath)}, { attempts: 3, wait: () => undefined })));`;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+
+  check('L2: by default the failed break journal goes to stderr, and the lock is still taken', [child.status, child.stdout, /could not be journaled/.test(child.stderr), / @es /.test(child.stderr)], [0, 'true', true, true]);
 }
 
 // --- L3: a release that fails never masks the work, and never turns a finished work into a throw -----------

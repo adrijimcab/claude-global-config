@@ -299,8 +299,7 @@ export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_M
       const judged = staleOf(lockFile, settings);
       const failedBreak = judged === undefined ? undefined : breakStale(lockFile, judged, settings);
 
-      if (failedBreak === undefined) failedBreaks = 0;
-      else {
+      if (failedBreak !== undefined) {
         failedBreaks += 1;
         breakFailure = failedBreak;
       }

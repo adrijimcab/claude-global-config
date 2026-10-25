@@ -17,7 +17,8 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const L = 'hook-state/file-lock.mjs';
 const BREAKER_JUDGED = 'const dead = staleOf(breaker, settings);';
-const LOCK_RECHECK = 'if (now === undefined || now.token !== judged.token || now.identity !== judged.identity) return false;';
+const LOCK_RECHECK = 'if (now === undefined || now.token !== judged.token || now.identity !== judged.identity) return { removed: false };';
+const RELEASE_REPORT = '      report(error instanceof Error ? error.message : String(error));\n\n      return error;';
 
 const MUTANTS = [
   // --- K-A: the owner token and a release of one's own lock only
@@ -27,8 +28,8 @@ const MUTANTS = [
   ['the token does not name this process', L, '`${String(process.pid)}:${randomBytes(6)', '`0:${randomBytes(6)'],
   ['the token taken is not remembered', L, '      taken.set(lockFile, token);\n', ''],
   ['a release removes the file whatever token it now holds', L, '  if (readLock(file)?.token !== token) return;\n', ''],
-  ['a release removes a lock this process never took', L, 'if (mine !== undefined) releaseToken(lockFile, mine, removeFile);', 'releaseToken(lockFile, readLock(lockFile)?.token, removeFile);'],
-  ['a release does nothing', L, 'if (mine !== undefined) releaseToken(lockFile, mine, removeFile);', 'void mine;'],
+  ['a release removes a lock this process never took', L, 'if (mine !== undefined) releaseToken(lockFile, mine, remove);', 'releaseToken(lockFile, readLock(lockFile)?.token, remove);'],
+  ['a release does nothing', L, 'if (mine !== undefined) releaseToken(lockFile, mine, remove);', 'void mine;'],
 
   // --- staleness: age AND an owner that is gone
   ['K-C: a young lock is judged by its content', L, '  if (ageMs <= staleAfterMs) return undefined;\n', ''],
@@ -48,18 +49,23 @@ const MUTANTS = [
   ['K-C: an unreadable lock is an error', L, '  } catch {\n    token = undefined;\n  }', '  } catch (error) {\n    throw error;\n  }'],
 
   // --- breaking under the breaker, with the re-check
-  ['a stale lock is recognised but not broken', L, '      if (judged !== undefined) breakStale(lockFile, judged, settings);\n', ''],
-  ['the lock is removed without being re-read', L, LOCK_RECHECK, 'if (now === undefined) return false;'],
-  ['the lock is re-checked by its identity alone, not its token', L, LOCK_RECHECK, 'if (now === undefined || now.identity !== judged.identity) return false;'],
-  ['K-C: the lock is re-checked by its token alone, not its identity', L, LOCK_RECHECK, 'if (now === undefined || now.token !== judged.token) return false;'],
+  ['a stale lock is recognised but not broken', L, 'const failedBreak = judged === undefined ? undefined : breakStale(lockFile, judged, settings);', 'const failedBreak = undefined;'],
+  ['the lock is removed without being re-read', L, LOCK_RECHECK, 'if (now === undefined) return { removed: false };'],
+  ['the lock is re-checked by its identity alone, not its token', L, LOCK_RECHECK, 'if (now === undefined || now.identity !== judged.identity) return { removed: false };'],
+  ['K-C: the lock is re-checked by its token alone, not its identity', L, LOCK_RECHECK, 'if (now === undefined || now.token !== judged.token) return { removed: false };'],
   ['the breaker file is not exclusive, so two breakers work at once', L, '    settings.create(breaker, token);', "    writeFileSync(breaker, token);"],
-  ['K-B: a dead breaker is removed without being re-read', L, 'if (dead !== undefined && removeIfStill(breaker, dead, settings.remove))', 'if (dead !== undefined && (settings.remove(breaker), true))'],
+  ['K-B: a dead breaker is removed without being re-read', L, 'const outcome = removeIfStill(breaker, dead, settings);', 'const outcome = (settings.remove(breaker), { removed: true });'],
   ['K-B: a dead breaker is never cleared', L, BREAKER_JUDGED, 'const dead = undefined;'],
   ['K-B: a live breaker is cleared as if dead', L, BREAKER_JUDGED, "const dead = { ...readLock(breaker), reason: 'dead-owner', ageMs: 0 };"],
   ['the breaker file is left behind after a break', L, '    releaseToken(breaker, token, settings.remove);\n', ''],
 
   // --- the break journal (K-D says so)
-  ['a break is not journaled', L, 'if (removeIfStill(lockFile, judged, settings.remove)) recordBreak(lockFile, lockFile, judged, settings);', 'removeIfStill(lockFile, judged, settings.remove);'],
+  ['a break is not journaled', L, '    if (outcome.removed) recordBreak(lockFile, lockFile, judged, settings);\n', ''],
+  ['the removal of a dead breaker is not journaled', L, '      if (outcome.removed) recordBreak(lockFile, breaker, dead, settings);\n', ''],
+  ['L2: a break journal that cannot be written fails the take', L, "  } catch (error) {\n    report(bilingual('lock-break-journal-fault'", "  } catch (error) {\n    throw error; report(bilingual('lock-break-journal-fault'"],
+  ['L2: a break journal that cannot be written is not reported', L, "    report(bilingual('lock-break-journal-fault', {", "    void (bilingual('lock-break-journal-fault', {"],
+  ['L2: the default reporter of a take prints nothing', L, 'remove = removeFile, platform = process.platform, report = toStderr } = {}', 'remove = removeFile, platform = process.platform, report = () => undefined } = {}'],
+  ['the reporter writes nothing to stderr', L, "const toStderr = (line) => process.stderr.write(`${line}\\n`);", 'const toStderr = (line) => void line;'],
   ['the journal names one reason for every break', L, 'reason: judged.reason, token', "reason: 'dead-owner', token"],
   ['the journal loses the age', L, 'const ageMs = Math.round(judged.ageMs);', 'const ageMs = 0;'],
   ['the journal loses the ceiling', L, 'ageMs, ceilingMs, message })', 'ageMs, message })'],
@@ -72,14 +78,26 @@ const MUTANTS = [
   ['a persisting delete-pending is reported as a held lock', L, 'if (!held && pending !== undefined) throw', 'if (false) throw'],
   ['a delete-pending mixed with a holder is a fault', L, 'if (!held && pending !== undefined) throw', 'if (pending !== undefined) throw'],
   ['EBUSY is not delete-pending', L, "new Set(['EPERM', 'EBUSY'])", "new Set(['EPERM'])"],
-  ['a delete-pending breaker is a fault', L, '    if (DELETE_PENDING.has(error?.code)) return;\n', ''],
-  ['K-E: a breaker that cannot be created for another reason returns silently', L, "    throw fault('lock-break-fault', breaker, error);", '    return;'],
-  ['a busy removal while breaking is a fault', L, '    if (ALREADY_GOING.has(error?.code)) return false;\n', ''],
-  ['any removal failure while breaking is swallowed', L, "    throw fault('lock-break-fault', file, error);", '    return false;'],
+  ['a delete-pending breaker is a fault at once', L, '    if (DELETE_PENDING.has(error?.code)) return error;\n', ''],
+  ['L1: a delete-pending breaker never escalates', L, '    if (DELETE_PENDING.has(error?.code)) return error;', '    if (DELETE_PENDING.has(error?.code)) return undefined;'],
+  ['K-E: a breaker that cannot be created for another reason returns silently', L, "    throw fault('lock-break-fault', breaker, error);", '    return undefined;'],
+  ['a pending removal while breaking is a fault at once', L, '    if (removalPending(platform).has(error?.code)) return { removed: false, pending: error };\n', ''],
+  ['L1: a pending removal while breaking never escalates', L, 'return { removed: false, pending: error };', 'return { removed: false };'],
+  ['L1: on POSIX an unlink EPERM is retried as if delete-pending', L, "(platform === 'win32' ? DELETE_PENDING : new Set(['EBUSY']))", '(DELETE_PENDING)'],
+  ['L1: on Windows an unlink EPERM is a fault at once', L, "(platform === 'win32' ? DELETE_PENDING : new Set(['EBUSY']))", "(new Set(['EBUSY']))"],
+  ['L1: the platform is never the given one', L, 'const settings = { staleAfterMs, ceilingMs, now, isAlive, create, remove, platform, report };', 'const settings = { staleAfterMs, ceilingMs, now, isAlive, create, remove, platform: process.platform, report };'],
+  ['a file already gone at its removal is a fault', L, "    if (error?.code === 'ENOENT') return { removed: false };\n", ''],
+  ['any removal failure while breaking is swallowed', L, "    throw fault('lock-break-fault', file, error);", '    return { removed: false };'],
+  ['L1: a stale lock that cannot be broken in any attempt is reported as held', L, 'if (attempts > 0 && failedBreaks === attempts) throw', 'if (false) throw'],
+  ['L1: zero attempts read as every break failed', L, 'if (attempts > 0 && failedBreaks === attempts) throw', 'if (failedBreaks === attempts) throw'],
+  ['L1: one failed break is a fault', L, 'if (attempts > 0 && failedBreaks === attempts) throw', 'if (failedBreaks > 0) throw'],
+  ['L1: a failed break is not counted', L, '        failedBreaks += 1;\n', ''],
   ['a breaker release failure is swallowed', L, "if (error?.code !== 'ENOENT') throw fault('lock-release-fault', file, error);", 'void error;'],
   ['a breaker already gone at release is a fault', L, "if (error?.code !== 'ENOENT') throw fault('lock-release-fault', file, error);", "throw fault('lock-release-fault', file, error);"],
   ['K-F: a fault is not a LockFault', L, "    this.name = 'LockFault';\n", ''],
-  ['a fault loses its cause', L, '{ cause: error });', '{});'],
+  ['L4: a fault does not say which lock it is about', L, '    this.file = options?.file;\n', ''],
+  ['L4: a fault is not given its lock', L, '{ cause: error, file });', '{ cause: error });'],
+  ['a fault loses its cause', L, '{ cause: error, file });', '{ file });'],
   ['K-F: a fault message is its bare id, not the bilingual text', L, 'new LockFault(bilingual(id, {', 'new LockFault(id, ({'],
 
   // --- the attempts
@@ -89,8 +107,15 @@ const MUTANTS = [
 
   // --- withLock
   ['the work runs even though the lock is held', L, '  if (!takeLock(lockFile, options)) return { held: false };', '  takeLock(lockFile, options);'],
-  ['the lock is not released after the work', L, '  } finally {\n    releaseLock(lockFile);\n  }', '  } finally {\n  }'],
-  ['the work value is lost', L, 'value: work()', 'value: undefined']
+  ['the lock is not released after a finished work', L, '  release();\n\n  return { held: true, value };', '  return { held: true, value };'],
+  ['the lock is not released after a failed work', L, '    const failure = release();', '    const failure = undefined;'],
+  ['the work value is lost', L, '  return { held: true, value };', '  return { held: true, value: undefined };'],
+  ['L3: a release failure after a finished work throws', L, RELEASE_REPORT, '      throw error;'],
+  ['L3: a release failure is not reported', L, '      report(error instanceof Error ? error.message : String(error));\n', ''],
+  ['L3: a release failure masks the work\'s own error', L, '    throw error;\n  }\n\n  release();', '    throw failure ?? error;\n  }\n\n  release();'],
+  ['L3: a release failure is not attached to the work\'s error', L, 'error.suppressed = failure;', 'void failure;'],
+  ['L3: withLock releases with the default removal, not the given one', L, '      releaseLock(lockFile, options);', '      releaseLock(lockFile);'],
+  ['L3: withLock reports nowhere by default', L, 'const report = options.report ?? toStderr;', 'const report = options.report ?? (() => undefined);']
 ];
 
 const survivors = runMutants({
