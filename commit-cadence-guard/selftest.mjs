@@ -507,7 +507,9 @@ function arrive(scene, files = ['f.txt']) {
 
   report(JSON.stringify(held) === JSON.stringify([{ path: 'mid', sinceMs: 200 }, { path: 'late', sinceMs: 500 }]), 'held paths: before arrival and undated are skipped, older-than-commit is clamped to the commit, oldest first');
 
-  report(stateKey('abc-DEF_09') === 'abc-DEF_09' && stateKey('../x') === undefined && stateKey('') === undefined && stateKey(7) === undefined && stateKey('a/b') === undefined, 'state keys: plain names only, so an id cannot climb out of the state directory');
+  const keyOf = (id) => { try { return stateKey(id); } catch { return 'THREW'; } };
+
+  report(keyOf('abc-DEF_09') === 'abc-DEF_09' && keyOf('../x') === undefined && keyOf('') === undefined && keyOf(7) === undefined && keyOf(undefined) === undefined && stateKey('a/b') === undefined, 'state keys: plain names only, so an id cannot climb out of the state directory');
 
   const dir = scenario('config').sandbox.plainDir('cfg');
   const writeConfig = (name, body) => { const file = path.join(dir, name); writeFileSync(file, body); return file; };
