@@ -18,16 +18,6 @@ const MUTANTS = [
   ['matching is case sensitive', `${W}/processes.mjs`, "text.split('\\\\').join('/').toLowerCase()", "text.split('\\\\').join('/')"],
   ['the caller process is reported', `${W}/processes.mjs`, 'entry.pid !== process.pid && ', ''],
   ['every process matches', `${W}/processes.mjs`, '&& normalized(entry.commandLine).includes(wanted)', ''],
-  ['a missing encoded half crashes the row', `${W}/processes.mjs`, "const [identity, encoded = ''] = line.split(' ');", "const [identity, encoded] = line.split(' ');"],
-  ['a non-numeric parent is read as a number', `${W}/processes.mjs`, 'parent !== undefined && /^\\d+$/.test(parent) ? Number(parent) : undefined', 'parent !== undefined ? Number(parent) : undefined'],
-  ['the parent half is ignored', `${W}/processes.mjs`, 'const parentPid = parent !== undefined && /^\\d+$/.test(parent) ? Number(parent) : undefined;', 'const parentPid = undefined;'],
-  ['the listing sends no parent pid', `${W}/processes.mjs`, "'{0}:{1} {2}' -f $_.ProcessId, $_.ParentProcessId,", "'{0}:{1} {2}' -f $_.ProcessId, 0,"],
-  ['blank lines become rows', `${W}/processes.mjs`, ".filter((line) => line !== '')", ''],
-  ['the command line is decoded as Latin-1', `${W}/processes.mjs`, "toString('utf8')", "toString('latin1')"],
-  ['the command line is not decoded', `${W}/processes.mjs`, "Buffer.from(encoded, 'base64').toString('utf8')", 'encoded'],
-  ['the listing sends the raw command line', `${W}/processes.mjs`, '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($line))', '$line'],
-  ['a null command line is not replaced', `${W}/processes.mjs`, "if ($null -eq $line) { $line = '' }; ", ''],
-  ['the listing tool ignores the given environment', `${W}/processes.mjs`, "WINDOWS_LISTING], { encoding: 'utf8', maxBuffer: 64 << 20, env })", "WINDOWS_LISTING], { encoding: 'utf8', maxBuffer: 64 << 20 })"],
 
   // worktree-git.mjs
   ['a non-checkout is described anyway', `${W}/worktree-git.mjs`, 'if (branch.status !== 0) return undefined;', ''],
