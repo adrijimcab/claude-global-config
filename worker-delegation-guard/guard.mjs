@@ -19,10 +19,10 @@
  * decisión del llamante falla CERRADO ante una sola señal de subagente (ver `decide.mjs`).
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { deny, hookMain, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { decide } from './decide.mjs';
 import { reason } from './reason.mjs';
@@ -47,7 +47,7 @@ export function evaluate(raw) {
   let refusal;
 
   try {
-    refusal = decide(JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw));
+    refusal = decide(parsePayload(raw));
   } catch {
     return undefined;
   }
@@ -56,24 +56,9 @@ export function evaluate(raw) {
 
   journal({ at: new Date().toISOString(), session: refusal.sessionId, agentId: refusal.agentId, tool: refusal.toolName });
 
-  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason(refusal) } };
-}
-
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    process.exit(0);
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-  process.exit(0);
+  return deny(reason(refusal));
 }
 
 // Only as the process entry point; an importer (the dispatcher, a selftest) never triggers a stdin read.
 // @es Solo como proceso principal; un importador nunca provoca una lectura de stdin.
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+runWhenMain(import.meta.url, hookMain(evaluate));

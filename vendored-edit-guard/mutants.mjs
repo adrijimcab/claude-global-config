@@ -38,13 +38,15 @@ const MUTANTS = [
   ['a path is judged against the folder it was typed in, not the root it resolves under', DECIDE, 'path.relative(root, write.path)', 'path.relative(root, path.basename(write.path))'],
 
   // --- the shim.
-  ['the shim never asks the decision', GUARD, 'offences = decide(JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw));', 'offences = [];'],
-  ['a BOM-prefixed payload is no longer read', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
+  // The BOM strip lives in `hook-io`, pinned there by its mutant 'the BOM is not stripped'; the selftest still
+  // sends a BOM-prefixed payload through this guard. @es El BOM lo quita `hook-io`, que lo fija con su mutante
+  // 'the BOM is not stripped'; el selftest sigue enviando un payload con BOM por esta guardia.
+  ['the shim never asks the decision', GUARD, 'offences = decide(parsePayload(raw));', 'offences = [];'],
   ['a malfunction of the decision crashes the hook instead of allowing', GUARD, '  } catch {\n    return undefined;\n  }\n\n  if (offences.length', '  } catch (error) {\n    throw error;\n  }\n\n  if (offences.length'],
   ['a call that writes nothing vendored is refused anyway', GUARD, 'if (offences.length === 0) return undefined;', ''],
-  ['the shim answers "allow" while naming a refusal', GUARD, "permissionDecision: 'deny'", "permissionDecision: 'allow'"],
-  ['the refusal is answered for another event', GUARD, "hookEventName: 'PreToolUse'", "hookEventName: 'Stop'"],
-  ['run as a hook, the refusal is never printed', GUARD, 'if (output !== undefined) console.log(JSON.stringify(output));', ''],
+  ['the shim answers "allow" while naming a refusal', GUARD, 'return deny(refusalText(offences));', "return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: refusalText(offences) } };"],
+  ['the refusal is answered for another event', GUARD, 'return deny(refusalText(offences));', "return { hookSpecificOutput: { hookEventName: 'Stop', permissionDecision: 'deny', permissionDecisionReason: refusalText(offences) } };"],
+  ['run as a hook, the refusal is never printed', GUARD, 'runWhenMain(import.meta.url, hookMain(evaluate));', 'runWhenMain(import.meta.url, () => {});'],
 
   // --- the refusal teaches the remedy, in both languages.
   ['the refusal stops naming the owner path in English', GUARD, "    '  1. edit the OWNER copy, in b100-am-ui:',\n    ...owners,\n", "    '  1. edit the OWNER copy, in b100-am-ui:',\n"],

@@ -55,7 +55,8 @@ const MUTANTS = [
   ['the refusal no longer names the apply command', 'gentle-ai-sync-guard/decide.mjs', '    ...(reapplicable ? [`  - Restore the reapplicable ones: ${APPLY_COMMAND} @es Restaurar las reaplicables: ${APPLY_COMMAND}`] : []),\n', ''],
   ['every tool is judged as bash', 'gentle-ai-sync-guard/decide.mjs', "(toolName === 'PowerShell' ? DIALECTS.POWERSHELL : DIALECTS.BASH)", '(DIALECTS.BASH)'],
   ['a check that exits without JSON reads as clean', 'gentle-ai-sync-guard/overlay-check.mjs', 'return { failure: `${checkScript} exited ${run.status} without its JSON report', 'return { exitCode: 0, results: [], f: `${checkScript} exited ${run.status} without its JSON report'],
-  ['a BOM-prefixed payload is no longer read', 'gentle-ai-sync-guard/guard.mjs', 'raw.charCodeAt(0) === BYTE_ORDER_MARK ? raw.slice(1) : raw', 'raw'],
+  // The BOM strip lives in `hook-io`, pinned there by its mutant 'the BOM is not stripped'.
+  // @es El BOM lo quita `hook-io`, que lo fija con su mutante 'the BOM is not stripped'.
   ['the guard exits 1 instead of 0', 'gentle-ai-sync-guard/guard.mjs', '    process.exitCode = 0;\n  });', '    process.exitCode = 1;\n  });'],
   ['the guard malfunction is no longer reported', 'gentle-ai-sync-guard/guard.mjs', "write({ systemMessage: `[gentle-ai-sync-guard] malfunctioned", "void ({ systemMessage: `[gentle-ai-sync-guard] malfunctioned"],
   ['the short help flag -h no longer asks for help', 'gentle-ai-sync-guard/subcommand-words.mjs', 'new Set([\'--help\', \'-h\'])', 'new Set([\'--help\'])'],
