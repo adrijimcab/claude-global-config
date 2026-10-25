@@ -655,6 +655,9 @@ for (const [label, text] of NEEDS_NO_JUDGE) check(`prefilter stays silent: ${lab
 check('a marker inside a longer word is not a marker: bug in debug', findCandidate('Corrí el debug del parser y quedó verde.'), undefined);
 check('a marker that runs into a longer word is not a marker: to do in to document', findCandidate('I went on to document the parser.'), undefined);
 check('a whole-word marker still fires: to do', findCandidate('Things to do: the parser.'), 'to do');
+// DEFERRAL UNTIL AN EVENT reaches the judge: the case the pending rubric calls an item put off past a wait
+// (L17 case 3: «Lo mido de verdad cuando aterrice»). @es EL APLAZAMIENTO HASTA UN EVENTO llega al juez.
+check('a deferral until an event reaches the judge, in both languages', ['Lo mido de verdad cuando aterrice.', 'Lo reviso cuando termine el worker.', 'Lo integro cuando llegue el veredicto.', 'I will measure it when it lands.', 'I will check it once it lands.', 'I will look at it after the landing.'].map((text) => findCandidate(text) !== undefined), Array(6).fill(true));
 check('a stem marker takes its endings: bugs, hallazgos, pendientes, queued', [findCandidate('Two bugs.'), findCandidate('Dos hallazgos.'), findCandidate('Quedan pendientes.'), findCandidate('A queued commit.')], ['bug', 'hallazgo', 'pendiente', 'queue']);
 check('a marker at the very start and the very end of the text fires', [findCandidate('bug'), findCandidate('see the backlog')], ['bug', 'backlog']);
 check('a digit glued to a marker is part of the word', findCandidate('the 2bug3 token'), undefined);

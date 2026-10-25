@@ -110,6 +110,13 @@ export const PENDING_MARKERS = Object.freeze([
   'followup*',
   'next round',
   'siguiente ronda',
+  // Until an event: the item put off past a wait (L17 case 3). @es Hasta un evento: el ítem diferido tras una espera.
+  'cuando aterrice',
+  'cuando termine',
+  'cuando llegue',
+  'when it lands',
+  'once it lands',
+  'after the landing',
 
   // --- A defect, debt or decision named. @es Un defecto, deuda o decisión nombrados.
   'defecto*',
