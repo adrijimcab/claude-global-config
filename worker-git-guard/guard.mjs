@@ -31,7 +31,8 @@
  * fichero solo compone las dos decisiones y anota (`state/unchecked.jsonl`) cada commit que no pudo comprobar. Falla ABIERTO.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -73,11 +74,43 @@ const PLAIN_WORD = /^[A-Za-z0-9_./-]+$/;
  * normales, y entre comillas simples de esa shell si lleva algo más que caracteres simples.
  */
 function shellWord(file, directory, cwd, dialect) {
-  const relative = path.relative(cwd, path.resolve(directory, file)).split('\\').join('/') || '.';
+  return quotedFor(relativeToShell(file, directory, cwd), dialect);
+}
 
-  if (PLAIN_WORD.test(relative)) return relative;
+/** An untracked file relative to the worker's shell directory, with forward slashes. @es Un fichero relativo al directorio de la shell del worker. */
+const relativeToShell = (file, directory, cwd) => path.relative(cwd, path.resolve(directory, file)).split('\\').join('/') || '.';
 
-  return dialect === 'powershell' ? `'${relative.split("'").join("''")}'` : `'${relative.split("'").join("'\\''")}'`;
+/** A word single-quoted for the worker's shell when it holds more than plain characters. @es Una palabra entre comillas simples de la shell del worker si hace falta. */
+function quotedFor(word, dialect) {
+  if (PLAIN_WORD.test(word)) return word;
+
+  return dialect === 'powershell' ? `'${word.split("'").join("''")}'` : `'${word.split("'").join("'\\''")}'`;
+}
+
+/**
+ * The `git add` that stages every untracked file of a refusal: the paths themselves up to `LISTED_PATHS`, past that
+ * a NUL-separated pathspec file the guard writes in its state directory, so no path is left out; when that file
+ * cannot be written, the paths themselves again.
+ * @es El `git add` que agrega cada fichero sin seguimiento de un rechazo: las rutas mismas hasta `LISTED_PATHS`; más
+ * allá, un fichero de pathspec separado por NUL que el guard escribe en su directorio de estado; si no se puede
+ * escribir, otra vez las rutas mismas.
+ */
+function addCommand(files, directory, cwd, dialect, session) {
+  const inline = `git add -- ${files.map((file) => shellWord(file, directory, cwd, dialect)).join(' ')}`;
+
+  if (files.length <= LISTED_PATHS) return inline;
+
+  try {
+    const folder = path.join(stateDir('worker-git-guard'), 'pathspecs');
+    const list = path.join(folder, `${String(session ?? 'session').replace(/[^\w-]/g, '_')}-${randomUUID()}.lst`);
+
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(list, `${files.map((file) => relativeToShell(file, directory, cwd)).join('\0')}\0`, 'utf8');
+
+    return `git add --pathspec-file-nul --pathspec-from-file=${quotedFor(list.split('\\').join('/'), dialect)}`;
+  } catch {
+    return inline;
+  }
 }
 
 /**
@@ -107,7 +140,7 @@ function untrackedRefusal(payload, command, dialect, cwd, list) {
 
   const listed = files.slice(0, LISTED_PATHS).map((untracked) => shellWord(untracked, directory, cwd, dialect));
 
-  return refusalText('commitUntracked', text, { paths: listed.join(' '), total: files.length });
+  return refusalText('commitUntracked', text, { paths: listed.join(' '), total: files.length, add: addCommand(files, directory, cwd, dialect, payload.session_id) });
 }
 
 /**

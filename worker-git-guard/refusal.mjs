@@ -149,8 +149,8 @@ export const MESSAGES = {
       'a file that only landed in 0235cc85). Untracked files under the pathspec ({total} in all, at most 10 shown):',
       '{paths}',
       '',
-      'USE INSTEAD: run `git add -- {paths}` first, in its own command or earlier in the same `&&` chain, or name',
-      'the files precisely in the pathspec of the commit.'
+      'USE INSTEAD: run `{add}` first (it names every one of them), in its own command or earlier in the same `&&`',
+      'chain, or name the files precisely in the pathspec of the commit.'
     ],
     es: [
       'WORKER-GIT GUARD RECHAZÓ este comando: el pathspec de este `git commit` cubre ficheros sin seguimiento ({command}).',
@@ -160,8 +160,37 @@ export const MESSAGES = {
       'importaba un fichero que solo aterrizó en 0235cc85). Ficheros sin seguimiento bajo el pathspec ({total} en total, se muestran 10 como máximo):',
       '{paths}',
       '',
-      'USAR EN SU LUGAR: ejecute antes `git add -- {paths}`, en su propio comando o antes en la misma cadena `&&`, o',
-      'nombre los ficheros con precisión en el pathspec del commit.'
+      'USAR EN SU LUGAR: ejecute antes `{add}` (nombra cada uno de ellos), en su propio comando o antes en la misma',
+      'cadena `&&`, o nombre los ficheros con precisión en el pathspec del commit.'
+    ]
+  },
+  unresolvable: {
+    en: [
+      'WORKER-GIT GUARD REFUSED this command: it depends on a value the line does not show ({command}).',
+      '',
+      'WHY. A pathspec word, a `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` or `--index-output` value, or the git',
+      'configuration holds an expansion the shell resolves only when it runs (`$X`, `${...}`, `$(cmd)`, a backtick,',
+      'PowerShell `(...)` or member access such as `$PWD.Path`), or the line changes a git selector variable in a way',
+      'the guard does not model (in a subshell, after `&&` or `||`, `env -u`/`-i`, a wildcard, `${env:...}`,',
+      '`Set-Item`, `[Environment]::...`). The guard cannot tell what git will act on, so it refuses.',
+      '',
+      'USE INSTEAD: spell paths and values literally. Set a `GIT_*` variable only as a literal prefix of the git',
+      'command (`GIT_INDEX_FILE=/tmp/i git read-tree <tree>`), or at the start of the line with `export NAME=value`',
+      'or `unset NAME` (bash), or `$env:NAME = \'value\'` or `Remove-Item Env:NAME` (PowerShell).'
+    ],
+    es: [
+      'WORKER-GIT GUARD RECHAZÓ este comando: depende de un valor que la línea no muestra ({command}).',
+      '',
+      'POR QUÉ. Una palabra del pathspec, un valor de `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` o `--index-output`,',
+      'o la configuración de git lleva una expansión que la shell resuelve solo al correr (`$X`, `${...}`, `$(cmd)`, una',
+      'comilla invertida, `(...)` o el acceso a miembros de PowerShell como `$PWD.Path`), o la línea cambia una',
+      'variable selectora de git de una forma que el guard no modela (en una subshell, tras `&&` o `||`, `env -u`/`-i`,',
+      'un comodín, `${env:...}`, `Set-Item`, `[Environment]::...`). El guard no puede saber sobre qué actuará git, así',
+      'que lo rechaza.',
+      '',
+      'USAR EN SU LUGAR: escriba las rutas y los valores de forma literal. Fije una variable `GIT_*` solo como prefijo',
+      'literal del comando git (`GIT_INDEX_FILE=/tmp/i git read-tree <árbol>`), o al principio de la línea con',
+      '`export NOMBRE=valor` o `unset NOMBRE` (bash), o `$env:NOMBRE = \'valor\'` o `Remove-Item Env:NOMBRE` (PowerShell).'
     ]
   },
   commitPathspecFile: {

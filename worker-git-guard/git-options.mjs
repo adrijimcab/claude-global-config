@@ -44,7 +44,8 @@ const LONG_OPTIONS = {
   'checkout-index': '--all --ignore-skip-worktree-bits --force --quiet --no-create --index --stdin --temp --prefix= --stage= --create --no-all --no-ignore-skip-worktree-bits --no-force --no-quiet --no-index --no-stdin --no-temp --no-prefix',
   'update-index': '--ignore-submodules --add --replace --remove --unmerged --refresh --really-refresh --cacheinfo --chmod= --assume-unchanged --no-assume-unchanged --skip-worktree --no-skip-worktree --ignore-skip-worktree-entries --info-only --force-remove --stdin --index-info --unresolve --again --ignore-missing --verbose --clear-resolve-undo --index-version= --show-index-version --split-index --untracked-cache --test-untracked-cache --force-untracked-cache --force-write-index --fsmonitor --fsmonitor-valid --no-fsmonitor-valid --no-ignore-submodules --no-add --no-replace --no-remove --no-unmerged --no-ignore-skip-worktree-entries --no-info-only --no-force-remove --no-ignore-missing --no-verbose --no-index-version --no-show-index-version --no-split-index --no-untracked-cache --no-test-untracked-cache --no-force-untracked-cache --no-force-write-index --no-fsmonitor',
   'update-ref': '--no-deref --stdin --create-reflog --batch-updates --deref --no-stdin --no-create-reflog --no-batch-updates',
-  'symbolic-ref': '--quiet --delete --short --recurse --no-quiet --no-delete --no-short --no-recurse'
+  'symbolic-ref': '--quiet --delete --short --recurse --no-quiet --no-delete --no-short --no-recurse',
+  rm: '--dry-run --quiet --cached --force --ignore-unmatch --sparse --pathspec-from-file= --pathspec-file-nul --no-dry-run --no-quiet --no-cached --no-force --no-ignore-unmatch --no-sparse --no-pathspec-from-file --no-pathspec-file-nul'
 };
 
 /**
@@ -62,7 +63,8 @@ const SHORT_OPTIONS = {
   'checkout-index': 'a:all f:force q:quiet n:no-create u:index z',
   'update-index': 'q z g:again',
   'update-ref': 'm= d z 0:batch-updates',
-  'symbolic-ref': 'q:quiet d:delete m='
+  'symbolic-ref': 'q:quiet d:delete m=',
+  rm: 'n:dry-run q:quiet f:force r'
 };
 
 /**

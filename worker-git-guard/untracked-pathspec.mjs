@@ -36,6 +36,10 @@
  * AN ERROR IS NOT A DECISION. Git failing, timing out or not being found yields `unchecked`, never an offender,
  * so a broken git never blocks a worker; `guard.mjs` journals the miss so it stays visible.
  *
+ * THE ADD THAT COUNTS (third Judgment Day round, 2026-10-25). An earlier `git add` counts only into the commit's
+ * own index (the same `GIT_INDEX_FILE`, or the same live index), and a later `restore --staged` or `rm` of a path it
+ * covers (or of no path, or of a pathspec file) cancels it.
+ *
  * LEFT OUT, stated. An earlier `git add` counts only when nothing but `&&` joins it to the commit, and only for the
  * paths it names literally (a glob resolved as a literal path names no file) or for `-A` with no path; one that
  * reads its paths from a file does not count.
@@ -45,8 +49,9 @@
  * `d` sale con 0 y lo deja fuera. LA DECISIÓN: por cada `commit` con pathspec se pregunta a git una vez, en su
  * directorio y sobre el repositorio al que la línea lo apunta (se reenvían `--git-dir`, `--work-tree`, `GIT_DIR`,
  * `GIT_WORK_TREE` y `GIT_INDEX_FILE`); una respuesta no vacía es un infractor, salvo lo que agrega un `git add`
- * anterior de la misma cadena `&&`, leído con la tabla de opciones de git (un ensayo, `-u`, `-p`, `-i`, `-e` y `-N` no
- * agregan ficheros nuevos; `-A` sin rutas cubre todo el worktree). EL ÁRBOL QUE VE EL HOOK: la línea se juzga antes de
+ * anterior de la misma cadena `&&` y del mismo índice que el commit, leído con la tabla de opciones de git (un ensayo,
+ * `-u`, `-p`, `-i`, `-e` y `-N` no agregan ficheros nuevos; `-A` sin rutas cubre todo el worktree); un `restore
+ * --staged` o `rm` posterior de una ruta que cubre lo anula. EL ÁRBOL QUE VE EL HOOK: la línea se juzga antes de
  * correr, así que si un comando anterior puede escribir ficheros y el commit lee un fichero de pathspec (también uno
  * que aún no existe: el escritor puede estar creándolo) o nombra un
  * pathspec que puede casar con ficheros por venir (un glob o un directorio), se rechaza y se pide hacer el commit en
@@ -62,10 +67,11 @@ import path from 'node:path';
 
 import { invocationDirectory } from '../company-remote/invocation-directory.mjs';
 import { finalValue, mayBe, optionsOf, surely } from './git-options.mjs';
+import { holdsExpansion } from './line-config.mjs';
 import { lineInvocations } from './line-invocations.mjs';
 import { earlierWriter } from './line-writes.mjs';
 import { matchesFilesToCome, sweepsWorktree } from './pathspec-scope.mjs';
-import { gitEnvironmentOf, isWithin, repositoryLayout } from './repository-layout.mjs';
+import { gitEnvironmentOf, indexFileOf, isWithin, repositoryLayout, samePath } from './repository-layout.mjs';
 
 /** How long git may take before the check gives up. @es Cuánto puede tardar git antes de abandonar la comprobación. */
 export const GIT_TIMEOUT_MS = 5000;
@@ -75,6 +81,9 @@ const STANDARD_INPUT = '-';
 
 /** The `git add` options that stage no new file. @es Las opciones de `git add` que no agregan ficheros nuevos. */
 const ADDS_NO_NEW_FILE = ['dry-run', 'update', 'interactive', 'patch', 'edit', 'intent-to-add'];
+
+/** The subcommands that take paths back out of the index. @es Los subcomandos que sacan rutas del índice. */
+const UNSTAGING = new Set(['restore', 'rm']);
 
 /** The C escapes git unquotes in a quoted pathspec line. @es Los escapes C que git desentrecomilla. */
 const C_ESCAPES = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '\\': 92, '"': 34 };
@@ -102,10 +111,10 @@ export function listUntracked(directory, pathspecs, environment = {}, run = spaw
   if (result.error !== undefined) {
     const timedOut = result.error.code === 'ETIMEDOUT';
 
-    return { error: timedOut ? `git ls-files timed out after ${GIT_TIMEOUT_MS} ms` : `git ls-files could not run: ${result.error.message}` };
+    return { error: timedOut ? `git ls-files timed out after ${GIT_TIMEOUT_MS} ms @es git ls-files superó el límite de ${GIT_TIMEOUT_MS} ms` : `git ls-files could not run: ${result.error.message} @es git ls-files no pudo ejecutarse` };
   }
 
-  if (result.status !== 0) return { error: `git ls-files exited ${String(result.status)}: ${String(result.stderr).trim().split('\n')[0]}` };
+  if (result.status !== 0) return { error: `git ls-files exited ${String(result.status)}: ${String(result.stderr).trim().split('\n')[0]} @es git ls-files salió con ${String(result.status)}` };
 
   return { files: result.stdout.split('\0').filter((file) => file.length > 0) };
 }
@@ -167,6 +176,30 @@ function addedPaths(invocation) {
 }
 
 /**
+ * The paths a later command takes back out of the index: `restore` (the lexical rules allow it only with
+ * `--staged`) and `rm` (`--cached` or not), resolved; every path (`[undefined]`) when it names none, reads them
+ * from a file, or runs where the line cannot follow; `[]` for a dry run or any other command.
+ * @es Las rutas que un comando posterior saca del índice: `restore` (solo con `--staged`) y `rm`; todas si no nombra
+ * ninguna, las lee de un fichero o corre donde la línea no se puede seguir; ninguna para un ensayo u otro comando.
+ */
+function unstagedPaths(invocation) {
+  if (!UNSTAGING.has(invocation.subcommand)) return [];
+
+  const { events, positionals } = optionsOf(invocation.subcommand, invocation.args);
+
+  if (surely(events, 'dry-run')) return [];
+
+  const directory = invocationDirectory(invocation);
+
+  if (typeof directory !== 'string' || invocation.gitOptions.some(holdsExpansion) || positionals.length === 0 || finalValue(events, 'pathspec-from-file') !== undefined) return [undefined];
+
+  return positionals.map((word) => path.resolve(directory, word));
+}
+
+/** Whether two resolved paths overlap: one is the other or lies under it. @es Si dos rutas se solapan. */
+const overlaps = (first, second) => first === undefined || isWithin(first, second) || isWithin(second, first);
+
+/**
  * The pathspec of a commit: the words after `--`, the lines of its `--pathspec-from-file`, or the file that cannot
  * be read; `undefined` for a commit with neither.
  * @es El pathspec de un commit: las palabras tras `--`, las líneas de su `--pathspec-from-file`, o el fichero que no
@@ -208,9 +241,15 @@ export function untrackedUnderCommits(script, dialect, cwd, list = listUntracked
   const added = [];
 
   for (const invocation of lineInvocations(script, dialect, cwd)) {
+    const indexFile = indexFileOf(invocationDirectory(invocation), invocation.environment, invocation.gitOptions);
+
     if (invocation.subcommand === 'add') {
-      added.push(...addedPaths(invocation).map((resolved) => ({ chain: invocation.chain, resolved })));
+      added.push(...addedPaths(invocation).map((resolved) => ({ chain: invocation.chain, resolved, indexFile })));
       continue;
+    }
+
+    for (const taken of unstagedPaths(invocation)) {
+      for (let at = added.length - 1; at >= 0; at -= 1) if (overlaps(taken, added[at].resolved)) added.splice(at, 1);
     }
 
     if (invocation.subcommand !== 'commit' || surely(optionsOf('commit', invocation.args).events, 'dry-run')) continue;
@@ -237,7 +276,7 @@ export function untrackedUnderCommits(script, dialect, cwd, list = listUntracked
     const environment = typeof directory === 'string' ? gitEnvironmentOf(directory, invocation.environment, invocation.gitOptions) : undefined;
 
     if (environment === undefined) {
-      unchecked.push({ text: invocation.text, directory, reason: 'the directory or the repository the commit runs in cannot be followed from the line' });
+      unchecked.push({ text: invocation.text, directory, reason: 'the directory or the repository the commit runs in cannot be followed from the line @es el directorio o el repositorio del commit no se pueden seguir desde la línea' });
       continue;
     }
 
@@ -248,7 +287,7 @@ export function untrackedUnderCommits(script, dialect, cwd, list = listUntracked
       continue;
     }
 
-    const staged = added.filter((entry) => entry.chain === invocation.chain);
+    const staged = added.filter((entry) => entry.chain === invocation.chain && entry.indexFile !== undefined && samePath(entry.indexFile, indexFile));
     const files = answer.files.filter((file) => !staged.some((entry) => isWithin(entry.resolved, path.resolve(directory, file))));
 
     if (files.length > 0) return { offender: { family: 'commitUntracked', text: invocation.text, files, directory }, unchecked };

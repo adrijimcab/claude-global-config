@@ -27,9 +27,10 @@ import { fileURLToPath } from 'node:url';
 
 import { messageProblems } from '../bilingual-output/message.mjs';
 import { payloadFor } from '../hook-payloads/payloads.mjs';
-import { isolateState } from '../hook-state/locations.mjs';
+import { isolateState, STATE_ROOT_VARIABLE } from '../hook-state/locations.mjs';
 import { evaluate } from './guard.mjs';
 import { MESSAGES } from './refusal.mjs';
+import { gitBoolean, parametersOf } from './line-config.mjs';
 import { GIT_TIMEOUT_MS, listUntracked, untrackedUnderCommits } from './untracked-pathspec.mjs';
 
 // The guard journals what it could not check; a selftest must never write the live journal. @es El guard anota lo que no pudo comprobar; un selftest nunca escribe el journal vivo.
@@ -150,13 +151,20 @@ for (const form of ['git commit --include --no-include -m x -- a', 'git commit -
 
 // --- C3: a pathspec that names no specific path is the same sweep (both judges) ---------------------
 for (const form of ['git commit -m x -- .', 'git commit -m x -- ./', 'git commit -m x -- :/', 'git commit -m x -- "*"', 'git commit -m x -- "**"', 'git commit -m x -- ":(glob)**"', 'git commit -m x -- ":(top)"', 'git commit -m x -- ..', 'git commit -m x -- a .', 'git commit -m x -- ":!a.txt"', 'git commit -m x -- ":(exclude)a.txt"', 'git commit -m x -- $FILES', 'git commit -m x -- "$@"', 'git commit -m x -- ${FILES}', 'git commit -m x -- $(git ls-files)', 'git commit -m x -- $FILES $MORE']) denied(form);
-for (const form of ['git commit -m x -- src', 'git commit -m x -- ./src/a.ts', 'git commit -m x -- ":(top)src"', 'git commit -m x -- "src/*.ts"', 'git commit -m x -- a ":!b"', 'git commit -m x -- $FILES a.txt', 'git commit -m x -- $DIR/a.txt', 'git commit -m x -- .gitignore', 'git commit -m x -- @files']) allowed(form);
+for (const form of ['git commit -m x -- src', 'git commit -m x -- ./src/a.ts', 'git commit -m x -- ":(top)src"', 'git commit -m x -- "src/*.ts"', 'git commit -m x -- a ":!b"', 'git commit -m x -- .gitignore', 'git commit -m x -- @files']) allowed(form);
 expect('deny', asSubagent('PowerShell', 'git commit -m x -- @files'), 'PowerShell, a splatted array names no specific path');
 expect('deny', asSubagent('PowerShell', 'git commit -m x -- $env:FILES'), 'PowerShell, an environment variable names no specific path');
 expect('deny', asSubagent('PowerShell', 'git commit -m x -- $files'), 'PowerShell, a variable names no specific path');
 expect('allow', asSubagent('PowerShell', 'git commit -m x -- src/a.ts'), 'PowerShell, a literal path');
-expect('allow', asSubagent('PowerShell', 'git commit -m x -- $dir\\a.ts'), 'PowerShell, a variable with a literal part after a backslash');
 expect('deny', asSubagent('PowerShell', 'git commit -m x -- $PWD\\'), 'PowerShell, a variable followed only by a backslash names the directory it hides');
+
+// --- A (third round): any pathspec word holding an expansion is unresolvable, its tail never trusted --------------
+const UNRESOLVABLE = 'depends on a value the line does not show';
+const unresolvableBash = (command) => check(`A: unresolvable: ${command}`, reasonFor(command).includes(UNRESOLVABLE) && reasonFor(command).includes('no muestra'));
+const unresolvablePowerShell = (command) => check(`A: unresolvable (PowerShell): ${command}`, (evaluate(JSON.stringify(asSubagent('PowerShell', command)))?.hookSpecificOutput?.permissionDecisionReason ?? '').includes(UNRESOLVABLE));
+
+for (const form of ['git commit -m x -- $FILES a.txt', 'git commit -m x -- $DIR/a.txt', 'git commit -m x -- "$PWD"/clean', 'git commit -m x -- ${D}/a', 'git commit -m x -- "$(pwd)/a"', 'git commit -m x -- `pwd`/a', 'git commit -m x -- a $B']) unresolvableBash(form);
+for (const form of ['git commit -m x -- $dir\\a.ts', 'git commit -m x -- $PWD.Path', 'git commit -m x -- (Get-Location)', 'git commit -m x -- ${env:D}/a', 'git commit -m x -- a @rest']) unresolvablePowerShell(form);
 denied('git commit -m x -- $(cat lists/a.txt)');
 denied('git commit -m x -- `cat list`');
 denied('git commit -Ka -m x -- a');
@@ -526,7 +534,12 @@ check('C13: an absolute -C after a cd the line cannot follow is still checked', 
 // --- R2: a pathspec that reaches the worktree root, resolved against the commit directory and the root ----------
 const SUBDIRECTORY = path.join(REPO, 'clean');
 const REPO_FWD = REPO.split('\\').join('/');
-const rootSweeps = ['.', './', '*', '?*', '[!.]*', '**', ':/', '":(top)"', '":(glob)**"', 'clean/..', 'clean/../', REPO_FWD, `${REPO_FWD}/`, '"$PWD/"', '"$(git rev-parse --show-toplevel)/"', '$(pwd)/*', ':!x', '":(exclude)x"'];
+// E (third round): normalised as git does, a wildcard covering everything under its literal directories, and the
+// Git Bash spelling `/c/...` of the root. @es Normalizado como git, un comodín cubre todo bajo sus directorios literales.
+const MSYS_ROOT = REPO_FWD.replace(/^([A-Za-z]):/, (match, drive) => `/${drive.toLowerCase()}`);
+const rootSweeps = ['.', './', '*', '?*', '[!.]*', '**', ':/', '":(top)"', '":(glob)**"', 'clean/..', 'clean/../', REPO_FWD, `${REPO_FWD}/`, ':!x', '":(exclude)x"', "'*.*'", "'*/..'", '"*.md"', 'clean/*/../..', MSYS_ROOT, `${MSYS_ROOT}/`, `${MSYS_ROOT}/*.txt`];
+
+for (const form of ['"$PWD/"', '"$(git rev-parse --show-toplevel)/"', '$(pwd)/*']) check(`A: an expansion that may name the root is unresolvable: git commit -m x -- ${form}`, untrackedReason(`git commit -m x -- ${form}`).includes(UNRESOLVABLE));
 
 // A sweep must get the paths refusal itself, not the untracked one the repository root would also earn.
 // @es Un barrido debe recibir el rechazo de rutas, no el de ficheros sin seguimiento que la raíz también ganaría.
@@ -535,7 +548,7 @@ const sweepRefused = (command, cwd = REPO) => untrackedReason(command, cwd).incl
 for (const form of rootSweeps) check(`R2: refused at the root: git commit -m x -- ${form}`, sweepRefused(`git commit -m x -- ${form}`));
 for (const form of ['..', '../', '../*', ':/', '":(top)"', ':/*', REPO_FWD]) check(`R2: refused from a subdirectory: git commit -m x -- ${form}`, sweepRefused(`git commit -m x -- ${form}`, SUBDIRECTORY));
 for (const form of ['.', './', '*', '?*', '[!.]*', '":(top)clean"', SUBDIRECTORY.split('\\').join('/')]) check(`R2: allowed from a subdirectory, it names that subdirectory only: git commit -m x -- ${form}`, untrackedVerdict(`git commit -m x -- ${form}`, SUBDIRECTORY) === undefined);
-for (const form of ['clean', 'clean/*', '":(top)clean"', '"*.md"', '"$PWD/clean"', '$DIR/a.txt', '":(literal)*"']) check(`R2: allowed at the root: git commit -m x -- ${form}`, untrackedVerdict(`git commit -m x -- ${form}`) !== 'deny' || untrackedReason(`git commit -m x -- ${form}`).includes('untracked'));
+for (const form of ['clean', 'clean/*', '":(top)clean"', '"clean/*.md"', `${MSYS_ROOT}/clean`, 'clean/sub/..', '":(literal)*"']) check(`R2: allowed at the root: git commit -m x -- ${form}`, untrackedVerdict(`git commit -m x -- ${form}`) !== 'deny' || untrackedReason(`git commit -m x -- ${form}`).includes('untracked'));
 check('R2: a whole-root pathspec in a pathspec file is refused', (() => { writeFileSync(path.join(SPECS, 'root.lst'), `${REPO}\n`); return untrackedReason(`git commit -m x --pathspec-from-file=${spec('root.lst')}`).includes('must name its paths'); })());
 
 // --- R3: an index file that is the live index, or that the line hides, is refused ---------------------------------
@@ -546,11 +559,11 @@ git(REPO, 'worktree', 'add', '-q', '-b', 'linked', WORKTREE);
 const LIVE = path.join(REPO, '.git', 'index').split('\\').join('/');
 const LINKED_LIVE = path.join(REPO, '.git', 'worktrees', 'linked', 'index').split('\\').join('/');
 
-for (const [command, cwd] of [['GIT_INDEX_FILE=.git/index git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, REPO], ['GIT_INDEX_FILE=../.git/index git read-tree HEAD', SUBDIRECTORY], ['git read-tree --index-output=.git/index HEAD', REPO], ['git read-tree --index-output ../.git/index HEAD', SUBDIRECTORY], ['GIT_INDEX_FILE="$(git rev-parse --git-path index)" git read-tree HEAD', REPO], ['GIT_INDEX_FILE=$TMP_INDEX git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LINKED_LIVE} git read-tree HEAD`, WORKTREE], [`GIT_DIR=${REPO_FWD}/.git GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, NOT_A_REPO], ['cd "$X" && GIT_INDEX_FILE=i git read-tree HEAD', REPO]]) {
+for (const [command, cwd] of [['GIT_INDEX_FILE=.git/index git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, REPO], ['GIT_INDEX_FILE=../.git/index git read-tree HEAD', SUBDIRECTORY], ['git read-tree --index-output=.git/index HEAD', REPO], ['git read-tree --index-output .git/index HEAD', SUBDIRECTORY], [`GIT_INDEX_FILE=${MSYS_ROOT}/.git/index git read-tree HEAD`, REPO], [`git read-tree --index-output=${MSYS_ROOT}/.git/index HEAD`, REPO],['GIT_INDEX_FILE="$(git rev-parse --git-path index)" git read-tree HEAD', REPO], ['GIT_INDEX_FILE=$TMP_INDEX git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LINKED_LIVE} git read-tree HEAD`, WORKTREE], [`GIT_DIR=${REPO_FWD}/.git GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, NOT_A_REPO], ['cd "$X" && GIT_INDEX_FILE=i git read-tree HEAD', REPO]]) {
   check(`R3: refused: ${command}`, untrackedVerdict(command, cwd) === 'deny');
 }
 
-for (const [command, cwd] of [['GIT_INDEX_FILE=.git/index.tmp git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, WORKTREE], ['git read-tree --index-output=../i HEAD', REPO], ['export GIT_INDEX_FILE=/tmp/i; git read-tree HEAD', REPO]]) {
+for (const [command, cwd] of [['GIT_INDEX_FILE=.git/index.tmp git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, WORKTREE], ['git read-tree --index-output=../i HEAD', REPO], ['export GIT_INDEX_FILE=/tmp/i; git read-tree HEAD', REPO], ['git read-tree --index-output ../.git/index HEAD', SUBDIRECTORY]]) {
   check(`R3: allowed: ${command}`, untrackedVerdict(command, cwd) === undefined);
 }
 
@@ -562,7 +575,7 @@ check('R3: PowerShell, $env:X = $null clears a repository variable, so the commi
 check('R3: PowerShell, a variable removed and set again counts', untrackedVerdict('Remove-Item Env:GIT_INDEX_FILE; $env:GIT_INDEX_FILE = "C:\\t\\i"; git read-tree HEAD', REPO, 'PowerShell') === undefined);
 
 // --- R4: an earlier command of the line that may write files, before a commit that could cover them ---------------
-for (const command of ['touch mixed/x.txt && git commit -m x -- mixed', 'echo a > mixed/y.txt && git commit -m x -- mixed', 'npm run gen && git commit -m x -- clean', 'cp a b && git commit -m x -- "*.txt"', 'node gen.mjs; git commit -m x -- clean', 'git status > clean/s.txt && git commit -m x -- clean', 'git stash list && git mv a b && git commit -m x -- clean', `echo clean > ${spec('w.lst')} && git commit -m x --pathspec-from-file=${spec('w.lst')}`, `npm run gen && git commit -m x --pathspec-from-file=${spec('clean.lst')}`]) {
+for (const command of ['touch mixed/x.txt && git commit -m x -- mixed', 'echo a > mixed/y.txt && git commit -m x -- mixed', 'npm run gen && git commit -m x -- clean', 'cp a b && git commit -m x -- "clean/*.txt"','node gen.mjs; git commit -m x -- clean', 'git status > clean/s.txt && git commit -m x -- clean', 'git stash list && git mv a b && git commit -m x -- clean', `echo clean > ${spec('w.lst')} && git commit -m x --pathspec-from-file=${spec('w.lst')}`, `npm run gen && git commit -m x --pathspec-from-file=${spec('clean.lst')}`]) {
   check(`R4: refused as a commit after writes: ${command}`, untrackedReason(command).includes('commit in its own command'));
 }
 for (const command of ['npm run gen && git commit -m x -- clean/tracked.txt', 'git status && git commit -m x -- clean', 'cat clean/tracked.txt && git commit -m x -- clean', 'git status 2>&1 && git commit -m x -- clean', 'git log > /dev/null && git commit -m x -- clean', 'cd clean && git commit -m x -- .']) {
@@ -599,6 +612,95 @@ check('R7: a hidden GIT_DIR leaves the commit unchecked', (() => { const found =
 // --- R9: a file whose name starts with two dots is inside its directory ------------------------------------------------
 put(REPO, 'dots/..env');
 check('R9: git add -- dots covers dots/..env', untrackedVerdict('git add -- dots && git commit -m x -- dots') === undefined);
+
+// === THIRD ROUND (2026-10-25): every bypass both judges named, closed by its class ===============================
+const psReason = (command, cwd = REPO) => evaluate(JSON.stringify(inDirectory('PowerShell', command, cwd)))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+const AFTER_WRITES = 'commit in its own command';
+
+// --- B: earlier writers are an allowlist; `$x = cmd` runs cmd; diff, log and show write with --output -----------
+for (const command of ['$x = New-Item clean/z.txt; git commit -m "x" -- clean', '$x = git diff --output=clean/o.txt; git commit -m "x" -- clean', '$x=gen; git commit -m "x" -- clean', '& $tool; git commit -m "x" -- clean']) check(`B: refused as after writes (PowerShell): ${command}`, psReason(command).includes(AFTER_WRITES));
+for (const command of ["$x = 'a'; git commit -m \"x\" -- clean", '$x = git status; git commit -m "x" -- clean', '$x = $y; git commit -m "x" -- clean', '$n = 3; git commit -m "x" -- clean']) check(`B: allowed (PowerShell): ${command}`, untrackedVerdict(command, REPO, 'PowerShell') === undefined);
+for (const command of ['git diff --output=clean/o.txt && git commit -m x -- clean', 'git log --output clean/o.txt && git commit -m x -- clean', 'git show --outp=clean/o.txt && git commit -m x -- clean', '$CMD && git commit -m x -- clean', 'git mv a b && git commit -m x -- clean']) check(`B: refused as after writes: ${command}`, untrackedReason(command).includes(AFTER_WRITES));
+for (const command of ['git diff && git commit -m x -- clean', 'git log --oneline && git commit -m x -- clean', 'git show HEAD && git commit -m x -- clean', 'X=1 && git commit -m x -- clean']) check(`B: allowed: ${command}`, untrackedVerdict(command) === undefined);
+
+// --- C: a selector touched outside the modelled forms makes the line unresolvable --------------------------------
+for (const command of ['(export GIT_INDEX_FILE=/tmp/i); git read-tree HEAD', 'true && export GIT_INDEX_FILE=/tmp/i; git read-tree HEAD', 'false || export GIT_INDEX_FILE=/tmp/i; git read-tree HEAD', 'env -u GIT_DIR git commit -m x -- clean', 'env -i git commit -m x -- clean', 'unset ${!GIT_@}; git commit -m x -- clean', 'x=$(export GIT_DIR=y); git commit -m x -- clean', 'GIT_DIR=/tmp/g; git commit -m x -- clean', 'export GIT_DIR; git commit -m x -- clean', 'source env.sh; git commit -m x -- clean', 'eval "$SETUP"; git status', 'export GIT_CONFIG_COUNT=1 | cat; git clean -d', 'declare -x GIT_INDEX_FILE=/tmp/i; git read-tree HEAD']) unresolvableBash(command);
+for (const command of ['Remove-Item Env:GIT_*; git commit -m x -- clean', "${env:GIT_INDEX_FILE} = 'C:\\t\\i'; git read-tree HEAD", "[Environment]::SetEnvironmentVariable('GIT_INDEX_FILE', 'C:\\t\\i'); git read-tree HEAD", "Set-Item Env:GIT_INDEX_FILE 'C:\\t\\i'; git read-tree HEAD", "if ($a) { $env:GIT_INDEX_FILE = 'C:\\t\\i' }; git read-tree HEAD", "& { $env:GIT_DIR = 'x' }; git commit -m x -- clean", "Get-Date && $env:GIT_DIR = 'x'; git commit -m x -- clean", 'Get-ChildItem Env: | Remove-Item; git commit -m x -- clean', 'Invoke-Expression $setup; git status']) unresolvablePowerShell(command);
+for (const command of ['echo $GIT_DIR; git commit -m x -- clean', 'GIT_DIR=.git git commit -m x -- clean', 'export GIT_INDEX_FILE=/tmp/i && git read-tree HEAD', 'cd clean; export GIT_INDEX_FILE=/tmp/i; git read-tree HEAD']) check(`C: not a touch: ${command}`, !reasonFor(command).includes(UNRESOLVABLE) && !untrackedReason(command).includes(UNRESOLVABLE));
+check('C: a --config-env variable is a selector too', reasonFor('(export A=reset); git --config-env=alias.x=A x').includes(UNRESOLVABLE));
+
+// --- D: git's config quoting, its booleans, and a `!` alias's own options ----------------------------------------
+check('D: GIT_CONFIG_PARAMETERS entries in both styles, with an escaped quote', JSON.stringify(parametersOf("'a.b=it'\\''s' 'c'='d' 'e' 'f'=")) === JSON.stringify(["a.b=it's", 'c=d', 'e', 'f']));
+check('D: a malformed GIT_CONFIG_PARAMETERS does not parse', parametersOf("'open") === undefined && parametersOf('bare') === undefined);
+for (const command of ["GIT_CONFIG_PARAMETERS=\"'clean.requireForce'='false'\" git clean -d", "GIT_CONFIG_PARAMETERS=\"'clean.requireforce=0'\" git clean -d", "GIT_CONFIG_PARAMETERS=\"'alias.ci'='commit -a'\" git ci -m x"]) denied(command);
+for (const command of ['GIT_CONFIG_PARAMETERS=garbage git status', 'GIT_CONFIG_PARAMETERS="$P" git status', 'git -c "$K=1" status']) unresolvableBash(command);
+allowed("GIT_CONFIG_PARAMETERS=\"'clean.requireForce'='true'\" git clean -d");
+for (const value of ['00', '0x0', '0X00', '0k', '-0', '+0', 'OFF', 'No']) denied(`git -c clean.requireForce=${value} clean -d`);
+for (const value of ['1', '0x1', '010', '1k', 'yes', '08', 'maybe']) allowed(`git -c clean.requireForce=${value} clean -d`);
+check('D: gitBoolean follows git (base 0, units, invalid is undefined)', gitBoolean('0x0') === false && gitBoolean('010') === true && gitBoolean('2m') === true && gitBoolean('08') === undefined && gitBoolean('0x') === undefined && gitBoolean('') === false && gitBoolean('On') === true);
+for (const command of ["git -c alias.x='!git -c clean.requireForce=false clean -d' x", 'git -c alias.x="-c clean.requireForce=false clean -d" x', "git -c clean.requireForce=false -c alias.x='!git clean -d' x"]) denied(command);
+check('D: a ! alias body holding an expansion is unseen', reasonFor("git -c 'alias.x=!$X' x").includes('body the line does not show'));
+
+// --- G: an earlier add counts only into the commit's own index, and is cancelled by a later unstage -------------
+for (const command of ['GIT_INDEX_FILE=/tmp/other git add -- mixed/new.txt && git commit -m x -- mixed', 'git add -- mixed/new.txt && git restore --staged -- mixed/new.txt && git commit -m x -- mixed', 'git add -- mixed && git restore --staged -- mixed/new.txt && git commit -m x -- mixed', 'git add -- mixed/new.txt && git rm --cached -q -- mixed/new.txt && git commit -m x -- mixed', 'git add -- mixed/new.txt && git restore --staged && git commit -m x -- mixed']) check(`G: refused, the add does not cover the commit: ${command}`, untrackedReason(command).includes('covers untracked files') && untrackedReason(command).includes('`git add -- mixed/new.txt`'));
+for (const command of ['git add -- mixed/new.txt && git restore --staged -- clean && git commit -m x -- mixed', 'git add -- mixed/new.txt && git rm --cached -n -- mixed/new.txt && git commit -m x -- mixed', 'GIT_INDEX_FILE=.git/index git add -- mixed/new.txt && git commit -m x -- mixed']) check(`G: allowed, the add still covers the commit: ${command}`, untrackedVerdict(command) === undefined);
+
+// --- H: the suggested git add names every path; past 10 it is a pathspec file the guard writes -------------------
+check('H: up to 10 paths the git add names them all inline', untrackedReason('git commit -m x -- mixed').includes('`git add -- mixed/new.txt`'));
+check('H: past 10 paths the git add reads a NUL-separated pathspec file holding every one of them', (() => {
+  const text = untrackedReason('git commit -m x -- many');
+  const named = /git add --pathspec-file-nul --pathspec-from-file=([^`\s]+)/.exec(text)?.[1]?.replace(/^'|'$/g, '');
+
+  if (named === undefined) return false;
+
+  const listed = readFileSync(named, 'utf8').split('\0').filter(Boolean);
+
+  return listed.length === 12 && listed.includes('many/f01.txt') && listed.includes('many/f12.txt') && text.split('--pathspec-from-file=').length === 3;
+})());
+
+// --- the branches each class adds, one case per branch ---------------------------------------------------------
+for (const command of ['GIT_DIR=$G git commit -m x -- clean', 'GIT_INDEX_FILE=$I git commit -m x -- clean', 'git --git-dir=$G commit -m x -- clean', 'GIT_WORK_TREE=`pwd` git commit -m x -- clean', 'git read-tree --index-output=$X HEAD', 'GIT_CONFIG_COUNT=$N git status', 'git --config-env=$K=V status', '(export GIT_INDEX_FILE=/tmp/i; true); git read-tree HEAD']) unresolvableBash(command);
+for (const command of ['git commit -m x -- a {b}', '[Environment]::SetEnvironmentVariable($n, $v); git status']) unresolvablePowerShell(command);
+denied('git read-tree --index-output= HEAD');
+denied('git -c "clean.requireForce= 0" clean -d');
+for (const command of ['cat MYGIT_DIR_NOTES.txt && git commit -m x -- clean', 'cat GIT_DIRECTORY.md && git commit -m x -- clean', 'git commit -m "GIT_DIR" -- clean', 'GIT_DIR=x npm test; git commit -m x -- clean', 'env X=1 git commit -m x -- clean']) check(`C: not a touch: ${command}`, !reasonFor(command).includes(UNRESOLVABLE));
+allowed('env -u X npm test');
+check('B: a fused PowerShell assignment of a literal runs no command', untrackedVerdict("$x='a'; git commit -m \"x\" -- clean", REPO, 'PowerShell') === undefined);
+check('C: Remove-Item -Path Env:\\NAME is modelled, so setting it again counts', untrackedVerdict('Remove-Item -Path Env:\\GIT_INDEX_FILE; $env:GIT_INDEX_FILE = "C:\\t\\i"; git read-tree HEAD', REPO, 'PowerShell') === undefined);
+check('C: $env:X = $null clears it, so the commit is checked in its own repository', psReason('$env:GIT_DIR = "C:\\nowhere"; $env:GIT_DIR = $null; git commit -m "x" -- mixed').includes('covers untracked files'));
+for (const command of ['git add -- mixed/new.txt && git restore --staged --pathspec-from-file=x && git commit -m x -- mixed', 'git add -- mixed/new.txt && git -C "$X" restore --staged -- new.txt && git commit -m x -- mixed', `git add -- mixed/new.txt && cd "$X" && git restore --staged -- y && git -C "${REPO_FWD}" commit -m x -- mixed`, 'git add -- mixed/new.txt && git restore --staged -- mixed && git commit -m x -- mixed', `git -C "${NOT_A_REPO}" add -- x && git commit -m x -- mixed`]) check(`G: refused, the add does not cover the commit: ${command}`, untrackedReason(command).includes('covers untracked files'));
+check('unresolvable: the refusal names the literal route in both halves', reasonFor('git commit -m x -- $F').includes('spell paths and values literally') && reasonFor('git commit -m x -- $F').includes('escriba las rutas y los valores de forma literal'));
+
+/** The refusal of the 12-file commit with the guard's state in `root`. @es El rechazo del commit de 12 ficheros con el estado en `root`. */
+function manyReasonWithState(root) {
+  const saved = process.env[STATE_ROOT_VARIABLE];
+
+  process.env[STATE_ROOT_VARIABLE] = root;
+
+  try {
+    return untrackedReason('git commit -m x -- many');
+  } finally {
+    process.env[STATE_ROOT_VARIABLE] = saved;
+  }
+}
+
+check('H: the pathspec file path is single-quoted for the shell and spelled with forward slashes', (() => {
+  const text = manyReasonWithState(path.join(SCRATCH, 'state with space'));
+  const quoted = /--pathspec-from-file=('[^']*')/.exec(text)?.[1];
+
+  return quoted !== undefined && !quoted.includes('\\') && readFileSync(quoted.slice(1, -1), 'utf8').split('\0').filter(Boolean).length === 12;
+})());
+check('H: when the pathspec file cannot be written, the git add names every path inline', (() => {
+  writeFileSync(path.join(SCRATCH, 'not-a-directory'), 'x');
+
+  const text = manyReasonWithState(path.join(SCRATCH, 'not-a-directory'));
+
+  return text.includes('git add -- many/f01.txt') && text.includes('many/f12.txt`') && !text.includes('--pathspec-from-file=');
+})());
+
+// --- the runtime strings are bilingual ---------------------------------------------------------------------------
+check('runtime: an unchecked commit is journaled with a bilingual reason', (() => { const start = journalLines().length; untrackedVerdict('cd "$X" && git commit -m x -- mixed'); return journalLines().slice(start).some((entry) => entry.reason.includes('cannot be followed') && entry.reason.includes(' @es ')); })());
+check('runtime: the git adapter errors are bilingual', listWith({ status: 2, stdout: '', stderr: 'x' }).result.error.includes(' @es ') && listWith({ error: Object.assign(new Error('t'), { code: 'ETIMEDOUT' }) }).result.error.includes(' @es '));
 
 // The module on its own, through its two ports (the git runner and the process runner). @es El módulo solo, por sus dos puertos.
 const NO_FILES = () => ({ files: [] });

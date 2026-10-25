@@ -6,12 +6,13 @@
  * environment. With a git directory and no work tree, git works in the current directory, so that is the root.
  * Otherwise the directory and its parents are searched for `.git`: a directory is the git directory; a file (a
  * linked worktree, a submodule) names it on its `gitdir:` line, relative to the file. The live index is
- * `<git directory>/index`.
+ * `<git directory>/index`. Every value is given its native spelling (`/c/x` is `C:/x` on Windows), as Git Bash
+ * hands it to `git.exe`.
  *
  * WHY NOT GIT. The lexical rules run on every shell call of every worker; two `stat`s per parent are cheap and
- * cannot hang, while a git process costs tens of milliseconds and can time out. A value the line hides (a `$`
- * expansion) and a directory the line cannot follow make the layout unknown (`undefined`), and each rule states
- * what unknown means for it.
+ * cannot hang, while a git process costs tens of milliseconds and can time out. A value the line hides (a shell
+ * expansion) and a directory the line cannot follow make the layout unknown (`undefined`); the rules refuse a
+ * hidden value as unresolvable before they ask.
  *
  * LEFT OUT, stated: `core.worktree` and `GIT_CEILING_DIRECTORIES`, which only configuration shows.
  *
@@ -19,19 +20,20 @@
  * índice VIVO, leído del sistema de ficheros como los encuentra git, sin ejecutar git. Mandan `--git-dir` y
  * `--work-tree` de la línea, luego `GIT_DIR`/`GIT_WORK_TREE` de su entorno; con directorio de git y sin worktree, la
  * raíz es el directorio actual. Si no, se busca `.git` en el directorio y sus padres: un directorio es el directorio
- * de git; un fichero lo nombra en su línea `gitdir:`. El índice vivo es `<directorio de git>/index`. Un valor que la
- * línea oculta o un directorio que no se puede seguir dejan el diseño desconocido (`undefined`). QUEDAN FUERA
- * `core.worktree` y `GIT_CEILING_DIRECTORIES`, que solo muestra la configuración.
+ * de git; un fichero lo nombra en su línea `gitdir:`. El índice vivo es `<directorio de git>/index`. Cada valor va en
+ * su grafía nativa (`/c/x` es `C:/x` en Windows). Un valor que la línea oculta o un directorio que no se puede
+ * seguir dejan el diseño desconocido (`undefined`); las reglas rechazan antes un valor oculto como no resoluble.
+ * QUEDAN FUERA `core.worktree` y `GIT_CEILING_DIRECTORIES`, que solo muestra la configuración.
  */
 
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import { nativeSpelling } from '../cherry-pick-guard/working-directory.mjs';
+import { holdsExpansion } from './line-config.mjs';
+
 /** The marker line of a `.git` file. @es La línea marcadora de un fichero `.git`. */
 const GITDIR_PREFIX = 'gitdir:';
-
-/** Whether a word holds an expansion the line does not resolve. @es Si una palabra lleva una expansión sin resolver. */
-export const isHidden = (word) => word.includes('$') || word.includes('%') || word.includes('`');
 
 /** The last value of a git global option, separate or fused. @es El último valor de una opción global de git. */
 function lastOption(gitOptions, name) {
@@ -43,6 +45,22 @@ function lastOption(gitOptions, name) {
   }
 
   return value;
+}
+
+/** A selector value in its native spelling, or `undefined`. @es Un valor selector en su grafía nativa. */
+const native = (value) => (value === undefined ? undefined : nativeSpelling(value));
+
+/**
+ * The repository, worktree and index values the line gives an invocation, options before environment, in their
+ * native spelling, unresolved: `{ gitDir, workTree, indexFile }`, each `undefined` when the line sets none.
+ * @es Los valores de repositorio, worktree e índice que la línea da a una invocación, en grafía nativa.
+ */
+export function selectorValues(environment, gitOptions) {
+  return {
+    gitDir: native(lastOption(gitOptions, '--git-dir') ?? environment.get('GIT_DIR')),
+    workTree: native(lastOption(gitOptions, '--work-tree') ?? environment.get('GIT_WORK_TREE')),
+    indexFile: native(environment.get('GIT_INDEX_FILE'))
+  };
 }
 
 /** What `.git` is at `candidate`: a directory, a file, or nothing. @es Qué es `.git` en `candidate`. */
@@ -95,10 +113,9 @@ function discovered(directory) {
 export function repositoryLayout(directory, environment, gitOptions) {
   if (typeof directory !== 'string') return undefined;
 
-  const gitDirValue = lastOption(gitOptions, '--git-dir') ?? environment.get('GIT_DIR');
-  const workTreeValue = lastOption(gitOptions, '--work-tree') ?? environment.get('GIT_WORK_TREE');
+  const { gitDir: gitDirValue, workTree: workTreeValue } = selectorValues(environment, gitOptions);
 
-  if ([gitDirValue, workTreeValue].some((value) => value !== undefined && isHidden(value))) return undefined;
+  if ([gitDirValue, workTreeValue].some((value) => value !== undefined && holdsExpansion(value))) return undefined;
 
   const found = gitDirValue === undefined ? discovered(directory) : { root: directory, gitDir: path.resolve(directory, gitDirValue) };
 
@@ -118,21 +135,30 @@ export function repositoryLayout(directory, environment, gitOptions) {
  * si la línea esconde alguna.
  */
 export function gitEnvironmentOf(directory, environment, gitOptions) {
-  const values = {
-    GIT_DIR: lastOption(gitOptions, '--git-dir') ?? environment.get('GIT_DIR'),
-    GIT_WORK_TREE: lastOption(gitOptions, '--work-tree') ?? environment.get('GIT_WORK_TREE'),
-    GIT_INDEX_FILE: environment.get('GIT_INDEX_FILE')
-  };
+  const { gitDir, workTree, indexFile } = selectorValues(environment, gitOptions);
   const forwarded = {};
 
-  for (const [name, value] of Object.entries(values)) {
+  for (const [name, value] of [['GIT_DIR', gitDir], ['GIT_WORK_TREE', workTree], ['GIT_INDEX_FILE', indexFile]]) {
     if (value === undefined) continue;
-    if (isHidden(value)) return undefined;
+    if (holdsExpansion(value)) return undefined;
 
     forwarded[name] = path.resolve(directory, value);
   }
 
   return forwarded;
+}
+
+/**
+ * The index file an invocation reads and writes: its `GIT_INDEX_FILE` resolved against `directory`, or the live
+ * index of its layout; `undefined` when neither is known.
+ * @es El fichero de índice que lee y escribe una invocación; `undefined` si no se conoce.
+ */
+export function indexFileOf(directory, environment, gitOptions) {
+  const { indexFile } = selectorValues(environment, gitOptions);
+
+  if (indexFile !== undefined) return typeof directory === 'string' ? path.resolve(directory, indexFile) : undefined;
+
+  return repositoryLayout(directory, environment, gitOptions)?.liveIndex;
 }
 
 /** Two paths compared as the platform's file system compares them. @es Dos rutas comparadas como las compara el sistema. */
