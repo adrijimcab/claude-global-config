@@ -74,7 +74,7 @@ const MUTANTS = [
   ['the --no-verify refusal loses its English half', GUARD, "    'Run the push without `--no-verify`.',\n", ''],
   ['a missing list is reported as a findings refusal', GUARD, 'if (verdict.problem !== undefined) return missingListRefusal(GUARD_NAME, verdict.problem);', ''],
   ['a --no-verify verdict is reported as a findings refusal', GUARD, 'return verdict.noVerify === true ? noVerifyRefusal(verdict) : findingsRefusal(verdict);', 'return findingsRefusal(verdict);'],
-  ['a BOM is no longer stripped', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
+  ['the payload is parsed without the BOM-tolerant port parser', GUARD, 'judgePush(parsePayload(raw))', 'judgePush(JSON.parse(raw))'],
   ['the guard denies when it throws instead of failing open', GUARD, '  } catch {\n    return undefined;\n  }\n}', "  } catch {\n    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'crash' } };\n  }\n}"]
 ];
 

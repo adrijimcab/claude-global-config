@@ -15,10 +15,7 @@
  * en `~/.claude`.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import { hookMain, deny, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { missingListRefusal } from '../company-config/config.mjs';
 import { renderFindings } from '../company-scan/findings.mjs';
 import { judgeCommit } from './decide.mjs';
@@ -54,35 +51,16 @@ function refusalText({ dir, findings }) {
  */
 export function evaluate(raw) {
   try {
-    const verdict = judgeCommit(JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw));
+    const verdict = judgeCommit(parsePayload(raw));
 
     if (verdict === undefined) return undefined;
 
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: verdict.problem === undefined ? refusalText(verdict) : missingListRefusal(GUARD_NAME, verdict.problem)
-      }
-    };
+    return deny(verdict.problem === undefined ? refusalText(verdict) : missingListRefusal(GUARD_NAME, verdict.problem));
   } catch {
     return undefined;
   }
 }
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-}
-
 // Only as the main process; imported by the dispatcher or a selftest, main() does not run.
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
+// @es Solo como proceso principal; importada por el dispatcher o un selftest, main() no corre.
+runWhenMain(import.meta.url, hookMain(evaluate));
