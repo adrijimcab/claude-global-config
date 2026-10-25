@@ -46,6 +46,7 @@ const MUTANTS = [
   ['the Windows listing runs with a profile', P, "['-NoProfile', '-Command', WINDOWS_LISTING]", "['-Command', WINDOWS_LISTING]"],
   ['the System command line is null, not empty', P, "if ($null -eq $line) { $line = '' }; ", ''],
   ['the listing drops the parent', P, ', $_.ParentProcessId, [Convert]', ', 0, [Convert]'],
+  ['the listing sends the raw command line', P, '[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($line))', '$line'],
   ['the command line is not UTF-8 encoded', P, '[Text.Encoding]::UTF8.GetBytes($line)', '[Text.Encoding]::ASCII.GetBytes($line)'],
 
   // --- the seam to the owner of the kill ---

@@ -13,7 +13,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { processesNaming } from './processes.mjs';
+import { listProcesses as portListProcesses, rowsOfListing as portRowsOfListing } from '../process-control/process-port.mjs';
+import { listProcesses, processesNaming, rowsOfListing } from './processes.mjs';
 import { gitState } from './worktree-git.mjs';
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'worker-sources-'));
@@ -41,6 +42,11 @@ try {
   check('processes: another worktree is not named', naming('C:/Users/me/.claude-wt/feat-two'), [13]);
   check('processes: nothing names an unknown worktree', naming('C:/nowhere'), []);
   check('processes: the caller itself is never reported', naming('C:/Users/me/.claude-wt/feat-one').includes(process.pid), false);
+
+  // The old import path keeps working: the same functions the port owns, not copies.
+  // @es La ruta de importación antigua sigue funcionando: las mismas funciones del puerto, no copias.
+  check('processes: listProcesses is still importable from here, and is the port one', listProcesses === portListProcesses, true);
+  check('processes: rowsOfListing is still importable from here, and is the port one', rowsOfListing === portRowsOfListing, true);
 
   // ── gitState: injected runner ──
   const scripted = (answers) => (args) => answers[args.join(' ')] ?? { status: 1, stdout: '' };
