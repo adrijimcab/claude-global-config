@@ -76,7 +76,7 @@ const MUTANTS = [
   ['a linked worktree is its own repository, not its main checkout', REPOS, "return path.basename(commonDir) === '.git' ? path.dirname(commonDir) : commonDir;", 'return directory;'],
   ['a tool input path names no repository', REPOS, "const PATH_FIELDS = ['file_path', 'path', 'notebook_path', 'cwd'];", 'const PATH_FIELDS = [];'],
   ['a record\'s cwd names no repository', REPOS, "const paths = typeof record?.cwd === 'string' ? [record.cwd] : [];", 'const paths = [];'],
-  ['a git -C target names no repository', REPOS, "if (option === '-C' && typeof gitOptions[at + 1] === 'string' && typeof directory === 'string') directories.push(path.resolve(directory, gitOptions[at + 1]));", ''],
+  ['a git -C target names no repository', REPOS, 'if (acting !== undefined && acting !== invocation.directory) directories.push(acting);', ''],
   ['a mention of git in a command is read as a command', REPOS, 'for (const invocation of gitInvocations(command, dialect, cwd)) {', 'for (const invocation of gitInvocations(`git ${command}`, dialect, cwd)) {'],
   ['a record straddling a read chunk is dropped', REPOS, 'pending = Buffer.concat([pending, buffer.subarray(0, read)]);', 'pending = buffer.subarray(0, read);'],
   ['a failed transcript read is reported as read', REPOS, '      transcriptRead = true;\n    } catch {\n      transcriptRead = false;', '      transcriptRead = true;\n    } catch {\n      transcriptRead = true;'],
@@ -90,7 +90,7 @@ const MUTANTS = [
   // --- the worktree a git worktree add creates
   ['any git worktree subcommand is read as an add', ADDED, "args[0] !== 'add'", 'false'],
   ['a branch name given to -b is read as the path', ADDED, 'if (OPTIONS_WITH_VALUE.has(args[at])) at += 1;', 'if (OPTIONS_WITH_VALUE.has(args[at])) continue;'],
-  ['-C is ignored when resolving the created path', ADDED, 'base = path.resolve(base, gitOptions[at + 1]);', 'base = base;'],
+  ['-C is ignored when resolving the created path', ADDED, 'const base = invocationDirectory(invocation);', 'const base = invocation.directory;'],
   ['the created path is not resolved against the directory of the line', ADDED, 'return path.resolve(base, args[at]);', 'return args[at];'],
 
   // --- the declared process output
@@ -114,7 +114,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['integrated-worktree-guard', 'mutation-proof', 'hook-state', 'hook-caller', 'agent-liveness', 'shell-command', 'cherry-pick-guard', 'bilingual-output', 'brief-tenancy'],
+  paths: ['integrated-worktree-guard', 'git-port', 'mutation-proof', 'hook-state', 'hook-caller', 'agent-liveness', 'shell-command', 'cherry-pick-guard', 'bilingual-output', 'brief-tenancy'],
   selftest: 'integrated-worktree-guard/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

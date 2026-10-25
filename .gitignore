@@ -352,6 +352,10 @@
 !/git-worktree/
 !/git-worktree/**
 
+# The git port: how the kit reaches git and folds its `-C` options (code and proof). @es El puerto de git: cómo el kit alcanza git y pliega sus `-C` (código y prueba).
+!/git-port/
+!/git-port/**
+
 # Where a review happens: the review stop hook runs only in a linked worktree (code and proof; its journal stays ignored). @es Dónde ocurre una revisión: el hook de parada de revisión corre solo en un worktree enlazado.
 !/review-site/
 !/review-site/**

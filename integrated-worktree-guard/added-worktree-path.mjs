@@ -16,6 +16,8 @@
 
 import path from 'node:path';
 
+import { invocationDirectory } from '../git-port/invocation-directory.mjs';
+
 /** `git worktree add` options that take a separate value word. @es Opciones de `git worktree add` con valor separado. */
 const OPTIONS_WITH_VALUE = new Set(['-b', '-B', '--reason']);
 
@@ -24,14 +26,14 @@ const OPTIONS_WITH_VALUE = new Set(['-b', '-B', '--reason']);
  * @returns {string | undefined} The absolute path of the worktree it adds.
  * @es La ruta absoluta del worktree que añade.
  */
-export function addedWorktreePath({ subcommand, args, gitOptions, directory }) {
-  if (subcommand !== 'worktree' || args[0] !== 'add' || typeof directory !== 'string') return undefined;
+export function addedWorktreePath(invocation) {
+  const { subcommand, args } = invocation;
 
-  let base = directory;
+  if (subcommand !== 'worktree' || args[0] !== 'add') return undefined;
 
-  gitOptions.forEach((option, at) => {
-    if (option === '-C' && typeof gitOptions[at + 1] === 'string') base = path.resolve(base, gitOptions[at + 1]);
-  });
+  const base = invocationDirectory(invocation);
+
+  if (base === undefined) return undefined;
 
   for (let at = 1; at < args.length; at += 1) {
     if (OPTIONS_WITH_VALUE.has(args[at])) at += 1;
