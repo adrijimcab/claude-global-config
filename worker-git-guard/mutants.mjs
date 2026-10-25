@@ -189,7 +189,7 @@ export const MUTANTS = [
   ['an alias body does not see its own options (D)', LINE, '  const config = configOf(gitOptions, invocation.environment);', '  const config = invocation.config;'],
   ['aliases defined on the line are ignored', LINE, 'found.push(...expanded({ ...invocation, environment, config, chain, separator: command.separator, selectorTouch: touch, before: [...before] }, aliasesOf(config), 0));', 'found.push({ ...invocation, environment, config, chain, separator: command.separator, selectorTouch: touch, before: [...before] });'],
   ['a modelled assignment is not recorded', LINE, '    if (assignments !== undefined) record(assignments, lineEnvironment);\n', ''],
-  ['a command inside a substitution counts as the line\'s own (C)', LINE, 'if (!isOwn) return { ...command, nested: true };', 'if (!isOwn) return { ...command, nested: false };'],
+  ['a substitution\'s separator counts as the one before the command that holds it (C)', LINE, 'const isOwn = candidate !== undefined && candidate.text === command.text && candidate.separator === command.separator && candidate.depth === command.depth;', 'const isOwn = true;'],
   ['the separator before a command is lost (C)', LINE, '    previous = command.separator;\n', ''],
   ['every command starts a new chain', LINE, "if (previousSeparator !== undefined && previousSeparator !== '&&') chain += 1;", 'chain += 1;'],
   ['no command starts a new chain', LINE, "if (previousSeparator !== undefined && previousSeparator !== '&&') chain += 1;", ''],
@@ -215,8 +215,7 @@ export const MUTANTS = [
   ["'key'= with no value is malformed (D)", CONFIG, '    if (value === undefined) {\n      settings.push(key.value);\n      continue;\n    }', '    if (value === undefined) {\n      return undefined;\n    }'],
   ['the space between entries is not skipped (D)', CONFIG, '    while (/\\s/.test(text.charAt(at))) at += 1;\n', ''],
   // C: selector touches
-  ['a command in a subshell counts as top level (C)', TOUCH, '!command.nested && command.depth === 0 &&', '!command.nested &&'],
-  ['a nested command counts as top level (C)', TOUCH, '!command.nested && command.depth === 0 &&', 'command.depth === 0 &&'],
+  ['a command in a subshell counts as top level (C)', TOUCH, 'export const isTopLevel = (command) => command.depth === 0 && ', 'export const isTopLevel = (command) => '],
   ['a command after && or || counts as top level (C)', TOUCH, '(command.previous === undefined || UNCONDITIONAL_BEFORE.has(command.previous))', 'true'],
   ['a command in a pipeline or block counts as top level (C)', TOUCH, ' && UNCONDITIONAL_AFTER.has(command.separator);', ';'],
   ['an assignment followed by && is a touch (C)', TOUCH, "const UNCONDITIONAL_AFTER = new Set([';', '\\n', 'end', '&&']);", "const UNCONDITIONAL_AFTER = new Set([';', '\\n', 'end']);"],

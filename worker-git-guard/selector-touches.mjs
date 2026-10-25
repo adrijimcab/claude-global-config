@@ -135,11 +135,13 @@ function namesSelector(word, extraNames) {
 }
 
 /**
- * Whether a command runs at the top level of the line, unconditionally: in its own shell, outside any subshell,
- * substitution, script block or pipeline, and not after `&&` or `||`.
- * @es Si un comando corre en el nivel superior de la línea, sin condición.
+ * Whether a command runs at the top level of the line, unconditionally: outside any subshell, script block or
+ * pipeline, and not after `&&` or `||`. A command inside a substitution or `bash -c` needs no flag of its own: its
+ * text is a word of the command that contains it, which the scan reads.
+ * @es Si un comando corre en el nivel superior de la línea, sin condición. Un comando dentro de una sustitución no
+ * necesita marca propia: su texto es una palabra del comando que lo contiene, y el examen la lee.
  */
-export const isTopLevel = (command) => !command.nested && command.depth === 0 && (command.previous === undefined || UNCONDITIONAL_BEFORE.has(command.previous)) && UNCONDITIONAL_AFTER.has(command.separator);
+export const isTopLevel = (command) => command.depth === 0 && (command.previous === undefined || UNCONDITIONAL_BEFORE.has(command.previous)) && UNCONDITIONAL_AFTER.has(command.separator);
 
 /** Whether a command runs text as commands, so it can set any variable without naming it. @es Si un comando ejecuta texto como comandos. */
 const runsText = (words, at) => at !== -1 && RUNS_TEXT.has(executableName(words[at]));
@@ -161,9 +163,8 @@ export function gitBehindWrapperOptions(commands) {
 
 /**
  * The text of the first command of the line that touches a selector outside the modelled forms, or `undefined`.
- * @param {Array<{ words: string[], text: string, separator: string, depth: number, nested: boolean, previous?: string }>} commands
- *   Every command of the line in execution order; `nested` is true inside a substitution or `bash -c`, `previous`
- *   the separator before it in the line's own shell.
+ * @param {Array<{ words: string[], text: string, separator: string, depth: number, previous?: string }>} commands
+ *   Every command of the line in execution order; `previous` is the separator before it in the line's own shell.
  * @param {string} dialect `bash` or `powershell`.
  * @param {string[]} extraNames The variables a `--config-env` of the line reads.
  * @es El texto del primer comando de la línea que toca una selectora fuera de las formas modeladas, o `undefined`.

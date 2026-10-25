@@ -126,11 +126,11 @@ function record(assignments, environment) {
 }
 
 /**
- * Every command of the line with where it runs: `nested` inside a substitution or `bash -c`, and `previous`, the
- * separator before it in the line's own shell. Own-shell commands come in the same order in both walks of the
- * parser, so they are paired in order.
- * @es Cada comando de la línea con dónde corre: `nested` dentro de una sustitución, y `previous`, el separador
- * anterior en la shell propia.
+ * Every command of the line with `previous`, the separator before it in the line's own shell. Own-shell commands
+ * come in the same order in both walks of the parser, so they are paired in order; a command inside a substitution
+ * or `bash -c` gets none, because its text is a word of the command that contains it (`selector-touches.mjs`).
+ * @es Cada comando de la línea con `previous`, el separador anterior en la shell propia; un comando dentro de una
+ * sustitución no lleva ninguno, porque su texto es una palabra del comando que lo contiene.
  */
 function commandsInContext(script, dialect) {
   const own = simpleCommands(script, dialect, { includeNested: false });
@@ -141,11 +141,11 @@ function commandsInContext(script, dialect) {
     const candidate = own[next];
     const isOwn = candidate !== undefined && candidate.text === command.text && candidate.separator === command.separator && candidate.depth === command.depth;
 
-    if (!isOwn) return { ...command, nested: true };
+    if (!isOwn) return command;
 
     next += 1;
 
-    const placed = { ...command, nested: false, previous };
+    const placed = { ...command, previous };
 
     previous = command.separator;
 

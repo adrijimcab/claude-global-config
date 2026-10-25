@@ -665,6 +665,7 @@ denied('git read-tree --index-output= HEAD');
 denied('git -c "clean.requireForce= 0" clean -d');
 for (const command of ['cat MYGIT_DIR_NOTES.txt && git commit -m x -- clean', 'cat GIT_DIRECTORY.md && git commit -m x -- clean', 'git commit -m "GIT_DIR" -- clean', 'GIT_DIR=x npm test; git commit -m x -- clean', 'env X=1 git commit -m x -- clean']) check(`C: not a touch: ${command}`, !reasonFor(command).includes(UNRESOLVABLE));
 allowed('env -u X npm test');
+check('C: a substitution inside a top-level export does not make the export conditional', untrackedVerdict('export GIT_INDEX_FILE=/tmp/i X=$(true); git read-tree HEAD') === undefined);
 check('B: a fused PowerShell assignment of a literal runs no command', untrackedVerdict("$x='a'; git commit -m \"x\" -- clean", REPO, 'PowerShell') === undefined);
 check('C: Remove-Item -Path Env:\\NAME is modelled, so setting it again counts', untrackedVerdict('Remove-Item -Path Env:\\GIT_INDEX_FILE; $env:GIT_INDEX_FILE = "C:\\t\\i"; git read-tree HEAD', REPO, 'PowerShell') === undefined);
 check('C: $env:X = $null clears it, so the commit is checked in its own repository', psReason('$env:GIT_DIR = "C:\\nowhere"; $env:GIT_DIR = $null; git commit -m "x" -- mixed').includes('covers untracked files'));
