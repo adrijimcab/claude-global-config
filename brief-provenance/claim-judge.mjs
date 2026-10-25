@@ -29,24 +29,42 @@ export const MARKER = 'DEPENDENCY-CLAIM:';
 /** How long the model may take, inside the hook's own budget. @es Cuánto puede tardar el modelo, dentro del presupuesto del hook. */
 export const ASK_TIMEOUT_MS = 30000;
 
-/** The rubric. `$CLAIMS` is replaced by the numbered claim units. @es La rúbrica; `$CLAIMS` se sustituye por las unidades numeradas. */
+/**
+ * The rubric. `$CLAIMS` is replaced by the numbered claim units. It is the judge model's INPUT, a value a program
+ * parses, so it stays English-only (contract §5 exempts such values): a measured A/B on 2026-10-25 showed Spanish
+ * lines in it, interleaved or as a block, raise false refusals of run receipts (the tsc receipt blocked in 3 of 5
+ * runs against 0 of 5 for this text). Its Spanish mirror lives here instead.
+ *
+ * @es La rúbrica; `$CLAIMS` se sustituye por las unidades numeradas. Es la ENTRADA del modelo juez, un valor que
+ * parsea un programa, así que queda solo en inglés (el §5 del contrato exime esos valores): un A/B medido el
+ * 2026-10-25 mostró que sus líneas en español, intercaladas o en bloque, suben los rechazos falsos de recibos de
+ * ejecución. Su espejo en español:
+ * Un brief de delegación marca como MEASURED los hechos que su autor dice haber medido. Cada afirmación de abajo
+ * nombra un paquete de terceros del que depende el proyecto (listado tras ella).
+ * Pregunta: ¿alguna afirmación dice cómo SE COMPORTA en ejecución un paquete nombrado (qué hace, cierra, reintenta,
+ * ignora, maneja, devuelve, envía) sin citar dónde se leyó (un fichero:línea de su código)?
+ * Reglas:
+ * 1. Una afirmación de comportamiento sin cita de fuente falla, lleve lo que lleve al lado: un código de salida, un
+ *    comando entre comillas invertidas, una versión o la palabra package.json no la vuelven medida.
+ * 2. No es una afirmación de comportamiento, así que pasa: el recibo de una ejecución (cuenta un comando con su
+ *    código de salida o su salida), una versión o un rango leído de un manifiesto, un recuento o una lista de
+ *    ficheros, y la prosa donde el nombre del paquete es una palabra corriente.
+ * 3. Una afirmación en cualquier idioma se juzga igual.
+ * 4. Ante la duda de si una afirmación dice un comportamiento, contesta {"ok": true}.
+ * Los ejemplos que fallan y que pasan se citan tal cual. Contesta solo con el objeto JSON: {"ok": true} o
+ * {"ok": false, "reason": "<motivo>"}; el motivo empieza por DEPENDENCY-CLAIM:, cita la afirmación que falla y
+ * nombra el comportamiento que afirma.
+ */
 export const PROMPT = [
-  'dependency-claim rubric v2.',
+  'dependency-claim rubric v1.',
   'A delegation brief marks claims as MEASURED: facts its author says were measured. Each claim below names a third-party package the project depends on (listed after it).',
-  '@es Un brief de delegación marca como MEASURED los hechos que su autor dice haber medido. Cada afirmación de abajo nombra un paquete de terceros del que depende el proyecto (listado tras ella).',
   'Question: does ANY claim assert how a named package BEHAVES at runtime (what it does, closes, retries, ignores, handles, returns, sends) without citing where that was read (a file:line of its source)?',
-  '@es Pregunta: ¿alguna afirmación dice cómo SE COMPORTA en ejecución un paquete nombrado (qué hace, cierra, reintenta, ignora, maneja, devuelve, envía) sin citar dónde se leyó (un fichero:línea de su código)?',
   '',
   'Rules:',
-  '@es Reglas:',
   '1. A behaviour claim with no source citation fails, whatever it carries beside it: an exit code, a command in backticks, a version or the word package.json do not make a behaviour claim measured.',
-  '@es 1. Una afirmación de comportamiento sin cita de fuente falla, lleve lo que lleve al lado: un código de salida, un comando entre comillas invertidas, una versión o la palabra package.json no la vuelven medida.',
   '2. Not a behaviour claim, so it passes: the receipt of a run (a command and its exit code or output counts), a version or range read from a manifest, a count or a file list, and prose where the package name is an ordinary word ("we ignore the generated folder").',
-  '@es 2. No es una afirmación de comportamiento, así que pasa: el recibo de una ejecución (cuenta un comando con su código de salida o su salida), una versión o un rango leído de un manifiesto, un recuento o una lista de ficheros, y la prosa donde el nombre del paquete es una palabra corriente ("we ignore the generated folder").',
   '3. A claim in any language is judged the same way.',
-  '@es 3. Una afirmación en cualquier idioma se juzga igual.',
   '4. When unsure whether a claim asserts behaviour, answer {"ok": true}.',
-  '@es 4. Ante la duda de si una afirmación dice un comportamiento, contesta {"ok": true}.',
   '',
   'Examples that FAIL:',
   '- "MEASURED: Playwright closes its children on SIGTERM" (playwright)',
@@ -62,8 +80,7 @@ export const PROMPT = [
   'Claims:',
   '$CLAIMS',
   '',
-  'Answer with the JSON object only: {"ok": true}, or {"ok": false, "reason": "<reason>"}. The reason starts with DEPENDENCY-CLAIM: then quotes the failing claim and names the behaviour it asserts.',
-  '@es Contesta solo con el objeto JSON: {"ok": true} o {"ok": false, "reason": "<motivo>"}. El motivo empieza por DEPENDENCY-CLAIM:, cita la afirmación que falla y nombra el comportamiento que afirma.'
+  'Answer with the JSON object only: {"ok": true}, or {"ok": false, "reason": "<reason>"}. The reason starts with DEPENDENCY-CLAIM: then quotes the failing claim and names the behaviour it asserts.'
 ].join('\n');
 
 /** The rubric with `candidates` numbered in. @es La rúbrica con las candidatas numeradas. */

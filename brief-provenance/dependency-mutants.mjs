@@ -66,17 +66,10 @@ const PARTS_LINE = 'const parts = [name.slice(1, slash), name.slice(slash + 1)];
 const MENTIONS_LINE = 'return [name, ...parts.filter((part) => !COMMON_WORDS.has(part.toLowerCase()))];';
 const OWN_LINE = 'for (const key of context.keys) if (!context.own.has(key)) for (const mention of mentionsOf(key)) names.add(mention);';
 
-// Each Spanish line of the rubric, broken once at its start. @es Cada línea en español de la rúbrica, rota una vez.
-const RUBRIC_MIRRORS = [
-  ['the intro', "'@es Un brief de delegación marca"],
-  ['the question', "'@es Pregunta: ¿alguna afirmación"],
-  ['the rules heading', "'@es Reglas:'"],
-  ['rule 1', "'@es 1. Una afirmación de comportamiento"],
-  ['rule 2', "'@es 2. No es una afirmación"],
-  ['rule 3', "'@es 3. Una afirmación en cualquier idioma"],
-  ['rule 4', "'@es 4. Ante la duda"],
-  ['the answer form', "'@es Contesta solo con"]
-].map(([part, start]) => [`the rubric's Spanish ${part} is not read`, JUDGE, start, `'${start.slice(5)}`]);
+// The rubric is the model's input and stays English-only: one mutant re-adds a Spanish line to it.
+// @es La rúbrica es la entrada del modelo y queda solo en inglés: un mutante le vuelve a añadir una línea en español.
+const RULES_LINE = "  'Rules:',\n";
+const RUBRIC_SPANISH = ["the rubric carries a Spanish line again", JUDGE, RULES_LINE, "  'Rules:',\n  '@es Reglas:',\n"];
 
 const PACKAGES_LINE = 'return [...new Set(words(unit, NAME_SEPARATORS).map((word) => trimPeriods(word).toLowerCase()).filter((word) => folded.has(word)))];';
 
@@ -227,7 +220,7 @@ export const DEPENDENCY_MUTANTS = [
   ['the headline has no Spanish half', REFUSAL, '    `@es BRIEF-PROVENANCE RECHAZÓ ${refusal.spanishSurface}', '    `@es BRIEF-PROVENANCE ${refusal.spanishSurface}'],
   ['the Spanish headline names no surface', REFUSAL, 'RECHAZÓ ${refusal.spanishSurface} (${refusal.toolName}): una afirmación', 'RECHAZÓ (${refusal.toolName}): una afirmación'],
   ['the Spanish headline names no package', REFUSAL, 'una dependencia instalada (${packages}) y no cita fuente.', 'una dependencia instalada y no cita fuente.'],
-  ...RUBRIC_MIRRORS,
+  RUBRIC_SPANISH,
   ['a unit is shown on several lines', REFUSAL, "claim.unit.split('\\n').join(' / ')", 'claim.unit'],
   ['the HYPOTHESIS way out is not named', REFUSAL, "'  2. Move the claim to a HYPOTHESIS: line, so the worker tests it rather than inherits it.',", ''],
   ['the citation way out is not named', REFUSAL, "'  1. Read the installed source and cite it in the claim as dir/file:line (or dir/file:line:col),',", ''],

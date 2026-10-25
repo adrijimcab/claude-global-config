@@ -268,18 +268,6 @@ const cases = [
   ['deny', resume(`${tenancy(PROJECT)}\nMEASURED: playwright closes\n${HYPOTHESIS_LINE}`), 'the Spanish dependency headline names a message', '@es BRIEF-PROVENANCE RECHAZÓ este mensaje (SendMessage): una afirmación MEASURED', REFUSE],
   ['deny', claim('MEASURED: playwright closes its children'), 'the JUDGE line has its Spanish half', `JUDGE — ${JUDGE_REASON} @es JUEZ: motivo del juez, citado tal cual.`, REFUSE],
   ['deny', claim('MEASURED: playwright closes its children'), 'the READ line has its Spanish half', 'READ — MEASURED: playwright closes its children @es LEÍDO: afirmación leída, citada tal cual.', REFUSE],
-  // The rubric is runtime text too: each rule and the question carry their Spanish mirror, as the judge reads it.
-  // @es La rúbrica también es texto de ejecución: cada regla y la pregunta llevan su espejo en español.
-  ...[
-    '@es Un brief de delegación marca como MEASURED los hechos que su autor dice haber medido. Cada afirmación de abajo nombra un paquete de terceros del que depende el proyecto (listado tras ella).',
-    '@es Pregunta: ¿alguna afirmación dice cómo SE COMPORTA en ejecución un paquete nombrado (qué hace, cierra, reintenta, ignora, maneja, devuelve, envía) sin citar dónde se leyó (un fichero:línea de su código)?',
-    '@es Reglas:',
-    '@es 1. Una afirmación de comportamiento sin cita de fuente falla, lleve lo que lleve al lado: un código de salida, un comando entre comillas invertidas, una versión o la palabra package.json no la vuelven medida.',
-    '@es 2. No es una afirmación de comportamiento, así que pasa: el recibo de una ejecución (cuenta un comando con su código de salida o su salida), una versión o un rango leído de un manifiesto, un recuento o una lista de ficheros, y la prosa donde el nombre del paquete es una palabra corriente ("we ignore the generated folder").',
-    '@es 3. Una afirmación en cualquier idioma se juzga igual.',
-    '@es 4. Ante la duda de si una afirmación dice un comportamiento, contesta {"ok": true}.',
-    '@es Contesta solo con el objeto JSON: {"ok": true} o {"ok": false, "reason": "<motivo>"}. El motivo empieza por DEPENDENCY-CLAIM:, cita la afirmación que falla y nombra el comportamiento que afirma.'
-  ].map((mirror) => ['deny', claim('MEASURED: playwright closes its children'), `the judge reads the Spanish mirror ${mirror.slice(0, 24)}`, 'playwright', REFUSE, mirror]),
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal names the HYPOTHESIS way out', '2. Move the claim to a HYPOTHESIS: line', REFUSE],
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal names the citation way out', 'cite it in the claim as dir/file:line', REFUSE],
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal says an exit code does not measure a behaviour claim', 'an exit code beside a behaviour claim does not measure it', REFUSE],
@@ -489,6 +477,23 @@ function check(expected, output, label, expectedText, judge, promptText, prompts
   report(actual === expected && textOk && askedOk && promptOk, `expected=${expected} actual=${actual}  ${label}${why === '' ? '' : `  ${why}`}`);
 }
 
+/**
+ * The rubric is a value a program parses (the judge model's input), which the contract exempts from bilingual text,
+ * and a measured A/B showed Spanish lines in it raise false refusals; so the prompt the judge reads holds none.
+ * @es La rúbrica es un valor que parsea un programa (la entrada del modelo juez), exento del texto bilingüe, y un A/B
+ * medido mostró que sus líneas en español suben los rechazos falsos; así que el prompt que lee el juez no lleva ninguna.
+ */
+async function checkRubricLanguage() {
+  const prompts = [];
+
+  await evaluate(claim('MEASURED: playwright closes its children'), { ask: async (prompt) => (prompts.push(prompt), ANSWERS.pass()) });
+
+  const lines = prompts.flatMap((prompt) => prompt.split('\n'));
+
+  report(prompts.length === 1 && lines.some((line) => line.startsWith('Question:')), 'the rubric check read the prompt the judge was asked');
+  report(!lines.some((line) => line.includes('@es')), 'the rubric the judge reads holds no @es line');
+}
+
 async function runCases() {
   for (const [expected, input, label, expectedText, judge, promptText] of cases) {
     const prompts = [];
@@ -630,6 +635,7 @@ let crashed;
 try {
   buildFixtures();
   await runCases();
+  await checkRubricLanguage();
   await checkWiring();
   checkJournals();
 } catch (error) {
