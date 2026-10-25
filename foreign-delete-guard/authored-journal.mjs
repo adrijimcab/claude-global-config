@@ -101,7 +101,7 @@ function append(agentKey, records) {
     mkdirSync(path.dirname(journalFile(agentKey)), { recursive: true });
     appendFileSync(journalFile(agentKey), records.map((record) => `${JSON.stringify(record)}\n`).join(''), 'utf8');
   } catch {
-    // evidence lost, never a decision
+    // evidence lost, never a decision @es se pierde evidencia, nunca una decisión.
   }
 }
 

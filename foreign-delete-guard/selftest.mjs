@@ -168,7 +168,7 @@ function tick(milliseconds = 4) {
 const agentWrites = (file) => announce(asAgent('Write', { file_path: file, content: 'x' }), file);
 
 try {
-  // THE ORCHESTRATOR'S AND OTHER ACTORS' FILES: they exist before the agent does anything.
+  // THE ORCHESTRATOR'S AND OTHER ACTORS' FILES: they exist before the agent does anything. @es Los ficheros del orquestador y de otros actores: existen antes de que el agente haga nada.
   for (const name of ['provision.mjs', 'engram-save.mjs', 'mirror-odd.mjs', 'split-backlog.mjs', 'contrast.mjs']) put(at(name));
 
   put(at('shared', 'x.txt'));
@@ -188,11 +188,11 @@ try {
   mkdirSync(at('emptydir'), { recursive: true });
   link(path.join(ROOT, 'outside'), at('holder', 'lnk'));
 
-  // WHAT THE AGENT MAKES, each announced while absent and then appearing.
+  // WHAT THE AGENT MAKES, each announced while absent and then appearing. @es Lo que hace el agente: anunciado con el fichero ausente, aparece durante la llamada.
   agentWrites(at('mine.mjs'));
   agentWrites(at('mine-too.mjs'));
   announce(bash(`echo hi > ${p('mine.txt')}`), at('mine.txt'));
-  announce(pwsh(`New-Item -ItemType Directory -Path '${at('mydir')}'`), `${at('mydir')}/`, at('mydir', 'out.log')); // out.log: dropped by a child process of the call
+  announce(pwsh(`New-Item -ItemType Directory -Path '${at('mydir')}'`), `${at('mydir')}/`, at('mydir', 'out.log')); // out.log: dropped by a child process of the call @es out.log: lo dejó un proceso hijo de la llamada.
   agentWrites(at('mydir', 'a.txt'));
   announce(bash(`mkdir -p ${p('work')}`), `${at('work')}/`, at('work', 'built.bin'));
   agentWrites(at('shared', 'y.txt'));
@@ -202,10 +202,10 @@ try {
   announce(bash(`cp ${p('mine.mjs')} ${p('dropdir')}/`), at('dropdir', 'mine.mjs'));
   announce(asAgent('Bash', { command: `cp ${p('mine.mjs')} .` }, { cwd: at('dropdir2') }), at('dropdir2', 'mine.mjs'));
   announce(bash(`mkdir ${p('linkdir')} ${p('linkdir2')}`), `${at('linkdir')}/`, `${at('linkdir2')}/`, () => link(path.join(ROOT, 'outside'), at('linkdir', 'out')), () => link(at('mydir'), at('linkdir2', 'in')));
-  link(at('mydir'), at('holder', 'lnk-owned')); // a link in a foreign folder, to a target the agent owns
+  link(at('mydir'), at('holder', 'lnk-owned')); // a link in a foreign folder, to a target the agent owns @es un enlace en una carpeta ajena, a un destino que el agente posee.
   announce(bash(`mkdir ${p('ownempty')}`), `${at('ownempty')}/`);
 
-  // WHAT THE AGENT MERELY NAMES, all of it existing when the call is made: none of it may claim anything.
+  // WHAT THE AGENT MERELY NAMES, all of it existing when the call is made: none of it may claim anything. @es Lo que el agente solo nombra, todo existente al llamar: nada de eso reclama nada.
   announce(asAgent('Edit', { file_path: at('chain-edited.mjs'), old_string: 'a', new_string: 'b' }));
   announce(bash(`sed -i s/a/b/ ${p('sedded.mjs')}`));
   announce(bash(`mkdir -p ${p('')}`));
@@ -408,7 +408,7 @@ try {
   }
 
   put(path.join(repo, 'foreign.tmp'));
-  put(path.join(repo, 'ñandú.tmp')); // git quotes a name like this unless told not to
+  put(path.join(repo, 'ñandú.tmp')); // git quotes a name like this unless told not to @es git entrecomilla un nombre así salvo que se le diga lo contrario.
   mkdirSync(path.join(ROOT, 'not-a-repo'), { recursive: true });
 
   const inRepo = (command, cwd) => asAgent('Bash', { command }, { cwd });
@@ -416,7 +416,7 @@ try {
 
   inRepoWrite(path.join(repo, 'mine.tmp'), repo);
   inRepoWrite(path.join(repoMine, 'mine.tmp'), repoMine);
-  inRepoWrite(path.join(repoMine, '-if.tmp'), repoMine); // a pathspec that looks like clean options
+  inRepoWrite(path.join(repoMine, '-if.tmp'), repoMine); // a pathspec that looks like clean options @es una ruta que parece opciones de clean.
 
   expect('deny', inRepo('git clean -f', repo), 'git clean over a repository holding a foreign untracked file');
   expect('deny', inRepo('git clean -fd', repo), 'git clean -fd');
@@ -708,7 +708,7 @@ try {
 
   recordCall('unit', 'c1', 1000, ['/a', '/b']);
   safely(() => confirmCall('unit', 'c1', 2000, identify));
-  recordCall('unit', 'c2', 3000, ['/a']); // never completes
+  recordCall('unit', 'c2', 3000, ['/a']); // never completes @es nunca se completa.
 
   const unit = readJournal('unit');
 
@@ -873,12 +873,12 @@ try {
   check('shim: a delegated rm of an own file prints nothing, exit 0', viaShimQuiet.status === 0 && viaShimQuiet.stdout === '');
   check('shim: a delegated Write prints nothing and journals the file, exit 0', viaShimWrite.status === 0 && viaShimWrite.stdout === '' && readFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'abc.jsonl'), 'utf8').toLowerCase().includes('via-shim.txt'));
 } finally {
-  // Junctions go first and alone: removing a junction removes the link, never what it points at.
+  // Junctions go first and alone: removing a junction removes the link, never what it points at. @es Las junctions primero y solas: quitar una junction quita el enlace, nunca su destino.
   for (const where of links) {
     try {
       rmdirSync(where);
     } catch {
-      // already gone
+      // already gone @es ya no está.
     }
   }
 

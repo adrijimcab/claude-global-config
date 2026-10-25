@@ -14,8 +14,9 @@
  * WHAT IS A DELETION. `deletion-targets.mjs`, on the vendored shell parser. WHAT THE AGENT CREATED. Recorded BY
  * EFFECT: on every allowed call of a delegated agent (shell, Write, MultiEdit) this guard records each creation
  * target that does not exist yet in the agent's own journal (`authored-journal.mjs`, `authorship.mjs`); a path is
- * the agent's only if it is recorded, exists and was born after the record. THE DECISION AND ITS ORDER. `judge.mjs`.
- * Registered on Bash|PowerShell (judge and record) and on Write|MultiEdit (record only).
+ * the agent's only if its own COMPLETED call confirmed it (PostToolUse) and its file identity is unchanged.
+ * THE DECISION AND ITS ORDER. `judge.mjs`. Registered for PreToolUse on Bash|PowerShell (judge and record) and
+ * Write|MultiEdit (record), and for PostToolUse on the same tools (confirm).
  *
  * FAILS OPEN on every malfunction of its own: a guard that cannot decide must not silence a safe command.
  *
@@ -29,9 +30,10 @@
  * expresa con un comodín sobre una carpeta que comparte. Quién es worker lo decide `hook-caller`; qué es un
  * borrado, `deletion-targets.mjs`; qué creó el agente se ANOTA POR EFECTO: en cada llamada permitida de un agente
  * delegado (shell, Write, MultiEdit) se anota en su journal propio cada objetivo de creación que aún no existe
- * (`authored-journal.mjs`, `authorship.mjs`); una ruta es del agente solo si está anotada, existe y nació después;
- * la decisión y su orden, `judge.mjs`. Registrada en Bash|PowerShell (juzga y anota) y en Write|MultiEdit (solo
- * anota). Falla ABIERTO.
+ * (`authored-journal.mjs`, `authorship.mjs`); una ruta es del agente solo si su propia llamada COMPLETADA la
+ * confirmó (PostToolUse) y la identidad de su fichero no cambió; la decisión y su orden, `judge.mjs`. Registrada
+ * para PreToolUse en Bash|PowerShell (juzga y anota) y Write|MultiEdit (anota), y para PostToolUse en las mismas
+ * herramientas (confirma). Falla ABIERTO.
  */
 
 import { readFileSync } from 'node:fs';
