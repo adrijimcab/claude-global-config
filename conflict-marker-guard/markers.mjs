@@ -1,36 +1,31 @@
 /**
  * WHAT A LEFTOVER CONFLICT IS, in lines of text: pure functions, no git, no file system.
  *
- * A conflict git left behind is a file carrying AT LEAST TWO of the three marker kinds it writes
- * (`<<<<<<< ours`, `=======`, `>>>>>>> theirs`) as whole lines. One kind alone is data: a Markdown heading
- * underline is `=======`, a document explaining the format quotes `<<<<<<<` once. Measured 2026-10-25 on a real
- * conflicted merge: `git diff --cached --check` flags the Markdown underline too, so the rule "two kinds"
- * is what separates a conflict from that data, and it still catches a half-resolved block (the opening line
- * deleted by hand, the other two forgotten).
+ * A conflict git left behind is a file carrying a marker line, judged by two rules:
+ *  - a LABELLED `<<<<<<< ours` or `>>>>>>> theirs` line (the seven characters, a space and a label) is a marker on
+ *    its own, because git always writes the label and the incident this guard exists for left exactly ONE such line;
+ *  - a bare `=======` is a Markdown heading underline as often as a marker, so it counts only beside a second kind
+ *    (and a bare seven-character `<<<<<<<` or `>>>>>>>` is in the same weak group).
+ * For a file git ITSELF lists as unmerged, the file is in conflict by git's own record and ANY marker line counts.
  *
- * A file that is DATA by declaration is exempt: one the change ADDS (a fixture or a test double that shows a
- * conflict deliberately), or one under a fixtures folder. A conflict is, by construction, a file both sides
- * already had, so a file absent from the base cannot be one.
+ * Exempt, in the index only and never for an unmerged file: a path under a prefix DECLARED in
+ * `fixture-paths.json` (test data that shows a conflict on purpose), and a file the change ADDS while no merge,
+ * rebase, cherry-pick or revert is in progress (a conflict is by construction a file both sides already had).
  *
- * @es QUÉ ES UN CONFLICTO OLVIDADO, en líneas de texto: funciones puras, sin git ni sistema de ficheros. Es un
- * fichero con AL MENOS DOS de los tres tipos de marca que git escribe, como líneas enteras. Un solo tipo es
- * dato: el subrayado de un título Markdown es `=======`. Medido el 2026-10-25 sobre una fusión real en
- * conflicto: `git diff --cached --check` marca también ese subrayado, así que la regla «dos tipos» es lo que
- * separa un conflicto de ese dato y aun así caza un bloque a medio resolver. Un fichero que es DATO por
- * declaración queda exento: el que el cambio AÑADE (un fixture que muestra un conflicto a propósito) o el que
- * está bajo una carpeta de fixtures. Un conflicto es, por construcción, un fichero que ambos lados ya tenían.
+ * @es QUÉ ES UN CONFLICTO OLVIDADO, en líneas de texto: funciones puras, sin git ni sistema de ficheros. Una
+ * línea ETIQUETADA `<<<<<<< ours` o `>>>>>>> theirs` (siete caracteres, un espacio y una etiqueta) es una marca por
+ * sí sola, porque git siempre escribe la etiqueta y el incidente que motiva esta guardia dejó exactamente UNA. Un
+ * `=======` suelto es tanto un subrayado de título Markdown como una marca, así que solo cuenta junto a un segundo
+ * tipo (y un `<<<<<<<` o `>>>>>>>` sin etiqueta es del mismo grupo débil). En un fichero que git MISMO lista como
+ * sin fusionar, cualquier línea de marca cuenta. Exentos, solo en el índice y nunca para un fichero sin fusionar:
+ * una ruta bajo un prefijo DECLARADO en `fixture-paths.json` y un fichero que el cambio AÑADE mientras no hay
+ * fusión, rebase, cherry-pick ni revert en curso.
  */
 
-/** The three kinds of marker line, by the text a line starts with. @es Los tres tipos de línea de marca. */
+/** The three kinds of marker line. @es Los tres tipos de línea de marca. */
 const OPEN = '<<<<<<<';
 const MIDDLE = '=======';
 const CLOSE = '>>>>>>>';
-
-/** Path segments that declare a folder of test data. @es Segmentos de ruta que declaran una carpeta de datos de prueba. */
-export const FIXTURE_SEGMENTS = Object.freeze(['fixtures', '__fixtures__', 'selftest-fixtures', 'testdata']);
-
-/** Files bigger than this are not read from the worktree. @es Los ficheros mayores no se leen del árbol de trabajo. */
-export const MAX_SCANNED_BYTES = 5 * 1024 * 1024;
 
 /**
  * The marker kind a line is, or `undefined`. As git writes them, `<<<<<<<` and `>>>>>>>` are followed by a space
@@ -45,34 +40,43 @@ export function markerKindOf(line) {
   return [OPEN, CLOSE].find((kind) => text === kind || text.startsWith(`${kind} `));
 }
 
-/** Whether `filePath` sits under a declared fixtures folder. @es Si la ruta está bajo una carpeta de fixtures declarada. */
-export function isFixturePath(filePath) {
-  return filePath.split('/').slice(0, -1).some((segment) => FIXTURE_SEGMENTS.includes(segment));
+/** Whether a marker line is one git writes: a seven-character run, a space and a non-empty label. @es Si una línea de marca lleva la etiqueta que escribe git. */
+export function isLabelled(line) {
+  const kind = markerKindOf(line);
+
+  return kind !== undefined && kind !== MIDDLE && line.slice(kind.length).trim().length > 0;
+}
+
+/** Whether `filePath` is under one of the declared fixture prefixes (each ends with `/`). @es Si la ruta está bajo un prefijo de fixtures declarado. */
+export function isDeclaredFixture(filePath, prefixes) {
+  return prefixes.some((prefix) => filePath.startsWith(prefix));
 }
 
 /**
- * The conflict a list of lines carries, or `undefined`.
- * @param numbered `[{ number, text }]` — the lines to judge, with their line number in the file.
- * @returns `{ line, kinds }` — the first marker's line and the distinct kinds found — when two kinds or more.
- * @es El conflicto que lleva una lista de líneas, o `undefined`.
+ * The conflict a sequence of lines carries, or `undefined`.
+ * @param numbered `[{ number, text }]` — any iterable, so a file can be read as a stream.
+ * @param options.unmerged True for a file git lists as unmerged: one marker of any kind is a conflict, and the scan
+ *   stops at the first. @es Verdadero para un fichero sin fusionar según git.
+ * @returns `{ line, kinds }` — the first marker's line and the distinct kinds seen.
+ * @es El conflicto que lleva una secuencia de líneas, o `undefined`.
  */
-export function conflictIn(numbered) {
+export function conflictIn(numbered, { unmerged = false } = {}) {
   const found = [];
 
   for (const { number, text } of numbered) {
     const kind = markerKindOf(text);
 
-    if (kind !== undefined) found.push({ number, kind });
+    if (kind === undefined) continue;
+
+    found.push({ number, kind, labelled: isLabelled(text) });
+
+    if (unmerged) break;
   }
 
   const kinds = [...new Set(found.map((marker) => marker.kind))];
+  const isConflict = found.length > 0 && (unmerged || found.some((marker) => marker.labelled) || kinds.length >= 2);
 
-  return kinds.length >= 2 ? { line: found[0].number, kinds } : undefined;
-}
-
-/** Splits a text into numbered lines. @es Divide un texto en líneas numeradas. */
-export function numberedLines(text) {
-  return text.split('\n').map((line, index) => ({ number: index + 1, text: line }));
+  return isConflict ? { line: found[0].number, kinds } : undefined;
 }
 
 /** `@@ -a,b +c,d @@` -> `{ removed: b, added: d, start: c }`, or `undefined`. @es Lee la cabecera de un hunk. */
@@ -88,7 +92,7 @@ function hunkHeader(line) {
   return { removed: count(oldRange.slice(1)), added: count(newRange.slice(1)), start: Number(newRange.slice(1).split(',')[0]) };
 }
 
-/** The path a `+++ ` header names, or `undefined` for `/dev/null`. @es La ruta que nombra una cabecera `+++ `. */
+/** The path a `+++ ` header names, or `undefined` for `/dev/null`. The prefix is pinned to `b/` by the probe. @es La ruta que nombra una cabecera `+++ `. */
 function targetPath(line) {
   const name = line.slice('+++ '.length).replace(/\t$/, '');
 
@@ -142,12 +146,14 @@ export function addedLinesByFile(patch) {
 }
 
 /**
- * Every leftover conflict a patch adds: `[{ path, line, kinds }]`, exempting new files and fixtures folders.
- * @es Cada conflicto olvidado que añade un parche, con los ficheros nuevos y las carpetas de fixtures exentos.
+ * Every leftover conflict a patch adds: `[{ path, line, kinds }]`.
+ * @param options.exemptNew Whether a file the change adds is data (false while a merge, rebase, cherry-pick or revert is in progress).
+ * @param options.fixturePrefixes The declared fixture prefixes. @es Los prefijos de fixtures declarados.
+ * @es Cada conflicto olvidado que añade un parche.
  */
-export function conflictsInPatch(patch) {
+export function conflictsInPatch(patch, { exemptNew, fixturePrefixes }) {
   return addedLinesByFile(patch)
-    .filter((file) => !file.isNew && !isFixturePath(file.path))
+    .filter((file) => !(exemptNew && file.isNew) && !isDeclaredFixture(file.path, fixturePrefixes))
     .flatMap((file) => {
       const conflict = conflictIn(file.added);
 

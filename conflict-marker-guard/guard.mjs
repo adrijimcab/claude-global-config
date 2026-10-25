@@ -23,7 +23,7 @@ import { decideFor } from './decide.mjs';
 /** How many conflicts the refusal lists before it counts the rest. @es Cuántos conflictos lista el rechazo antes de contar el resto. */
 const LISTED_CONFLICTS = 8;
 
-const describe = ({ path: file, line, kinds }) => `${file}:${line} (${kinds.join(' ')})`;
+const describe = ({ path: file, line, kinds, unreadable }) => (unreadable === undefined ? `${file}:${line} (${kinds.join(' ')})` : `${file} (unreadable: ${unreadable}; git lists it as unmerged / ilegible: ${unreadable}; git lo lista sin fusionar)`);
 
 /** The bilingual refusal for one offending step. @es La negativa bilingüe para un paso infractor. */
 export function refusalText({ text, directory, conflicts }) {
@@ -41,7 +41,8 @@ export function refusalText({ text, directory, conflicts }) {
     'ten commits before anyone saw it. This guard checks at the step that commits, so no chain can skip it.',
     '',
     'USE INSTEAD: open the file at that line, resolve the conflict (keep the intended side, delete all three marker lines),',
-    '`git add` the file, then retry. If the marker is data on purpose, it lives in a fixtures folder or in a file the change adds.',
+    '`git add` the file, then retry. A file git still lists as unmerged counts with ONE marker of any kind, or when it cannot be read.',
+    'If a marker is data on purpose, declare its path prefix in conflict-marker-guard/fixture-paths.json (never valid for an unmerged file).',
     '',
     `@es CONFLICT-MARKER GUARD RECHAZÓ este comando: \`${text}\` commitearía una marca de conflicto olvidada en ${directory}:`,
     ...listed,
@@ -52,8 +53,9 @@ export function refusalText({ text, directory, conflicts }) {
     'viajó diez commits sin que nadie la viera. Esta guardia comprueba en el paso que commitea, así que ninguna cadena la salta.',
     '',
     'USAR EN SU LUGAR: abrir el fichero en esa línea, resolver el conflicto (quedarse con el lado correcto y borrar las tres',
-    'líneas de marca), hacer `git add` del fichero y reintentar. Si la marca es un dato a propósito, va en una carpeta de',
-    'fixtures o en un fichero que el cambio añade.'
+    'líneas de marca), hacer `git add` del fichero y reintentar. Un fichero que git aún lista sin fusionar cuenta con UNA',
+    'marca de cualquier tipo, o si no se puede leer. Si una marca es un dato a propósito, declara su prefijo de ruta en',
+    'conflict-marker-guard/fixture-paths.json (nunca vale para un fichero sin fusionar).'
   ].join('\n');
 }
 

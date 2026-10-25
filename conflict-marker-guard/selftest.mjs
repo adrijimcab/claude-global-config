@@ -19,7 +19,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -34,8 +34,12 @@ const { createGitSandbox } = await load('../selftest-fixtures/git-sandbox.mjs');
 const { dialectOfTool } = await load('../shell-command/shell-command.mjs');
 const { classify, ARCHIVE } = await load('../hook-state/rotate.mjs');
 const { evaluate, refusalText } = await load('guard.mjs');
-const { addedLinesByFile, conflictIn, isFixturePath, markerKindOf, numberedLines } = await load('markers.mjs');
-const { GIT_TIMEOUT_MS, runGit, unmergedConflicts } = await load('probe.mjs');
+const { addedLinesByFile, conflictIn, isDeclaredFixture, isLabelled, markerKindOf } = await load('markers.mjs');
+const { declaredFixturePrefixes, DEFAULT_FIXTURE_PREFIXES } = await load('fixtures.mjs');
+const { CHUNK_BYTES, fileLines, GIT_TIMEOUT_MS, indexConflicts, MAX_PATHSPEC, repositoryContext, runGit, unmergedConflicts } = await load('probe.mjs');
+
+/** A text as numbered lines, the shape `conflictIn` reads. @es Un texto como líneas numeradas. */
+const numberedLines = (text) => text.split('\n').map((line, index) => ({ number: index + 1, text: line }));
 
 let failures = 0;
 let total = 0;
@@ -118,7 +122,22 @@ function staged() {
 
 const unmerged = conflicted();
 const unmergedFixture = conflicted('src/fixtures/f.txt');
+const unmergedDeclared = conflicted('conflict-marker-guard/fixtures/f.txt');
+const unmergedOneKind = conflicted();
+const unmergedIncident = conflicted();
+const unmergedGone = conflicted();
+const unmergedBig = conflicted();
 const markersStaged = staged();
+const configured = staged();
+
+unmerged.write('sub/u.txt', 'untracked\n');
+configured.write('sub/u.txt', 'untracked\n');
+unmergedOneKind.write('f.txt', 'a\n=======\nc\n');
+unmergedIncident.write('f.txt', 'a\nXY\n>>>>>>> 9f8e7d6\nc\n');
+rmSync(path.join(unmergedGone.repoDir, 'f.txt'));
+unmergedBig.write('f.txt', `${'x'.repeat(1000)}\n`.repeat(6000) + '=======\nafter\n');
+
+for (const [key, value] of [['diff.noprefix', 'true'], ['diff.mnemonicPrefix', 'true'], ['diff.relative', 'true'], ['diff.renames', 'false']]) configured.git(['config', key, value]);
 const resolved = conflicted();
 
 resolved.write('f.txt', 'a\nXY\nc\n');
@@ -155,12 +174,29 @@ const FULL = '<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> x\n';
 const lonely = (text) => `intro\n${text}\noutro\n`;
 
 const underline = stagedWith({ 'doc.md': 'Title\n=======\ntext\n' }, { 'doc.md': 'Title\n' });
-const openOnly = stagedWith({ 'doc.md': lonely('<<<<<<< HEAD') }, { 'doc.md': 'x\n' });
+const labelledOpen = stagedWith({ 'doc.md': lonely('<<<<<<< HEAD') }, { 'doc.md': 'x\n' });
+const labelledClose = stagedWith({ 'spec.ts': lonely('>>>>>>> 9f8e7d6') }, { 'spec.ts': 'x\n' });
+const bareOpen = stagedWith({ 'doc.md': lonely('<<<<<<<') }, { 'doc.md': 'x\n' });
 const longRuns = stagedWith({ 'doc.md': lonely('<<<<<<<<\n========\n>>>>>>>>') }, { 'doc.md': 'x\n' });
 const plusPlus = stagedWith({ 'doc.md': '++ not a header\n=======\n' }, { 'doc.md': 'x\n' });
 const inString = stagedWith({ 's.js': 'const marker = "<<<<<<< HEAD";\nconst end = ">>>>>>> x";\nconst mid = "=======";\n' }, { 's.js': '// seed\n' });
 const fixtureFolder = stagedWith({ 'src/fixtures/conflict.txt': `seed\n${FULL}` }, { 'src/fixtures/conflict.txt': 'seed\n' });
+const declaredFixture = stagedWith({ 'conflict-marker-guard/fixtures/conflict.txt': `seed\n${FULL}` }, { 'conflict-marker-guard/fixtures/conflict.txt': 'seed\n' });
+const customFixture = stagedWith({ 'custom/data.txt': `seed\n${FULL}` }, { 'custom/data.txt': 'seed\n' });
 const addedFixture = stagedWith({ 'new-conflict-example.txt': FULL });
+const addedInMerge = conflicted();
+
+addedInMerge.write('f.txt', 'a\nXY\nc\n');
+addedInMerge.git(['add', 'f.txt']);
+addedInMerge.write('new-conflict-example.txt', FULL);
+addedInMerge.git(['add', 'new-conflict-example.txt']);
+
+const renamed = stagedWith({}, { 'r1.txt': Array.from({ length: 12 }, (_, index) => `line ${index}`).join('\n') + '\n' });
+
+renamed.git(['config', 'diff.renames', 'false']);
+renamed.git(['mv', 'r1.txt', 'r2.txt']);
+renamed.write('r2.txt', `${Array.from({ length: 12 }, (_, index) => `line ${index}`).join('\n')}\n${FULL}`);
+renamed.git(['add', 'r2.txt']);
 const halfResolved = stagedWith({ 'g.txt': '=======\ntheirs\n>>>>>>> x\n' }, { 'g.txt': 'seed\n' });
 const crlf = stagedWith({ 'g.txt': '<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> x\r\n' }, { 'g.txt': 'seed\r\n' });
 const nested = stagedWith({ 'src/app/spec.ts': `seed\n${FULL}` }, { 'src/app/spec.ts': 'seed\n' });
@@ -215,7 +251,17 @@ for (const step of STEPS) {
   report(worktree('git add -A && git commit -m x') === 'deny', 'add -A then commit is refused the same way');
   report(worktree('git rebase --continue') === 'allow', 'a continue WITHOUT an add on the same line leaves the unmerged file to git, which refuses it itself');
   report(worktree('git status && git add -- f.txt') === 'allow', 'an add alone commits nothing');
-  report(verdict(decide(unmergedFixture, bash(unmergedFixture.repoDir, 'git add -A && git rebase --continue'))) === 'allow', 'an unmerged file under a fixtures folder is data for the add too');
+  report(verdict(decide(unmergedFixture, bash(unmergedFixture.repoDir, 'git add -A && git rebase --continue'))) === 'deny', 'an unmerged file under a fixtures folder is STILL a conflict (the exemption never reaches a file git lists as unmerged)');
+  report(verdict(decide(unmergedDeclared, bash(unmergedDeclared.repoDir, 'git add -A && git rebase --continue'))) === 'deny', 'an unmerged file under a DECLARED fixtures prefix is STILL a conflict');
+  report(verdict(decide(unmergedOneKind, bash(unmergedOneKind.repoDir, 'git add -A && git commit -m x'))) === 'deny', 'an unmerged file with ONE bare `=======` is a conflict: git lists it as unmerged');
+  report(verdict(decide(unmergedIncident, bash(unmergedIncident.repoDir, 'rg -c "^(<<<<<<<|=======|>>>>>>>)" f.txt; git add -- f.txt && git rebase --continue'))) === 'deny', 'THE INCIDENT SHAPE EXACTLY: one `>>>>>>> sha` line left in the worktree file, a `;` check, the add, the continue');
+  report(verdict(decide(unmergedIncident, bash(unmergedIncident.repoDir, 'git add -A && git commit -m x'))) === 'deny', 'the same single label line is refused with commit');
+
+  const gone = reasonOf(decide(unmergedGone, bash(unmergedGone.repoDir, 'git add -A && git commit -m x')));
+
+  report(gone.includes('f.txt (unreadable: ENOENT') && gone.includes('ilegible: ENOENT'), 'an unmerged file that cannot be read is REFUSED, saying why in both languages');
+  report(verdict(decide(unmergedBig, bash(unmergedBig.repoDir, 'git add -A && git commit -m x'))) === 'deny', 'a 6 MB unmerged file is read as a stream, not skipped as clean');
+  report(reasonOf(decide(unmergedBig, bash(unmergedBig.repoDir, 'git add -A && git commit -m x'))).includes('f.txt:6001'), '  ...and the refusal names the line of the marker deep in it');
   report(reasonOf(decide(unmerged, bash(unmerged.repoDir, 'git add -A && git commit -m x'))).split('  - f.txt:2').length === 3, 'a file unmerged at three stages is listed ONCE per language');
   report(verdict(decide(resolved, bash(resolved.repoDir, 'git add -- f.txt && git rebase --continue'))) === 'allow', 'add + continue over a RESOLVED file passes');
 }
@@ -226,12 +272,19 @@ for (const step of STEPS) {
   const denied = (repo, label, step = 'git commit -m x') => report(verdict(decide(repo, bash(repo.repoDir, step))) === 'deny', `MARKER refused: ${label}`);
 
   allowed(underline, 'a Markdown `=======` underline alone');
-  allowed(openOnly, 'one `<<<<<<<` line alone');
+  allowed(bareOpen, 'one bare `<<<<<<<` line (no label) alone');
   allowed(longRuns, 'runs of eight characters are not markers');
   allowed(plusPlus, 'an added line that begins with `++` is a line, and one marker kind alone');
   allowed(inString, 'markers inside string literals are not whole lines');
-  allowed(fixtureFolder, 'a file under a fixtures folder');
-  allowed(addedFixture, 'a file the change deliberately ADDS');
+  allowed(declaredFixture, 'a file under a prefix DECLARED in fixture-paths.json');
+  allowed(addedFixture, 'a file the change deliberately ADDS (no merge in progress)');
+  denied(fixtureFolder, 'a file under an UNDECLARED `fixtures` folder is no longer exempt');
+  denied(addedInMerge, 'a file the change adds while a MERGE is in progress is not exempt');
+  denied(labelledOpen, 'one labelled `<<<<<<< HEAD` line is a marker on its own');
+  denied(labelledClose, 'one labelled `>>>>>>> sha` line is a marker on its own (the incident shape, staged)');
+  denied(renamed, 'markers added to a RENAMED file (diff.renames=false in its config) are judged against the old file, not exempt as new');
+  report(verdict(evaluate(bash(customFixture.repoDir, 'git commit -m x'), { run: customFixture.run, fixtures: () => ({ prefixes: ['custom/'] }) })) === 'allow', 'a prefix declared in the config is honoured');
+  report(verdict(evaluate(bash(declaredFixture.repoDir, 'git commit -m x'), { run: declaredFixture.run, fixtures: () => ({ prefixes: ['custom/'] }) })) === 'deny', 'the default prefix no longer applies once the config declares others');
   allowed(legacy, 'markers already in HEAD, only CONTEXT of an unrelated edit next to them');
   denied(halfResolved, 'a half-resolved block (the opening line deleted, two kinds left)');
   denied(crlf, 'a CRLF file');
@@ -255,13 +308,41 @@ for (const step of STEPS) {
   report(verdict(decide(clean, bash(elsewhere, `git -C "${slash(clean.repoDir)}" commit -m x`))) === 'allow', '`git -C <clean repo> commit` passes');
   report(verdict(decide(markersStaged, bash(slash(clean.repoDir), `git -C "${target}" commit -m x`))) === 'deny', 'the repository is the one `-C` names, not the payload directory');
   report(verdict(decide(markersStaged, bash(target, `git -C "${slash(clean.repoDir)}" commit -m x`))) === 'allow', 'a clean `-C` repository passes although the payload directory is conflicted');
+
+  // One repository, three spellings: the staging and the commit are matched by TOP LEVEL, not by raw directory.
+  const root = slash(unmerged.repoDir);
+  const staging = (command) => verdict(decide(unmerged, bash(root, command)));
+
+  report(staging('cd sub && git add -A && git commit -m x') === 'deny', 'cd into a subdirectory, add and commit: the unmerged files are found from the top level');
+  report(staging('git -C sub add -A && git -C . commit -m x') === 'deny', '`-C sub` for the add and `-C .` for the commit are one repository');
+  report(staging('cd sub && git add . && cd .. && git commit -m x') === 'deny', 'an add in a subdirectory and a commit at the root are one repository');
+  report(staging('cd sub && git commit -m x') === 'allow', 'a commit alone from a subdirectory still passes while the index is clean');
+  report(staging(`git -C "${slash(clean.repoDir)}" add -A && git commit -m x`) === 'allow', 'an add in ANOTHER repository does not make this commit stage');
+
+  // The diff is pinned against the user's configuration (noprefix, mnemonicPrefix, relative, renames).
+  const configuredRoot = slash(configured.repoDir);
+
+  report(verdict(decide(configured, bash(configuredRoot, 'git commit -m x'))) === 'deny', 'diff.noprefix/mnemonicPrefix/relative/renames in the config do not blind the probe');
+  report(reasonOf(decide(configured, bash(`${configuredRoot}/sub`, 'git commit -m x'))).includes('  - f.txt:2 ('), '  ...also from a subdirectory (diff.relative would have hidden the file), naming the path from the top level');
 }
 
 // --- 6. steps and words that are none of this guard's business.
 {
   const quiet = (command) => report(verdict(decide(markersStaged, bash(markersStaged.repoDir, command))) === 'allow', `never refused: \`${command}\``);
 
-  for (const command of ['git status', 'git rebase --abort', 'git rebase --skip', 'git merge x', 'git merge --abort', 'git add f.txt', 'git diff --cached', 'git log', 'git cherry-pick abc', 'git commit-tree HEAD', 'git rebase --continue-not', 'git notcommit']) quiet(command);
+  for (const command of ['git status', 'git rebase --abort', 'git rebase --skip', 'git rebase -r main', 'git merge x', 'git merge --abort', 'git revert --abort', 'git revert abc', 'git am --abort', 'git am --skip', 'git am patch.mbox', 'git add f.txt', 'git diff --cached', 'git log', 'git cherry-pick abc', 'git commit-tree HEAD', 'git rebase --continue-not', 'git notcommit', 'git revert -- --continue']) quiet(command);
+
+  const refused = (command) => report(verdict(decide(markersStaged, bash(markersStaged.repoDir, command))) === 'deny', `refused: \`${command}\``);
+
+  for (const command of ['git revert --continue', 'git am --resolved', 'git am -r', 'git am --continue']) refused(command);
+
+  const takesWorktree = (command) => report(verdict(decide(unmerged, bash(unmerged.repoDir, command))) === 'deny', `a commit that takes worktree content reads the unmerged files: \`${command}\``);
+
+  for (const command of ['git commit -am x', 'git commit -a -m x', 'git commit --all -m x', 'git commit -i f.txt -m x', 'git commit --include f.txt -m x', 'git commit -o f.txt -m x', 'git commit --only f.txt -m x', 'git commit -m x -- f.txt']) takesWorktree(command);
+
+  const takesNothing = (command) => report(verdict(decide(unmerged, bash(unmerged.repoDir, command))) === 'allow', `a commit that takes only the index leaves the unmerged files to git: \`${command}\``);
+
+  for (const command of ['git commit -m x', 'git commit -m "fix: -a flag"', 'git commit -ma x', 'git commit -m x --', 'git commit --amend --no-edit', 'git commit -F msg.txt']) takesNothing(command);
 
   const data = (label, command) => report(verdict(decide(markersStaged, bash(markersStaged.repoDir, command))) === 'allow', `DATA, not a command: ${label}`);
 
@@ -307,6 +388,11 @@ for (const step of STEPS) {
   });
   failOpen('the line\'s own cd cannot be followed', bash(markersStaged.repoDir, 'cd "$SOMEWHERE" && git commit -m x'), unmerged.run);
   report(GIT_TIMEOUT_MS > 0 && GIT_TIMEOUT_MS <= 10000, 'the git timeout is short');
+
+  const before = journalText().length;
+  const strict = evaluate(bash(declaredFixture.repoDir, 'git commit -m x'), { run: declaredFixture.run, fixtures: () => ({ prefixes: ['custom/'], failure: 'fixture-paths.json is broken' }) });
+
+  report(verdict(strict) === 'deny' && journalText().slice(before).includes('fixture-paths.json is broken'), 'a broken fixture declaration is journaled and the guard keeps ENFORCING');
 }
 
 // --- 8. the refusal and the journal of a refusal.
@@ -341,7 +427,7 @@ for (const step of STEPS) {
 
     return clean.run(args, options);
   } });
-  report(calls.length === 1, 'ONE git call for the same repository, however many commit steps the line has');
+  report(calls.length === 2 && calls[0][0] === 'rev-parse', 'TWO git calls for a clean repository, however many commit steps the line has: where it is, and the prefilter');
 
   calls.length = 0;
   evaluate(bash(markersStaged.repoDir, 'cd "$SOMEWHERE" && git commit -m x'), { run: counting });
@@ -353,7 +439,11 @@ for (const step of STEPS) {
 
   calls.length = 0;
   evaluate(bash(unmerged.repoDir, 'git add -A && git commit -m x'), { run: counting });
-  report(calls.length === 2 && calls[0].includes('diff') && calls[1].includes('ls-files'), 'a line that stages asks the index and the unmerged files, two calls');
+  report(calls.length === 3 && calls[0][0] === 'rev-parse' && calls[1].includes('diff') && calls[2].includes('ls-files'), 'a line that stages asks where it is, the index and the unmerged files, three calls');
+
+  calls.length = 0;
+  evaluate(bash(markersStaged.repoDir, 'git commit -m x'), { run: counting });
+  report(calls.length === 3 && calls[2].includes('-U0') && calls[2].includes('--') && calls[2].at(-1) === 'f.txt', 'a repository with a candidate asks where it is, the prefilter and the patch restricted to the candidate');
 
   report(verdict(decide(markersStaged, JSON.stringify({ ...payloadAt('Bash', markersStaged.repoDir, 'git commit -m x'), tool_name: 'NotAShellTool' }))) === 'allow', "a tool with no shell dialect is none of this guard's business");
   report(verdict(decide(markersStaged, `\uFEFF${bash(markersStaged.repoDir, 'git commit -m x')}`)) === 'deny', 'a payload with a byte-order mark is still read');
@@ -373,19 +463,18 @@ for (const step of STEPS) {
   report(options.timeout === GIT_TIMEOUT_MS && options.maxBuffer >= 16 * 1024 * 1024 && options.windowsHide === true && options.encoding === 'utf8', 'runGit bounds time and output and hides the window');
 
   const record = (stage, name) => `100644 abc123 ${stage}\t${name}`;
-  const fakeLs = () => ({ status: 0, stdout: [record(1, 'f.txt'), record(2, 'f.txt'), record(3, 'f.txt'), record(1, 'big.txt'), record(1, 'src/fixtures/z.txt'), record(1, 'gone.txt'), ''].join('\0'), stderr: '' });
+  const fakeLs = () => ({ status: 0, stdout: [record(1, 'f.txt'), record(2, 'f.txt'), record(3, 'f.txt'), record(1, 'src/fixtures/z.txt'), record(1, 'gone.txt'), record(1, 'clean.txt'), ''].join('\0'), stderr: '' });
   const reads = [];
   let answer;
 
   try {
-    answer = unmergedConflicts(fakeLs, 'C:/r', {
-      size: (file) => (file.endsWith('big.txt') ? 6 * 1024 * 1024 : 10),
-      read: (file) => {
+    answer = unmergedConflicts(fakeLs, { toplevel: 'C:/r' }, {
+      lines: (file) => {
         reads.push(path.basename(file));
 
-        if (file.endsWith('gone.txt')) throw new Error('ENOENT');
+        if (file.endsWith('gone.txt')) throw Object.assign(new Error('boom'), { code: 'EACCES' });
 
-        return FULL;
+        return file.endsWith('clean.txt') ? ['fine', 'text'] : FULL.split('\n');
       }
     });
   } catch (error) {
@@ -393,18 +482,105 @@ for (const step of STEPS) {
   }
 
   report(answer.thrown === undefined, `unmergedConflicts: an unreadable file does not abort the scan${answer.thrown === undefined ? '' : ` (${answer.thrown})`}`);
-  report(answer.conflicts.length === 1 && answer.conflicts[0].path === 'f.txt', 'unmergedConflicts: three stages of one path are one conflict; a file over 5 MB, a fixtures path and an unreadable file add none');
-  report(reads.join(',') === 'f.txt,gone.txt', 'unmergedConflicts reads each path once, skipping the oversized file and the fixtures path');
-  report(unmergedConflicts(() => ({ status: 128, stdout: '', stderr: 'fatal: x' }), 'C:/r').failure?.includes('git exited 128') === true, 'unmergedConflicts: a git that fails is a failure, never "clean"');
+  report(answer.conflicts.map((conflict) => conflict.path).join(',') === 'f.txt,src/fixtures/z.txt,gone.txt', 'unmergedConflicts: three stages of one path are one conflict; a fixtures path is scanned like any other; an unreadable file is a conflict; a clean one is not');
+  report(answer.conflicts[2].unreadable === 'EACCES' && answer.conflicts[2].line === 0 && answer.conflicts[2].kinds.length === 0, 'unmergedConflicts: an unreadable file says why');
+  report(reads.join(',') === 'f.txt,z.txt,gone.txt,clean.txt', 'unmergedConflicts reads each path once, from the top level');
+  report(unmergedConflicts(() => ({ status: 128, stdout: '', stderr: 'fatal: x' }), { toplevel: 'C:/r' }).failure?.includes('git exited 128') === true, 'unmergedConflicts: a git that fails is a failure, never "clean"');
+  report(unmergedConflicts(fakeLs, { toplevel: 'C:/r' }, { lines: () => [] }).conflicts.length === 0, 'unmergedConflicts: an unmerged file holding no marker is clean');
+
+  // The probe asks git exactly what it should, with every config-dependent switch pinned.
+  const asked = [];
+  const listing = (stdout) => (args) => {
+    asked.push(args);
+
+    return { status: 0, stdout: args.includes('--name-status') ? stdout : '', stderr: '' };
+  };
+  const context = { toplevel: 'C:/r', inProgress: false };
+
+  indexConflicts(listing('R100\0old.txt\0new.txt\0M\0m.txt\0A\0a.txt\0'), context, []);
+
+  const [first, second] = asked;
+
+  report(first.includes('-G^(<<<<<<<|=======|>>>>>>>)') && first.includes('--name-status') && first.includes('-z') && first.includes('-M') && first.includes('--no-relative') && first.includes('--literal-pathspecs') && first.includes('core.quotePath=false'), 'the prefilter is `-G` on the three marker shapes, with renames, and pinned');
+  report(['-U0', '--no-relative', '--src-prefix=a/', '--dst-prefix=b/', '-M', '--no-color', '--no-ext-diff', '--no-textconv', '--literal-pathspecs', '--cached'].every((flag) => second.includes(flag)), 'the patch pins every switch the user configuration could change');
+  report(second.slice(second.indexOf('--') + 1).join(',') === 'old.txt,new.txt,m.txt,a.txt', 'the patch is restricted to the candidates, a rename SOURCE included');
+
+  asked.length = 0;
+  indexConflicts(listing(Array.from({ length: MAX_PATHSPEC + 1 }, (_, index) => `M\0p${index}.txt\0`).join('')), context, []);
+  report(!asked[1].includes('--'), 'above the pathspec limit the patch is taken for the whole index');
+
+  asked.length = 0;
+  indexConflicts(listing(Array.from({ length: MAX_PATHSPEC }, (_, index) => `M\0p${index}.txt\0`).join('')), context, []);
+  report(asked[1].includes('--'), 'at the pathspec limit the patch is still restricted');
+
+  asked.length = 0;
+  report(indexConflicts(listing(''), context, []).conflicts.length === 0 && asked.length === 1, 'no candidate, no patch');
+  report(indexConflicts(() => ({ status: 1, stdout: '', stderr: 'x' }), context, []).failure?.includes('git diff --cached --name-status') === true, 'a failing prefilter is a failure');
+
+  let patchCalls = 0;
+  const patchFails = (args) => (args.includes('--name-status') ? { status: 0, stdout: 'M\0f.txt\0', stderr: '' } : (patchCalls += 1, { status: 2, stdout: '', stderr: 'bad' }));
+
+  report(indexConflicts(patchFails, context, []).failure === 'git diff --cached: git exited 2: bad' && patchCalls === 1, 'a failing patch is a failure');
+
+  // The repository context: where it is, and which operation is in progress.
+  const rev = (stdout) => () => ({ status: 0, stdout, stderr: '' });
+  const revOutput = 'C:/r\n.git/MERGE_HEAD\n.git/REBASE_HEAD\n.git/CHERRY_PICK_HEAD\n.git/REVERT_HEAD\n';
+
+  for (const state of ['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD']) {
+    report(repositoryContext(rev(revOutput), 'C:/r', (file) => slash(file).endsWith(`/.git/${state}`)).inProgress === true, `repositoryContext: ${state} means an operation is in progress`);
+  }
+
+  const idle = repositoryContext(rev(revOutput), 'C:/r', () => false);
+
+  report(idle.inProgress === false && idle.toplevel === 'C:/r', 'repositoryContext: no state file, nothing in progress, and the top level is the first line');
+  report(repositoryContext(() => ({ status: 128, stdout: '', stderr: 'fatal: not a git repository' }), 'C:/x').failure?.includes('git rev-parse: git exited 128') === true, 'repositoryContext: a directory that is no repository is a failure');
+  report(repositoryContext(rev('C:/r\n'), 'C:/r', () => true).inProgress === false, 'repositoryContext: only the four listed paths are state files');
+
+  // The worktree reader streams: chunks, multibyte characters across a chunk edge, a last line with no newline.
+  const sample = path.join(plainDirectory, 'stream.txt');
+  const body = `x${'é'.repeat(CHUNK_BYTES)}\nsecond\n\nlast`;
+
+  writeFileSync(sample, body);
+
+  const streamed = [...fileLines(sample)];
+
+  report(streamed.length === 4 && streamed[0] === `x${'é'.repeat(CHUNK_BYTES)}` && streamed[1] === 'second' && streamed[2] === '' && streamed[3] === 'last', 'fileLines: a multibyte character across a chunk edge, an empty line and an unterminated last line are read intact');
+
+  let closed = 0;
+  const generator = fileLines(sample, { close: () => { closed += 1; } });
+
+  generator.next();
+  generator.return();
+  report(closed === 1, 'fileLines: the descriptor is closed even when the reader stops early');
+  report(Array.from((() => { try { return [...fileLines(path.join(plainDirectory, 'absent.txt'))]; } catch (error) { return [error.code]; } })()).join() === 'ENOENT', 'fileLines: a file that cannot be opened throws its error');
+
+  // The fixture declaration.
+  const declared = (text, code) => declaredFixturePrefixes('fixture-paths.json', () => {
+    if (code !== undefined) throw Object.assign(new Error('read'), { code });
+
+    return text;
+  });
+
+  report(declared('{"prefixes":["a/","b/c/"]}').prefixes.join() === 'a/,b/c/' && declared('{"prefixes":["a/"]}').failure === undefined, 'fixtures: a valid declaration is read');
+  report(declared(undefined, 'ENOENT').prefixes.join() === DEFAULT_FIXTURE_PREFIXES.join() && declared(undefined, 'ENOENT').failure === undefined, 'fixtures: an absent declaration means the default, without complaint');
+  report(declared(undefined, 'EACCES').prefixes.join() === DEFAULT_FIXTURE_PREFIXES.join() && declared(undefined, 'EACCES').failure.includes('EACCES'), 'fixtures: an unreadable declaration means the default and is reported');
+  report(['not json', '{}', '{"prefixes":"a/"}', '{"prefixes":["a"]}', '{"prefixes":["/a/"]}', '{"prefixes":[1]}'].every((text) => declared(text).prefixes.join() === DEFAULT_FIXTURE_PREFIXES.join() && declared(text).failure !== undefined), 'fixtures: a malformed declaration means the default and is reported');
+  report(declaredFixturePrefixes().prefixes.join() === 'conflict-marker-guard/fixtures/', 'fixtures: the declaration in the tree names this guard\'s own fixtures');
 }
 
 // --- 9. the pure parts.
 {
   report(['<<<<<<<', '<<<<<<< HEAD', '=======', '>>>>>>>', '>>>>>>> x', '=======\r'].every((line) => markerKindOf(line) !== undefined), 'markerKindOf: the three kinds, with and without a label, CRLF');
   report(['<<<<<<<<', '======== ', '=======x', '>>>>>>>>', ' <<<<<<<', '======= ', '<<<<<<<HEAD', ''].every((line) => markerKindOf(line) === undefined), 'markerKindOf: eight characters, trailing text, indentation and an empty line are not markers');
-  report(conflictIn(numberedLines('a\n=======\nb\n')) === undefined, 'conflictIn: one kind alone is data');
-  report(conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n'))?.line === 2, 'conflictIn: two kinds are a conflict, at the first marker line');
-  report(isFixturePath('a/fixtures/b.txt') && isFixturePath('a/__fixtures__/b.txt') && isFixturePath('selftest-fixtures/b.txt') && !isFixturePath('fixtures') && !isFixturePath('a/fixtures.txt') && !isFixturePath('src/app/b.txt'), 'isFixturePath: a folder segment, never a file name');
+  report(conflictIn(numberedLines('a\n=======\nb\n')) === undefined, 'conflictIn: a bare `=======` alone is data');
+  report(conflictIn(numberedLines('a\n<<<<<<<\nb\n')) === undefined && conflictIn(numberedLines('a\n>>>>>>>\nb\n')) === undefined, 'conflictIn: a bare unlabelled `<<<<<<<` or `>>>>>>>` alone is data');
+  report(conflictIn(numberedLines('a\n<<<<<<<\nb\n>>>>>>>\n'))?.line === 2, 'conflictIn: two bare kinds are a conflict, at the first marker line');
+  report(conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n'))?.line === 2 && conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n')).kinds.join() === '=======,>>>>>>>', 'conflictIn: two kinds are a conflict, at the first marker line, with the kinds seen');
+  report(conflictIn(numberedLines('a\n<<<<<<< HEAD\nb\n'))?.line === 2 && conflictIn(numberedLines('a\nb\n>>>>>>> 9f8e7d6\n'))?.line === 3, 'conflictIn: one labelled `<<<<<<< x` or `>>>>>>> x` line is a conflict on its own');
+  report(conflictIn(numberedLines('a\n=======\nb\n'), { unmerged: true })?.line === 2 && conflictIn(numberedLines('a\n<<<<<<<\n'), { unmerged: true })?.line === 2, 'conflictIn: for an unmerged file ONE marker of any kind is a conflict');
+  report(conflictIn(numberedLines('a\nb\n'), { unmerged: true }) === undefined && conflictIn([], { unmerged: true }) === undefined, 'conflictIn: an unmerged file with no marker is clean');
+  report(isLabelled('<<<<<<< HEAD') && isLabelled('>>>>>>> 9f8e7d6') && !isLabelled('<<<<<<<') && !isLabelled('>>>>>>> ') && !isLabelled('=======') && !isLabelled('plain'), 'isLabelled: seven characters, a space and a label; a bare run or `=======` is not');
+  report(isDeclaredFixture('a/fixtures/b.txt', ['a/fixtures/']) && !isDeclaredFixture('b/fixtures/b.txt', ['a/fixtures/']) && !isDeclaredFixture('a/fixtures.txt', ['a/fixtures/']) && !isDeclaredFixture('x', []), 'isDeclaredFixture: a declared prefix, never a segment name anywhere');
 
   const patch = ['diff --git a/n.txt b/n.txt', 'new file mode 100644', '--- /dev/null', '+++ b/n.txt', '@@ -0,0 +1 @@', '+n', 'diff --git a/d.txt b/d.txt', 'deleted file mode 100644', '--- a/d.txt', '+++ /dev/null', '@@ -1 +0,0 @@', '-d', 'diff --git a/x.txt b/x.txt', 'index 1..2 100644', '--- a/x.txt', '+++ b/x.txt', '@@ -1,2 +1,0 @@', '-gone', '-gone2', '@@ -5,0 +6,3 @@', '+++ twin header', '+two', '\\ No newline at end of file', '+three'].join('\n');
   const files = addedLinesByFile(patch);

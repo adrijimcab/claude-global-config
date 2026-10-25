@@ -4,35 +4,42 @@
  * array (never a shell line), a short timeout and a bounded output. A git that cannot answer is a FAILURE the
  * caller turns into an allow plus a journal line; it is never read as "clean".
  *
- * WHY `git diff --cached -U0` AND NOT `--check`. Measured 2026-10-25 on a real conflicted merge, staged:
- * `--check` prints `f.txt:2: leftover conflict marker` per line and exits 2, but it says nothing of which
- * marker KIND a line is, so it cannot tell a conflict from a Markdown `=======` underline (it flags that too),
- * and it does not say whether the file is new in the commit. The patch gives, in the same single call, the
- * added lines, their line numbers, their kinds and `new file`. Cost, stated: git's per-path
- * `conflict-marker-size` attribute is not honoured (the default 7 is what every file in practice uses).
+ * THE CALLS, for one repository, in order:
+ *  1. `rev-parse --show-toplevel --git-path <MERGE|REBASE|CHERRY_PICK|REVERT>_HEAD` — the top level that keys
+ *     every other call, and whether a merge, rebase, cherry-pick or revert is in progress.
+ *  2. `diff --cached --name-status -z -M -G<marker shapes>` — the PREFILTER: only paths whose change touches a
+ *     line shaped like a marker (rename sources included, so a rename is never read as a new file).
+ *  3. `diff --cached -U0 … -- <those paths>` — the patch, with every config-dependent switch pinned
+ *     (`--no-relative`, `--src-prefix=a/`, `--dst-prefix=b/`, `-M`, `--no-color`, `--literal-pathspecs`), skipped
+ *     when step 2 found nothing.
+ *  4. only when the same line also stages: `ls-files -u -z --full-name` from the top level, and each listed file
+ *     is read from the worktree as a STREAM (no size limit, no memory cost), because that is what the `add` is
+ *     about to put in the index. A listed file that cannot be read is itself a conflict: git records it as one.
  *
- * WHY THE WORKTREE TOO. In the incident this guard exists for, `git add -- <spec> && git rebase --continue` was
- * ONE command line: when the guard runs, the conflicted file is still UNMERGED, so the index holds no marker
- * yet and `diff --cached` is empty. When the same line stages, the files `git ls-files -u` lists are read from
- * the worktree, because that is what the `add` is about to put in the index.
+ * WHY THE PATCH AND NOT `--check`: measured 2026-10-25 on a real conflicted merge, `--check` prints
+ * `f.txt:2: leftover conflict marker` and exits 2, but it flags a Markdown `=======` underline too and says
+ * neither the marker kind nor whether the file is new. WHY THE WORKTREE TOO: in the incident, `git add -- <spec>
+ * && git rebase --continue` was ONE line; when the guard runs the file is still unmerged and the index holds no
+ * marker. Cost, stated: git's per-path `conflict-marker-size` attribute is not honoured (the default 7 is used).
  *
- * @es EL ADAPTADOR DE GIT de la guardia: pregunta a un repositorio qué commitearía su índice y qué
- * añadiría al índice el árbol de trabajo para los ficheros aún sin fusionar. Cada llamada es UN proceso `git`
- * con argumentos en array, un tiempo límite corto y una salida acotada. Un git que no puede responder es un
- * FALLO que quien llama convierte en permitir más una línea de journal; jamás se lee como «limpio». POR QUÉ
- * `git diff --cached -U0` Y NO `--check`: medido el 2026-10-25, `--check` da líneas pero no el TIPO de marca,
- * así que no distingue un conflicto de un subrayado `=======` de Markdown (lo marca también), ni dice si el
- * fichero es nuevo; el parche lo da todo en una llamada. Coste: no respeta `conflict-marker-size`. POR QUÉ
- * TAMBIÉN EL ÁRBOL: en el incidente, `git add -- <spec> && git rebase --continue` era UNA línea; cuando corre la
- * guardia el fichero sigue sin fusionar, el índice aún no tiene marcas. Si la misma línea hace `add`, los
- * ficheros de `git ls-files -u` se leen del árbol de trabajo.
+ * @es EL ADAPTADOR DE GIT de la guardia. Cada llamada es UN proceso `git` con argumentos en array, tiempo
+ * límite corto y salida acotada; un git que no responde es un FALLO (se permite y se registra), jamás «limpio».
+ * Las llamadas: (1) `rev-parse` da el nivel superior que enlaza todo y si hay fusión, rebase, cherry-pick o revert
+ * en curso; (2) el PREFILTRO `diff --cached --name-status -G` deja solo las rutas cuyo cambio toca una línea con
+ * forma de marca (con el origen de los renombrados); (3) el parche `-U0` con todo lo que depende de la
+ * configuración FIJADO; (4) solo si la misma línea hace `add`, `ls-files -u --full-name` desde el nivel superior
+ * y cada fichero se lee del árbol de trabajo en FLUJO, sin límite de tamaño; uno ilegible es en sí un conflicto.
+ * Por qué el parche y no `--check`: marca también el subrayado Markdown y no dice el tipo ni si el fichero es
+ * nuevo. Por qué también el árbol: en el incidente el `add` y el `continue` eran UNA línea. Coste: no se respeta
+ * `conflict-marker-size`.
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readSync } from 'node:fs';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 
-import { conflictIn, conflictsInPatch, isFixturePath, MAX_SCANNED_BYTES, numberedLines } from './markers.mjs';
+import { conflictIn, conflictsInPatch } from './markers.mjs';
 
 /** How long one git call may take. @es Cuánto puede tardar una llamada a git. */
 export const GIT_TIMEOUT_MS = 4000;
@@ -40,8 +47,20 @@ export const GIT_TIMEOUT_MS = 4000;
 /** The largest output of one git call. @es La mayor salida de una llamada a git. */
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 
-/** Paths unquoted, so a name with accents or spaces is read as it is. @es Rutas sin entrecomillar. */
-const PLAIN_PATHS = ['-c', 'core.quotePath=false'];
+/** How many bytes of a worktree file are read at a time. @es Cuántos bytes de un fichero se leen por vez. */
+export const CHUNK_BYTES = 64 * 1024;
+
+/** The paths of a prefiltered diff above which the patch is taken for the whole index. @es Por encima de esto el parche abarca todo el índice. */
+export const MAX_PATHSPEC = 200;
+
+/** Lines shaped like a marker, as the pickaxe regular expression (POSIX extended) `-G` reads it. @es Líneas con forma de marca para `-G`. */
+const MARKER_SHAPES = '^(<<<<<<<|=======|>>>>>>>)';
+
+/** Global git switches: paths unquoted, and pathspecs taken literally. @es Opciones globales de git. */
+const PLAIN = ['-c', 'core.quotePath=false', '--literal-pathspecs'];
+
+/** The in-progress states, each a file in the git directory while it lasts. @es Los estados en curso. */
+const IN_PROGRESS_FILES = ['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD'];
 
 /** `git <args>` in `cwd`: `{ status, stdout, stderr, error }`. `spawn` is a test seam. @es Corre `git <args>` en `cwd`; `spawn` es un punto de prueba. */
 export function runGit(args, { cwd }, spawn = spawnSync) {
@@ -57,23 +76,108 @@ function failureOf(result, what) {
 }
 
 /**
- * The leftover conflicts the index would commit: `{ conflicts }`, or `{ failure }` when git did not answer.
- * @es Los conflictos olvidados que commitearía el índice, o `{ failure }`.
+ * The repository `directory` belongs to: `{ toplevel, inProgress }`, or `{ failure }`.
+ * @param exists Replaces `fs.existsSync` (a test seam). @es Sustituye a `fs.existsSync`.
+ * @es El repositorio al que pertenece `directory`.
  */
-export function indexConflicts(run, directory) {
-  const result = run([...PLAIN_PATHS, 'diff', '--cached', '-U0', '--no-color', '--no-ext-diff', '--no-textconv'], { cwd: directory });
-  const failure = failureOf(result, 'git diff --cached');
+export function repositoryContext(run, directory, exists = existsSync) {
+  const result = run(['rev-parse', '--show-toplevel', ...IN_PROGRESS_FILES.flatMap((name) => ['--git-path', name])], { cwd: directory });
+  const failure = failureOf(result, 'git rev-parse');
 
-  return failure === undefined ? { conflicts: conflictsInPatch(result.stdout) } : { failure };
+  if (failure !== undefined) return { failure };
+
+  const [toplevel, ...statePaths] = result.stdout.split('\n');
+
+  return { toplevel, inProgress: statePaths.slice(0, IN_PROGRESS_FILES.length).some((statePath) => statePath.length > 0 && exists(path.resolve(directory, statePath))) };
+}
+
+/** The paths a `--name-status -z` listing names, rename and copy sources included. @es Las rutas que nombra un listado `--name-status -z`. */
+function pathsOfNameStatus(stdout) {
+  const tokens = stdout.split('\0');
+  const paths = [];
+
+  for (let index = 0; index < tokens.length - 1; ) {
+    const width = tokens[index].startsWith('R') || tokens[index].startsWith('C') ? 2 : 1;
+
+    paths.push(...tokens.slice(index + 1, index + 1 + width));
+    index += 1 + width;
+  }
+
+  return paths;
 }
 
 /**
- * The leftover conflicts in the worktree copy of every still-unmerged file: `{ conflicts }`, or `{ failure }`.
- * @param readFile Replaces the file reader (a test seam). @es Sustituye al lector de ficheros.
- * @es Los conflictos olvidados en la copia del árbol de trabajo de cada fichero aún sin fusionar.
+ * The leftover conflicts the index would commit: `{ conflicts }`, or `{ failure }` when git did not answer.
+ * @param fixturePrefixes The declared fixture prefixes. @es Los prefijos de fixtures declarados.
+ * @es Los conflictos olvidados que commitearía el índice, o `{ failure }`.
  */
-export function unmergedConflicts(run, directory, { read = readFileSync, size = (file) => statSync(file).size } = {}) {
-  const result = run(['ls-files', '-u', '-z'], { cwd: directory });
+export function indexConflicts(run, { toplevel, inProgress }, fixturePrefixes) {
+  const listing = run([...PLAIN, 'diff', '--cached', '--name-status', '-z', '-M', '--no-relative', '--no-color', '--no-ext-diff', '--no-textconv', `-G${MARKER_SHAPES}`], { cwd: toplevel });
+  const listingFailure = failureOf(listing, 'git diff --cached --name-status');
+
+  if (listingFailure !== undefined) return { failure: listingFailure };
+
+  const candidates = pathsOfNameStatus(listing.stdout);
+
+  if (candidates.length === 0) return { conflicts: [] };
+
+  const restrict = candidates.length <= MAX_PATHSPEC ? ['--', ...candidates] : [];
+  const patch = run([...PLAIN, 'diff', '--cached', '-U0', '--no-relative', '--src-prefix=a/', '--dst-prefix=b/', '-M', '--no-color', '--no-ext-diff', '--no-textconv', ...restrict], { cwd: toplevel });
+  const patchFailure = failureOf(patch, 'git diff --cached');
+
+  return patchFailure === undefined ? { conflicts: conflictsInPatch(patch.stdout, { exemptNew: !inProgress, fixturePrefixes }) } : { failure: patchFailure };
+}
+
+/**
+ * The lines of a file, read in chunks: the whole file is never in memory. Throws when it cannot be opened or read.
+ * @param options.open @param options.read @param options.close Replace the `fs` calls (test seams).
+ * @es Las líneas de un fichero, leídas por trozos: el fichero entero nunca está en memoria.
+ */
+export function* fileLines(file, { open = openSync, read = readSync, close = closeSync } = {}) {
+  const descriptor = open(file, 'r');
+
+  try {
+    const decoder = new StringDecoder('utf8');
+    const buffer = Buffer.alloc(CHUNK_BYTES);
+    let carry = '';
+
+    for (;;) {
+      const count = read(descriptor, buffer, 0, CHUNK_BYTES, null);
+
+      if (count === 0) break;
+
+      const parts = `${carry}${decoder.write(buffer.subarray(0, count))}`.split('\n');
+
+      carry = parts.pop();
+      yield* parts;
+    }
+
+    carry += decoder.end();
+    if (carry.length > 0) yield carry;
+  } finally {
+    close(descriptor);
+  }
+}
+
+/** The lines of `lines` with their numbers, lazily. @es Las líneas con su número, de forma perezosa. */
+function* numbered(lines) {
+  let number = 0;
+
+  for (const text of lines) {
+    number += 1;
+    yield { number, text };
+  }
+}
+
+/**
+ * The conflicts in the worktree copy of every still-unmerged file: `{ conflicts }`, or `{ failure }`. A listed file
+ * is in conflict by git's own record, so ANY marker counts, and one that cannot be read is reported as a conflict
+ * (`unreadable`), never as clean.
+ * @param options.lines Replaces `fileLines` (a test seam). @es Sustituye a `fileLines`.
+ * @es Los conflictos en la copia del árbol de trabajo de cada fichero aún sin fusionar.
+ */
+export function unmergedConflicts(run, { toplevel }, { lines = fileLines } = {}) {
+  const result = run(['ls-files', '-u', '-z', '--full-name'], { cwd: toplevel });
   const failure = failureOf(result, 'git ls-files -u');
 
   if (failure !== undefined) return { failure };
@@ -83,18 +187,12 @@ export function unmergedConflicts(run, directory, { read = readFileSync, size = 
   const conflicts = [];
 
   for (const name of names) {
-    if (isFixturePath(name)) continue;
-
     try {
-      const file = path.resolve(directory, name);
-
-      if (size(file) > MAX_SCANNED_BYTES) continue;
-
-      const conflict = conflictIn(numberedLines(read(file, 'utf8')));
+      const conflict = conflictIn(numbered(lines(path.join(toplevel, name))), { unmerged: true });
 
       if (conflict !== undefined) conflicts.push({ path: name, ...conflict });
-    } catch {
-      // A file that cannot be read (deleted by one side) holds no marker the add could stage.
+    } catch (error) {
+      conflicts.push({ path: name, line: 0, kinds: [], unreadable: error.code ?? error.message });
     }
   }
 
