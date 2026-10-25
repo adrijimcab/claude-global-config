@@ -330,14 +330,26 @@ export function releaseLock(lockFile, { remove = removeFile } = {}) {
 }
 
 /**
+ * Whether the release failure can ride on the work's error without changing it: an object that can take a new
+ * property and carries no `suppressed` of its own. Otherwise the error is rethrown untouched (a frozen error would
+ * make the assignment throw a TypeError that masks it; an own `suppressed` is someone else's chain), and the
+ * failure is only reported.
+ * @es Si el fallo al soltar puede ir sobre el error del trabajo sin cambiarlo: un objeto que admite una propiedad
+ * nueva y no tiene `suppressed` propio. Si no, el error se relanza intacto (uno congelado haría lanzar un TypeError
+ * que lo taparía; un `suppressed` propio es la cadena de otro), y el fallo solo se informa.
+ */
+const canCarry = (error) => error !== null && typeof error === 'object' && Object.isExtensible(error) && !Object.hasOwn(error, 'suppressed');
+
+/**
  * Runs `work` holding the lock and releases it whether `work` returns or throws. A release that fails never
  * changes what the work did: a work that returned still returns its value, a work that threw still throws its own
- * error (with the release failure attached as `suppressed`), and the release failure is reported, bilingual,
- * through `options.report` (stderr by default).
+ * error (with the release failure attached as `suppressed` when the error can carry it, see `canCarry`), and the
+ * release failure is reported, bilingual, through `options.report` (stderr by default).
  * @returns `{ held: true, value }`, or `{ held: false }` when the lock could not be taken: `work` did not run and the holder's lock is untouched.
  * @es Ejecuta `work` con el lock y lo suelta tanto si vuelve como si lanza. Un fallo al soltar nunca cambia lo que
  * hizo el trabajo: si volvió, vuelve con su valor; si lanzó, lanza su propio error (con el fallo al soltar adjunto
- * como `suppressed`), y el fallo al soltar se informa, bilingüe. Con el lock ocupado, `work` no corre.
+ * como `suppressed` si el error puede llevarlo, ver `canCarry`), y el fallo al soltar se informa, bilingüe. Con el
+ * lock ocupado, `work` no corre.
  */
 export function withLock(lockFile, work, options = {}) {
   if (!takeLock(lockFile, options)) return { held: false };
@@ -361,7 +373,7 @@ export function withLock(lockFile, work, options = {}) {
   } catch (error) {
     const failure = release();
 
-    if (failure !== undefined && error !== null && typeof error === 'object') error.suppressed = failure;
+    if (failure !== undefined && canCarry(error)) Object.defineProperty(error, 'suppressed', { value: failure, writable: true, configurable: true, enumerable: true });
 
     throw error;
   }

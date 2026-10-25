@@ -559,6 +559,45 @@ process.stdout.write(String(takeLock(${JSON.stringify(lockPath)}, { attempts: 3,
   check('L3: a work that throws reaches the caller as itself, with the release failure attached, and reported', [thrown === boom, thrown?.suppressed?.name, thrown?.suppressed?.cause?.code, reported.length], [true, 'LockFault', 'EIO', 1]);
   rmSync(target, { force: true });
 
+  // A work error that cannot carry the failure is rethrown untouched: a frozen one (an assignment would throw a
+  // TypeError that masks it), and one with its own `suppressed` chain (which is not overwritten). The failure is
+  // still reported. @es Un error que no puede llevar el fallo se relanza intacto: uno congelado y uno con su propia
+  // cadena `suppressed`; el fallo se informa igual.
+  const thrownBy = (work) => {
+    try {
+      lock.withLock(target, work, options({ remove: releaseFails, report: (line) => reported.push(line) }));
+    } catch (error) {
+      return error;
+    } finally {
+      rmSync(target, { force: true });
+    }
+
+    return undefined;
+  };
+  const frozen = Object.freeze(new Error('frozen'));
+
+  reported.length = 0;
+  const frozenThrown = thrownBy(() => { throw frozen; });
+
+  check('L3: a frozen work error reaches the caller as itself, untouched, and the release failure is reported', [frozenThrown === frozen, Object.hasOwn(frozen, 'suppressed'), reported.length], [true, false, 1]);
+
+  const earlier = new Error('earlier');
+  const chained = Object.assign(new Error('chained'), { suppressed: earlier });
+
+  reported.length = 0;
+  const chainedThrown = thrownBy(() => { throw chained; });
+
+  check('L3: a work error with its own suppressed chain keeps it, and the release failure is reported', [chainedThrown === chained, chained.suppressed === earlier, reported.length], [true, true, 1]);
+
+  // An inherited, non-writable `suppressed` cannot make the attachment throw either. @es Un `suppressed` heredado
+  // y no escribible tampoco hace lanzar la asignación.
+  const guarded = Object.create(Object.defineProperty({}, 'suppressed', { value: 'inherited', writable: false }));
+
+  reported.length = 0;
+  const guardedThrown = thrownBy(() => { throw guarded; });
+
+  check('L3: a work error with an inherited read-only suppressed still carries the failure as its own', [guardedThrown === guarded, guarded.suppressed?.name], [true, 'LockFault']);
+
   // Without a reporter, the report goes to the standard error of the process. @es Sin reportero, el informe va a stderr.
   const script = `import { withLock } from ${JSON.stringify(new URL('./file-lock.mjs', import.meta.url).href)};
 const target = ${JSON.stringify(path.join(scratch, 'release-stderr.lock'))};

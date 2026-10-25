@@ -113,7 +113,10 @@ const MUTANTS = [
   ['L3: a release failure after a finished work throws', L, RELEASE_REPORT, '      throw error;'],
   ['L3: a release failure is not reported', L, '      report(error instanceof Error ? error.message : String(error));\n', ''],
   ['L3: a release failure masks the work\'s own error', L, '    throw error;\n  }\n\n  release();', '    throw failure ?? error;\n  }\n\n  release();'],
-  ['L3: a release failure is not attached to the work\'s error', L, 'error.suppressed = failure;', 'void failure;'],
+  ['L3: a release failure is not attached to the work\'s error', L, "if (failure !== undefined && canCarry(error)) Object.defineProperty(error, 'suppressed',", "if (false) Object.defineProperty(error, 'suppressed',"],
+  ['L3: a frozen work error is written to anyway, and the TypeError masks it', L, '&& Object.isExtensible(error) &&', '&&'],
+  ['L3: an own suppressed chain of the work error is overwritten', L, " && !Object.hasOwn(error, 'suppressed');", ';'],
+  ['L3: the failure is attached by assignment, which an inherited read-only suppressed refuses', L, "Object.defineProperty(error, 'suppressed', { value: failure, writable: true, configurable: true, enumerable: true });", 'error.suppressed = failure;'],
   ['L3: withLock releases with the default removal, not the given one', L, '      releaseLock(lockFile, options);', '      releaseLock(lockFile);'],
   ['L3: withLock reports nowhere by default', L, 'const report = options.report ?? toStderr;', 'const report = options.report ?? (() => undefined);']
 ];
