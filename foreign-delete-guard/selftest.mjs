@@ -644,6 +644,7 @@ try {
   check('journal: the journal lives in the isolated state folder, one file per agent', existsSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'abc.jsonl')));
 
   recordCreations('torn', [canonical(at('mine.mjs'))], 5);
+  mkdirSync(path.join(stateDir('foreign-delete-guard'), 'authored'), { recursive: true });
   appendFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'torn.jsonl'), '{torn\n{"path":1,"at":5}\n{"path":"p","at":"x"}\n');
   recordCreations('torn', [canonical(at('mine.mjs'))], 9);
   recordCreations('maxed', [canonical(at('mine.mjs'))], 9);
