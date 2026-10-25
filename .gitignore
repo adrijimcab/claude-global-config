@@ -352,6 +352,10 @@
 !/git-worktree/
 !/git-worktree/**
 
+# The one way the kit runs git (code, proof and the scripted double). @es La única forma en que el kit corre git (código, prueba y doble guionado).
+!/git-port/
+!/git-port/**
+
 # Where a review happens: the review stop hook runs only in a linked worktree (code and proof; its journal stays ignored). @es Dónde ocurre una revisión: el hook de parada de revisión corre solo en un worktree enlazado.
 !/review-site/
 !/review-site/**
