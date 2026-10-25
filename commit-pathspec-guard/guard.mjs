@@ -32,10 +32,7 @@
  * fallo propio.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { offendingInvocationFor } from './decide.mjs';
 
 /** The command that commits exactly the staged content after verifying the declaration (`commit-staged.mjs`). @es El comando que commitea exactamente lo que está en stage. */
@@ -104,13 +101,9 @@ function refusalText({ text, repo }) {
  * `~/.claude/hook-dispatch/dispatch.mjs` la corra dentro de su propio proceso. Falla abierta.
  */
 export function evaluate(raw) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   let offender;
 
@@ -122,28 +115,9 @@ export function evaluate(raw) {
 
   if (offender === undefined) return undefined;
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: refusalText(offender)
-    }
-  };
+  return deny(refusalText(offender));
 }
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-}
-
-// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre.
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
+// Only as the main process; imported by the dispatcher or a selftest, it never runs.
+// @es Solo como proceso principal; importada por el dispatcher o un selftest, no corre.
+runWhenMain(import.meta.url, hookMain(evaluate));

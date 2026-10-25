@@ -22,10 +22,10 @@
  * lección —la mecánica— y lo dice. Cualquier fallo propio o medición imposible DEJA PASAR.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { lossyResolutions } from './conflict.mjs';
 import { sideTakings } from './side-taking.mjs';
@@ -87,13 +87,9 @@ function reasonFor(take, lossy) {
  * `~/.claude/hook-dispatch/dispatch.mjs` la corra dentro de su propio proceso.
  */
 export function evaluate(raw) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   let reason;
 
@@ -123,33 +119,11 @@ export function evaluate(raw) {
 
   journal(raw);
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: reason
-    }
-  };
-}
-
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output === undefined) return;
-
-  console.log(JSON.stringify(output));
+  return deny(reason);
 }
 
 // Only when RUN as the hook. Imported — which is how the proof reads the error-journal path from the
 // one place that owns it, instead of repeating the literal and drifting from it — nothing reads stdin.
 // @es Solo al EJECUTARSE como hook: importado (así la prueba lee la ruta del journal de su dueño) no
 // toca stdin.
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+runWhenMain(import.meta.url, hookMain(evaluate));
