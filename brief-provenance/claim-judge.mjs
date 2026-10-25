@@ -45,6 +45,7 @@ export const PROMPT = [
   '- "MEASURED: Playwright closes its children on SIGTERM" (playwright)',
   '- "MEASURED: Playwright closes its children on SIGTERM and they exit 0" (playwright)',
   '- "MEASURED: `playwright` closes its children on SIGTERM" (playwright)',
+  '- "MEASURED: playwright 1.58.0 in package.json closes its children on SIGTERM" (playwright)',
   '- "MEASURED: Playwright cierra sus procesos hijos al recibir SIGTERM" (playwright)',
   'Examples that PASS:',
   '- "MEASURED: npx eslint src exit 0" (eslint)',

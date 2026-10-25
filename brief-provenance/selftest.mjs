@@ -226,9 +226,11 @@ const cases = [
   // @es LA CARA DE DEPENDENCIAS — el prefiltro manda al juez solo lo que nombra una dependencia sin citar fuente.
   // ---------------------------------------------------------------------------------------------
   ['deny', claim('MEASURED: Playwright closes its children on SIGTERM'), 'REAL INCIDENT, as written: the claim reaches the judge, which refuses', 'playwright', REFUSE, 'Playwright closes its children on SIGTERM (playwright)'],
-  ['deny', claim('MEASURED: Playwright closes its children on SIGTERM and they exit 0'), 'JUDGES: an exit code beside the claim does not keep it from the judge', 'playwright', REFUSE],
-  ['deny', claim('MEASURED: `playwright` closes its children on SIGTERM'), 'JUDGES: a backticked name does not keep it from the judge', 'playwright', REFUSE],
-  ['deny', claim('MEASURED: playwright 1.58.0 in package.json closes its children on SIGTERM'), 'JUDGES: a version beside package.json does not keep it from the judge', 'playwright', REFUSE],
+  // Each bypass the judges measured reaches the judge AND is one of the rubric's failing examples.
+  // @es Cada esquive que midieron los jueces llega al juez Y es un ejemplo que falla en la rúbrica.
+  ['deny', claim('MEASURED: Playwright closes its children on SIGTERM and they exit 0'), 'JUDGES: an exit code beside the claim does not keep it from the judge', 'playwright', REFUSE, '- "MEASURED: Playwright closes its children on SIGTERM and they exit 0" (playwright)'],
+  ['deny', claim('MEASURED: `playwright` closes its children on SIGTERM'), 'JUDGES: a backticked name does not keep it from the judge', 'playwright', REFUSE, '- "MEASURED: `playwright` closes its children on SIGTERM" (playwright)'],
+  ['deny', claim('MEASURED: playwright 1.58.0 in package.json closes its children on SIGTERM'), 'JUDGES: a version beside package.json does not keep it from the judge', 'playwright', REFUSE, '- "MEASURED: playwright 1.58.0 in package.json closes its children on SIGTERM" (playwright)'],
   ['deny', claim('MEASURED: PLAYWRIGHT closes its children'), 'an upper-case name is the same package', 'playwright', REFUSE],
   ['deny', claim('MEASURED: legacypkg breaks on SIGTERM', WORDS), 'a manifest name with capitals is matched folded', 'legacypkg', REFUSE],
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal carries the judge\'s reason', `JUDGE — ${JUDGE_REASON}`, REFUSE],
@@ -285,6 +287,11 @@ const cases = [
   ['allow', claim('MEASURED: playwright stops only on SIGINT, see lib/x.js:12:5'), 'a path:line:col citation passes'],
   ['allow', claim('MEASURED: playwright stops only on SIGINT, see lib/x.js:12-14:5'), 'a path:range:col citation passes'],
   ['allow', claim('MEASURED: playwright stops only on SIGINT, see lib/.npmrc:2'), 'a hidden file under a directory is a citation'],
+  ['allow', claim('MEASURED: playwright stops only on SIGINT, see a/x.js:12'), 'a one-letter directory is no drive letter'],
+  ['deny', claim('MEASURED: playwright closes, see 1:/x/y.js:12'), 'a digit before a colon is no drive letter', 'playwright', REFUSE],
+  ['deny', claim('  - an intro bullet\nMEASURED: playwright closes'), 'a bullet before any claim belongs to no unit', 'playwright', REFUSE],
+  ['deny', claim('MEASURED: playwright closes, and playwright says so'), 'a package named twice in a unit is sent once', 'playwright', REFUSE, 'says so (playwright)\n'],
+  ['deny', claim('MEASURED: left-pad pads\nMEASURED: left-pad trims'), 'a package named by two units is listed once in the refusal', 'installed dependency behaves (left-pad) and', REFUSE],
   ['allow', claim('MEASURED: the teardown, playwright included:\n  - read in node_modules/playwright/lib/x.js:3'), 'a heading and its cited bullet are ONE unit: the heading is not refused alone'],
   ['allow', claim('MEASURED: lodash ok\nMEASURED: playwright closes (node_modules/playwright/lib/x.js:1)'), 'every dependency unit cited passes'],
   ['allow', claim('MEASURED: playwright stops on SIGINT:\n  node_modules/playwright/lib/x.js:3'), 'a citation opening a continuation line is its own word'],

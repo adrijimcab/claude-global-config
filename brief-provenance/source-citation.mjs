@@ -40,16 +40,17 @@ const withoutDrive = (path) => (LETTERS.includes(path.charAt(0)) && path.charAt(
 /** Whether `path` is a file under a directory, with a letters-only extension and no port. @es Si `path` es un fichero bajo un directorio, con extensión de letras y sin puerto. */
 function isSourcePath(path) {
   const local = withoutDrive(path);
-  const dot = local.lastIndexOf('.');
-  const extension = dot >= 0 ? local.slice(dot + 1) : '';
+  // With no dot this is the whole path, which holds a `/` (required below), never a letter: no extension.
+  const extension = local.slice(local.lastIndexOf('.') + 1);
 
   return local.includes('/') && !local.includes(':') && extension.length > 0 && [...extension].every((character) => LETTERS.includes(character));
 }
 
-/** Whether one word is `dir/file.ext:line` or `dir/file.ext:line:col`, and no URL. @es Si una palabra es una cita. */
+/**
+ * Whether one word is `dir/file.ext:line` or `dir/file.ext:line:col`. A URL never is: its scheme puts a colon in
+ * the path, which `isSourcePath` refuses. @es Si una palabra es una cita; una URL nunca, por el dos puntos del esquema.
+ */
 function isCitation(word) {
-  if (word.includes('://')) return false;
-
   const parts = trimPeriods(word).split(':');
   const withLine = isLineRef(parts.at(-1)) && isSourcePath(parts.slice(0, -1).join(':'));
   const withColumn = isDigits(parts.at(-1)) && isLineRef(parts.at(-2) ?? '') && isSourcePath(parts.slice(0, -2).join(':'));
