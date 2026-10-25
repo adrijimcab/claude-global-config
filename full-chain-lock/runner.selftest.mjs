@@ -356,6 +356,25 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
 }
 
 {
+  const told = [];
+  const say = { say: () => undefined, complain: (id) => told.push(id), line: () => '' };
+  let takes = 0;
+  const lock = { tryTake: () => { takes += 1; return takes === 4; }, readHolder: () => (takes === 1 ? undefined : { chain: 'a', project: 'p', session: 's', pid: 1, startedAt: 't' }), release: () => undefined };
+
+  await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 5000, pollMs: 10 }, { lock, child: { run: () => Promise.resolve(0) }, clock: { now: () => 0, sleep }, say, processId: 1 });
+
+  check('a record missing only at the first look is not announced as unreadable', told.join() === 'waiting', told.join());
+
+  const stillTold = [];
+  let looks = 0;
+  const missing = { tryTake: () => { looks += 1; return looks === 4; }, readHolder: () => undefined, release: () => undefined };
+
+  await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 5000, pollMs: 10 }, { lock: missing, child: { run: () => Promise.resolve(0) }, clock: { now: () => 0, sleep }, say: { ...say, complain: (id) => stillTold.push(id) }, processId: 1 });
+
+  check('a record still missing at the second look is announced once as unreadable', stillTold.join() === 'waiting-unreadable', stillTold.join());
+}
+
+{
   let now = 0;
   let ran = 0;
   const sleeps = [];
@@ -494,7 +513,7 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   check('a take whose record cannot be written fails and does not keep the lock', unwritable && !existsSync(LOCK));
 
   clearState();
-  check('with no record file there is no holder', lock.readHolder() === undefined);
+  check('with no record file there is no holder', (() => { try { return lock.readHolder() === undefined; } catch { return false; } })());
   check('a release with nothing taken does nothing', (() => { lock.release(); return lockFree(); })());
 }
 
