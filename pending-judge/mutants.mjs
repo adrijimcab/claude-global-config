@@ -21,6 +21,11 @@ const MEASURE = 'pending-judge/measure.mjs';
 
 const MUTANTS = [
   // --- THE RUBRIC.
+  ['the rubric v3 stops passing work queued into the current run', PROMPT, ' So is work queued into the current run or landing (the next free worker slot, the next checkpoint or batch: "en cuanto se libere un lugar entra el juez de voz", "lo sumo al checkpoint-42"),', ' So is'],
+  ['the rubric v3 stops passing the listed remaining steps of the change', PROMPT, 'and the remaining steps of the change the message reports on, when it lists them as its plan ("lo que queda antes del reporte: 1. validar, 2. mover develop", "queda archivar el SDD" at the end of a finished change).', 'and nothing else.'],
+  ['the rubric v3 stops blocking a record put off', PROMPT, "  '- Putting off the RECORD of an item is pending, because the item stays unrecorded: \"cuando llegue el veredicto de CI actualizo el backlog\", \"después lo anoto en el backlog\".',\n", ''],
+  ['the rubric v3 stops blocking a claim check put off', PROMPT, "  '- Putting off the check of a claim the message states now without measuring it is pending: \"lo estimó a mano en 138 mil; lo mido de verdad cuando aterrice\".',\n", ''],
+  ['the rubric v3 stops passing an item put to the owner', PROMPT, ', or it names an item and asks the owner, in this message, what to do with it ("¿lo sumo ahora o lo dejo en la fila?")', ''],
   ['the rubric stops naming the durable stores', PROMPT, 'A durable store is engram, a backlog record, a feature document or a commit.', 'A durable store is a place.'],
   ['the rubric stops counting a cited record as a record', PROMPT, '3. Answer {"ok": true} when every item it leaves for later is recorded:', '3. Answer {"ok": true} when it is'],
   ['the rubric stops treating not-yet as pending', PROMPT, '5. «todavía no», «aún no» and «not yet» followed by a deferral are pending, not a negation of pending:', '5. «todavía no» is a negation:'],
@@ -43,7 +48,7 @@ const MUTANTS = [
   ['the rubric lets the model set impossible', PROMPT, 'Never set the field impossible.', ''],
   ['the rubric spells the marker literally', PROMPT, 'starts with the word PENDING-JUDGE followed by a colon', 'starts with PENDING-JUDGE:'],
   ['the rubric loses its second dollar-free guarantee', PROMPT, 'is: $ARGUMENTS', 'is: $ARGUMENTS and $x'],
-  ['the signature is still v1', PROMPT, "'pending-judge rubric v2.'", "'pending-judge rubric v1.'"],
+  ['the signature is still v2', PROMPT, "'pending-judge rubric v3.'", "'pending-judge rubric v2.'"],
   ['the timeout drifts', PROMPT, 'TIMEOUT_SECONDS = 30', 'TIMEOUT_SECONDS = 20'],
   ['the marker drifts', PROMPT, "MARKER = 'PENDING-JUDGE:'", "MARKER = 'PENDING:'"],
 

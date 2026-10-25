@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-queued-next-slot",
+  "expect": "pass",
+  "provenance": "author",
+  "source": "synthetic: work queued into the next free worker slot of the current run (T4A2 rubric v3)",
+  "message": "Trabajan 5 workers, que es el tope. En cuanto se libere un lugar entra el juez de voz, que queda por lanzar."
+}
