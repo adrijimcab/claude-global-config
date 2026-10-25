@@ -207,7 +207,7 @@ check('promotion: another rubric is allowed only with a MET record of its exact 
 check('promotion: the live rubric is allowed by the recorded ship bar', measure.promotionAllowed(LIVE_PROMPT, V7.PROMPT, measure.readShipBarRecord()), true);
 check('promotion: the hook runs v7 while the recorded ship bar has not passed', [measure.readShipBarRecord()?.met === true, LIVE_PROMPT === V7.PROMPT], [false, true]);
 check('promotion: the ship-bar record lives beside the rubrics', measure.SHIP_BAR_RECORD, path.join(HERE, 'ship-bar.json'));
-check('promotion: a ship-bar record names the rubric, its text hash, the verdict and the owner labels', measure.shipBarRecord({ path: '/r/v8f.mjs', prompt: 'P $ARGUMENTS' }, { met: false, en: 'not enough owner labels (2/10)' }, 2, 6, '2026-10-25'), { rubric: '/r/v8f.mjs', promptSha256: sha256('P $ARGUMENTS'), met: false, verdict: 'not enough owner labels (2/10)', ownerLabels: 2, runs: 6, measuredOn: '2026-10-25' });
+check('promotion: a ship-bar record names the rubric, its text hash, the verdict and the owner labels', measure.shipBarRecord({ path: path.join(HERE, 'rubrics', 'v8f.mjs'), prompt: 'P $ARGUMENTS' }, { met: false, en: 'not enough owner labels (2/10)' }, 2, 6, '2026-10-25'), { rubric: 'rubrics/v8f.mjs', promptSha256: sha256('P $ARGUMENTS'), met: false, verdict: 'not enough owner labels (2/10)', ownerLabels: 2, runs: 6, measuredOn: '2026-10-25' });
 check('measure: a module with no PROMPT is an error', await thrown(() => measure.loadRubric(noPrompt)), `the rubric module ${noPrompt} exports no PROMPT string holding $ARGUMENTS`);
 check('measure: a PROMPT without $ARGUMENTS is an error', await thrown(() => measure.loadRubric(promptWithoutInput)), `the rubric module ${promptWithoutInput} exports no PROMPT string holding $ARGUMENTS`);
 check('measure: a module with no MARKER is an error', await thrown(() => measure.loadRubric(noMarker)), `the rubric module ${noMarker} exports no MARKER string`);
@@ -289,7 +289,7 @@ const prefixAsked = asked.splice(0);
 const recordExit = await measure.main(['--rates', '--runs', '1', '--prefix', 'held-owner-', '--record', '--rubric', goodRubric, '--only', 'held-owner-red-5f411d3c-10181322'], { ask: fakeAsk, writeRecord }).catch((error) => `threw: ${error.message}`);
 
 printedLines.splice(0);
-check('measure: --rates writes the ship-bar record only with --record, for the rubric it measured', [recordExit, written.length, written[0]?.rubric, written[0]?.promptSha256, written[0]?.met, written[0]?.ownerLabels, written[0]?.runs, /^\d{4}-\d{2}-\d{2}$/.test(written[0]?.measuredOn ?? '')], [1, 1, goodRubric, sha256('judge $ARGUMENTS'), false, 1, 1, true]);
+check('measure: --rates writes the ship-bar record only with --record, for the rubric it measured', [recordExit, written.length, written[0]?.rubric, written[0]?.promptSha256, written[0]?.met, written[0]?.ownerLabels, written[0]?.runs, /^\d{4}-\d{2}-\d{2}$/.test(written[0]?.measuredOn ?? '')], [1, 1, path.relative(HERE, goodRubric).split(path.sep).join('/'), sha256('judge $ARGUMENTS'), false, 1, 1, true]);
 
 console.log = consoleLog;
 check('measure: --prefix selects what --rates measures, plus every rule-4 pin, once per run', [prefixExit, prefixAsked.length, prefixAsked.filter((prompt) => prompt.includes('Ya tomé la decisión que me pidió Discovery')).length], [1, 2 * (1 + pinnedCount), 2]);

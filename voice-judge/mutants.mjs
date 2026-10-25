@@ -35,6 +35,7 @@ const MUTANTS = [
   ['a record that did not meet the bar allows a promotion', MEASURE, 'record?.met === true && ', 'record !== undefined && '],
   ['a MET record of another text allows a promotion', MEASURE, ' && record.promptSha256 === sha256(livePrompt)', ''],
   ['the record lives somewhere else', MEASURE, "path.join(HERE, 'ship-bar.json')", "path.join(HERE, 'ship-bar-other.json')"],
+  ['the record names the rubric by its absolute path', MEASURE, "rubric: path.relative(HERE, rubric.path).split(path.sep).join('/'), ", 'rubric: rubric.path, '],
   ['the record does not hash the rubric text', MEASURE, 'promptSha256: sha256(rubric.prompt)', "promptSha256: ''"],
   ['--rates never writes the record', MEASURE, 'if (record !== undefined) record(', 'if (false) record('],
   ['--rates writes the record without --record', MEASURE, "argv.includes('--record') ? writeRecord : undefined", 'writeRecord'],

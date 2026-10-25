@@ -85,11 +85,12 @@ export const SHIP_BAR_RECORD = path.join(HERE, 'ship-bar.json');
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
 /**
- * The record `--record` writes: the rubric measured, the sha256 of its text, the ship-bar verdict, the owner labels
+ * The record `--record` writes: the rubric measured (its path from this folder, so the tracked record names no
+ * machine), the sha256 of its text, the ship-bar verdict, the owner labels
  * and runs it rested on, and the date. @es El registro que escribe `--record`: la rúbrica medida, el sha256 de su
  * texto, el veredicto de la barra, las etiquetas del dueño y las corridas en que se apoyó, y la fecha.
  */
-export const shipBarRecord = (rubric, bar, ownerLabels, runs, measuredOn) => ({ rubric: rubric.path, promptSha256: sha256(rubric.prompt), met: bar.met, verdict: bar.en, ownerLabels, runs, measuredOn });
+export const shipBarRecord = (rubric, bar, ownerLabels, runs, measuredOn) => ({ rubric: path.relative(HERE, rubric.path).split(path.sep).join('/'), promptSha256: sha256(rubric.prompt), met: bar.met, verdict: bar.en, ownerLabels, runs, measuredOn });
 
 /** The ship-bar record on disk, or `undefined` when there is none. @es El registro de la barra en disco, o `undefined` si no hay. */
 export function readShipBarRecord() {
