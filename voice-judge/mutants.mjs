@@ -76,6 +76,7 @@ const MUTANTS = [
   ['trait a in Spanish is voseo in a neutral register again (decision 2)', PROMPT, ' in a Rioplatense register: the warm, colloquial cadence of a porteño mentor talking to him; no particular expression is required, and correct voseo that reads as a cold report is not that register.', '.'],
   ['trait a demands one Rioplatense expression again (A/B 2026-10-25)', PROMPT, 'no particular expression is required', 'at least one natural Rioplatense expression is required'],
   ['a shared tú and vos verb is no address for trait a (A/B 2026-10-25)', PROMPT, ' A verb form that the tú and the vos conjugations share, aimed at him, is a verb conjugated for vos here too, exactly as rule 4 reads it.', ''],
+  ['energy in the closing sentence does not count (A/B 2026-10-25)', PROMPT, '; one instance is enough, wherever it sits in the reply, the closing sentence included', ''],
   ['a closing step that carries its stance does not land (A/B 2026-10-25)', PROMPT, ', but a closing next step that carries the stance or the principle behind it does land', ''],
   ['the reason language is left to the model (rule 11)', PROMPT, ' The reason is written in English first, then the same reason in Spanish after the token @es.', ''],
   ['the reason quotes with double quotes and can break the JSON (rule 11)', PROMPT, ' Inside the reason, words quoted from the reply go between single quotes, never double quotes, so the JSON answer stays valid.', ''],
