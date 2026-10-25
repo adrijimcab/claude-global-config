@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * The decisions of `hook-dispatch/block-journal.mjs` and of its wiring (`dispatch.mjs`, `manifest.mjs`,
- * `payload.mjs`), each broken once, that `block-journal.selftest.mjs` must catch. The runner and its rules
+ * the payload port), each broken once, that `block-journal.selftest.mjs` must catch. The runner and its rules
  * live in `../mutation-proof/run-mutants.mjs`; `crashKills: 'fail'` makes a mutant that only crashes the
  * selftest count as a survivor.
  *
- * @es Las decisiones de `block-journal.mjs` y de su cableado (`dispatch.mjs`, `manifest.mjs`, `payload.mjs`),
+ * @es Las decisiones de `block-journal.mjs` y de su cableado (`dispatch.mjs`, `manifest.mjs`, el puerto del payload),
  * rotas una a una, que `block-journal.selftest.mjs` debe detectar. Un mutante que solo hace caer el selftest
  * cuenta como superviviente (`crashKills: 'fail'`).
  */
@@ -18,7 +18,6 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const B = 'hook-dispatch/block-journal.mjs';
 const D = 'hook-dispatch/dispatch.mjs';
 const M = 'hook-dispatch/manifest.mjs';
-const P = 'hook-dispatch/payload.mjs';
 
 const MUTANTS = [
   // --- what blocks ---
@@ -89,9 +88,7 @@ const MUTANTS = [
   ['the real id generator is never used', B, 'newBlockId = newId', "newBlockId = () => 'fixed'"],
 
   // --- the payload ---
-  ['a BOM is not stripped', P, 'raw.charCodeAt(0) === 0xfeff', 'false'],
-  ['two characters are stripped from a BOM payload', P, 'raw.slice(1)', 'raw.slice(2)'],
-  ['a payload that is not JSON throws', P, '} catch {\n    return undefined;', '} catch (error) {\n    throw error;'],
+  ['the block facts are read without the port parser', B, 'const payload = tryParsePayload(raw);\n  const toolUseId', 'const payload = JSON.parse(raw);\n  const toolUseId'],
 
   // --- the mechanism ---
   ['the mechanism is the file, not its folder', M, 'return path.basename(path.dirname(file));', 'return path.basename(file);'],
@@ -112,7 +109,8 @@ const MUTANTS = [
   ['a journal failure is not written to the dispatch journal', D, 'journal({ manifest: manifestFile, journalFailures });', ''],
   ['a journal failure is not written to stderr', D, "process.stderr.write(`${journalFailures.map((failure) => `[hook-dispatch] no se pudo registrar el bloqueo de ${failure}`).join('\\n')}\\n`);", ''],
   ['a journal failure names no mechanism on stderr', D, 'no se pudo registrar el bloqueo de ${failure}', 'no se pudo registrar el bloqueo'],
-  ['the tool name is read without the payload parser', D, 'const payload = parsePayload(raw);\n\n  return typeof payload?.tool_name', 'const payload = JSON.parse(raw);\n\n  return typeof payload?.tool_name']
+  ['the tool name is read without the payload parser', D, 'const payload = tryParsePayload(raw);\n\n  return typeof payload?.tool_name', 'const payload = JSON.parse(raw);\n\n  return typeof payload?.tool_name'],
+  ['the dispatcher does not read stdin', D, 'raw = await readStdin();', "raw = '';"]
 ];
 
 const survivors = runMutants({

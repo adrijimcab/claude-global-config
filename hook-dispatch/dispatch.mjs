@@ -19,15 +19,14 @@
  * fallar invisible.
  */
 
-import { appendFileSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
+import { readStdin, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { describeBlocks, recordBlocks } from './block-journal.mjs';
 import { appliesTo, loadManifest } from './manifest.mjs';
 import { mergeOutputs } from './merge.mjs';
-import { parsePayload } from './payload.mjs';
 import { runGuard } from './run-guard.mjs';
 
 /** The dispatcher's own malfunctions, resolved at each call through the one state-location module. @es Los fallos propios del dispatcher, resueltos en cada llamada por el único módulo de ubicaciones. */
@@ -44,7 +43,7 @@ function journal(entry) {
 
 /** El nombre de herramienta del payload, o `undefined` si no se puede leer. */
 function toolNameOf(raw) {
-  const payload = parsePayload(raw);
+  const payload = tryParsePayload(raw);
 
   return typeof payload?.tool_name === 'string' ? payload.tool_name : undefined;
 }
@@ -87,7 +86,7 @@ async function main() {
   let raw;
 
   try {
-    raw = readFileSync(0, 'utf8');
+    raw = await readStdin();
   } catch {
     return;
   }
@@ -117,20 +116,9 @@ async function main() {
   }
 }
 
-/**
- * Si este archivo es el programa en ejecución. Se compara por `realpathSync.native` (junctions, rutas
- * 8.3, mayúsculas) y, ante cualquier duda, responde «sí»: un dispatcher que se cree importado no
- * decide nada y deja a todas sus guardias mudas.
- */
-function isEntryPoint() {
-  try {
-    return realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url));
-  } catch {
-    return true;
-  }
-}
-
-if (process.argv[1] !== undefined && isEntryPoint()) {
+// Only as the main process (`runWhenMain` compares real paths); it never leaves with a code other than 0.
+// @es Solo como proceso principal (`runWhenMain` compara rutas reales); nunca sale con código distinto de 0.
+runWhenMain(import.meta.url, async () => {
   await main();
   process.exitCode = 0;
-}
+});

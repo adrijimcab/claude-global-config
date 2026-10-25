@@ -32,8 +32,8 @@
  * línea de fallo para que quien llama la informe en el diario del dispatcher.
  */
 
+import { tryParsePayload } from '../hook-io/hook-io.mjs';
 import { appendRecord, digestInput, newId } from '../hook-state/journal.mjs';
-import { parsePayload } from './payload.mjs';
 
 /** The longest reason journaled, in characters. @es El motivo más largo que se registra, en caracteres. */
 export const REASON_LIMIT = 300;
@@ -64,7 +64,7 @@ export function blockOf(output) {
  * @es Los bloqueos de un despacho: uno por cada salida de guardia que bloquea, en el orden del manifiesto, con los datos del payload. `results` es `[{ mechanism, output }]`.
  */
 export function describeBlocks({ event, raw, results }) {
-  const payload = parsePayload(raw);
+  const payload = tryParsePayload(raw);
   const toolUseId = typeof payload?.tool_use_id === 'string' ? payload.tool_use_id : null;
   const inputDigest = digestInput(payload?.tool_input ?? raw);
 
