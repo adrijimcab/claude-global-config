@@ -27,10 +27,7 @@
  * decide `hook-caller/identify-caller.mjs`; qué es un stash, `stash-invocations.mjs`. Falla ABIERTO.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import { hookMain, deny, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
 import { dialectOfTool } from '../shell-command/shell-command.mjs';
 import { refusalText } from './refusal.mjs';
@@ -42,13 +39,9 @@ import { stackChangingStashes } from './stash-invocations.mjs';
  * @es La salida de hook para un payload crudo, o `undefined` para dejar correr el comando.
  */
 export function evaluate(raw, decision = stackChangingStashes) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   const dialect = dialectOfTool(payload?.tool_name);
   const command = payload?.tool_input?.command;
@@ -66,27 +59,9 @@ export function evaluate(raw, decision = stackChangingStashes) {
 
   if (offenders.length === 0) return undefined;
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: refusalText(offenders[0].text)
-    }
-  };
+  return deny(refusalText(offenders[0].text));
 }
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-}
-
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
+// Only as the main process; imported by the dispatcher or a selftest, it does not run.
+// @es Solo como proceso principal; importada por el dispatcher o un selftest, no corre.
+runWhenMain(import.meta.url, hookMain(evaluate));
