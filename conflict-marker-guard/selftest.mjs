@@ -165,7 +165,7 @@ const halfResolved = stagedWith({ 'g.txt': '=======\ntheirs\n>>>>>>> x\n' }, { '
 const crlf = stagedWith({ 'g.txt': '<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> x\r\n' }, { 'g.txt': 'seed\r\n' });
 const nested = stagedWith({ 'src/app/spec.ts': `seed\n${FULL}` }, { 'src/app/spec.ts': 'seed\n' });
 const accented = stagedWith({ 'dir ñ/espec ificación.ts': `seed\n${FULL}` }, { 'dir ñ/espec ificación.ts': 'seed\n' });
-const OLD_BLOCK = 'a\n<<<<<<< HEAD\nb\n=======\nc\n>>>>>>> x\nz\n';
+const OLD_BLOCK = '<<<<<<< HEAD\nb\n=======\n>>>>>>> x\n';
 const legacy = stagedWith({ 'old.txt': `${OLD_BLOCK}d\n` }, { 'old.txt': OLD_BLOCK });
 const clean = repository();
 const spaced = stagedWith({ 'f.txt': 'a\nb\nc\nd\n' });
