@@ -208,7 +208,7 @@ for (const event of ['Stop', 'SessionStart']) {
 function copyWithBroken(name, broken) {
   const root = path.join(sandbox.root, name);
 
-  for (const directory of ['review-site', 'git-worktree', 'hook-state', 'bilingual-output']) cpSync(path.join(HERE, '..', directory), path.join(root, directory), { recursive: true });
+  for (const directory of ['review-site', 'git-worktree', 'hook-state', 'bilingual-output', 'hook-io']) cpSync(path.join(HERE, '..', directory), path.join(root, directory), { recursive: true });
 
   writeFileSync(path.join(root, 'review-site', broken), "throw new Error('broken on purpose');\n");
 

@@ -22,7 +22,8 @@
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+
+import { runWhenMain } from '../hook-io/hook-io.mjs';
 
 /** The arguments gentle-ai's own hook is registered with. @es Los argumentos con que gentle-ai registra su hook. */
 const GENTLE_AI_HOOK = ['review', 'stop-hook', '--agent', 'claude-code'];
@@ -109,4 +110,4 @@ async function main() {
   process.exitCode = decision.run ? runGentleAi(input, process.env) : 0;
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+runWhenMain(import.meta.url, main);
