@@ -403,6 +403,11 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   reaper.mjs, so the flake is most likely pre-existing process-timing sensitivity (HYPOTHESIS). PENDING,
   reason (3): the owner froze the backlog-1-6 scope to in-flight units and the six points (L13). The fix:
   reproduce under load, find the timing assumption, and bound it.
+  Same class, 2026-10-26: the T4B worker reports that the fleet-kit/orphan-work selftest baseline went red once
+  (94/95) under 6-way parallel load and passes alone. Its suspected cause is a time-window check
+  (ACTIVE_WINDOW_MS); that is a HYPOTHESIS and is not verified. The locks unit already fixed the same class in
+  hook-state/journal and premise-judge (b8c9530), by moving to a virtual clock. Fix the class the same way.
+  PENDING, reason (3).
 - Anonymous selftest failures (master, 2026-10-25). The locks worker found that some selftests print a failing
   check's name only on stderr or not in the last stdout line, which is the only line the mutation runner
   shows. It fixed hook-state/journal and premise-judge (b8c9530). The other selftests have not been audited.
