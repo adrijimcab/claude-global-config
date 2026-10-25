@@ -21,7 +21,7 @@
  * y entrega dentro del worker. POR QUÉ UN PUNTERO: ver `pointer-text.mjs`. NUNCA BLOQUEA.
  */
 
-import { parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
+import { context, hookMain, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { workerPointer } from './worker-pointer.mjs';
 
 /**
@@ -32,27 +32,11 @@ export function envelopeFor(raw, env = process.env) {
   try {
     const payload = parsePayload(raw);
 
-    return { hookSpecificOutput: { hookEventName: 'SubagentStart', additionalContext: workerPointer(payload, env) } };
+    return context('SubagentStart', workerPointer(payload, env));
   } catch {
     return undefined;
   }
 }
 
-async function main() {
-  let raw;
-
-  try {
-    raw = await readStdin();
-  } catch {
-    process.exit(0);
-  }
-
-  const envelope = envelopeFor(raw);
-
-  if (envelope !== undefined) process.stdout.write(JSON.stringify(envelope));
-
-  process.exit(0);
-}
-
-// Only as the main process: imported by the selftest, main() must not read its stdin.
-runWhenMain(import.meta.url, main);
+// Only as the main process: imported by the selftest, the hook must not read its stdin.
+runWhenMain(import.meta.url, hookMain(envelopeFor));
