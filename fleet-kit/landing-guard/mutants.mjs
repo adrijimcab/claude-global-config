@@ -32,7 +32,7 @@ runCampaign('landing-guard/selftest.mjs', [
   ['--git-dir is ignored', R, 'const option = optionGitDir(invocation.gitOptions);', 'const option = undefined;'],
   ['GIT_DIR in the command is ignored', R, 'option === undefined ? environmentGitDir(invocation.text, dialect, platform) : option.value', 'option === undefined ? undefined : option.value'],
   ['GIT_DIR beats --git-dir', R, 'option === undefined ? environmentGitDir(invocation.text, dialect, platform) : option.value', 'environmentGitDir(invocation.text, dialect, platform) ?? option?.value'],
-  ['a relative --git-dir ignores the -C before it', R, 'index < until', 'index < 0'],
+  ['a relative --git-dir ignores the -C before it', R, 'option === undefined ? invocation.gitOptions.length : option.at', '0'],
   ['the repository lookup ignores the invocation options', D, 'const ask = gitAsker(directory, repositoryOptions(request.invocation, dialect));', 'const ask = gitAsker(directory);'],
   ['-C is not followed', I, "if (invocation.gitOptions[index] === '-C' && directory !== undefined) directory =", 'if (false) directory =']
 ]);

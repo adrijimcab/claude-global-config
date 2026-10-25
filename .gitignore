@@ -354,7 +354,7 @@
 !/git-worktree/
 !/git-worktree/**
 
-# The one way the kit runs git (code, proof and the scripted double). @es La única forma en que el kit corre git (código, prueba y doble guionado).
+# The git port: the one way the kit runs git and folds its `-C` options (code, proof and the scripted double). @es El puerto de git: la única forma en que el kit corre git y pliega sus `-C` (código, prueba y doble guionado).
 !/git-port/
 !/git-port/**
 
