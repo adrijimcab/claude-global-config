@@ -398,6 +398,11 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   reproduced): `git commit -- <paths>` with lint-staged left the index out of step with HEAD and the backup
   stash behind. Pairs with lesson commit-pathspec-restaged-a-removed-file. PENDING, reason (4): reproduce
   on constructed state first, then decide whether workers commit with pathspecs or stage-then-commit.
+- process-reaper/reaper.selftest.mjs is flaky (master, 2026-10-25). On the t8-p1-process-port tree, 1 of 6
+  runs exited 1 and 5 exited 0. Its mutant campaign is 51/51 killed. P1u changed only one import line in
+  reaper.mjs, so the flake is most likely pre-existing process-timing sensitivity (HYPOTHESIS). PENDING,
+  reason (3): the owner froze the backlog-1-6 scope to in-flight units and the six points (L13). The fix:
+  reproduce under load, find the timing assumption, and bound it.
 
 ## ORDER (decided 2026-10-11)
 
