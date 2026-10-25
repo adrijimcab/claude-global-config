@@ -116,7 +116,10 @@ const MUTANTS = [
   // RETIRED with the move onto hook-io: 'the process prints nothing when it blocks'. Printing the decision is
   // `hookMain`'s and `hook-io/hook-io.mutants.mjs` pins it: 'hookMain never prints the decision'.
   // @es RETIRADO con el paso a hook-io: imprimir la decisión es de `hookMain` y lo fija 'hookMain never prints the decision'.
-  ['importing the guard runs it as a process', GUARD, 'runWhenMain(import.meta.url, hookMain(evaluate));', 'hookMain(evaluate)();'],
+  // RETIRED with the move onto hook-io: 'importing the guard runs it as a process'. Running only as the main process
+  // is `runWhenMain`'s and `hook-io/hook-io.mutants.mjs` pins it: 'main runs always'.
+  // @es RETIRADO con el paso a hook-io: correr solo como proceso principal es de `runWhenMain` y lo fija 'main runs always'.
+  ['the guard no longer runs when the file is executed', GUARD, 'runWhenMain(import.meta.url, hookMain(evaluate));', ''],
 ];
 
 const survivors = runMutants({
