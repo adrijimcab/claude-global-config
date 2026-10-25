@@ -62,8 +62,9 @@ const SESSIONS_FOLDER = 'sessions';
 
 /**
  * Every known state kind: `[mechanism, pattern, kind, reason]`, first match wins. A pattern is a path relative to
- * the mechanism's state directory, `/`-separated; a segment `*` is any one segment, `*.ext` any one segment with
- * that ending, and a last segment `**` any one or more.
+ * the mechanism's state directory, `/`-separated; a segment `*` is any one segment, `prefix*suffix` (`*.ext`
+ * included) any one segment with that start and ending and at least one character between them, and a last
+ * segment `**` any one or more.
  * @es Cada tipo de estado conocido: `[mecanismo, patrón, tipo, motivo]`; gana la primera coincidencia.
  */
 export const KINDS = Object.freeze([
@@ -133,9 +134,15 @@ export const KINDS = Object.freeze([
 /** Whether one path segment matches one pattern segment. @es Si un segmento de ruta casa con uno de patrón. */
 function segmentMatches(pattern, segment) {
   if (pattern === '*') return true;
-  if (pattern.startsWith('*.')) return segment.endsWith(pattern.slice(1)) && segment.length > pattern.length - 1;
 
-  return pattern === segment;
+  const star = pattern.indexOf('*');
+
+  if (star === -1 || pattern.indexOf('*', star + 1) !== -1) return pattern === segment;
+
+  const prefix = pattern.slice(0, star);
+  const suffix = pattern.slice(star + 1);
+
+  return segment.length > prefix.length + suffix.length && segment.startsWith(prefix) && segment.endsWith(suffix);
 }
 
 /** Whether `relative` (`/`-separated) matches `pattern`. @es Si `relative` casa con `pattern`. */

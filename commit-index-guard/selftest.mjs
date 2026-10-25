@@ -206,7 +206,7 @@ check('a throw is journaled', journalLines('errors.jsonl').map((line) => line.st
 
 // git answers the status but cannot name the repository root: the stale paths are still reported, nothing is recorded, the reason is journaled.
 clearState();
-const rootlessGit = (args) => (args[0] === 'status' ? { ok: true, stdout: 'MM a.txt\0' } : { ok: false, reason: 'git rev-parse failed: no root @es git rev-parse falló: sin raíz' });
+const rootlessGit = (args) => (args[0] === 'status' ? { ok: true, stdout: `1 MM N... 100644 100644 100644 ${'a'.repeat(40)} ${'b'.repeat(40)} a.txt\0` } : { ok: false, reason: 'git rev-parse failed: no root @es git rev-parse falló: sin raíz' });
 const rootlessNotice = noticeOf(run(after, post('git commit -m work -- a.txt', { cwd: incident }), { git: rootlessGit }));
 
 check('AFTER a repository root git cannot name: the stale path is still reported', rootlessNotice?.includes('a.txt [MM]'), true);
@@ -281,14 +281,14 @@ check('a git error before a commit is journaled', journalLines('errors.jsonl').s
 check('BEFORE a git port that throws: allowed', run(before, pre('git commit -m next', { cwd: justNotice }), { git: () => { throw new Error('boom'); } }), undefined);
 
 clearState();
-recordStale(git(justNotice, 'rev-parse', '--show-toplevel').trim(), [{ path: 'a.txt', code: 'MM' }]);
+recordStale(git(justNotice, 'rev-parse', '--show-toplevel').trim(), [{ path: 'a.txt', code: 'MM', blob: 'recorded-blob' }]);
 
 const statusFails = (args, options) => (args[0] === 'status' ? { ok: false, reason: 'git status failed: x @es git status falló: x' } : runGit(args, options));
 
 check('BEFORE a status that fails: allowed, and the reason is journaled as a status failure', [run(before, pre('git commit -m next', { cwd: justNotice }), { git: statusFails }), journalLines('errors.jsonl').map((line) => line.step)], [undefined, ['status']]);
 
 clearState();
-recordStale('C:/Any/Repo', [{ path: 'a.txt', code: 'MM' }]);
+recordStale('C:/Any/Repo', [{ path: 'a.txt', code: 'MM', blob: 'recorded-blob' }]);
 check('BEFORE a repository root git cannot name: allowed, and the reason is journaled', [run(before, pre('git commit -m next', { cwd: justNotice }), { git: () => ({ ok: false, reason: 'git rev-parse failed: x @es git rev-parse falló: x' }) }), journalLines('errors.jsonl').map((line) => line.step)], [undefined, ['rev-parse']]);
 
 // A record whose paths are only modified in the worktree (` M`) is not a sweep hazard: allowed and forgotten.
@@ -297,7 +297,7 @@ const worktreeOnly = makeRepo({ rewriting: false });
 const topOfWorktreeOnly = git(worktreeOnly, 'rev-parse', '--show-toplevel').trim();
 
 writeFileSync(path.join(worktreeOnly, 'a.txt'), 'changed after the commit\n');
-recordStale(topOfWorktreeOnly, [{ path: 'a.txt', code: ' M' }]);
+recordStale(topOfWorktreeOnly, [{ path: 'a.txt', code: ' M', blob: 'recorded-blob' }]);
 check('BEFORE a path that is only modified in the worktree: allowed', run(before, pre('git commit -m next', { cwd: worktreeOnly })), undefined);
 check('BEFORE that record is forgotten once it is no longer MM', anyRecorded(), false);
 
@@ -367,6 +367,227 @@ const here = process.cwd();
 process.chdir(shrinking);
 check('BEFORE a cd that cannot be followed: allowed, never judged against the process directory', run(before, pre('cd "$UNKNOWN" && git commit -m next', { cwd: shrinking })), undefined);
 process.chdir(here);
+
+// ---- THE SEQUENCES THE JUDGES NAMED, each on real repositories.
+const topOf = (repo) => git(repo, 'rev-parse', '--show-toplevel').trim();
+const pathsRecorded = (repo) => recordedStale(topOf(repo)).map((entry) => entry.path).sort();
+
+// (1) Two successive pathspec commits: the second must not make the first forgotten.
+clearState();
+const successive = makeRepo();
+
+commitNamed(successive, ['a.txt']);
+run(after, post('git commit -m one -- a.txt', { cwd: successive }));
+commitNamed(successive, ['b.txt']);
+run(after, post('git commit -m two -- b.txt', { cwd: successive }));
+check('two successive commits: the record holds the first commit\'s path (b.txt has no hook, so it is not stale)', pathsRecorded(successive), ['a.txt']);
+
+const successiveHook = path.join(successive, '.git', 'hooks', 'pre-commit');
+
+writeFileSync(successiveHook, "#!/bin/sh\nsed -i 's/ *$//' a.txt b.txt sub/c.txt\ngit add a.txt b.txt sub/c.txt\n");
+commitNamed(successive, ['sub/c.txt']);
+run(after, post('git commit -m three -- sub/c.txt', { cwd: successive }));
+check('two successive stale commits: both paths are recorded', pathsRecorded(successive), ['a.txt', 'sub/c.txt']);
+git(successive, 'add', '--', 'sub/c.txt');
+
+const sweptFirst = denialOf(run(before, pre('git commit -m next', { cwd: successive })));
+
+check('after the second path is staged, a bare commit is still refused for the FIRST path', [sweptFirst?.includes('a.txt [MM]'), sweptFirst?.includes('sub/c.txt [')], [true, false]);
+
+// (2) Two directories of one repository in one line.
+clearState();
+const twoDirectories = makeRepo();
+
+commitNamed(twoDirectories, ['a.txt', 'sub/c.txt']);
+run(after, post('git commit -m one -- a.txt && cd sub && git commit -m two -- c.txt', { cwd: twoDirectories }));
+check('two directories of one repository in one line: both are recorded', pathsRecorded(twoDirectories), ['a.txt', 'sub/c.txt']);
+
+// (3) A partial stage changes the index blob and settles the path, even though it is still MM.
+clearState();
+const partial = makeRepo();
+
+commitNamed(partial, ['a.txt']);
+run(after, post('git commit -m work -- a.txt', { cwd: partial }));
+check('partial stage: the path is recorded as stale', pathsRecorded(partial), ['a.txt']);
+
+const patch = 'diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a.txt edited  \n+a.txt edited   \n';
+const patchFile = path.join(scratch, 'partial.patch');
+
+writeFileSync(patchFile, patch);
+git(partial, 'apply', '--cached', '--whitespace=nowarn', patchFile);
+check('partial stage: git still says MM', status(partial), 'MM a.txt\n');
+check('partial stage: a bare commit is allowed, the new staged content is deliberate', run(before, pre('git commit -m next', { cwd: partial })), undefined);
+check('partial stage: the record no longer holds the path', pathsRecorded(partial), []);
+
+// (4) A moved path is followed to its new name.
+clearState();
+const moved = makeRepo();
+
+commitNamed(moved, ['a.txt']);
+run(after, post('git commit -m work -- a.txt', { cwd: moved }));
+git(moved, 'mv', 'a.txt', 'moved.txt');
+
+const movedRefusal = denialOf(run(before, pre('git commit -m next', { cwd: moved })));
+
+check('rename: a bare commit is refused naming the NEW path with its current status', [movedRefusal?.includes('moved.txt [AM]'), movedRefusal?.includes('- a.txt')], [true, false]);
+check('rename: the record holds the new name and not the old one', pathsRecorded(moved), ['moved.txt']);
+check('rename: the first-seen time survives the move', recordedStale(topOf(moved)).length, 1);
+git(moved, 'add', '--', 'moved.txt');
+check('rename: staging the new name settles it', [run(before, pre('git commit -m next', { cwd: moved })), pathsRecorded(moved)], [undefined, []]);
+
+clearState();
+const movedAway = makeRepo();
+
+commitNamed(movedAway, ['a.txt']);
+run(after, post('git commit -m work -- a.txt', { cwd: movedAway }));
+git(movedAway, 'rm', '-q', '-f', '--cached', '--', 'a.txt');
+check('a recorded path removed from the index with no new name settles: nothing is followed, nothing is refused', [run(before, pre('git commit -m next', { cwd: movedAway })), pathsRecorded(movedAway)], [undefined, []]);
+
+clearState();
+const movedGitFails = makeRepo();
+
+commitNamed(movedGitFails, ['a.txt']);
+run(after, post('git commit -m work -- a.txt', { cwd: movedGitFails }));
+git(movedGitFails, 'mv', 'a.txt', 'moved.txt');
+
+let statusCalls = 0;
+const wholeRepositoryFails = (args, options) => {
+  if (args[0] === 'status' && args.at(-1) === '--') {
+    statusCalls += 1;
+    return { ok: false, reason: 'git status failed: x @es git status falló: x' };
+  }
+
+  return runGit(args, options);
+};
+
+check('rename: when the whole-repository read fails the commit is allowed and the reason journaled', [run(before, pre('git commit -m next', { cwd: movedGitFails }), { git: wholeRepositoryFails }), statusCalls, journalLines('errors.jsonl').map((line) => line.step)], [undefined, 1, ['status']]);
+
+// (5) --pathspec-from-file, in both forms, and the other ways to commit only what is named.
+clearState();
+const fromFile = makeRepo();
+
+writeFileSync(path.join(fromFile, 'list.txt'), 'a.txt\n');
+writeFileSync(path.join(fromFile, 'a.txt'), 'a.txt edited  \n');
+git(fromFile, 'commit', '-q', '-m', 'work', '--pathspec-from-file=list.txt');
+
+const fusedNotice = noticeOf(run(after, post('git commit -m work --pathspec-from-file=list.txt', { cwd: fromFile })));
+
+check('pathspec file, fused form: the paths of the file are measured', fusedNotice?.includes('a.txt [MM]'), true);
+check('pathspec file, fused form: the path is recorded', pathsRecorded(fromFile), ['a.txt']);
+
+clearState();
+check('pathspec file, separated form: the file name is not a path and its entries are measured', noticeOf(run(after, post('git commit -m work --pathspec-from-file list.txt', { cwd: fromFile })))?.includes('a.txt [MM]'), true);
+check('pathspec file, separated form: the path is recorded', pathsRecorded(fromFile), ['a.txt']);
+check('pathspec file: the file name itself is never measured as a path', recordedStale(topOf(fromFile)).some((entry) => entry.path === 'list.txt'), false);
+
+writeFileSync(path.join(fromFile, 'nul.lst'), 'a.txt\0');
+clearState();
+check('pathspec file with NUL separators', noticeOf(run(after, post('git commit -m work --pathspec-from-file=nul.lst --pathspec-file-nul', { cwd: fromFile })))?.includes('a.txt [MM]'), true);
+
+clearState();
+check('pathspec file that cannot be read: silent, and the reason is journaled', [run(after, post('git commit -m work --pathspec-from-file=missing.lst', { cwd: fromFile })), journalLines('errors.jsonl').map((line) => line.step)], [undefined, ['pathspec-file']]);
+check('pathspec file from standard input: silent, journaled', [run(after, post('git commit -m work --pathspec-from-file=-', { cwd: fromFile })), journalLines('errors.jsonl').length], [undefined, 2]);
+
+clearState();
+run(after, post('git commit -m work -- a.txt', { cwd: fromFile }));
+check('pathspec file: the stale path is recorded again for the next commit', pathsRecorded(fromFile), ['a.txt']);
+check('BEFORE `--pathspec-from-file=` (fused): not a sweep, allowed', run(before, pre('git commit -m next --pathspec-from-file=other.txt', { cwd: fromFile })), undefined);
+check('BEFORE `--pathspec-from-file` (separated): not a sweep, allowed', run(before, pre('git commit -m next --pathspec-from-file other.txt', { cwd: fromFile })), undefined);
+check('BEFORE `--amend -o` with no path: not a sweep, allowed', run(before, pre('git commit --amend -o -m next', { cwd: fromFile })), undefined);
+check('BEFORE `--only` with no path: not a sweep, allowed', run(before, pre('git commit --only -m next', { cwd: fromFile })), undefined);
+check('BEFORE `--onl` abbreviated: not a sweep, allowed', run(before, pre('git commit --onl -m next', { cwd: fromFile })), undefined);
+check('BEFORE `--incl b.txt` abbreviated: a sweep, refused', typeof denialOf(run(before, pre('git commit --incl b.txt -m next', { cwd: fromFile }))), 'string');
+check('BEFORE `--inc b.txt` abbreviated: a sweep, refused', typeof denialOf(run(before, pre('git commit --inc b.txt -m next', { cwd: fromFile }))), 'string');
+check('BEFORE `--al` (ambiguous, git refuses it): not read as --all, so a bare commit is refused', typeof denialOf(run(before, pre('git commit --al -m next', { cwd: fromFile }))), 'string');
+check('BEFORE `--all` spelled `--no-al`... an unknown word consumes nothing: a bare commit is refused', typeof denialOf(run(before, pre('git commit --no-al -m next', { cwd: fromFile }))), 'string');
+check('BEFORE the value of `-U 3` is not a path: the commit still names nothing and is refused', typeof denialOf(run(before, pre('git commit -p -U 3 -m next', { cwd: fromFile }))), 'string');
+
+// (6) A notice for a path that is only ` M` after the commit is given but never recorded.
+clearState();
+const looseWorktree = makeRepo({ rewriting: false });
+
+commitNamed(looseWorktree, ['a.txt']);
+writeFileSync(path.join(looseWorktree, 'a.txt'), 'edited again after the commit\n');
+check('AFTER a path modified only in the worktree: the notice is given', noticeOf(run(after, post('git commit -m work -- a.txt', { cwd: looseWorktree })))?.includes('a.txt [ M]'), true);
+check('AFTER a path modified only in the worktree: nothing is recorded', anyRecorded(), false);
+
+// (7) Only the MM paths are recorded: a commit of two paths where one is MM and the other is modified afterwards.
+clearState();
+const mixed = makeRepo();
+
+commitNamed(mixed, ['a.txt', 'sub/c.txt']);
+writeFileSync(path.join(mixed, 'sub', 'c.txt'), 'edited after the commit\n');
+git(mixed, 'add', '--', 'sub/c.txt');
+writeFileSync(path.join(mixed, 'sub', 'c.txt'), 'edited again, only in the worktree\n');
+check('mixed: a.txt is MM and so is c.txt after a staged edit and a worktree edit', status(mixed), 'MM a.txt\nMM sub/c.txt\n');
+
+const mixedClean = makeRepo({ rewriting: false });
+
+commitNamed(mixedClean, ['a.txt']);
+writeFileSync(path.join(mixedClean, 'a.txt'), 'only the worktree\n');
+commitNamed(mixedClean, ['b.txt']);
+writeFileSync(path.join(mixedClean, 'b.txt'), 'only the worktree again\n');
+clearState();
+check('mixed: a path modified only in the worktree is reported and not recorded', [noticeOf(run(after, post('git commit -m work -- a.txt b.txt', { cwd: mixedClean })))?.includes('b.txt [ M]'), anyRecorded()], [true, false]);
+
+// A mixed measure on ONE repository: one MM path and one ` M` path. Only the MM path is recorded.
+clearState();
+const oneEach = makeRepo();
+
+commitNamed(oneEach, ['a.txt']);
+writeFileSync(path.join(oneEach, 'b.txt'), 'b edited after\n');
+check('mixed: one MM path and one worktree-only path', status(oneEach), 'MM a.txt\n M b.txt\n');
+run(after, post('git commit -m work -- a.txt b.txt', { cwd: oneEach }));
+check('mixed: only the MM path is recorded', pathsRecorded(oneEach), ['a.txt']);
+
+// (8) The same blob is not enough: when the worktree is made equal to the stale staged content the path is no longer a disagreement.
+clearState();
+const restored = makeRepo();
+
+commitNamed(restored, ['a.txt']);
+run(after, post('git commit -m work -- a.txt', { cwd: restored }));
+writeFileSync(path.join(restored, 'a.txt'), git(restored, 'show', ':a.txt'));
+check('restored worktree: git says the staged change is deliberate (M in the first column only)', status(restored), 'M  a.txt\n');
+check('restored worktree: a bare commit is allowed although the index blob is the recorded one', run(before, pre('git commit -m next', { cwd: restored })), undefined);
+check('restored worktree: the record is forgotten', pathsRecorded(restored), []);
+
+// (9) The commands the guard sends to git, seen through the port.
+clearState();
+const sent = [];
+const spy = (args, options) => {
+  sent.push(args);
+
+  return runGit(args, options);
+};
+const spied = makeRepo();
+
+commitNamed(spied, ['a.txt']);
+run(after, post('git commit -m work -- a.txt', { cwd: spied }), { git: spy });
+check('git is asked for the status of the committed paths only, as an argument array', sent[0], ['status', '--porcelain=v2', '-z', '--find-renames', '--untracked-files=no', '--', 'a.txt']);
+check('git is then asked for the repository root', sent[1], ['rev-parse', '--show-toplevel']);
+
+sent.length = 0;
+git(spied, 'mv', 'a.txt', 'moved.txt');
+run(before, pre('git commit -m next', { cwd: spied }), { git: spy });
+check('the refusal asks the root, the recorded paths, then the whole repository for a path that went missing', sent.map((args) => args.slice(0, 1).concat(args.at(-1) === '--' ? ['whole'] : args.slice(-1))), [['rev-parse', '--show-toplevel'], ['status', 'a.txt'], ['status', 'whole']]);
+check('the whole-repository read keeps the rename flag and the untracked flag', sent[2], ['status', '--porcelain=v2', '-z', '--find-renames', '--untracked-files=no', '--']);
+
+// A path with nothing to record costs one git call, and a plain refusal costs two.
+clearState();
+sent.length = 0;
+run(after, post('git commit -m work -- a.txt', { cwd: looseWorktree }), { git: spy });
+check('AFTER a path that is only modified in the worktree: git is asked once, for the status', sent.map((args) => args[0]), ['status']);
+
+clearState();
+const plain = makeRepo();
+
+commitNamed(plain, ['a.txt']);
+run(after, post('git commit -m work -- a.txt', { cwd: plain }));
+sent.length = 0;
+check('BEFORE a plain refusal: git is asked for the root and for the recorded paths, nothing more', [typeof denialOf(run(before, pre('git commit -m next', { cwd: plain }), { git: spy })), sent.map((args) => args[0])], ['string', ['rev-parse', 'status']]);
+
+rmSync(path.join(plain, 'a.txt'));
+check('BEFORE the refusal shows the current status of the path, not the recorded one', denialOf(run(before, pre('git commit -m next', { cwd: plain })))?.includes('a.txt [MD]'), true);
 
 // ---- WIRING: both guards run from their manifests, for the tools they decide, and the REAL payload works through the dispatcher.
 const manifestsDirectory = path.join(HERE, '..', 'hook-dispatch', 'manifests');
