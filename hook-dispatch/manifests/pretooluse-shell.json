@@ -9,6 +9,7 @@
     "../../cwd-change-guard/guard.mjs",
     "../../vendored-edit-guard/guard.mjs",
     "../../review-cwd-guard/guard.mjs",
+    "../../conflict-marker-guard/guard.mjs",
     "../../worker-stash-guard/guard.mjs",
     "../../worker-git-guard/guard.mjs",
     "../../shared-temp-guard/guard.mjs",

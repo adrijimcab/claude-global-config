@@ -114,6 +114,9 @@
 !/vendored-edit-guard/
 !/vendored-edit-guard/**
 /vendored-edit-guard/state/
+!/conflict-marker-guard/
+!/conflict-marker-guard/**
+/conflict-marker-guard/state/
 !/review-cwd-guard/
 !/review-cwd-guard/**
 /review-cwd-guard/state/

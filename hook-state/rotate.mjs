@@ -79,6 +79,7 @@ export const KINDS = Object.freeze([
   ['brief-tenancy', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['collision-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['collision-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],
+  ['conflict-marker-guard', 'journal.jsonl', ARCHIVE, 'refusal and fail-open journal'],
   ['config-sync-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['config-sync-guard', 'dismissals.jsonl', KEEP, 'dismissals in force'],
   ['config-sync-guard', 'pending.jsonl', KEEP, 'paths still waiting for a commit'],
