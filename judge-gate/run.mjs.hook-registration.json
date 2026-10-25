@@ -4,5 +4,5 @@
       "event": "Stop"
     }
   ],
-  "why": "the two Stop judges (premise and voice) run through this command hook so that stop_hook_active, a malformed verdict and the cost and latency per turn are decided and recorded in code, not left to a model."
+  "why": "the three Stop judges (premise, voice and pending) run through this command hook, one hook per judge, so that stop_hook_active, a malformed verdict and the cost and latency per turn are decided and recorded in code, not left to a model. @es los tres jueces de Stop (premise, voice y pending) corren por este hook de comando, un hook por juez, para que stop_hook_active, un veredicto mal formado y el costo y la latencia por turno se decidan y registren en código, no por un modelo."
 }

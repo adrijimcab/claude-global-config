@@ -42,7 +42,8 @@ process.on('exit', () => {
 });
 
 const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./prompt.mjs');
-const { JUDGES: GATE_JUDGES, hookCommand } = await import('../judge-gate/judges.mjs');
+const { hookCommand, loadJudges } = await import('../judge-gate/judges.mjs');
+const GATE_JUDGES = await loadJudges();
 const { MARKER: PREMISE_MARKER } = await import('../premise-judge/prompt.mjs');
 const { MARKER: PENDING_MARKER } = await import('../pending-judge/prompt.mjs');
 const { JUDGES, VOICE_MECHANISM, evaluate, journalJudgeBlocks } = await import('../premise-judge/journal-guard.mjs');

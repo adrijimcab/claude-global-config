@@ -42,7 +42,8 @@ process.on('exit', () => {
 });
 
 const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./prompt.mjs');
-const { JUDGES, hookCommand } = await import('../judge-gate/judges.mjs');
+const { hookCommand, loadJudges } = await import('../judge-gate/judges.mjs');
+const JUDGES = await loadJudges();
 const { MECHANISM, REASON_LIMIT, TAIL_RECORDS, evaluate, journalJudgeBlocks, judgeReasons } = await import('./journal-guard.mjs');
 const { judgeLatency, latencyReport, main: latencyMain } = await import('./latency.mjs');
 const { digestInput, firesPath, journalPath } = await import('../hook-state/journal.mjs');
