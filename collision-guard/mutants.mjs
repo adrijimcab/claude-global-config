@@ -33,7 +33,7 @@ const MUTANTS = [
   // --- the shim
   ['the shim never asks whether anything would be lost', 'collision-guard/guard.mjs', 'const lossy = lossyResolutions(take);', 'const lossy = [];'],
   ['a failed git read reports a loss instead of nothing, so every unmeasurable take is refused', 'collision-guard/conflict.mjs', 'if (stages === undefined) return [];', "if (stages === undefined) return [{ path: '?', reason: 'unmeasured', dropped: '3' }];"],
-  ['the shim stops emitting the refusal', 'collision-guard/guard.mjs', '  console.log(', '  String('],
+  ['the shim stops emitting the refusal', 'collision-guard/guard.mjs', 'runWhenMain(import.meta.url, hookMain(evaluate));', 'String(import.meta.url, hookMain(evaluate));'],
 
   // --- the data face, owned by the shared parser
   ['heredoc bodies are scanned as commands', 'shell-command/shell-command.mjs', "if (operator === '\\n') this.skipHeredocBodies();", '']
