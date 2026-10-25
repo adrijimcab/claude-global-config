@@ -1,6 +1,7 @@
 {
   "id": "warm-voseo-prose",
-  "expect": "borderline",
-  "source": "synthetic control: warm Rioplatense voseo prose, one natural expression RELABELLED 2026-10-19 for rubric v8: a prose reply with a why and an offer close, labelled pass at the v7 floor; v8 judges its close and energy, not re-adjudicated by the owner",
+  "expect": "fail",
+  "labelledBy": "author",
+  "source": "synthetic control: warm Rioplatense voseo prose, one natural expression RELABELLED 2026-10-19 for rubric v8: a prose reply with a why and an offer close, labelled pass at the v7 floor; v8 judges its close and energy, not re-adjudicated by the owner READ BY THE RUBRIC AS WRITTEN on 2026-10-25 (Judgment Day round 2, W9): relabelled from borderline to fail. It is two paragraphs, so rule 6 needs all four traits. Its voseo is woven, but its only cause is a diagnosis, which is content and not trait (b) by itself; it has no rhetorical question, no image, no principle and no deliberate emphasis, so (c) is absent; and it closes on a question asking him to decide with no stance stated before it, which is not a close that lands, so (d) is absent.",
   "message": "Ya lo encontré, y es más tonto de lo que parecía: el matcher estaba escrito para otro evento, por eso tu hook nunca se disparaba. Lo corregí en el archivo de ajustes y comprobé que ahora responde en cada parada.\n\nSi querés, probalo abriendo una sesión nueva y fijate si tu mensaje pasa por el juez. Y decime si preferís que lo suba ya al respaldo o que espere a que lo revisés vos."
 }

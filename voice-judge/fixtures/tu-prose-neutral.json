@@ -1,6 +1,7 @@
 {
   "id": "tu-prose-neutral",
   "expect": "fail",
+  "labelledBy": "author",
   "source": "synthetic: correct prose, but addresses the owner with tú forms instead of voseo",
   "message": "Ya revisé el hook y encontré por qué no se disparaba. El matcher estaba escrito para otro evento, así que nunca llegaba a ejecutarse con tu configuración actual.\n\nLo corregí en el archivo de ajustes y comprobé que ahora responde a cada parada. Si quieres, puedes probarlo tú mismo abriendo una sesión nueva y mirando si tu mensaje pasa por el juez.\n\nCuando tengas un momento dime si prefieres que lo suba al repositorio de respaldo o que espere a tu revisión."
 }

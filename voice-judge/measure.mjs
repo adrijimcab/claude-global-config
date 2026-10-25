@@ -127,6 +127,19 @@ const percent = (part, whole) => (whole === 0 ? 'n/a' : `${((100 * part) / whole
 /** A verdict as the outputs print it. @es Un veredicto tal como lo imprimen las salidas. */
 const shown = (verdict) => (verdict === null ? '?' : verdict ? 'pass' : 'FAIL');
 
+/** A verdict as the Spanish half of an output prints it. @es Un veredicto en la mitad española de una salida. */
+const mostrado = (verdict) => (verdict === null ? '?' : verdict ? 'pasa' : 'FALLA');
+
+/** Whether a matrix row met its label, in Spanish. @es Si una fila de la matriz cumplió su etiqueta, en español. */
+const CUMPLIDO = { OK: 'bien', MISS: 'FALLO', 'n/a': 'n/a' };
+
+/**
+ * One row of the matrix view: whether the label was met (`OK`, `MISS` or `n/a`), the fixture, its label and the
+ * verdict of every run. @es Una fila de la matriz: si se cumplió la etiqueta, el fixture, su etiqueta y el veredicto
+ * de cada corrida.
+ */
+export const matrixRow = (met, fixture, verdicts) => `${met.padEnd(4)} ${fixture.id.padEnd(40)} expect=${fixture.expect.padEnd(14)} ${verdicts.map(shown).join(' ')} @es ${CUMPLIDO[met]} ${fixture.id} esperado=${fixture.expect} ${verdicts.map(mostrado).join(' ')}`;
+
 /** Recall and precision of one labelled set. @es Recall y precisión de un conjunto etiquetado. */
 function scored(fixtures, judgedFor) {
   const red = fixtures.filter((fixture) => fixture.expect === 'fail');
@@ -175,10 +188,10 @@ export function shipBarOf(ownerSets) {
   const labels = (ownerSets[0]?.red ?? 0) + (ownerSets[0]?.green ?? 0);
 
   if (labels < OWNER_LABELS_NEEDED) {
-    return { met: false, text: `not enough owner labels (${labels}/${OWNER_LABELS_NEEDED}) @es faltan etiquetas del dueño (${labels}/${OWNER_LABELS_NEEDED})` };
+    return { met: false, en: `not enough owner labels (${labels}/${OWNER_LABELS_NEEDED})`, es: `faltan etiquetas del dueño (${labels}/${OWNER_LABELS_NEEDED})` };
   }
 
-  return ownerSets.every(meetsShipBar) ? { met: true, text: 'MET @es ALCANZADA' } : { met: false, text: 'NOT MET @es NO ALCANZADA' };
+  return ownerSets.every(meetsShipBar) ? { met: true, en: 'MET', es: 'ALCANZADA' } : { met: false, en: 'NOT MET', es: 'NO ALCANZADA' };
 }
 
 /** The lines of one scored set. @es Las líneas de un conjunto puntuado. */
@@ -268,7 +281,7 @@ async function rates(fixtures, runs, model, parallel, rubric) {
 
   const bar = shipBarOf(ownerSets);
 
-  console.log(`rubric=${rubric.path} cost=$${cost.toFixed(4)} ship-bar(owner labels, every run: recall>=90% and precision>=95%)=${bar.text}`);
+  console.log(`rubric=${rubric.path} cost=$${cost.toFixed(4)} ship-bar(owner labels, every run: recall>=90% and precision>=95%)=${bar.en} @es rúbrica=${rubric.path} costo=$${cost.toFixed(4)} barra(etiquetas del dueño, toda corrida: recall>=90% y precisión>=95%)=${bar.es}`);
 
   return bar.met ? 0 : 1;
 }
@@ -285,7 +298,7 @@ export async function main(argv) {
 
     return 2;
   }
-  console.log(`rubric=${rubric.path}`);
+  console.log(`rubric=${rubric.path} @es rúbrica=${rubric.path}`);
 
   const runs = Number(option('--runs', '3'));
   const model = option('--model', 'haiku');
@@ -312,12 +325,18 @@ export async function main(argv) {
     cost += results.reduce((sum, result) => sum + result.costUsd, 0);
     latencies.push(...results.map((result) => result.durationMs));
     if (met === 'MISS') wrong += 1;
-    console.log(`${met.padEnd(4)} ${fixture.id.padEnd(40)} expect=${fixture.expect.padEnd(14)} ${verdicts.map(shown).join(' ')}`);
+    console.log(matrixRow(met, fixture, verdicts));
     for (const result of rule4) console.log(`    rule-4 false positive @es falso positivo de la regla 4: ${result.reason}`);
   }
 
   latencies.sort((left, right) => left - right);
-  console.log(`rubric=${rubric.path} runs=${latencies.length} cost=$${cost.toFixed(4)} (mean $${(cost / Math.max(1, latencies.length)).toFixed(5)}/run) latency median=${latencies[Math.floor(latencies.length / 2)] ?? 0}ms max=${latencies.at(-1) ?? 0}ms`);
+
+  const total = cost.toFixed(4);
+  const mean = (cost / Math.max(1, latencies.length)).toFixed(5);
+  const median = latencies[Math.floor(latencies.length / 2)] ?? 0;
+  const max = latencies.at(-1) ?? 0;
+
+  console.log(`rubric=${rubric.path} runs=${latencies.length} cost=$${total} (mean $${mean}/run) latency median=${median}ms max=${max}ms @es rúbrica=${rubric.path} corridas=${latencies.length} costo=$${total} (media $${mean}/corrida) latencia mediana=${median}ms máxima=${max}ms`);
 
   return wrong === 0 ? 0 : 1;
 }

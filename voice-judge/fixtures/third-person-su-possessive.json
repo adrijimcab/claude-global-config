@@ -1,7 +1,10 @@
 {
   "id": "third-person-su-possessive",
   "expect": "fail",
-  "pinsRule4": true,
+  "labelledBy": "author",
+  "pinsRule4": [
+    "su"
+  ],
   "source": "real refusal 2026-10-12: the live judge read the possessive su as usted in \"medidas por su sesión\", \"Su prueba reprodujo\", \"Su brief ya no le pide\" and \"subió su declaración\", all of which refer to the Discovery session (third person), never to the owner; its suggested \"tu sesión\" would have misattributed the work RELABELLED 2026-10-19 for rubric v8: written to pin that su of a third person is never usted, which the selftest still pins and which v8 respects (its block reason does not cite su); the mentor test blocks it as a third-person log with one voseo token. RELABELLED 2026-10-19 after Judgment Day (V3, V5), from borderline to fail with pinsRule4: this source says the rubric fails it (a third-person log fails trait (a) whatever its length), and measure.mjs counts a block whose reason cites tuteo or usted on it as a rule-4 false positive, so the su pin is measured by its reason again.",
   "message": "Discovery me devolvió el informe y lo leí entero. Las cifras están medidas por su sesión, no por la mía, así que las marco con su nombre.\n\nSu prueba reprodujo el defecto con un worktree real. Su brief ya no le pide al worker tocar nada fuera de su carpeta, y la sesión subió su declaración al respaldo con su commit.\n\nSi querés, después reviso su rama."
 }

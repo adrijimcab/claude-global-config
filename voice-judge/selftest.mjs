@@ -202,8 +202,13 @@ const matrixLines = printedLines.splice(0);
 const ratesExit = await measure.main(['--rates', '--runs', '1', '--rubric', goodRubric, ...noFixture]);
 
 console.log = consoleLog;
-check('measure: the matrix view starts and ends with the path of the active rubric', [matrixExit, matrixLines[0], matrixLines.at(-1)?.startsWith(`rubric=${goodRubric} runs=0 `)], [0, `rubric=${goodRubric}`, true]);
-check('measure: --rates names the active rubric and never meets the ship bar without owner labels', [ratesExit, printedLines[0], printedLines.at(-1)], [1, `rubric=${goodRubric}`, `rubric=${goodRubric} cost=$0.0000 ship-bar(owner labels, every run: recall>=90% and precision>=95%)=not enough owner labels (0/10) @es faltan etiquetas del dueño (0/10)`]);
+check('measure: the matrix view starts and ends with the path of the active rubric, in both languages', [matrixExit, matrixLines[0], matrixLines.at(-1)], [0, `rubric=${goodRubric} @es rúbrica=${goodRubric}`, `rubric=${goodRubric} runs=0 cost=$0.0000 (mean $0.00000/run) latency median=0ms max=0ms @es rúbrica=${goodRubric} corridas=0 costo=$0.0000 (media $0.00000/corrida) latencia mediana=0ms máxima=0ms`]);
+check('measure: --rates names the active rubric and never meets the ship bar without owner labels, in both languages', [ratesExit, printedLines[0], printedLines.at(-1)], [1, `rubric=${goodRubric} @es rúbrica=${goodRubric}`, `rubric=${goodRubric} cost=$0.0000 ship-bar(owner labels, every run: recall>=90% and precision>=95%)=not enough owner labels (0/10) @es rúbrica=${goodRubric} costo=$0.0000 barra(etiquetas del dueño, toda corrida: recall>=90% y precisión>=95%)=faltan etiquetas del dueño (0/10)`]);
+check('measure: a matrix row says in both languages whether the label was met', [measure.matrixRow('OK', { id: 'f1', expect: 'pass' }, [true, false, null]), measure.matrixRow('MISS', { id: 'f2', expect: 'fail' }, [true]), measure.matrixRow('n/a', { id: 'f3', expect: 'unadjudicated' }, [false])], [
+  `OK   ${'f1'.padEnd(40)} expect=${'pass'.padEnd(14)} pass FAIL ? @es bien f1 esperado=pass pasa FALLA ?`,
+  `MISS ${'f2'.padEnd(40)} expect=${'fail'.padEnd(14)} pass @es FALLO f2 esperado=fail pasa`,
+  `n/a  ${'f3'.padEnd(40)} expect=${'unadjudicated'.padEnd(14)} FAIL @es n/a f3 esperado=unadjudicated FALLA`,
+]);
 check('measure: --rates measures the held-out set by default, and the bar needs 10 owner labels', [measure.DEFAULT_PREFIX, measure.OWNER_LABELS_NEEDED], ['held-', 10]);
 check('measure: --rates measures the requested prefix plus every rule-4 pin', [measure.ratesFixtures([{ id: 'held-a' }, { id: 'real-b' }, { id: 'real-c', pinsRule4: ['x'] }], 'held-').map((fixture) => fixture.id), measure.ratesFixtures([{ id: 'held-a' }, { id: 'real-b' }], 'real-').map((fixture) => fixture.id)], [['held-a', 'real-c'], ['real-b']]);
 check('measure: a block is read with the marker of the loaded rubric, with its reason', [measure.judgedOf('{"ok": false, "reason": "X-JUDGE: tuteo"}', 'X-JUDGE:'), measure.judgedOf('{"ok": false, "reason": "X-JUDGE: tuteo"}', MARKER), measure.judgedOf('{"ok": true}', 'X-JUDGE:')], [{ verdict: false, reason: 'X-JUDGE: tuteo' }, { verdict: null, reason: '' }, { verdict: true, reason: '' }]);
@@ -255,8 +260,8 @@ const set = (red, missed, green, blocked) => ({ red, missedRed: Array(missed).fi
 
 check('measure: the ship bar is recall 90% and precision 95%, both inclusive', [measure.meetsShipBar(set(10, 1, 20, 1)), measure.meetsShipBar(set(10, 2, 20, 1)), measure.meetsShipBar(set(10, 1, 20, 2))], [true, false, false]);
 check('measure: an empty side never meets the ship bar', [measure.meetsShipBar(set(0, 0, 20, 0)), measure.meetsShipBar(set(10, 0, 0, 0))], [false, false]);
-check('measure: the ship bar is not computed below 10 owner labels, in both languages', [measure.shipBarOf([set(5, 0, 4, 0)]), measure.shipBarOf([])], [{ met: false, text: 'not enough owner labels (9/10) @es faltan etiquetas del dueño (9/10)' }, { met: false, text: 'not enough owner labels (0/10) @es faltan etiquetas del dueño (0/10)' }]);
-check('measure: from 10 owner labels the ship bar is MET only when every run meets it', [measure.shipBarOf([set(5, 0, 5, 0), set(5, 0, 5, 0)]), measure.shipBarOf([set(5, 0, 5, 0), set(5, 1, 5, 0)])], [{ met: true, text: 'MET @es ALCANZADA' }, { met: false, text: 'NOT MET @es NO ALCANZADA' }]);
+check('measure: the ship bar is not computed below 10 owner labels, in both languages', [measure.shipBarOf([set(5, 0, 4, 0)]), measure.shipBarOf([])], [{ met: false, en: 'not enough owner labels (9/10)', es: 'faltan etiquetas del dueño (9/10)' }, { met: false, en: 'not enough owner labels (0/10)', es: 'faltan etiquetas del dueño (0/10)' }]);
+check('measure: from 10 owner labels the ship bar is MET only when every run meets it', [measure.shipBarOf([set(5, 0, 5, 0), set(5, 0, 5, 0)]), measure.shipBarOf([set(5, 0, 5, 0), set(5, 1, 5, 0)])], [{ met: true, en: 'MET', es: 'ALCANZADA' }, { met: false, en: 'NOT MET', es: 'NO ALCANZADA' }]);
 
 const fixtureFiles = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json')).map((name) => ({ name, fixture: JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8')) }));
 const byId = Object.fromEntries(fixtureFiles.map(({ fixture }) => [fixture.id, fixture]));
@@ -267,7 +272,12 @@ check('fixtures: every scored label names who set it, owner or author, and an un
 check('fixtures: an owner label carries its date, and no other label does', fixtureFiles.filter(({ fixture }) => (fixture.labelledBy === 'owner' ? !/^\d{4}-\d{2}-\d{2}$/.test(fixture.labelledOn ?? '') : fixture.labelledOn !== undefined)).map(({ name }) => name), []);
 check('fixtures: every rule-4 pin lists forms that appear in its message', fixtureFiles.filter(({ fixture }) => fixture.pinsRule4 !== undefined && !(Array.isArray(fixture.pinsRule4) && fixture.pinsRule4.length > 0 && fixture.pinsRule4.every((form) => wordIn(form, fixture.message)))).map(({ name }) => name), []);
 check('fixtures: the owner calibration of 2026-10-19 is recorded', [byId['held-owner-red-5f411d3c-10181322'], byId['held-v8-green-c4d7f854-10182025']].map((fixture) => [fixture?.expect, fixture?.labelledBy, fixture?.labelledOn]), [['fail', 'owner', '2026-10-19'], ['pass', 'owner', '2026-10-19']]);
-check('fixtures: every file is named for its id', fixtureFiles.filter(({ name, fixture }) => `${fixture.id}.json` !== name).map(({ name }) => name), []);
+check('fixtures: unaccented voseo and a shared preterite are pinned rule-4 fixtures, labelled by the author', ['voseo-unaccented-queres', 'voseo-shared-preterite-aprobaste'].map((id) => [byId[id]?.pinsRule4, byId[id]?.labelledBy]), [[['queres'], 'author'], [['aprobaste'], 'author']]);
+check('fixtures: the two-sentence control passes, its whole voseo sentence woven, and says why', [byId['control-short-reply']?.expect, byId['control-short-reply']?.labelledBy, /whole sentence of voseo aimed at him is woven/.test(byId['control-short-reply']?.source ?? '')], ['pass', 'author', true]);
+check('fixtures: the te-only real reply stays unadjudicated, with the clitic reading recorded', [byId['real-v8-red-5f411d3c-10050356']?.expect, /only address to him is the clitic te/.test(byId['real-v8-red-5f411d3c-10050356']?.source ?? '')], ['unadjudicated', true]);
+check('fixtures: every real reply is unadjudicated unless the owner labelled it', fixtureFiles.filter(({ fixture }) => /^(real|held)-/.test(fixture.id) && fixture.expect !== 'unadjudicated' && fixture.labelledBy !== 'owner').map(({ name }) => name), []);
+check('fixtures: a source never runs two sentences together', fixtureFiles.filter(({ fixture }) => /[a-z]\.[0-9a-z]{4,}/.test((fixture.source ?? '').replace(/\b[\w-]+\.(?:mjs|json|md|ts)\b/g, ''))).map(({ name }) => name), []);
+check('fixtures: every file is named for its id',fixtureFiles.filter(({ name, fixture }) => `${fixture.id}.json` !== name).map(({ name }) => name), []);
 
 const sidecar = JSON.parse(readFileSync(path.join(HERE, '..', 'premise-judge', 'journal-guard.mjs.hook-registration.json'), 'utf8'));
 

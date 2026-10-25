@@ -1,6 +1,6 @@
 {
   "id": "real-red-be82f4de-10181431",
   "expect": "unadjudicated",
-  "source": "UNADJUDICATED since 2026-10-19 (Judgment Day round 2, W1 and W2): this real reply has no label from the owner, and silence is not a label, so it is printed with its verdict and never scored; the notes that follow are its history.be82f4de 2026-10-18T14:31:22.333Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
+  "source": "UNADJUDICATED since 2026-10-19 (Judgment Day round 2, W1 and W2): this real reply has no label from the owner, and silence is not a label, so it is printed with its verdict and never scored; the notes that follow are its history. be82f4de 2026-10-18T14:31:22.333Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
   "message": "El judgment day de cadenas ya está corriendo sobre el rango congelado: 89 archivos, +7211/−374. La `-11` me va a pasar el veredicto cuando terminen los dos jueces.\n\nAdemás acordamos cómo ordenar la validación estricta, porque ya hay tres helpers parecidos, cada uno de una unidad: el `parseApi` de cadenas, uno de project-info en su rama y el que planeaba la `-11`. Para no dejar tres versiones de lo mismo, ella espera a que cadenas aterrice y después los unifica en un único operador en `core/api`, con la misma firma que el `validateResponse` que ya aceptó la librería. Así no sumamos deuda técnica, que es lo que pediste."
 }
