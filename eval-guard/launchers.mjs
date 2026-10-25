@@ -1,7 +1,8 @@
 /**
  * Which program a command line really runs: the word past the launchers that only start another program
- * (`env`, `command`, `exec`, `time`, `timeout N`, `nice`, `npx`) and their own options. That is the one
- * question this module answers, over the words the tokenizer of `detect.mjs` produced.
+ * (`env`, `command`, `exec`, `time`, `timeout N`, `nice`, `npx`, `nohup`, `sudo`, `xargs`, `stdbuf`, `uv run`,
+ * `poetry run`) and their own options; `env -S 'node -'` splits its string into the command line itself. That is
+ * the one question this module answers, over the words the tokenizer of `detect.mjs` produced.
  *
  * WHY (2026-10-19, two blind judges): `env node - <<'EOF'` and `timeout 5 python3 - <<'EOF'` run the same
  * interpreter as `node -` and `python3 -`, so a rule that reads only the first word misses them.
@@ -12,7 +13,8 @@
  * the value is read as the program, which can only MISS an interpreter, never invent one.
  *
  * @es Qué programa ejecuta de verdad una línea de órdenes: la palabra tras los lanzadores que solo arrancan
- * otro programa (`env`, `command`, `exec`, `time`, `timeout N`, `nice`, `npx`) y sus opciones. POR QUÉ: `env
+ * otro programa (`env`, `command`, `exec`, `time`, `timeout N`, `nice`, `npx`, `nohup`, `sudo`, `xargs`, `stdbuf`,
+ * `uv run`, `poetry run`) y sus opciones; `env -S 'node -'` parte su cadena en la propia línea. POR QUÉ: `env
  * node - <<'EOF'` ejecuta el mismo intérprete que `node -`, y una regla que solo lee la primera palabra no lo
  * ve. Cada lanzador lista las opciones que toman valor y, para `timeout`, la duración previa al programa. Un
  * lanzador que no ejecuta nada (`command -v node`) no tiene programa. Una opción desconocida se salta como
@@ -22,20 +24,38 @@
 const BACKSLASH = '\\';
 
 /**
- * The launchers: `values`, options whose value is the next word; `positionals`, words before the program;
- * `noProgram`, options after which nothing runs; `assignments`, whether `NAME=value` words are skipped.
- * @es Los lanzadores: `values`, opciones cuyo valor es la palabra siguiente; `positionals`, palabras antes
- * del programa; `noProgram`, opciones tras las que no se ejecuta nada; `assignments`, si se saltan `NOMBRE=valor`.
+ * One launcher: `values`, options whose value is the next word; `positionals`, words before the program;
+ * `noProgram`, options after which nothing runs; `assignments`, whether `NAME=value` words are skipped; `split`,
+ * options whose value is itself a command line (`env -S 'node -'`); `subcommand`, the word that must follow the
+ * launcher for it to run a program (`uv run`, `poetry run`).
+ * @es Un lanzador: `values`, opciones cuyo valor es la palabra siguiente; `positionals`, palabras antes del
+ * programa; `noProgram`, opciones tras las que no se ejecuta nada; `assignments`, si se saltan `NOMBRE=valor`;
+ * `split`, opciones cuyo valor es a su vez una línea de órdenes; `subcommand`, la palabra que debe seguir al
+ * lanzador para que ejecute un programa.
  */
+const launcher = ({ values = [], positionals = 0, noProgram = [], assignments = false, split = [], subcommand } = {}) => ({ values: new Set(values), positionals, noProgram: new Set(noProgram), assignments, split: new Set(split), subcommand });
+
+/** The launchers. @es Los lanzadores. */
 export const LAUNCHERS = {
-  env: { values: new Set(['-u', '--unset', '-C', '--chdir', '-S', '--split-string']), positionals: 0, noProgram: new Set(), assignments: true },
-  command: { values: new Set(), positionals: 0, noProgram: new Set(['-v', '-V']), assignments: false },
-  exec: { values: new Set(['-a']), positionals: 0, noProgram: new Set(), assignments: false },
-  time: { values: new Set(['-f', '--format', '-o', '--output']), positionals: 0, noProgram: new Set(), assignments: false },
-  timeout: { values: new Set(['-s', '--signal', '-k', '--kill-after']), positionals: 1, noProgram: new Set(), assignments: false },
-  nice: { values: new Set(['-n', '--adjustment']), positionals: 0, noProgram: new Set(), assignments: false },
-  npx: { values: new Set(['-p', '--package']), positionals: 0, noProgram: new Set(['-c', '--call']), assignments: false }
+  env: launcher({ values: ['-u', '--unset', '-C', '--chdir'], assignments: true, split: ['-S', '--split-string'] }),
+  command: launcher({ noProgram: ['-v', '-V'] }),
+  exec: launcher({ values: ['-a'] }),
+  time: launcher({ values: ['-f', '--format', '-o', '--output'] }),
+  timeout: launcher({ values: ['-s', '--signal', '-k', '--kill-after'], positionals: 1 }),
+  nice: launcher({ values: ['-n', '--adjustment'] }),
+  npx: launcher({ values: ['-p', '--package'], noProgram: ['-c', '--call'] }),
+  nohup: launcher(),
+  sudo: launcher({ values: ['-u', '--user', '-g', '--group', '-C', '--close-from', '-D', '--chdir', '-h', '--host', '-p', '--prompt', '-U', '--other-user', '-r', '--role', '-t', '--type', '-T', '--command-timeout'], noProgram: ['-l', '--list', '-v', '--validate', '-V', '--version', '-e', '--edit', '-K', '--remove-timestamp'] }),
+  xargs: launcher({ values: ['-I', '-L', '-n', '--max-args', '-P', '--max-procs', '-s', '--max-chars', '-d', '--delimiter', '-E', '-a', '--arg-file'] }),
+  stdbuf: launcher({ values: ['-i', '--input', '-o', '--output', '-e', '--error'] }),
+  uv: launcher({ subcommand: 'run', values: ['--with', '--with-editable', '--with-requirements', '--python', '-p', '--project', '--directory', '--env-file', '--extra', '--group', '--index', '--package', '--from'] }),
+  poetry: launcher({ subcommand: 'run', values: ['-C', '--directory', '-P', '--project'] })
 };
+
+/** The words of a command line given as one string (`env -S 'node -'`), split on blanks. @es Las palabras de una línea dada como una cadena, separadas por blancos. */
+function splitWords(text) {
+  return text.split(' ').flatMap((part) => part.split('\t')).filter((part) => part.length > 0).map((raw) => ({ kind: 'word', raw, quoted: false, bare: true }));
+}
 
 /** The trailing path segment of a program word, lowercased and without a `.exe` tail. @es Último segmento de ruta del programa, en minúsculas y sin `.exe`. */
 export function programName(raw) {
@@ -72,46 +92,61 @@ export function isEnvironmentAssignment(token) {
   return true;
 }
 
-/** Whether a word is an option of a launcher (`-x`, `--long`, `-10` for nice). @es Si una palabra es una opción de un lanzador. */
-const isOption = (token) => !token.quoted && token.raw.length > 1 && token.raw[0] === '-';
+/**
+ * Whether a word is an option of a launcher (`-x`, `--long`, `-10` for nice). Quoting is no part of the answer: the
+ * launcher receives the same argument either way, so `--split-string='node -'` is an option.
+ * @es Si una palabra es una opción de un lanzador. Las comillas no deciden: el lanzador recibe el mismo argumento con
+ * o sin ellas, así `--split-string='node -'` es una opción.
+ */
+const isOption = (token) => token.raw.length > 1 && token.raw[0] === '-';
 
 /**
- * The index in `words` of the program the words at `position` run, past every launcher; `-1` when a launcher
- * runs nothing or no program word is left.
- * @es El índice en `words` del programa que ejecutan las palabras desde `position`, tras todo lanzador; `-1`
- * si un lanzador no ejecuta nada o no queda palabra de programa.
+ * The words the command at `position` runs, starting at its program, past every launcher: the program word and
+ * its arguments; `undefined` when a launcher runs nothing or no program word is left. A split option's string
+ * (`env -S 'node -'`) becomes words of the command line itself.
+ * @es Las palabras que ejecuta la orden desde `position`, empezando por su programa, tras todo lanzador;
+ * `undefined` si un lanzador no ejecuta nada o no queda programa. La cadena de una opción de partición se vuelve
+ * palabras de la propia línea.
  */
-export function programIndex(words, position) {
-  let at = position;
+export function programWords(words, position) {
+  let rest = words.slice(position);
 
-  while (at < words.length && isEnvironmentAssignment(words[at])) at += 1;
+  while (rest.length > 0) {
+    while (rest.length > 0 && isEnvironmentAssignment(rest[0])) rest = rest.slice(1);
 
-  while (at < words.length) {
-    const name = programName(words[at].raw);
+    const name = programName(rest[0]?.raw ?? '');
 
-    if (!Object.hasOwn(LAUNCHERS, name)) return at;
+    if (!Object.hasOwn(LAUNCHERS, name)) return rest.length > 0 ? rest : undefined;
 
-    const launcher = LAUNCHERS[name];
+    const spec = LAUNCHERS[name];
+    let at = 1;
 
-    at += 1;
+    if (spec.subcommand !== undefined) {
+      if (rest[1]?.raw !== spec.subcommand) return undefined;
 
-    let positionals = launcher.positionals;
+      at = 2;
+    }
 
-    while (at < words.length) {
-      const word = words[at];
+    let positionals = spec.positionals;
+    let split;
+
+    while (at < rest.length && split === undefined) {
+      const word = rest[at];
 
       // `--` is skipped like any flag, so `timeout -- 5 node` still counts its duration.
       // @es `--` se salta como cualquier flag, así `timeout -- 5 node` sigue contando su duración.
       if (isOption(word)) {
-        const option = word.raw.includes('=') ? word.raw.slice(0, word.raw.indexOf('=')) : word.raw;
+        const inline = word.raw.includes('=');
+        const option = inline ? word.raw.slice(0, word.raw.indexOf('=')) : word.raw;
 
-        if (launcher.noProgram.has(option)) return -1;
+        if (spec.noProgram.has(option)) return undefined;
+        if (spec.split.has(option)) split = inline ? word.raw.slice(word.raw.indexOf('=') + 1) : rest[at + 1]?.raw ?? '';
 
-        at += launcher.values.has(option) && !word.raw.includes('=') ? 2 : 1;
+        at += (spec.values.has(option) || spec.split.has(option)) && !inline ? 2 : 1;
         continue;
       }
 
-      if (launcher.assignments && isEnvironmentAssignment(word)) {
+      if (spec.assignments && isEnvironmentAssignment(word)) {
         at += 1;
         continue;
       }
@@ -124,7 +159,9 @@ export function programIndex(words, position) {
 
       break;
     }
+
+    rest = split === undefined ? rest.slice(at) : [...splitWords(split), ...rest.slice(at)];
   }
 
-  return -1;
+  return undefined;
 }

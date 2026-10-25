@@ -25,10 +25,10 @@ const SOURCE = 'eval-guard/script-source.mjs';
 const LAUNCHERS = 'eval-guard/launchers.mjs';
 
 /** A call marker taken out of the list, one mutant each. @es Un marcador de llamada fuera de la lista, un mutante cada uno. */
-const callMarkerMutants = ['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'createWriteStream', 'writeSync', 'fs.write', 'copyFileSync', 'renameSync', 'cpSync', 'write_text', 'write_bytes', 'shutil.copy*', 'os.replace'].map((marker) => [`the write marker ${marker} is no longer recognised`, WRITES, `'${marker}',`, '']);
+const callMarkerMutants = ['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'createWriteStream', 'writeSync', 'fs.write', 'copyFileSync', 'renameSync', 'cpSync', 'write_text', 'write_bytes', 'shutil.copy*', 'os.replace', 'copyFile', 'fs.rename', 'fs.cp', 'shutil.move', 'os.rename', 'Deno.writeTextFile', 'Bun.write'].map((marker) => [`the write marker ${marker} is no longer recognised`, WRITES, `'${marker}',`, '']);
 
 /** A cmdlet taken out of the list. @es Un cmdlet fuera de la lista. */
-const cmdletMutants = [["'Set-Content', ", ''], ["'Add-Content', ", ''], [", 'Out-File'", '']].map(([original, replacement]) => [`the cmdlet ${original} is no longer recognised`, WRITES, original, replacement]);
+const cmdletMutants = [["'Set-Content', ", ''], ["'Add-Content', ", ''], [", 'Out-File'", ''], [", 'Copy-Item'", ''], [", 'Tee-Object'", '']].map(([original, replacement]) => [`the cmdlet ${original} is no longer recognised`, WRITES, original, replacement]);
 
 /** An interpreter name taken out of its family. @es Un nombre de intérprete fuera de su familia. */
 const nameMutants = [
@@ -50,7 +50,7 @@ const nameMutants = [
 ].map(([original, replacement]) => [`${replacement} no longer names every interpreter of its family`, SOURCE, original, replacement]);
 
 /** A launcher taken out of the table. @es Un lanzador fuera de la tabla. */
-const launcherMutants = ['env', 'command', 'exec', 'time', 'timeout', 'nice', 'npx'].map((name) => [`${name} is no longer unwrapped`, LAUNCHERS, `  ${name}: {`, `  ${name}x: {`]);
+const launcherMutants = ['env', 'command', 'exec', 'time', 'timeout', 'nice', 'npx', 'nohup', 'sudo', 'xargs', 'stdbuf', 'uv', 'poetry'].map((name) => [`${name} is no longer unwrapped`, LAUNCHERS, `  ${name}: launcher(`, `  ${name}x: launcher(`]);
 
 const MUTANTS = [
   // --- noisy: the script's own arguments are read as node's ---
@@ -83,7 +83,7 @@ const MUTANTS = [
   ['an unquoted backslash-newline is read as an eaten escape instead of a line continuation', DETECT, "    if (character === BACKSLASH && command[index + 1] === '\\n') {\n", '    if (false) {\n'],
   ['a comment is tokenized as words, so its quotes and backslashes are judged', DETECT, "if (character === '#' && startsComment(command, index)) {", 'if (false) {'],
   ['every # opens a comment, including the one of ${#x} and a#b', DETECT, 'return index === 0 || BEFORE_A_COMMENT.has(command[index - 1]);', 'return true;'],
-  ['a # after a brace opens a comment, so ${#x} hides the rest of the line', DETECT, "'\\n', ';', '|', '&']", "'\\n', ';', '|', '&', '{']"],
+  ['a # glued after a brace opens a comment, so a{#b hides the rest of the line', DETECT, "'\\n', ';', '|', '&']", "'\\n', ';', '|', '&', '{']"],
   ['a comment glued to ; is not a comment', DETECT, "'\\n', ';', '|', '&']", "'\\n', '|', '&']"],
   ['a comment glued to | is not a comment', DETECT, "'\\n', ';', '|', '&']", "'\\n', ';', '&']"],
   ['a comment glued to & is not a comment', DETECT, "'\\n', ';', '|', '&']", "'\\n', ';', '|']"],
@@ -100,21 +100,36 @@ const MUTANTS = [
   ['every caller is read as delegated', GUARD, 'delegated: isSubagentCaller(payload)', 'delegated: true'],
   ['the script-write refusal has no text of its own', GUARD, "if (refusal.kind === 'script-write') return scriptWriteReason(refusal);\n", ''],
   // --- the program and whether it reads its script from stdin ---
-  ['launchers are not unwrapped', DETECT, 'const at = programIndex(command, position);', 'const at = position;'],
-  ['the argument list is not read: every interpreter reads stdin', DETECT, ' || !readsScriptFromStdin(family, command.slice(at + 1))', ''],
+  ['launchers are not unwrapped', DETECT, 'const run = programWords(command, position);', 'const run = command.length > position ? command.slice(position) : undefined;'],
+  ['the argument list is not read: every interpreter reads stdin', DETECT, ' || !readsScriptFromStdin(family, run.slice(1))', ''],
   ['a script that calls a writer is not judged', DETECT, 'const evidence = writeEvidence(input.text) ?? ', 'const evidence = '],
   ['a shell script is never judged as shell', DETECT, 'family.shellLike ? shellScriptWrites(input.text, family) : undefined', 'undefined'],
   ['every script is judged as shell', DETECT, 'family.shellLike ? shellScriptWrites(input.text, family) : undefined', 'shellScriptWrites(input.text, family)'],
   ...launcherMutants,
-  ['env assignments are read as the program', LAUNCHERS, 'positionals: 0, noProgram: new Set(), assignments: true }', 'positionals: 0, noProgram: new Set(), assignments: false }'],
-  ['env -u takes no value', LAUNCHERS, "new Set(['-u', '--unset', ", "new Set(['--unset', "],
-  ['timeout has no duration before the program', LAUNCHERS, "new Set(['-s', '--signal', '-k', '--kill-after']), positionals: 1,", "new Set(['-s', '--signal', '-k', '--kill-after']), positionals: 0,"],
-  ['timeout -s takes no value', LAUNCHERS, "new Set(['-s', '--signal', ", "new Set(['--signal', "],
-  ['nice -n takes no value', LAUNCHERS, "new Set(['-n', '--adjustment'])", "new Set(['--adjustment'])"],
-  ['command -v runs its argument', LAUNCHERS, "noProgram: new Set(['-v', '-V'])", 'noProgram: new Set([])'],
-  ['a launcher option with = also skips the next word', LAUNCHERS, "at += launcher.values.has(option) && !word.raw.includes('=') ? 2 : 1;", 'at += launcher.values.has(option) ? 2 : 1;'],
-  ['no launcher option takes a value', LAUNCHERS, "at += launcher.values.has(option) && !word.raw.includes('=') ? 2 : 1;", 'at += 1;'],
-  ['an assignment before a program in a script is the program', LAUNCHERS, '  while (at < words.length && isEnvironmentAssignment(words[at])) at += 1;\n', ''],
+  ['env assignments are read as the program', LAUNCHERS, 'assignments: true, split:', 'assignments: false, split:'],
+  ['env -u takes no value', LAUNCHERS, "values: ['-u', '--unset', ", "values: ['--unset', "],
+  ['timeout has no duration before the program', LAUNCHERS, "'--kill-after'], positionals: 1 })", "'--kill-after'], positionals: 0 })"],
+  ['timeout -s takes no value', LAUNCHERS, "values: ['-s', '--signal', ", "values: ['--signal', "],
+  ['nice -n takes no value', LAUNCHERS, "values: ['-n', '--adjustment']", "values: ['--adjustment']"],
+  ['command -v runs its argument', LAUNCHERS, "noProgram: ['-v', '-V']", 'noProgram: []'],
+  ['sudo -l runs its argument', LAUNCHERS, "noProgram: ['-l', '--list', ", "noProgram: ['--list', "],
+  ['sudo -u takes no value', LAUNCHERS, "sudo: launcher({ values: ['-u', ", "sudo: launcher({ values: ["],
+  ['xargs -n takes no value', LAUNCHERS, "'-L', '-n', '--max-args'", "'-L', '--max-args'"],
+  ['stdbuf -o takes no value', LAUNCHERS, "'-i', '--input', '-o', '--output'", "'-i', '--input', '--output'"],
+  ['uv run --with takes no value', LAUNCHERS, "values: ['--with', ", "values: ["],
+  ['a launcher option with = also skips the next word', LAUNCHERS, 'at += (spec.values.has(option) || spec.split.has(option)) && !inline ? 2 : 1;', 'at += spec.values.has(option) || spec.split.has(option) ? 2 : 1;'],
+  ['no launcher option takes a value', LAUNCHERS, 'at += (spec.values.has(option) || spec.split.has(option)) && !inline ? 2 : 1;', 'at += 1;'],
+  ['a split option takes no value word', LAUNCHERS, 'at += (spec.values.has(option) || spec.split.has(option)) && !inline ? 2 : 1;', 'at += spec.values.has(option) && !inline ? 2 : 1;'],
+  ['a quoted option is read as the program', LAUNCHERS, 'const isOption = (token) => token.raw.length > 1', 'const isOption = (token) => !token.quoted && token.raw.length > 1'],
+  ['an assignment before a program in a script is the program', LAUNCHERS, '    while (rest.length > 0 && isEnvironmentAssignment(rest[0])) rest = rest.slice(1);\n', ''],
+  // --- X7: `uv run` / `poetry run` and `env -S` ---
+  ['a subcommand launcher runs a program without its subcommand', LAUNCHERS, '      if (rest[1]?.raw !== spec.subcommand) return undefined;\n', ''],
+  ['the subcommand word is read as the program', LAUNCHERS, '      at = 2;\n', ''],
+  ['env -S is not split', LAUNCHERS, "        if (spec.split.has(option)) split = inline ? word.raw.slice(word.raw.indexOf('=') + 1) : rest[at + 1]?.raw ?? '';\n", ''],
+  ['an inline --split-string= reads the next word', LAUNCHERS, "split = inline ? word.raw.slice(word.raw.indexOf('=') + 1) : rest[at + 1]?.raw ?? '';", "split = rest[at + 1]?.raw ?? '';"],
+  ['the split words are not put back on the line', LAUNCHERS, 'rest = split === undefined ? rest.slice(at) : [...splitWords(split), ...rest.slice(at)];', 'rest = rest.slice(at);'],
+  ['a split string is cut on spaces only', LAUNCHERS, ".flatMap((part) => part.split('\\t'))", ''],
+  ['a split string keeps its empty words', LAUNCHERS, '.filter((part) => part.length > 0)', ''],
   ['a program name keeps its case', LAUNCHERS, 'const name = raw.slice(start).toLowerCase();', 'const name = raw.slice(start);'],
   ['a program name keeps its .exe', LAUNCHERS, "return name.endsWith('.exe') ? name.slice(0, -4) : name;", 'return name;'],
   ...nameMutants,
@@ -162,8 +177,31 @@ const MUTANTS = [
   ['the descriptor of a heredoc is a word', DETECT, '      dropDescriptor(index);\n      flush();\n\n      const declaration', '      flush();\n\n      const declaration'],
   ['the descriptor of a redirection is a word', DETECT, "      dropDescriptor(index);\n      flush();\n      items.push({ kind: 'redirect'", "      flush();\n      items.push({ kind: 'redirect'"],
   ['any word glued to a redirection is a descriptor', DETECT, " && [...current.raw].every((digit) => digit >= '0' && digit <= '9')) current = undefined;", ') current = undefined;'],
-  ['an arrow -> is a redirection', DETECT, "afterDash: command[index - 1] === '-' }", 'afterDash: false }'],
-  ['(( )) is not arithmetic', DETECT, 'if (command.startsWith(ARITHMETIC_OPEN, index)) {', 'if (false) {'],
+  // --- X8: in a shell script `->out.txt` is a redirection ---
+  ['an arrow -> in a shell script is no redirection', DETECT, '    if (redirection !== undefined) {\n      dropDescriptor(index);', "    if (redirection !== undefined && command[index - 1] !== '-') {\n      dropDescriptor(index);"],
+  // --- X4: (( … )) is Bash arithmetic only at command position, closed on its own line ---
+  ['(( )) is not arithmetic', DETECT, 'if (!powershell && current === undefined && command.startsWith(ARITHMETIC_OPEN, index) && atCommandPosition(items)) {', 'if (false) {'],
+  ['(( )) is arithmetic in PowerShell too', DETECT, 'if (!powershell && current === undefined && command.startsWith(ARITHMETIC_OPEN, index)', 'if (current === undefined && command.startsWith(ARITHMETIC_OPEN, index)'],
+  ['(( glued to a word is arithmetic', DETECT, 'if (!powershell && current === undefined && command.startsWith', 'if (!powershell && command.startsWith'],
+  ['(( is arithmetic anywhere', DETECT, 'command.startsWith(ARITHMETIC_OPEN, index) && atCommandPosition(items)) {', 'command.startsWith(ARITHMETIC_OPEN, index)) {'],
+  ['a (( closed on a later line is arithmetic', DETECT, '      if (close !== -1 && (lineBreak === -1 || close < lineBreak)) {', '      if (close !== -1) {'],
+  ['nothing before (( is no command position', DETECT, 'return last === undefined || last.kind', 'return last.kind'],
+  ['an operator before (( is no command position', DETECT, "last === undefined || last.kind === 'operator' || (", 'last === undefined || ('],
+  ['a quoted keyword opens a command position', DETECT, "(last.kind === 'word' && !last.quoted && COMMAND_KEYWORDS.has(last.raw))", "(last.kind === 'word' && COMMAND_KEYWORDS.has(last.raw))"],
+  ...['if', 'elif', 'while', 'until', 'then', 'do', 'else'].map((keyword) => [`(( after ${keyword} is no arithmetic`, DETECT, `'${keyword}', `, '']),
+  ['(( after ! is no arithmetic', DETECT, ", '!']);", ']);'],
+  // --- X3: a substitution is part of its word, and its text is judged ---
+  ['a substitution is a separator again', DETECT, "if ((character === '$' && (command[index + 1] === '(' || command[index + 1] === '{')) || (character === '`' && !powershell)) {", 'if (false) {'],
+  ['${ … } is a separator', DETECT, " || command[index + 1] === '{')) || (character", ')) || (character'],
+  ['a backtick is a separator', DETECT, " || (character === '`' && !powershell)) {", ') {'],
+  ['a PowerShell backtick opens a substitution', DETECT, "(character === '`' && !powershell)", "(character === '`')"],
+  ['the text of a substitution is not judged', DETECT, '      if (innerRefusal !== undefined) return innerRefusal;\n', ''],
+  ['the text of a substitution is not kept', DETECT, '      current.substitutions.push(substitution.inner);\n', ''],
+  ['quotes do not group inside $( … )', DETECT, "    if (character === \"'\" || character === '\"') {\n      const end = command.indexOf(character, at + 1);", "    if (false) {\n      const end = command.indexOf(character, at + 1);"],
+  ['a backslash escapes nothing inside $( … )', DETECT, '    if (character === BACKSLASH) at += 1;\n    else if (character === opener) depth += 1;', '    if (character === opener) depth += 1;'],
+  ['$( … ) does not nest', DETECT, '    else if (character === opener) depth += 1;\n', '\n'],
+  ['a backslash escapes nothing inside backticks', DETECT, "end += command[end] === BACKSLASH ? 2 : 1;", 'end += 1;'],
+  ['the substitution word is not bare', DETECT, '      current.bare = true;\n      current.raw += command.slice(index, substitution.next);', '      current.raw += command.slice(index, substitution.next);'],
   ['a heredoc is given to no command', DETECT, "for (const owner of owners()) owner.inputs.push({ text: item.heredoc.body ?? ''", "for (const owner of []) owner.inputs.push({ text: item.heredoc.body ?? ''"],
   ['the heredoc body is not kept', DETECT, 'heredoc.body = command.slice(bodyStart, index);', "heredoc.body = '';"],
   ['the heredoc body is not given to its command', DETECT, "owner.inputs.push({ text: item.heredoc.body ?? '',", "owner.inputs.push({ text: '',"],
@@ -178,8 +216,19 @@ const MUTANTS = [
   ['a here-string word is never flagged', DETECT, 'hereString: hereStringAt !== undefined,', 'hereString: false,'],
   ['the here-string flag leaks to every later word', DETECT, '      hereStringAt = undefined;\n', ''],
   ['a command\'s own input is ignored', DETECT, '  if (command.inputs.length > 0) return command.inputs;\n', ''],
-  ['the pipe does not flow through every stage', DETECT, '[...stdinTexts(before, powerShellScripts), ', '['],
-  ['a PowerShell here-string piped on is not its output', DETECT, ', ...literalOutputOf(before, powerShellScripts)]', ']'],
+  ['the pipe does not flow through every stage', DETECT, '[...stdinTexts(before, context), ', '['],
+  ['a PowerShell here-string piped on is not its output', DETECT, ', ...literalOutputOf(before, context)]', ']'],
+  // --- X5 and X7: a variable assigned a here-string, and echo / printf, print a script ---
+  ['a variable assigned a here-string prints nothing', DETECT, ': context.variables.get(word.raw.toLowerCase());', ': undefined;'],
+  ['a variable is read in its own case', DETECT, ': context.variables.get(word.raw.toLowerCase());', ': context.variables.get(word.raw);'],
+  ['a spaced assignment is no assignment', DETECT, "    if (second?.raw === '=' && third?.raw.startsWith(POWERSHELL_PLACEHOLDER)) variables.set", '    if (false) variables.set'],
+  ['a spaced assignment keeps its case', DETECT, 'variables.set(first.raw.toLowerCase(), third.raw);', 'variables.set(first.raw, third.raw);'],
+  ['a glued assignment is no assignment', DETECT, '    else if (equals > 1 && first.raw.slice(equals + 1).startsWith(POWERSHELL_PLACEHOLDER))', '    else if (false)'],
+  ['a glued assignment keeps its case', DETECT, 'variables.set(first.raw.slice(0, equals).toLowerCase(), ', 'variables.set(first.raw.slice(0, equals), '],
+  ['a name with no $ is a variable', DETECT, "    if (!first.raw.startsWith('$')) continue;\n", ''],
+  ['echo and printf print nothing', DETECT, 'return PRINTERS.has(name) ? [', 'return false ? ['],
+  ['echo prints nothing', DETECT, "const PRINTERS = new Set(['echo', 'printf']);", "const PRINTERS = new Set(['printf']);"],
+  ['printf prints nothing', DETECT, "const PRINTERS = new Set(['echo', 'printf']);", "const PRINTERS = new Set(['echo']);"],
   // --- E6: the finding points at the real opener ---
   ['a heredoc finding points at offset 0', DETECT, "source: 'heredoc', offset: item.start,", "source: 'heredoc', offset: 0,"],
   ['a here-string finding points at offset 0', DETECT, 'offset: word.hereStringAt,', 'offset: 0,'],
@@ -206,7 +255,11 @@ const MUTANTS = [
   ['a sink is matched in one case only', DETECT, '  return !descriptorCopy && !NON_FILE_SINKS.has(target.toLowerCase());', '  return !descriptorCopy && !NON_FILE_SINKS.has(target);'],
   ['a nested interpreter is not judged', DETECT, "if (nested?.kind === 'script-write') return", 'if (false) return'],
   ['a [[ ]] comparison is a redirection', DETECT, "const comparison = command.some((word) => !word.quoted && word.raw === '[[');", 'const comparison = false;'],
-  ['cp is no write', DETECT, "    if (name === 'cp') return 'calls cp';\n", ''],
+  ['cp and mv are no writes', DETECT, '    if (FILE_MOVERS.has(name)) return `calls ${name}`;\n', ''],
+  ['cp is no write', DETECT, "const FILE_MOVERS = new Set(['cp', 'mv']);", "const FILE_MOVERS = new Set(['mv']);"],
+  ['mv is no write', DETECT, "const FILE_MOVERS = new Set(['cp', 'mv']);", "const FILE_MOVERS = new Set(['cp']);"],
+  ['dd is no write', DETECT, "    if (name === 'dd' && words.some((word) => word.raw.startsWith(DD_OUTPUT))) return 'calls dd of=';\n", ''],
+  ['dd writes with any operand', DETECT, "const DD_OUTPUT = 'of=';", "const DD_OUTPUT = '';"],
   ['tee is no write', DETECT, "if (name === 'tee' && words.some(", 'if (false && words.some('],
   ['tee with no file writes', DETECT, 'words.some((word) => !isOptionWord(word) && !NON_FILE_SINKS.has(word.raw.toLowerCase()))', 'true'],
   ['tee into a sink writes', DETECT, '!isOptionWord(word) && !NON_FILE_SINKS.has(word.raw.toLowerCase())', '!isOptionWord(word)'],
@@ -219,6 +272,8 @@ const MUTANTS = [
   // --- what a script calls ---
   ...callMarkerMutants,
   ['the WriteAllText marker is no longer recognised', WRITES, ", 'WriteAllText'", ''],
+  ['the WriteAllLines marker is no longer recognised', WRITES, ", 'WriteAllLines'", ''],
+  ['the AppendAllText marker is no longer recognised', WRITES, ", 'AppendAllText'", ''],
   ...cmdletMutants,
   ['a marker continues into any name', WRITES, '    if (prefix) while (isIdentifierCharacter(text[end])) end += 1;\n', ''],
   ['a name glued after another is a call site', WRITES, '    if (isIdentifierCharacter(text[from - 1])) continue;\n', ''],
@@ -237,10 +292,19 @@ const MUTANTS = [
   ['only the first mode letter is read', WRITES, '[...mode].some(', '[...mode].slice(0, 1).some('],
   ['python open calls are never looked at', WRITES, 'if (opensForWriting(text))', 'if (false)'],
   ['the mode= keyword is not read', WRITES, "parts.find((part) => keywordOf(part) === 'mode')", 'parts.find(() => false)'],
-  ['a method open takes its mode second', WRITES, 'method && !PATH_FIRST_MODULES.has(receiver) ? 0 : 1', '1'],
-  ['io.open takes its mode first', WRITES, 'method && !PATH_FIRST_MODULES.has(receiver) ? 0 : 1', 'method ? 0 : 1'],
-  ['nothing is a method open', WRITES, "const method = text[site.at - 1] === '.';", 'const method = false;'],
-  ['the receiver of a method open is not read', WRITES, '  while (isIdentifierCharacter(text[receiverStart - 1])) receiverStart -= 1;\n', ''],
+  // --- X6: the receiver of a method open decides where its mode is ---
+  ['a Path open takes its mode second', WRITES, '    if (path) index = 0;', '    if (path) index = 1;'],
+  ['nothing is a method open', WRITES, "  if (text[site.at - 1] === '.') {\n    const receiver", "  if (false) {\n    const receiver"],
+  ['every other method open is judged', WRITES, '    else if (receiver.call || !PATH_FIRST_MODULES.has(receiver.name)) return undefined;\n', ''],
+  ['a call receiver is read like a name', WRITES, 'const path = receiver.call ? PATH_CLASSES.has(receiver.name) : assignedPath(', 'const path = assignedPath('],
+  ['a name assigned a Path is no Path', WRITES, ': assignedPath(text, receiver.name, site.at);', ': false;'],
+  ['a Path assigned on a later line counts', WRITES, 'return text.slice(0, lineStart).split(', 'return text.split('],
+  ['Path is no Path class', WRITES, "const PATH_CLASSES = new Set(['Path', 'pathlib.Path']);", "const PATH_CLASSES = new Set(['pathlib.Path']);"],
+  ['pathlib.Path is no Path class', WRITES, "const PATH_CLASSES = new Set(['Path', 'pathlib.Path']);", "const PATH_CLASSES = new Set(['Path']);"],
+  ['a receiver call is never seen', WRITES, "  if (text[dot - 1] !== ')') return", '  if (true) return'],
+  ['a receiver name stops at a dot', WRITES, "const isNameCharacter = (character) => isIdentifierCharacter(character) || character === '.';", 'const isNameCharacter = (character) => isIdentifierCharacter(character);'],
+  ...['gzip', 'bz2', 'lzma', 'tarfile', 'io', 'codecs', 'fs'].map((module) => [`${module}.open is not a module open`, WRITES, `'${module}', `, '']),
+  ['fs.promises.open is not a module open', WRITES, ", 'fs.promises']);", ']);'],
   ['brackets do not nest in an argument list', WRITES, "    if (character === '(' || character === '[' || character === '{') depth += 1;\n", ''],
   ['quotes do not group in an argument list', WRITES, "    if (character === \"'\" || character === '\"') {\n      let close", "    if (false) {\n      let close"],
   // --- heredocs: the body is data, the scan resumes after the terminator ---

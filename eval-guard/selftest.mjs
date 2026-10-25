@@ -157,7 +157,7 @@ const falseRefusalCases = [
   ['allow', delegated(lines("pwsh - <<'EOF'", 'Get-Content in.txt; Write-Host "use Set-Content later"', 'EOF')), 'a cmdlet name inside a string is no command'],
   ['allow', delegated(lines("bash <<'EOF'", "awk '$1 > 5' data.txt", "jq '.a > 1' x.json", 'EOF')), 'a > inside awk and jq programs'],
   ['allow', delegated(lines("bash <<'EOF'", 'if [[ "$a" > "$b" ]]; then echo yes; fi', '(( n > 3 )) && echo big', 'EOF')), 'a > inside [[ ]] and (( ))'],
-  ['allow', delegated(lines("bash <<'EOF'", '# write > out.txt later', 'echo "a > b"', "echo 'x -> y'", 'echo a->b', 'EOF')), 'a > in a comment, in quotes and in an arrow'],
+  ['allow', delegated(lines("bash <<'EOF'", '# write > out.txt later', 'echo "a > b"', "echo 'x -> y'", 'EOF')), 'a > in a comment and in quotes'],
   ['allow', delegated(lines("bash <<'EOF'", 'echo x > /dev/stderr', 'echo y >/dev/stdout', 'echo z >&2', 'echo w &>/dev/null', 'EOF')), 'stderr, stdout and descriptor copies are no files'],
   ['allow', delegated(lines("pwsh - <<'EOF'", 'Get-Date > $null', 'Get-Date > NUL', 'EOF')), 'PowerShell $null and NUL are no files'],
   ['allow', delegated(lines("bash <<'EOF'", "awk '$1 > 5' <<'X'", '3 > 2', 'X', 'EOF')), 'a read-only awk heredoc nested in a shell script'],
@@ -183,6 +183,82 @@ const openCases = [
   ['deny', delegated(lines("python3 - <<'EOF'", "open(p, encoding='utf8', mode='w')", 'EOF')), 'mode= after another keyword', 'writes a file'],
   ['allow', delegated(lines("python3 - <<'EOF'", "Path(p).open().read(); Path(p).open('r'); io.open('w.txt', 'r')", 'EOF')), 'read-only method opens'],
   ['allow', delegated(lines("python3 - <<'EOF'", "open(os.path.join(root, 'w'), 'r')", 'EOF')), 'a w inside the nested path is no mode']
+];
+
+// Round 2 (X3-X8), the judges' own examples first.
+// @es Ronda 2 (X3-X8), primero los ejemplos de los propios jueces.
+const PS_WRITE = "'x' | Set-Content o.txt";
+const roundTwoCases = [
+  // X3: a substitution is part of its word, and the command inside it is still judged.
+  ['deny', delegated(lines("python3 - $(pwd)/out.txt <<'EOF'", "open('o', 'w')", 'EOF')), 'X3: an unquoted $(…) argument keeps the heredoc on the interpreter', 'writes a file'],
+  ['deny', delegated(lines("python3 - ${HOME}/x <<'EOF'", "open('o', 'w')", 'EOF')), 'X3: an unquoted ${…} argument keeps the heredoc on the interpreter', 'writes a file'],
+  ['deny', delegated(lines("python3 - `pwd`/x <<'EOF'", "open('o', 'w')", 'EOF')), 'X3: an unquoted backtick argument keeps the heredoc on the interpreter', 'writes a file'],
+  ['deny', delegated(lines("python3 - $(echo $(pwd))/x <<'EOF'", "open('o', 'w')", 'EOF')), 'X3: nested substitutions stay one word', 'writes a file'],
+  ['deny', payload(String.raw`x=$(node -e "console.log('\\b')")`), 'X3: the command inside $(…) is still judged by every rule'],
+  ['deny', payload(String.raw`echo ` + '`' + String.raw`node -e "console.log('\\b')"` + '`'), 'X3: the command inside backticks is still judged'],
+  ['allow', delegated(lines("node $(pwd)/tool.mjs <<'EOF'", WRITE, 'EOF')), 'X3: a substituted script path is a script path'],
+  // X4: (( … )) is Bash arithmetic only at command position and closed on its line.
+  ['deny', payload(String.raw`((Get-Content f) | Measure-Object).Count; node -e "console.log('\\b')"`, 'PowerShell'), 'X4: PowerShell parentheses are no arithmetic: the node -e after them is judged'],
+  ['deny', payload(lines('(( n', String.raw`node -e "console.log('\\b')"`)), 'X4: an unclosed (( on its line hides nothing on the next one'],
+  ['deny', delegated(lines("bash <<'EOF'", 'echo ((a)) > out.txt', 'EOF')), 'X4: (( after a word is no arithmetic', 'writes a file'],
+  ['allow', delegated(lines("bash <<'EOF'", 'if (( n > 3 )); then echo big; fi', 'while (( i > 0 )); do i=0; done', 'EOF')), 'X4: (( after if and while is arithmetic'],
+  // X5: a PowerShell variable assigned a here-string feeds the interpreter it is piped into.
+  ['deny', delegated(lines("$code = @'", WRITE, "'@", '$code | node -'), 'PowerShell'), 'X5: $code = @\'…\'@ then $code | node -', 'writes a file'],
+  ['deny', delegated(lines("$code = @'", WRITE, "'@; $Code | node -"), 'PowerShell'), 'X5: a PowerShell variable name in any case', 'writes a file'],
+  ['deny', delegated(lines("$code=@'", PS_WRITE, "'@", '$code | pwsh -Command -'), 'PowerShell'), 'X5: an assignment with no blanks', 'writes a file'],
+  ['allow', delegated(lines("$code = @'", WRITE, "'@", '$other | node -'), 'PowerShell'), 'X5: another variable carries no here-string'],
+  // X6: the mode of a method open is read only where the receiver says where it is.
+  ['allow', delegated(lines("python3 - <<'EOF'", "gzip.open('data.gz')", "tarfile.open('a.tar')", "Image.open('x.png')", 'EOF')), 'X6: module and library opens that only read'],
+  ['allow', delegated(lines("node - <<'EOF'", "fs.open('index.txt', 'r')", 'EOF')), 'X6: fs.open with a read flag'],
+  ['allow', delegated(lines("python3 - <<'EOF'", "obj.open('w')", "Path('w.txt').open()", 'EOF')), 'X6: an unknown method open is not judged, and a Path open with no mode reads'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "gzip.open(p, 'wt')", 'EOF')), 'X6: gzip.open with a writing mode', 'writes a file'],
+  ['deny', delegated(lines("node - <<'EOF'", "fs.promises.open('out', 'w')", 'EOF')), 'X6: fs.promises.open with a writing flag', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "bz2.open(p, mode='w')", 'EOF')), 'X6: bz2.open with mode=', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "tarfile.open('a.tar', 'w:gz')", 'EOF')), 'X6: tarfile.open with a writing mode', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "lzma.open(p, 'ab')", 'EOF')), 'X6: lzma.open with an appending mode', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "p = Path('x')", "p.open('w')", 'EOF')), 'X6: a name assigned a Path on an earlier line', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "pathlib.Path('x').open('a')", 'EOF')), 'X6: pathlib.Path(…).open', 'writes a file'],
+  ['allow', delegated(lines("python3 - <<'EOF'", "p.open('w')", "p = Path('x')", 'EOF')), 'X6: a Path assigned only on a later line does not count'],
+  // X7: more launchers, a literal piped from echo or printf, more write calls.
+  ...['nohup', 'sudo -u bob', 'xargs -n 1', 'stdbuf -o0', 'uv run', 'uv run --with requests', 'poetry run', "env -S 'nice -n 5'"].map((launcher) => ['deny', delegated(lines(`${launcher} node - <<'EOF'`, WRITE, 'EOF')), `X7: the launcher "${launcher}" is unwrapped`, 'writes a file']),
+  ['deny', delegated(lines("env -S 'node -' <<'EOF'", WRITE, 'EOF')), 'X7: env -S splits its string into the program', 'writes a file'],
+  ['allow', delegated(lines("uv pip install x <<'EOF'", WRITE, 'EOF')), 'X7: uv without run runs no interpreter'],
+  ['allow', delegated(lines("sudo -l node - <<'EOF'", WRITE, 'EOF')), 'X7: sudo -l only lists'],
+  ['deny', delegated("echo \"fs.writeFileSync('a', 'b')\" | node -"), 'X7: a literal piped from echo is the script', 'writes a file'],
+  ['deny', delegated("printf '%s\\n' \"open('o', 'w')\" | python3 -"), 'X7: a literal piped from printf is the script', 'writes a file'],
+  ['allow', delegated("echo \"fs.writeFileSync('a', 'b')\" | node tool.mjs"), 'X7: echo piped into a script FILE is data'],
+  ...['fs.copyFile', 'fs.rename', 'fs.cp', 'Deno.writeTextFile', 'Bun.write'].map((call) => ['deny', delegated(lines("node - <<'EOF'", `${call}('a', 'b');`, 'EOF')), `X7: ${call} writes`, 'writes a file']),
+  ...['shutil.move', 'os.rename'].map((call) => ['deny', delegated(lines("python3 - <<'EOF'", `${call}('a', 'b')`, 'EOF')), `X7: ${call} writes`, 'writes a file']),
+  ...['[IO.File]::WriteAllLines', '[IO.File]::AppendAllText'].map((call) => ['deny', delegated(lines("pwsh - <<'EOF'", `${call}('a', 'b')`, 'EOF')), `X7: ${call} writes`, 'writes a file']),
+  ...['Copy-Item a b', 'Get-Date | Tee-Object -FilePath o.txt'].map((line) => ['deny', delegated(lines("pwsh - <<'EOF'", line, 'EOF')), `X7: ${line} writes`, 'writes a file']),
+  ['deny', delegated(lines("bash <<'EOF'", 'mv a b', 'EOF')), 'X7: mv in a shell script writes', 'calls mv'],
+  ['deny', delegated(lines("bash <<'EOF'", 'dd if=a of=b', 'EOF')), 'X7: dd of= in a shell script writes', 'calls dd'],
+  ['allow', delegated(lines("bash <<'EOF'", 'dd if=a', 'EOF')), 'X7: dd with no of= writes to stdout'],
+  // X8: in a SHELL script `->out.txt` is a redirection; an arrow in a JS or Python body is no redirection.
+  ['deny', delegated(lines("bash <<'EOF'", 'echo x ->out.txt', 'EOF')), 'X8: -> in a shell script redirects', 'redirects output'],
+  ['allow', delegated(lines("python3 - <<'EOF'", 'def f() -> int:', '    return 1 > 0', 'EOF')), 'X8: a Python return arrow is no redirection'],
+  // Pins of each decision above, one per mutant of mutants.mjs.
+  // @es Fijaciones de cada decisión de arriba, una por mutante de mutants.mjs.
+  ['deny', payload('echo $' + String.raw`{ node -e "console.log('\\b')"; }`), 'X3: the text inside ${ … } is judged too (Bash 5.3 runs it)'],
+  ['deny', delegated(lines("$code = @'", WRITE, "'@", 'Write-Host `t; $code | node -; Write-Host `t'), 'PowerShell'), 'X3: a PowerShell backtick is an escape, never a substitution', 'writes a file'],
+  ['deny', delegated(lines("python3 - $(printf ')')/x <<'EOF'", "open('o', 'w')", 'EOF')), 'X3: a quoted closer inside $(…) does not close it', 'writes a file'],
+  ['deny', delegated(lines("python3 - $(echo \\))/x <<'EOF'", "open('o', 'w')", 'EOF')), 'X3: an escaped closer inside $(…) does not close it', 'writes a file'],
+  ['deny', delegated(lines("python3 - `echo \\``/x <<'EOF'", "open('o', 'w')", 'EOF')), 'X3: an escaped backtick does not close a backtick substitution', 'writes a file'],
+  ['allow', delegated(lines("bash <<'EOF'", 'until (( i > 0 )); do (( i > 1 )); done', 'if true; then (( a > 1 )); elif (( b > 1 )); then :; else (( c > 1 )); fi', '! (( d > 1 ))', 'echo a; (( n > 3 ))', 'EOF')), 'X4: (( after every keyword and after an operator is arithmetic'],
+  ['deny', delegated(lines("bash <<'EOF'", "'if' ((a > out.txt))", 'EOF')), 'X4: a quoted if is no keyword', 'redirects output'],
+  ['deny', delegated(lines("bash <<'EOF'", 'x((a > out.txt))', 'EOF')), 'X4: (( glued to a word is no arithmetic', 'redirects output'],
+  ['deny', payload(lines('(( n', String.raw`node -e "console.log('\\b')"`, '))')), 'X4: a (( closed only on a later line is no arithmetic'],
+  ['deny', payload(String.raw`((node -e "console.log('\\b')"))`, 'PowerShell'), 'X4: PowerShell runs what (( … )) holds'],
+  ['deny', payload("node -e 'console.log(1)'$(pwd)"), 'X3: a substitution glued to a quoted payload makes it partly bare', 'partly quoted'],
+  ['allow', delegated(lines("code = @'", WRITE, "'@", 'code | node -'), 'PowerShell'), 'X5: a name with no $ is no variable'],
+  ['deny', delegated(lines("$Code = @'", WRITE, "'@", '$code | node -'), 'PowerShell'), 'X5: a variable assigned in another case', 'writes a file'],
+  ['deny', delegated(lines("$CODE=@'", WRITE, "'@", '$code | node -'), 'PowerShell'), 'X5: a variable assigned with no blanks in another case', 'writes a file'],
+  ['allow', delegated(lines("python3 - <<'EOF'", "db.open('cache', 'w')", "p == Path('x')", "p.open('w')", 'EOF')), 'X6: another method open with a w argument, and a comparison with a Path, are no writes'],
+  ['deny', delegated(lines("node - <<'EOF'", "fs.open('out', 'w')", 'EOF')), 'X6: fs.open with a writing flag', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "codecs.open(p, 'w')", 'EOF')), 'X6: codecs.open with a writing mode', 'writes a file'],
+  ['deny', delegated(lines("stdbuf -o L node - <<'EOF'", WRITE, 'EOF')), 'X7: stdbuf -o takes a value', 'writes a file'],
+  ...["env --split-string='node -'", "env -S 'node\t-'", "env -S '  node  -'"].map((launcher) => ['deny', delegated(lines(`${launcher} <<'EOF'`, WRITE, 'EOF')), `X7: "${launcher}" splits its string into the program`, 'writes a file']),
+  ['allow', delegated(lines("uv venv node - <<'EOF'", WRITE, 'EOF')), 'X7: uv with another subcommand runs no program']
 ];
 
 // Boundaries: each case pins one decision of the readers above (launchers, families, options, redirections).
@@ -263,6 +339,7 @@ const cases = [
   ...openCases,
   ...powerShellCases,
   ...boundaryCases,
+  ...roundTwoCases,
   ['deny', delegated(lines("python3 - <<'EOF'", "open(path, 'xb').write(data)", 'EOF')), "python heredoc with an exclusive-create mode (xb)", 'writes a file'],
   ['deny', delegated(lines('grep "@\'" notes.txt', "node - <<'EOF'", "fs.writeFileSync('a', 'b');", 'EOF')), 'an @-quote in the middle of a line is no here-string and hides nothing after it', 'writes a file'],
   ['allow', delegated(lines("bash <<'EOF'", 'echo x >>/dev/null', 'echo y > /dev/null', 'EOF')), 'redirections to /dev/null, appended or spaced, are not file writes'],
@@ -482,6 +559,7 @@ const cases = [
   ['deny', payload(`sed -n 1p run.cjs # fine\n${String.raw`sd -F "a\\\\b" c f`}`), 'a dangerous command on the line AFTER a comment is still judged', 'backslash the shell eats'],
   ['deny', payload(`${String.raw`node -e "console.log('\\b')"`} # trailing comment`), 'a dangerous payload BEFORE a comment is still judged', 'backslash the shell eats'],
   ['deny', payload(`echo \${#x}; ${String.raw`node -e "console.log('\\b')"`}`), 'the # of ${#x} does not open a comment that hides the rest of the line', 'backslash the shell eats'],
+  ['deny', payload(`echo a{#b}; ${String.raw`node -e "console.log('\\b')"`}`), 'a # glued after a brace inside a word opens no comment', 'backslash the shell eats'],
   ['deny', payload(`sed -n a#b ${String.raw`"x\\\\y"`} f`), 'a # inside a word is no comment: the script after it is still judged', 'backslash the shell eats'],
   ['deny', payload(`sed \\\n  ${String.raw`"s/a\\b/c/"`} f`), 'a line continuation does not hide a dangerous script that follows it', 'backslash the shell eats'],
   ['deny', payload(`sed "s/a\\\nb/c/" f`), 'a backslash-newline INSIDE double quotes is still eaten', 'before "\\n"'],

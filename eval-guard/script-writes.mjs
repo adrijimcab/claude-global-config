@@ -13,8 +13,9 @@
  * a word inside a message (`console.log('use writeFile')`) or a longer name (`myWriteFile(`) is not a write. A
  * PowerShell cmdlet counts only as a command word (any case). A python `open(` is read with balanced brackets
  * and quotes, so `open(os.path.join(a, 'b'), 'w')` finds its mode, and the mode is read by position or by
- * name: the second argument of `open(…)`, `io.open(…)` and `codecs.open(…)`, the first of a method such as
- * `Path(p).open('w')`.
+ * name: the second argument of `open(…)` and of a module function (`gzip`, `bz2`, `lzma`, `tarfile`, `io`,
+ * `codecs`, `fs`, `fs.promises`), the first of a pathlib Path (`Path(p).open('w')`, or a name assigned a Path on
+ * an earlier line); any other `.open(` method (`Image.open`) is no file-mode open and is not judged.
  *
  * @es Si un texto de script LLAMA a algo que escribe un fichero: las llamadas de escritura de node, python y
  * .NET, un `open(…)` de python con modo de escritura y un cmdlet de PowerShell que escribe. La sintaxis de shell
@@ -22,8 +23,10 @@
  * SE LEE UNA LLAMADA: un marcador cuenta solo como LLAMADA, `nombre(` o `.nombre(`, sin carácter de identificador
  * pegado delante, así una palabra dentro de un mensaje o un nombre más largo no es una escritura. Un cmdlet de
  * PowerShell cuenta solo como palabra de orden. Un `open(` de python se lee con paréntesis y comillas
- * equilibrados, y el modo por posición o por nombre: el segundo argumento de `open(…)`, `io.open(…)` y
- * `codecs.open(…)`, el primero de un método como `Path(p).open('w')`.
+ * equilibrados, y el modo por posición o por nombre: el segundo argumento de `open(…)` y de una función de módulo
+ * (`gzip`, `bz2`, `lzma`, `tarfile`, `io`, `codecs`, `fs`, `fs.promises`), el primero de un Path de pathlib
+ * (`Path(p).open('w')`, o un nombre al que se asignó un Path en una línea anterior); cualquier otro método
+ * `.open(` (`Image.open`) no es un `open` con modo de fichero y no se juzga.
  */
 
 /**
@@ -33,17 +36,21 @@
  */
 export const CALL_MARKERS = [
   'writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'createWriteStream', 'writeSync', 'fs.write',
-  'copyFileSync', 'renameSync', 'cpSync', 'write_text', 'write_bytes', 'shutil.copy*', 'os.replace', 'WriteAllText'
+  'copyFileSync', 'copyFile', 'renameSync', 'fs.rename', 'cpSync', 'fs.cp', 'write_text', 'write_bytes', 'shutil.copy*',
+  'shutil.move', 'os.replace', 'os.rename', 'Deno.writeTextFile', 'Bun.write', 'WriteAllText', 'WriteAllLines', 'AppendAllText'
 ];
 
 /** PowerShell cmdlets that write a file, matched as command words in any case. @es Cmdlets de PowerShell que escriben un fichero. */
-export const CMDLET_MARKERS = ['Set-Content', 'Add-Content', 'Out-File'];
+export const CMDLET_MARKERS = ['Set-Content', 'Add-Content', 'Out-File', 'Copy-Item', 'Tee-Object'];
 
 /** Python `open` modes that write, append or create. @es Modos de `open` de python que escriben, añaden o crean. */
 const WRITING_MODE_LETTERS = 'wax+';
 
-/** Modules whose `open` takes the path first and the mode second. @es Módulos cuyo `open` toma la ruta primero y el modo segundo. */
-const PATH_FIRST_MODULES = new Set(['io', 'codecs']);
+/** Modules whose `open` takes the path first and the mode (or `fs` flags) second. @es Módulos cuyo `open` toma la ruta primero y el modo segundo. */
+const PATH_FIRST_MODULES = new Set(['gzip', 'bz2', 'lzma', 'tarfile', 'io', 'codecs', 'fs', 'fs.promises']);
+
+/** The pathlib classes whose `open` takes the mode first. @es Las clases de pathlib cuyo `open` toma el modo primero. */
+const PATH_CLASSES = new Set(['Path', 'pathlib.Path']);
 
 /** Characters that may sit before a cmdlet word. @es Caracteres que pueden ir delante de una palabra de cmdlet. */
 const BEFORE_A_COMMAND_WORD = ' \t\r\n|;({=&';
@@ -199,26 +206,77 @@ const keywordOf = (argument) => {
   return equals > 0 && argument[equals + 1] !== '=' && [...argument.slice(0, equals).trim()].every(isIdentifierCharacter) ? argument.slice(0, equals).trim() : undefined;
 };
 
+/** Whether a character may sit in a dotted name (`fs.promises`). @es Si un carácter puede ir en un nombre con puntos. */
+const isNameCharacter = (character) => isIdentifierCharacter(character) || character === '.';
+
+/** The start of the dotted name that ends just before `end`. @es El inicio del nombre con puntos que acaba justo antes de `end`. */
+function nameStart(text, end) {
+  let start = end;
+
+  while (isNameCharacter(text[start - 1])) start -= 1;
+
+  return start;
+}
+
 /**
- * The mode of the `open(` call at `site`: the `mode=` argument, else the positional one: the second for a plain
- * `open(` and for `io.open(` / `codecs.open(`, the first for any other method (`Path(p).open('w')`).
- * @es El modo de la llamada `open(` en `site`: el argumento `mode=`, si no el posicional que toca.
+ * The receiver of the method `open(` at `site`: `{ name, call }`, the dotted name before `.open`, or, when the
+ * receiver is a call (`Path(p).open`), the dotted name of the callee with `call` set.
+ * @es El receptor del método `open(` en `site`: el nombre con puntos antes de `.open` o, si el receptor es una
+ * llamada (`Path(p).open`), el nombre del llamado con `call` activo.
+ */
+function receiverOf(text, site) {
+  const dot = site.at - 1;
+
+  if (text[dot - 1] !== ')') return { name: text.slice(nameStart(text, dot), dot), call: false };
+
+  let depth = 0;
+  let open = dot - 1;
+
+  for (; open >= 0; open -= 1) {
+    if (text[open] === ')') depth += 1;
+    if (text[open] === '(') depth -= 1;
+    if (depth === 0) break;
+  }
+
+  return { name: text.slice(nameStart(text, open), open), call: true };
+}
+
+/** Whether `name` was assigned a pathlib Path on a line before `before` (`p = Path('x')`). @es Si a `name` se le asignó un Path en una línea anterior. */
+function assignedPath(text, name, before) {
+  const lineStart = text.lastIndexOf('\n', before) + 1;
+
+  return text.slice(0, lineStart).split('\n').some((line) => {
+    const trimmed = line.trim();
+    const rest = trimmed.slice(name.length).trimStart();
+
+    return trimmed.startsWith(name) && rest.startsWith('=') && [...PATH_CLASSES].some((path) => rest.slice(1).trimStart().startsWith(`${path}(`));
+  });
+}
+
+/**
+ * The mode of the `open(` call at `site`, by `mode=` or by position, or `undefined` when it is not judged:
+ *   - a plain `open(` and a module function (`gzip`, `bz2`, `lzma`, `tarfile`, `io`, `codecs`, `fs`,
+ *     `fs.promises`): the second positional argument (the mode, or `fs`'s flags);
+ *   - a pathlib Path (`Path(…).open`, `pathlib.Path(…).open`, a name assigned a Path on an earlier line): the first;
+ *   - any other method (`Image.open`, `obj.open`): not judged, it is no file-mode open we know.
+ * @es El modo de la llamada `open(` en `site`, por `mode=` o por posición, o `undefined` si no se juzga: el segundo
+ * argumento para `open(` y las funciones de módulo; el primero para un Path de pathlib; cualquier otro método no se juzga.
  */
 function modeOf(text, site) {
   const parts = callArguments(text, site.open);
   const named = parts.find((part) => keywordOf(part) === 'mode');
-
-  if (named !== undefined) return literalOf(named.slice(named.indexOf('=') + 1).trim());
-
   const positional = parts.filter((part) => keywordOf(part) === undefined);
-  const method = text[site.at - 1] === '.';
-  let receiverStart = site.at - 1;
+  let index = 1;
 
-  while (isIdentifierCharacter(text[receiverStart - 1])) receiverStart -= 1;
+  if (text[site.at - 1] === '.') {
+    const receiver = receiverOf(text, site);
+    const path = receiver.call ? PATH_CLASSES.has(receiver.name) : assignedPath(text, receiver.name, site.at);
 
-  const receiver = method ? text.slice(receiverStart, site.at - 1) : '';
+    if (path) index = 0;
+    else if (receiver.call || !PATH_FIRST_MODULES.has(receiver.name)) return undefined;
+  }
 
-  return literalOf(positional[method && !PATH_FIRST_MODULES.has(receiver) ? 0 : 1]);
+  return named !== undefined ? literalOf(named.slice(named.indexOf('=') + 1).trim()) : literalOf(positional[index]);
 }
 
 /** Whether the script calls python's `open` in a mode that writes. @es Si el script llama al `open` de python con un modo que escribe. */
