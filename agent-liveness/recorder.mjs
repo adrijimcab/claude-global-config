@@ -19,9 +19,7 @@
  * `malfunction`; una escritura que falla se traga. Un evento que no es ni start ni stop se ignora.
  */
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import { parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
 import { appendLifecycle, START, STOP } from './lifecycle-log.mjs';
 
 /** The hook events this recorder understands, and what each one records. @es Los eventos que entiende y qué registra cada uno. */
@@ -70,26 +68,21 @@ function record(line) {
  */
 export function evaluate(raw, { now = new Date() } = {}) {
   try {
-    // PowerShell 5.1 prepends a BOM when it pipes a string into a native process. @es PowerShell 5.1 antepone un BOM.
-    const line = lineOf(JSON.parse(raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw), now);
+    // The port strips the BOM PowerShell 5.1 prepends. @es El puerto quita el BOM que antepone PowerShell 5.1.
+    const line = lineOf(parsePayload(raw), now);
 
     if (line !== undefined) record(line);
   } catch (error) {
-    record({ event: 'malfunction', time: now.toISOString(), why: error instanceof Error ? error.message : String(error), rawLength: raw.length });
+    // A parse failure keeps the parser's own message, the port's error cause. @es Un fallo de parseo conserva el mensaje del parser, la causa del error del puerto.
+    record({ event: 'malfunction', time: now.toISOString(), why: error instanceof Error ? (error.cause ?? error).message : String(error), rawLength: raw.length });
   }
 
   return undefined;
 }
 
-function run() {
-  let raw = '';
-
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', (chunk) => (raw += chunk));
-  process.stdin.on('end', () => {
-    evaluate(raw);
-    process.exit(0);
-  });
+async function run() {
+  evaluate(await readStdin());
+  process.exit(0);
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) run();
+runWhenMain(import.meta.url, run);
