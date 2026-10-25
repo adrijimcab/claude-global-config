@@ -153,7 +153,10 @@ const MUTANTS = [
   ['a sentence that praises the voseo still cites rule 4', MEASURE, '    if (PRAISES_VOSEO.test(sentence)) return false;\n', ''],
   ['calling forms voseo is not praise', MEASURE, '\\b(?:is|are) voseo\\b|', ''],
   ['naming the voseo forms is not praise', MEASURE, '|\\bvoseo forms?\\b', ''],
-  ['saying rule 4 passes is not praise', MEASURE, '|\\brule 4 (?:passes|holds|is met)\\b', ''],
+  ['saying rule 4 passes is not praise', MEASURE, '|\\brule 4 (?:passes|holds|is met|does not apply)\\b', ''],
+  ['saying rule 4 does not apply is not praise', MEASURE, '|is met|does not apply)', '|is met)'],
+  ['addressing him in voseo is not praise', MEASURE, '|\\bin (?:Rioplatense )?voseo\\b', ''],
+  ['calling the voseo correct is not praise', MEASURE, '|\\bvoseo\\b[^.;]*\\bis correct\\b', ''],
   ['the reason is read whole, not sentence by sentence', MEASURE, 'reason.split(/(?<=[.;!?])\\s+/u)', '[reason]'],
   ['a quoted pinned form is matched case sensitively', MEASURE, "[\"”»'’]`, 'iu')", "[\"”»'’]`, 'u')"],
 

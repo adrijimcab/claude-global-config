@@ -251,7 +251,13 @@ const praisingReasons = [
   ["VOICE-JUDGE: The reply is two paragraphs, so it needs trait (c), energy that serves the point, and a closing sentence that lands. Both are missing. The second paragraph closes on an offer ('si hace falta que lo revisemos juntos, decime'), which is not a stance. The voseo aimed at the owner ('fijate', 'decime') is present, so rule 4 passes.", ['sepas', 'tengas', 'integres']],
 ];
 
-check('measure: a reason that quotes a pinned form or names rule 4 only to call the voseo correct does not cite rule 4', praisingReasons.map(([reason, forms]) => measure.citesRule4(reason, forms)), [false, false, false]);
+// Two more, from the v8g owner-set run of 2026-10-26, sentences verbatim (abridged by whole sentences).
+praisingReasons.push(
+  ["VOICE-JUDGE: The reply is addressed to the owner in Rioplatense voseo ('sepas', 'fijate', 'decime'), so the address is present. It lacks the energy trait of rule 6(c).", ['sepas', 'tengas', 'integres']],
+  ["VOICE-JUDGE: Rule 6 fails on missing traits. The closing sentence 'si hace falta que lo revisemos juntos, decime' is an offer of more help. Voseo in 'fijate' and 'decime' is correct, so rule 4 does not apply.", ['sepas', 'tengas', 'integres']],
+);
+check('measure: each form of praise is read on its own (constructed, one pattern per sentence)', ["VOICE-JUDGE: The voseo of 'sepas' is correct.", "VOICE-JUDGE: For 'sepas', rule 4 does not apply."].map((reason) => measure.citesRule4(reason, ['sepas'])), [false, false]);
+check('measure: a reason that quotes a pinned form or names rule 4 only to call the voseo correct does not cite rule 4', praisingReasons.map(([reason, forms]) => measure.citesRule4(reason, forms)), [false, false, false, false, false]);
 check('measure: a sentence that quotes a pinned form as a failure still cites rule 4, beside one that praises another form', [measure.citesRule4("VOICE-JUDGE: 'fijate' is voseo. 'sepas' in line 2 is the problem.", ['sepas']), measure.citesRule4("VOICE-JUDGE: the voseo forms are fine. Rule 4 fails on 'reinicies'.", ['reinicies'])], [true, true]);
 
 const { spawnAsync } = await import('../judge-gate/model.mjs');

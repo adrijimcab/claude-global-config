@@ -179,7 +179,7 @@ const RULE4_WORDS = /tuteo|usted|(^|[^\p{L}])t[uú][ -]forms?([^\p{L}]|$)|(^|[^\
 const RULE4_NUMBER = /rule 4\b|regla 4\b/iu;
 
 /** A sentence that calls the voseo correct. @es Una oración que da el voseo por correcto. */
-const PRAISES_VOSEO = /\b(?:is|are) voseo\b|\bvoseo forms?\b|\brule 4 (?:passes|holds|is met)\b/iu;
+const PRAISES_VOSEO = /\b(?:is|are) voseo\b|\bvoseo forms?\b|\bin (?:Rioplatense )?voseo\b|\bvoseo\b[^.;]*\bis correct\b|\brule 4 (?:passes|holds|is met|does not apply)\b/iu;
 
 /** The share of `part` in `whole`, as a percentage with one decimal. @es La proporción de `part` en `whole`, en porcentaje. */
 const percent = (part, whole) => (whole === 0 ? 'n/a' : `${((100 * part) / whole).toFixed(1)}%`);
