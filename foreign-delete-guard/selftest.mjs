@@ -707,25 +707,25 @@ try {
   const identify = (target) => fakeFiles.get(target);
 
   recordCall('unit', 'c1', 1000, ['/a', '/b']);
-  confirmCall('unit', 'c1', 2000, identify);
+  safely(() => confirmCall('unit', 'c1', 2000, identify));
   recordCall('unit', 'c2', 3000, ['/a']); // never completes
 
   const unit = readJournal('unit');
 
   check('journal: a completed call confirms the targets that exist, with identity and birth, and discards the rest', unit.confirmed.get('/a')?.id === '9:9' && unit.confirmed.get('/a')?.born === 100 && !unit.confirmed.has('/b'));
   check('journal: a completed call leaves its interval, an unfinished one does not', unit.intervals.length === 1 && unit.intervals[0].start === 1000 && unit.intervals[0].end === 2000);
-  confirmCall('unit', 'never-started', 4000, identify);
+  safely(() => confirmCall('unit', 'never-started', 4000, identify));
   check('journal: a call that never started confirms nothing and ends nothing', readJournal('unit').intervals.length === 1);
-  confirmCall('unit', undefined, 5000, identify);
+  safely(() => confirmCall('unit', undefined, 5000, identify));
   check('journal: without a call id the latest open call is the one', readJournal('unit').intervals.length === 2 && readJournal('unit').intervals[1].start === 3000 && readJournal('unit').intervals[1].end === 5000);
-  confirmCall('unit', undefined, 6000, identify);
-  confirmCall('unit', 'c1', 7000, identify);
+  safely(() => confirmCall('unit', undefined, 6000, identify));
+  safely(() => confirmCall('unit', 'c1', 7000, identify));
   check('journal: a call that already ended is not ended again', readJournal('unit').intervals.length === 2);
 
   mkdirSync(path.join(stateDir('foreign-delete-guard'), 'authored'), { recursive: true });
-  appendFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'torn.jsonl'), '{torn\n{"k":"confirm","id":"x","path":1,"ino":"1:1","born":1}\n{"k":"confirm","id":"x","path":"p","ino":"1:1","born":"x"}\n{"k":"start","id":"s","at":"x"}\n{"k":"end","id":"s","at":5}\n{"k":"mystery","id":"q"}\n');
+  appendFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'torn.jsonl'), '{torn\n{"k":"confirm","id":"x","path":1,"ino":"1:1","born":1}\n{"k":"confirm","id":"x","path":"p","ino":"1:1","born":"x"}\n{"k":"start","id":"s","at":"x"}\n{"k":"end","id":"s","at":5}\n{"k":"mystery","id":"q"}\n{"k":"start","at":5}\n{"k":"end","at":9}\n');
   recordCall('torn', 'c', 10, ['/t']);
-  confirmCall('torn', 'c', 20, (target) => (target === '/t' ? { id: '2:2', born: 15 } : undefined));
+  safely(() => confirmCall('torn', 'c', 20, (target) => (target === '/t' ? { id: '2:2', born: 15 } : undefined)));
   check('journal: a torn or malformed line hides nothing around it and adds nothing', readJournal('torn').confirmed.size === 1 && readJournal('torn').confirmed.get('/t').born === 15 && readJournal('torn').intervals.length === 1);
 
   recordCall('../escape', 'c', 1, ['/x']);
@@ -745,7 +745,7 @@ try {
   const mine = readJournal('abc');
   const fakeTree = new Map([['/d', { id: '1:1', born: 1 }], ['/d/f', { id: '2:2', born: 15 }], ['/d/late', { id: '3:3', born: 25 }], ['/d/e', { id: '4:4', born: 2 }], ['/d/e/g', { id: '5:5', born: 16 }]]);
   const journalOfTree = (folderIdentity) => ({ confirmed: new Map([['/d', folderIdentity]]), intervals: [{ start: 10, end: 20 }] });
-  const ownsInTree = (folderIdentity, target) => ownershipOf(journalOfTree(folderIdentity), undefined, (candidate) => fakeTree.get(candidate)).ownsCanonical(target);
+  const ownsInTree = (folderIdentity, target) => safely(() => ownershipOf(journalOfTree(folderIdentity), undefined, (candidate) => fakeTree.get(candidate)).ownsCanonical(target)) === true;
 
   check('ownership: below a folder the agent made, what was born inside its call intervals is owned', ownsInTree({ id: '1:1', born: 1 }, '/d/f') && ownsInTree({ id: '1:1', born: 1 }, '/d/e/g'));
   check('ownership: below a folder the agent made, what was born outside its call intervals is foreign', !ownsInTree({ id: '1:1', born: 1 }, '/d/late') && !ownsInTree({ id: '1:1', born: 1 }, '/d/e'));
@@ -787,6 +787,32 @@ try {
   });
 
   check('foreignLeaves: a folder that cannot be listed is foreign', unreadable.foreign.length === 1 && unreadable.foreign[0] === at('shared'));
+
+  // --- more cases found by the mutation campaign --------------------------------------------------------
+  check('identity: ids are read as BigInt, so a 64-bit file id loses nothing', identityOf('x', (_target, mode) => (mode?.bigint ? { dev: 1n, ino: 9007199254740993n, birthtimeMs: 5n, ctimeMs: 5n } : { dev: 1, ino: 9007199254740992, birthtimeMs: 5, ctimeMs: 5 })).id === '1:9007199254740993');
+
+  tick();
+  evaluate(JSON.stringify({ ...asAgent('Write', { file_path: at('conc-a.txt'), content: 'x' }), hook_event_name: 'PreToolUse', tool_use_id: 'conc-A' }));
+  evaluate(JSON.stringify({ ...asAgent('Write', { file_path: at('conc-b.txt'), content: 'x' }), hook_event_name: 'PreToolUse', tool_use_id: 'conc-B' }));
+  put(at('conc-a.txt'));
+  tick();
+  evaluate(JSON.stringify({ ...asAgent('Write', { file_path: at('conc-a.txt'), content: 'x' }), hook_event_name: 'PostToolUse', tool_use_id: 'conc-A' }));
+  tick();
+  put(at('conc-b.txt'));
+  expect('allow', bash(`rm ${p('conc-a.txt')}`), 'two calls in flight: the completed one confirms ITS target by call id');
+  expect('deny', bash(`rm ${p('conc-b.txt')}`), 'two calls in flight: the other, never completed, confirms nothing');
+
+  check('declaredPaths: every separator of a declaration splits its words', [' ', '\t', '\r', ',', ';', '"', '\'', '`', '(', ')'].every((separator) => declaredPaths(`TENANCY:${separator}${slashes(worktree)}${separator}`).includes(canonical(worktree))));
+  check('declaredPaths: a line with no colon declares nothing, even with a path in it', declaredPaths(`TENANCY ${slashes(worktree)}`).length === 0);
+  check('declaredPaths: a bare folder name is not a path', declaredPaths('TENANCY: wt-mine').length === 0);
+  check('declaredPaths: the colon of a drive letter does not close the marker, whichever slash follows', declaredPaths(`TENANCY ${worktree}`).length === 0 && declaredPaths(`TENANCY ${slashes(worktree)}`).length === 0);
+  check('declaredPaths: a qualifier before the colon is allowed, and its colon closes the marker', declaredPaths(`TENANCY note: ${slashes(worktree)}`).includes(canonical(worktree)) && declaredPaths(`TENANCY (a): ${slashes(worktree)}`).includes(canonical(worktree)));
+  expect('deny', inTree(worktree, rmOld(worktree)), 'a TENANCY line with no colon grants nothing', { records: byBrief(`TENANCY ${slashes(worktree)}`) });
+  expect('deny', inTree(worktree, rmOld(worktree)), 'a brief that declares another worktree grants nothing', { records: byBrief(`TENANCY: ${slashes(otherWorktree)}`) });
+
+  check('targets: cmd /c is read once, not twice', targetsOf(`cmd /c del ${p('provision.mjs')}`).length === 1);
+  check('targets: every mover reads its sources', ['mv', 'move', 'mi', 'move-item'].every((mover) => names(targetsOf(`${mover} ${p('mine.mjs')} ${p('shared')}`, 'powershell')).join() === 'mine.mjs'));
+  check('targets: cmd //c after a cd that cannot be followed reports the folder', safely(() => targetsOf(`cd "$X" && cmd //c del ${p('provision.mjs')}`).some((target) => target.unresolvable === 'directory')) === true);
 
   // --- the shape of the output ------------------------------------------------------------------------
   const foreignText = reasonOf(bash(`rm -f ${p('provision.mjs')} ${p('contrast.mjs')}`));

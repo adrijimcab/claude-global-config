@@ -95,7 +95,7 @@ export function identityOf(target, stat = lstatSync) {
 
 /** Appends lines to an agent's journal; a journal that cannot be written loses the evidence and nothing else. @es Añade líneas al journal del agente; si no se puede escribir se pierde evidencia, nada más. */
 function append(agentKey, records) {
-  if (!isPlainKey(agentKey) || records.length === 0) return;
+  if (!isPlainKey(agentKey)) return;
 
   try {
     mkdirSync(path.dirname(journalFile(agentKey)), { recursive: true });

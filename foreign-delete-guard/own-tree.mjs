@@ -96,6 +96,26 @@ export function tenancyWorktree({ cwd, agentKey, records = agentRecords }) {
 /** The characters that separate the words of a `TENANCY:` declaration. @es Los caracteres que separan las palabras de una declaración `TENANCY:`. */
 const WORD_SEPARATORS = ' \t\r,;"\'`()';
 
+/** Whether the character at `index` of `text` is a letter. @es Si el carácter en `index` de `text` es una letra. */
+const isLetterAt = (text, index) => text.charAt(index).toLowerCase() !== text.charAt(index).toUpperCase();
+
+/**
+ * The index of the colon that closes the `TENANCY` marker, skipping the colon of a drive letter (`C:/`): without
+ * that, `TENANCY C:/work` would be read as a declaration of `/work`.
+ * @es El índice de los dos puntos que cierran el marcador `TENANCY`, saltando los de una letra de unidad (`C:/`): sin
+ * eso, `TENANCY C:/work` se leería como una declaración de `/work`.
+ */
+function declarationColon(rest) {
+  for (let index = rest.indexOf(':'); index !== -1; index = rest.indexOf(':', index + 1)) {
+    const next = rest.charAt(index + 1);
+    const driveLetter = isLetterAt(rest, index - 1) && !isLetterAt(rest, index - 2) && (next === '/' || next === '\\');
+
+    if (!driveLetter) return index;
+  }
+
+  return -1;
+}
+
 /**
  * The absolute paths a brief's `TENANCY:` lines declare, canonical. A word counts only if it is an absolute path
  * (a drive path or one starting with a slash, Git Bash spellings translated): a line that names a worktree only by
@@ -110,7 +130,7 @@ export function declaredPaths(briefText) {
   const declared = [];
 
   for (const rest of tenancyLines(briefText)) {
-    const colon = rest.indexOf(':');
+    const colon = declarationColon(rest);
 
     if (colon === -1) continue;
 
@@ -124,7 +144,7 @@ export function declaredPaths(briefText) {
 
       const native = nativeSpelling(word);
 
-      if (word.length > 0 && path.isAbsolute(native)) declared.push(canonical(native));
+      if (path.isAbsolute(native)) declared.push(canonical(native));
 
       word = '';
     }
