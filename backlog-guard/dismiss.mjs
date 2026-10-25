@@ -61,10 +61,10 @@ export function commandDismiss(args, { append = appendFileSync, mkdir = mkdirSyn
   const problems = [];
 
   if (typeof reason !== 'string' || reason.trim().length < MINIMUM_REASON_LENGTH) {
-    problems.push(`--reason must say WHY this is not real pending work (${String(MINIMUM_REASON_LENGTH)}+ chars)`);
+    problems.push(`--reason must say WHY this is not real pending work (${String(MINIMUM_REASON_LENGTH)}+ chars) @es --reason debe decir POR QUÉ esto no es trabajo pendiente real (${String(MINIMUM_REASON_LENGTH)}+ caracteres)`);
   }
   if (typeof reason === 'string' && (reason.includes('\n') || reason.includes('\r'))) {
-    problems.push('--reason must be one line: it is written verbatim into a one-line JSONL entry');
+    problems.push('--reason must be one line: it is written verbatim into a one-line JSONL entry @es --reason debe ser una sola línea: se escribe tal cual en una entrada JSONL de una línea');
   }
 
   if (problems.length > 0) return { ok: false, problems };
@@ -77,7 +77,9 @@ export function commandDismiss(args, { append = appendFileSync, mkdir = mkdirSyn
       'utf8'
     );
   } catch (error) {
-    return { ok: false, problems: [`could not write the dismissal log: ${error instanceof Error ? error.message : String(error)}`] };
+    const cause = error instanceof Error ? error.message : String(error);
+
+    return { ok: false, problems: [`could not write the dismissal log: ${cause} @es no se pudo escribir el registro de descartes: ${cause}`] };
   }
 
   return { ok: true };
@@ -88,12 +90,12 @@ function main() {
   const { ok, problems } = commandDismiss(args);
 
   if (!ok) {
-    console.error('backlog-guard dismiss REFUSED:');
+    console.error('backlog-guard dismiss REFUSED: @es backlog-guard dismiss RECHAZADO:');
     for (const problem of problems) console.error(`  - ${problem}`);
     process.exit(1);
   }
 
-  console.log('DISMISSED and recorded. The turn may end.');
+  console.log('DISMISSED and recorded. The turn may end. @es DESCARTADO y registrado. El turno puede terminar.');
   process.exit(0);
 }
 

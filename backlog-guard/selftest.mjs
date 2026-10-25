@@ -19,6 +19,7 @@
  * lista de marcadores es AMPLIA.
  */
 
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
@@ -36,7 +37,7 @@ import { proseOutsideQuotes } from './prose.mjs';
 import { hasMasterDocumentCommit } from './backlog-document-save.mjs';
 import { describeReplay, replay } from './replay.mjs';
 import { hasMasterBacklogSave, isMasterBacklogTopicKey, topicKeyValuesIn } from './master-save.mjs';
-import { isolateState } from '../hook-state/locations.mjs';
+import { isolateState, STATE_ROOT_VARIABLE } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
 // session reads, and never a line a previous run left behind.
@@ -416,6 +417,26 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
   const result = commandDismiss({ session: 's-1', reason: 'one line only, but\nthis has a newline in it' }, { append: () => {}, mkdir: () => {} });
 
   check('a multi-line reason is REFUSED (it must fit one JSONL line)', result.ok, false);
+  check('every refusal problem is bilingual', [...result.problems, ...commandDismiss({ reason: 'x' }, { append: () => {}, mkdir: () => {} }).problems].every((problem) => problem.includes(' @es ')), true);
+}
+{
+  const failed = commandDismiss({ session: 's-1', reason: 'a long enough reason to be accepted here' }, { append: () => { throw new Error('disk full'); }, mkdir: () => {} });
+
+  check('a log that cannot be written is a bilingual problem naming the cause', [failed.ok, failed.problems.length, failed.problems[0]], [false, 1, 'could not write the dismissal log: disk full @es no se pudo escribir el registro de descartes: disk full']);
+}
+{
+  // The CLI as a person runs it: both its refusal and its acceptance speak both languages.
+  // @es La CLI tal como la corre una persona: su rechazo y su aceptación hablan ambos idiomas.
+  // Its own state root, so its dismissal never reaches the later checks of this run. @es Su propia raíz de estado.
+  const cliState = mkdtempSync(path.join(tmpdir(), 'backlog-guard-dismiss-cli-'));
+
+  process.once('exit', () => rmSync(cliState, { recursive: true, force: true }));
+  const cli = (args) => spawnSync(process.execPath, [path.join(HERE, 'dismiss.mjs'), ...args], { encoding: 'utf8', env: { ...process.env, [STATE_ROOT_VARIABLE]: cliState } });
+  const refused = cli(['--session', 's-cli', '--reason', 'short']);
+  const accepted = cli(['--session', 's-cli', '--marker', 'pendiente', '--reason', 'a written reason of more than twenty-five characters']);
+
+  check('cli: a refusal exits 1 with a bilingual header and bilingual problems', [refused.status, refused.stderr.includes('dismiss REFUSED: @es'), refused.stderr.split('\n').filter((line) => line.startsWith('  - ')).every((line) => line.includes(' @es '))], [1, true, true]);
+  check('cli: an accepted dismissal exits 0 with a bilingual line', [accepted.status, accepted.stdout.includes('DISMISSED and recorded. The turn may end. @es DESCARTADO y registrado. El turno puede terminar.')], [0, true]);
 }
 
 // ---------------------------------------------------------------------------------------------

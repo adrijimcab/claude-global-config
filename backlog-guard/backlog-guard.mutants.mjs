@@ -88,6 +88,15 @@ const MUTANTS = [
   ['Windows separators stop being normalised', 'backlog-document-save.mjs', "token.replaceAll('\\\\', '/')", 'token'],
   ['the document commit stops satisfying the prefilter', 'decide.mjs', 'hasMasterBacklogSave(tail) || hasMasterDocumentCommit(tail)', 'hasMasterBacklogSave(tail)'],
 
+  // --- the dismiss command speaks both languages
+  ['the short-reason problem loses its Spanish half', 'dismiss.mjs', ' @es --reason debe decir POR QUÉ esto no es trabajo pendiente real (${String(MINIMUM_REASON_LENGTH)}+ caracteres)', ''],
+  ['the one-line problem loses its Spanish half', 'dismiss.mjs', ' @es --reason debe ser una sola línea: se escribe tal cual en una entrada JSONL de una línea', ''],
+  ['the write problem loses its Spanish half', 'dismiss.mjs', ' @es no se pudo escribir el registro de descartes: ${cause}', ''],
+  ['the write problem loses its cause', 'dismiss.mjs', 'could not write the dismissal log: ${cause} @es', 'could not write the dismissal log @es'],
+  ['the refusal header loses its Spanish half', 'dismiss.mjs', "'backlog-guard dismiss REFUSED: @es backlog-guard dismiss RECHAZADO:'", "'backlog-guard dismiss REFUSED:'"],
+  ['the acceptance line loses its Spanish half', 'dismiss.mjs', ' @es DESCARTADO y registrado. El turno puede terminar.', ''],
+  ['a refusal exits 0', 'dismiss.mjs', '    process.exit(1);', '    process.exit(0);'],
+
   // --- the dismissal log, read back
   ['a dismissal of any session ends the question', 'dismissals.mjs', 'record?.session === session && ', ''],
   ['a dismissal at the very moment of the block counts', 'dismissals.mjs', 'Date.parse(record.at) > sinceMs', 'Date.parse(record.at) >= sinceMs'],
