@@ -28,6 +28,9 @@ const MUTANTS = [
   // --- stdin ---
   ['the stream is decoded as latin1', H, "toString('utf8');\n}\n\n/** A PreToolUse", "toString('latin1');\n}\n\n/** A PreToolUse"],
   ['only the first chunk is read', H, 'for await (const chunk of stream) chunks.push(Buffer.from(chunk));', 'for await (const chunk of stream) { chunks.push(Buffer.from(chunk)); break; }'],
+  ['the raw bytes come back decoded as text', H, '  return Buffer.concat(chunks);', "  return Buffer.concat(chunks).toString('utf8');"],
+  ['the raw bytes lose their first byte', H, '  return Buffer.concat(chunks);', '  return Buffer.concat(chunks).subarray(1);'],
+  ['the text reader does not decode the bytes', H, "return (await readStdinBytes(stream)).toString('utf8');", 'return readStdinBytes(stream);'],
 
   // --- shapers ---
   ['deny does not say deny', H, "permissionDecision: 'deny'", "permissionDecision: 'allow'"],
@@ -35,6 +38,9 @@ const MUTANTS = [
   ['deny drops the reason', H, 'permissionDecisionReason: reason', 'permissionDecisionReason: undefined'],
   ['advise refuses', H, "hookEventName: 'PreToolUse', additionalContext: context", "hookEventName: 'PreToolUse', permissionDecision: 'deny', additionalContext: context"],
   ['advise drops the context', H, "hookEventName: 'PreToolUse', additionalContext: context } });", "hookEventName: 'PreToolUse', additionalContext: undefined } });"],
+  ['context names a fixed event', H, 'hookEventName: event, additionalContext: text', "hookEventName: 'PreToolUse', additionalContext: text"],
+  ['context drops the text', H, 'hookEventName: event, additionalContext: text', 'hookEventName: event, additionalContext: undefined'],
+  ['context refuses', H, 'hookEventName: event, additionalContext: text', "hookEventName: event, permissionDecision: 'deny', additionalContext: text"],
   ['blockStop does not block', H, "decision: 'block', reason", "decision: 'approve', reason"],
   ['blockStop drops the reason', H, "{ decision: 'block', reason, ...", "{ decision: 'block', ..."],
   ['blockStop always adds the context block', H, 'context === undefined ? {} :', 'false ? {} :'],
@@ -55,6 +61,7 @@ const MUTANTS = [
   ['main never runs', H, 'if (isMain) main();', 'if (false) main();'],
   ['the entry point is not resolved to its real path', H, 'realpathSync.native(process.argv[1]) ===', 'path.resolve(process.argv[1]) ==='],
   ['the module path is not resolved to its real path', H, '=== realpathSync.native(fileURLToPath(moduleUrl))', '=== fileURLToPath(moduleUrl)'],
+  ['an unresolvable path is never the main process', H, '    isMain = path.resolve(process.argv[1]) === path.resolve(fileURLToPath(moduleUrl));', '    isMain = false;'],
   ['an unresolvable path is taken as the main process', H, '    isMain = path.resolve(process.argv[1]) === path.resolve(fileURLToPath(moduleUrl));', '    isMain = true;'],
 
   // --- standalone hook ---

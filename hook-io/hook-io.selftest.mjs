@@ -24,7 +24,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { advise, blockStop, deny, evaluator, hookMain, parsePayload, readStdin, runWhenMain, tryParsePayload } from './hook-io.mjs';
+import { advise, blockStop, context, deny, evaluator, hookMain, parsePayload, readStdin, readStdinBytes, runWhenMain, tryParsePayload } from './hook-io.mjs';
 
 let passed = 0;
 const failures = [];
@@ -101,7 +101,20 @@ async function main() {
   stream.end();
   check('readStdin: a stream is read whole across chunks and decoded as UTF-8', await reading, '{"x":"ñ"}');
 
+  const rawStream = new PassThrough();
+  const rawBytes = Buffer.from([0xef, 0xbb, 0xbf, 0xff, 0xfe, 0x41]);
+  const rawReading = readStdinBytes(rawStream);
+
+  rawStream.write(rawBytes.subarray(0, 2));
+  await new Promise((resolve) => setImmediate(resolve));
+  rawStream.end(rawBytes.subarray(2));
+
+  const rawRead = await rawReading;
+
+  check('readStdinBytes: the bytes come back exactly, BOM and invalid UTF-8 included', [Buffer.isBuffer(rawRead), rawRead.equals(rawBytes)], [true, true]);
+
   // --- shapers ---
+  check('context: the exact literal for any event', [JSON.stringify(context('SessionStart', 'ctx')), JSON.stringify(context('UserPromptSubmit', 'x'))], ['{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"ctx"}}', '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"x"}}']);
   check('deny: the exact PreToolUse literal', JSON.stringify(deny('no')), '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no"}}');
   check('advise: the exact PreToolUse literal', JSON.stringify(advise('ctx')), '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"ctx"}}');
   check('blockStop: the exact Stop literal', JSON.stringify(blockStop('why')), '{"decision":"block","reason":"why"}');
@@ -178,6 +191,20 @@ async function main() {
   const missingMain = (() => { let ran = false; runWhenMain(pathToFileURL(path.join(scratch, 'not-main.mjs')).href, () => { ran = true; }); return ran; })();
 
   check('runWhenMain: a module that is not the entry point never runs main in-process', missingMain, false);
+
+  // A path that cannot be resolved (no such file) must still count as main when both resolved forms agree: deciding
+  // "not main" there would silence the dispatcher and, with it, every guard. @es Una ruta que no se puede resolver
+  // (no existe) cuenta como principal si ambas formas resueltas coinciden: decidir «no es principal» silenciaría
+  // al dispatcher y con él a toda guarda.
+  const unresolvable = path.join(scratch, 'no-such-entry.mjs');
+  const savedEntry = process.argv[1];
+  let ranUnresolvable = false;
+
+  process.argv[1] = unresolvable;
+  runWhenMain(pathToFileURL(unresolvable).href, () => { ranUnresolvable = true; });
+  process.argv[1] = savedEntry;
+
+  check('runWhenMain: an unresolvable entry path that equals the module path still runs main', ranUnresolvable, true);
 
   unlinkSync(junction);
   check('cleanup: unlinking the junction left its target intact', [existsSync(junction), existsSync(path.join(real, 'entry.mjs')), readFileSync(path.join(real, 'importer.mjs'), 'utf8').length > 0], [false, true, true]);

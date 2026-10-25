@@ -33,13 +33,18 @@ export function tryParsePayload(raw) {
   }
 }
 
-/** All of a stream (stdin by default) as UTF-8 text. @es Todo un stream (stdin por defecto) como texto UTF-8. */
-export async function readStdin(stream = process.stdin) {
+/** All of a stream (stdin by default) as the exact bytes, for a hook that forwards them unchanged. @es Todo un stream (stdin por defecto) como los bytes exactos, para un hook que los reenvía sin cambios. */
+export async function readStdinBytes(stream = process.stdin) {
   const chunks = [];
 
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
 
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
+}
+
+/** All of a stream (stdin by default) as UTF-8 text. @es Todo un stream (stdin por defecto) como texto UTF-8. */
+export async function readStdin(stream = process.stdin) {
+  return (await readStdinBytes(stream)).toString('utf8');
 }
 
 /** A PreToolUse refusal. @es Una negativa de PreToolUse. */
@@ -47,6 +52,9 @@ export const deny = (reason) => ({ hookSpecificOutput: { hookEventName: 'PreTool
 
 /** PreToolUse context injected without refusing. @es Contexto de PreToolUse sin negar. */
 export const advise = (context) => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: context } });
+
+/** Context injected for any event (SessionStart, SubagentStart, UserPromptSubmit...). @es Contexto inyectado para cualquier evento (SessionStart, SubagentStart, UserPromptSubmit...). */
+export const context = (event, text) => ({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
 
 /** A Stop block, with optional extra context for the model. @es Un bloqueo de Stop, con contexto opcional para el modelo. */
 export const blockStop = (reason, context) => ({ decision: 'block', reason, ...(context === undefined ? {} : { hookSpecificOutput: { hookEventName: 'Stop', additionalContext: context } }) });
