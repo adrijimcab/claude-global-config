@@ -3,14 +3,12 @@
  * worktrees of it carry work (commits the main checkout's HEAD lacks, or uncommitted changes)?
  *
  * Every git failure THROWS, so the caller can fail open and journal it; nothing here guesses. Whether a directory
- * is a linked worktree is decided HERE, inline in `linkedWorktreesCarryingWork`: its git dir differs from the
- * common git dir (`git rev-parse --git-dir --git-common-dir`), and a linked worktree yields `[]`.
+ * is a linked worktree is not decided here: `git-worktree/linked-worktree.mjs` owns that question.
  *
  * @es Los hechos de git sobre los que decide la guardia: si un directorio es el checkout PRINCIPAL de un
  * repositorio y qué worktrees ENLAZADOS suyos llevan trabajo (commits que el HEAD principal no tiene, o
  * cambios sin commitear). Todo fallo de git LANZA, para que quien llama falle abierto y lo registre. Si un
- * directorio es un worktree enlazado se decide AQUÍ, en línea en `linkedWorktreesCarryingWork`: su git dir
- * difiere del git dir común (`git rev-parse --git-dir --git-common-dir`), y un worktree enlazado da `[]`.
+ * directorio es un worktree enlazado no se decide aquí: esa pregunta es de `git-worktree/linked-worktree.mjs`.
  */
 
 import { git } from '../git-worktree/git-query.mjs';
@@ -31,9 +29,7 @@ function worktreePaths(directory) {
  * @es Los worktrees enlazados con trabajo, o `[]` si `directory` es un worktree enlazado o ninguno lleva trabajo.
  */
 export function linkedWorktreesCarryingWork(directory) {
-  const [gitDir, commonDir] = git(directory, ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir']).split('\n');
-
-  if (gitDir.trim() !== commonDir.trim()) return [];
+  if (isLinkedWorktree(directory)) return [];
 
   const mainHead = git(directory, ['rev-parse', 'HEAD']);
   const [, ...linked] = worktreePaths(directory);

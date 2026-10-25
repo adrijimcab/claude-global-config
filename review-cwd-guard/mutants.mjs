@@ -27,7 +27,7 @@ const MUTANTS = [
   ['a tool with no shell dialect is no longer exempted', 'review-cwd-guard/decide.mjs', 'if (dialect === undefined || typeof command', 'if (typeof command'],
 
   // --- worktree-work.mjs: what counts as work, and which directory is a main checkout.
-  ['a linked worktree as --cwd is treated like a main checkout', 'review-cwd-guard/worktree-work.mjs', 'if (gitDir.trim() !== commonDir.trim()) return [];', ''],
+  ['a linked worktree as --cwd is treated like a main checkout', 'review-cwd-guard/worktree-work.mjs', 'if (isLinkedWorktree(directory)) return [];', ''],
   ['uncommitted changes no longer count as work', 'review-cwd-guard/worktree-work.mjs', 'worktree.ahead > 0 || worktree.dirty', 'worktree.ahead > 0'],
   ['commits ahead of the main HEAD no longer count as work', 'review-cwd-guard/worktree-work.mjs', 'worktree.ahead > 0 || worktree.dirty', 'worktree.dirty'],
   ['every linked worktree counts as work, integrated or not', 'review-cwd-guard/worktree-work.mjs', '.filter((worktree) => worktree.ahead > 0 || worktree.dirty)', ''],
