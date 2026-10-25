@@ -21,7 +21,7 @@
  * sigue `git -C <dir>` ni un `cd` a una variable; la siguiente llamada que nombre el worktree lo encuentra.
  */
 
-import { existsSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { nativeSpelling, withWorkingDirectories } from '../cherry-pick-guard/working-directory.mjs';
@@ -76,7 +76,7 @@ export function candidateDirectories(payload) {
 export function findLinkedWorktree(payload) {
   for (const directory of candidateDirectories(payload)) {
     try {
-      if (existsSync(directory) && isLinkedWorktree(directory)) return gitOutput(undefined, ['rev-parse', '--show-toplevel'], { gitOptions: ['-C', directory] }).trim();
+      if (isLinkedWorktree(directory)) return gitOutput(undefined, ['rev-parse', '--show-toplevel'], { gitOptions: ['-C', directory] }).trim();
     } catch {
       /* not a repository, or git could not tell: this candidate is not a worktree */
     }

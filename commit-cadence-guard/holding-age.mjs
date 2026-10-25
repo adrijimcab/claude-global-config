@@ -50,7 +50,7 @@ export function porcelainPaths(output) {
  */
 export function heldPaths(dated, { arrivalMs, lastCommitMs }) {
   return dated
-    .filter(({ modifiedMs }) => modifiedMs !== undefined && modifiedMs >= arrivalMs)
+    .filter(({ modifiedMs }) => modifiedMs >= arrivalMs) // `undefined >= n` is false: an undated path drops out here
     .map(({ path: where, modifiedMs }) => ({ path: where, sinceMs: Math.max(modifiedMs, lastCommitMs) }))
     .sort((a, b) => a.sinceMs - b.sinceMs);
 }

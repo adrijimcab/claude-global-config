@@ -21,8 +21,8 @@ import path from 'node:path';
 import { tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 
-/** The mechanism name, which is also the guard's directory. @es El nombre del mecanismo, que es también el directorio de la guardia. */
-export const MECHANISM = 'commit-cadence-guard';
+/** The mechanism's state directory, through the hook-state port. @es El directorio de estado del mecanismo, por el puerto de hook-state. */
+export const mechanismStateDir = () => stateDir('commit-cadence-guard');
 
 const AGENTS_FOLDER = 'agents';
 
@@ -38,7 +38,7 @@ export function stateKey(agentId) {
   return [...agentId].every(isKeyCharacter) ? agentId : undefined;
 }
 
-const fileFor = (key) => path.join(stateDir(MECHANISM), AGENTS_FOLDER, `${key}.json`);
+const fileFor = (key) => path.join(mechanismStateDir(), AGENTS_FOLDER, `${key}.json`);
 
 /** The stored state of an agent, or `undefined`. @es El estado guardado de un agente, o `undefined`. */
 export function readAgentState(key) {

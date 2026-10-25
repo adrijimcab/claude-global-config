@@ -32,10 +32,8 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
 import { advise, deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
-import { stateDir } from '../hook-state/locations.mjs';
-import { MECHANISM, readAgentState, stateKey, writeAgentState } from './agent-state.mjs';
+import { mechanismStateDir, readAgentState, stateKey, writeAgentState } from './agent-state.mjs';
 import { loadConfig } from './config.mjs';
 import { measureHeld } from './measure.mjs';
 import { noticeText, refusalText } from './messages.mjs';
@@ -45,7 +43,7 @@ import { findLinkedWorktree } from './worktree-locator.mjs';
 /** Appends one line of evidence; never a precondition. @es Añade una línea de evidencia; nunca una precondición. */
 function journal(entry, now) {
   try {
-    const directory = stateDir(MECHANISM);
+    const directory = mechanismStateDir();
 
     mkdirSync(directory, { recursive: true });
     appendFileSync(path.join(directory, 'journal.jsonl'), `${JSON.stringify({ at: new Date(now).toISOString(), ...entry })}\n`, 'utf8');
@@ -64,7 +62,7 @@ function stateFor(key, payload, { now, config, locate }) {
   const stored = readAgentState(key) ?? { arrivalMs: now };
 
   if (stored.worktree !== undefined) return stored;
-  if (stored.searchedAtMs !== undefined && now - stored.searchedAtMs < config.remeasureMs) return stored;
+  if (now - (stored.searchedAtMs ?? 0) < config.remeasureMs) return stored;
 
   const worktree = locate(payload);
 
@@ -77,7 +75,7 @@ function stateFor(key, payload, { now, config, locate }) {
  * @es Las rutas sostenidas y si se midieron ahora: de la medición guardada mientras es fresca, si no de git.
  */
 function heldFor(state, { now, config, measure }) {
-  if (state.measuredAtMs !== undefined && now - state.measuredAtMs < config.remeasureMs) return { held: state.held ?? [], fresh: false, state };
+  if (now - (state.measuredAtMs ?? 0) < config.remeasureMs) return { held: state.held ?? [], fresh: false, state };
 
   const answer = measure(state.worktree, state.arrivalMs);
 
@@ -85,7 +83,7 @@ function heldFor(state, { now, config, measure }) {
     journal({ verdict: 'fail-open', worktree: state.worktree, reason: answer.reason }, now);
 
     // The worktree may be gone: forget it so the next window looks again. @es El worktree puede haber desaparecido: se olvida.
-    return { held: [], fresh: false, state: { ...state, worktree: undefined, measuredAtMs: now, held: [] } };
+    return { held: [], fresh: false, state: { ...state, worktree: undefined, searchedAtMs: now, measuredAtMs: now, held: [] } };
   }
 
   return { held: answer.held, fresh: true, state: { ...state, measuredAtMs: now, held: answer.held } };
@@ -99,9 +97,12 @@ function heldFor(state, { now, config, measure }) {
 export function evaluate(raw, deps = {}) {
   const payload = tryParsePayload(raw);
 
-  if (payload === undefined || !isSubagentCaller(payload)) return undefined;
-
-  const key = stateKey(payload.agent_id);
+  // A delegated agent is a payload that carries an `agent_id` (the orchestrator's never does: measured on a live
+  // run on 2026-10-25 and on the 3,040-payload corpus of `hook-caller`). Without a plain id there is nothing to
+  // key the state on, so the call is not judged.
+  // @es Un agente delegado es un payload con `agent_id` (el del orquestador nunca lo trae: medido). Sin un id
+  // simple no hay con qué clavar el estado y la llamada no se juzga.
+  const key = stateKey(payload?.agent_id);
 
   if (key === undefined) return undefined;
 
