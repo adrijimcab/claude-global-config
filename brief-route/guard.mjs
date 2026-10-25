@@ -25,10 +25,8 @@
  * ABIERTO ante todo fallo propio.
  */
 
-import { readFileSync } from 'node:fs';
-
 import { briefOf } from '../brief-provenance/provenance.mjs';
-import { deny, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { refusalReason } from './refusal-text.mjs';
 import { inspectRoute } from './route-line.mjs';
 
@@ -53,26 +51,19 @@ export function evaluate(raw) {
   return deny(reason);
 }
 
-function main() {
-  let raw;
-
+/** `evaluate` for the standalone hook: a malfunction of this guard allows the delegation. @es `evaluate` para el hook independiente: una avería de esta guardia deja pasar la delegación. */
+const evaluateOrAllow = (raw) => {
   try {
-    raw = readFileSync(0, 'utf8');
+    return evaluate(raw);
   } catch {
-    process.exit(0);
+    return undefined;
   }
+};
 
-  try {
-    const output = evaluate(raw);
+const standalone = hookMain(evaluateOrAllow);
 
-    if (output !== undefined) process.stdout.write(JSON.stringify(output));
-  } catch {
-    /* a malfunction of this guard allows the delegation: the dispatcher reports a throw of evaluate as a guard problem */
-  }
-
-  process.exit(0);
-}
-
-// Only as the main process: imported by the dispatcher or a selftest, main() must not read their stdin.
-// @es Solo como proceso principal: importado por el dispatcher o un selftest, main() no debe leer su stdin.
-runWhenMain(import.meta.url, main);
+// Only as the main process: imported by the dispatcher or a selftest, the hook must not read their stdin.
+// The process then ends with status 0.
+// @es Solo como proceso principal: importado por el dispatcher o un selftest, el hook no debe leer su stdin.
+// El proceso termina con estado 0.
+runWhenMain(import.meta.url, () => standalone().then(() => process.exit(0)));
