@@ -44,6 +44,18 @@ import { nativeSpelling, withWorkingDirectories } from '../cherry-pick-guard/wor
 import { commandWordIndex, executableName, simpleCommands } from '../shell-command/shell-command.mjs';
 
 /**
+ * The npm verbs that INSTALL packages (named ones, or the lockfile's), as opposed to the other mutating
+ * verbs. Owned here, beside the table that extends it, so the install aliases are listed once: the
+ * pruning decision reads this set and a second copy would drift. The aliases are in full for the same
+ * reason as below — `isntall` is a real npm alias.
+ * @es Los verbos de npm que INSTALAN paquetes. Se declaran aquí, junto a la tabla que los extiende, para
+ * listar los alias una sola vez: la decisión de poda lee este conjunto y una segunda copia divergiría.
+ */
+export const NPM_INSTALL_VERBS = Object.freeze(
+  new Set(['install', 'i', 'in', 'ins', 'inst', 'insta', 'instal', 'isnt', 'isnta', 'isntal', 'isntall', 'add'])
+);
+
+/**
  * Per manager, the verbs whose reify phase can delete. npm's install aliases are listed in full rather
  * than sampled: an unlisted alias is a SILENT MISS, and npm really does answer to `isntall`.
  * @es Por gestor, los verbos cuyo reify puede borrar. Los alias de `npm install` van completos: un alias
@@ -51,7 +63,7 @@ import { commandWordIndex, executableName, simpleCommands } from '../shell-comma
  */
 const MUTATING_VERBS = Object.freeze({
   npm: new Set([
-    'install', 'i', 'in', 'ins', 'inst', 'insta', 'instal', 'isnt', 'isnta', 'isntal', 'isntall', 'add',
+    ...NPM_INSTALL_VERBS,
     'ci', 'clean-install', 'install-clean', 'isntall-clean',
     'update', 'up', 'upgrade', 'udpate',
     'dedupe', 'ddp', 'find-dupes', 'prune',
@@ -196,19 +208,25 @@ export function packageManagerMutations(script, dialect, cwd, platform = process
 
     if (verb === undefined || writesOnlyTheLockfile(manager, rest)) continue;
 
+    // What the line names, so a decision about WHICH packages it installs reads it from here and never
+    // re-tokenises. `packages` is every operand after the verb; `words` is everything after the manager.
+    // @es Lo que nombra la línea: `packages` son los operandos tras el verbo; `words`, todo tras el gestor.
+    const named = { packages: operands.slice(1), words: rest };
+
     if (override === undefined) {
-      found.push({ manager, verb, directory, unresolvable: undefined });
+      found.push({ manager, verb, ...named, directory, unresolvable: undefined });
       continue;
     }
 
     if (isUnresolvable(override)) {
-      found.push({ manager, verb, directory: undefined, unresolvable: `the landing flag value \`${override ?? ''}\` depends on a variable` });
+      found.push({ manager, verb, ...named, directory: undefined, unresolvable: `the landing flag value \`${override ?? ''}\` depends on a variable` });
       continue;
     }
 
     found.push({
       manager,
       verb,
+      ...named,
       directory: directory === undefined ? undefined : path.resolve(directory, nativeSpelling(override, platform)),
       unresolvable: undefined
     });

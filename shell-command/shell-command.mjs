@@ -33,6 +33,9 @@
  * propios. No es una gramática completa: una palabra con `$` queda literal y es NO RESOLUBLE.
  */
 
+import { launcherNamed, unwrapLauncher } from './launchers.mjs';
+import { powershellRunnerScript } from './powershell-runners.mjs';
+
 /** The two dialects the harness offers as tools. @es Los dos dialectos que el harness ofrece. */
 export const DIALECTS = Object.freeze({ BASH: 'bash', POWERSHELL: 'powershell' });
 
@@ -73,7 +76,7 @@ const FILE_DESCRIPTOR_CHARACTERS = '0123456789*';
  * and wrappers that run their argument as the command.
  * @es Palabras que PRECEDEN a un comando sin serlo.
  */
-const COMMAND_PREFIXES = new Set(['&', '.', '!', '{', '}', 'if', 'elif', 'then', 'else', 'do', 'while', 'until', 'time', 'command', 'exec', 'nohup', 'sudo', 'env']);
+const COMMAND_PREFIXES = new Set(['&', '.', '!', '{', '}', 'if', 'elif', 'then', 'else', 'do', 'while', 'until']);
 
 /** Executables that run a script string of their own. @es Ejecutables que corren un script propio. */
 const NESTED_SHELLS = [
@@ -99,9 +102,39 @@ function isAssignment(word) {
   return name.length > 0 && !'0123456789'.includes(name.charAt(0)) && [...name].every((character) => NAME_CHARACTERS.includes(character));
 }
 
-/** Index of the word in command position, or -1 when the command is only prefixes and assignments. @es Índice de la palabra en posición de comando. */
+/**
+ * Index of the word in command position, or -1 when the command is only prefixes and assignments. A
+ * launcher (`timeout 60 git ...`, `env -i git ...`, `exec git`) is not the command: the program it runs is,
+ * so it is unwrapped, recursively (`launchers.mjs` owns the table). A launcher with nothing to launch is -1.
+ * @es Índice de la palabra en posición de comando. Un lanzador no es el comando: lo es el programa que lanza
+ * (`launchers.mjs` guarda la tabla), recursivamente.
+ */
 export function commandWordIndex(words) {
-  return words.findIndex((word) => !COMMAND_PREFIXES.has(word.toLowerCase()) && !isAssignment(word));
+  return resolveCommand(words).index;
+}
+
+/**
+ * The command a word list runs: `index` of its program word (-1 when none) and, when a launcher carries the
+ * command as one string (`env -S 'git reset'`), that `script`. @es El comando que corre la lista de palabras.
+ */
+export function resolveCommand(words) {
+  let at = words.findIndex((word) => !COMMAND_PREFIXES.has(word.toLowerCase()) && !isAssignment(word));
+
+  while (at !== -1) {
+    const name = executableName(words[at]);
+
+    if (launcherNamed(name) === undefined) return { index: at };
+
+    const unwrapped = unwrapLauncher(words, at, name, isAssignment);
+
+    // An unwrap either advances past the launcher, finds no program (-1), carries a script (-1) or runs
+    // nothing (`command -v`, the same index): only an advance goes round again, so the loop always ends.
+    if (unwrapped.index <= at) return unwrapped;
+
+    at = unwrapped.index;
+  }
+
+  return { index: at };
 }
 
 /** A cursor over one source string. @es Un cursor sobre una cadena. */
@@ -467,7 +500,9 @@ function wrappedScript(words, at) {
 
 /** The script a nested-shell invocation runs, if `words` is one. @es El script que ejecuta una shell anidada. */
 function nestedShellScript(words) {
-  const at = commandWordIndex(words);
+  const { index: at, script: launcherScript } = resolveCommand(words);
+
+  if (launcherScript !== undefined) return { script: launcherScript, dialect: DIALECTS.BASH };
 
   if (at === -1) return undefined;
 
@@ -476,6 +511,10 @@ function nestedShellScript(words) {
   if (wrapped !== undefined) return wrapped;
 
   const name = executableName(words[at]);
+  const runnerScript = powershellRunnerScript(name, words.slice(at + 1));
+
+  if (runnerScript !== undefined) return { script: runnerScript, dialect: DIALECTS.POWERSHELL };
+
   const shell = NESTED_SHELLS.find((candidate) => candidate.names.includes(name));
 
   if (shell === undefined) return undefined;
