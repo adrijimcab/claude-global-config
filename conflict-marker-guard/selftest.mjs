@@ -485,7 +485,7 @@ for (const step of STEPS) {
 
   report(answer.thrown === undefined, `unmergedConflicts: an unreadable file does not abort the scan${answer.thrown === undefined ? '' : ` (${answer.thrown})`}`);
   report(answer.conflicts.map((conflict) => conflict.path).join(',') === 'f.txt,src/fixtures/z.txt,gone.txt', 'unmergedConflicts: three stages of one path are one conflict; a fixtures path is scanned like any other; an unreadable file is a conflict; a clean one is not');
-  report(answer.conflicts[2].unreadable === 'EACCES' && answer.conflicts[2].line === 0 && answer.conflicts[2].kinds.length === 0, 'unmergedConflicts: an unreadable file says why');
+  report(answer.conflicts[2]?.unreadable === 'EACCES' && answer.conflicts[2]?.line === 0 && answer.conflicts[2]?.kinds.length === 0, 'unmergedConflicts: an unreadable file says why');
   report(reads.join(',') === 'f.txt,z.txt,gone.txt,clean.txt', 'unmergedConflicts reads each path once, from the top level');
   report(unmergedConflicts(() => ({ status: 128, stdout: '', stderr: 'fatal: x' }), { toplevel: 'C:/r' }).failure?.includes('git exited 128') === true, 'unmergedConflicts: a git that fails is a failure, never "clean"');
   report(unmergedConflicts(fakeLs, { toplevel: 'C:/r' }, { lines: () => [] }).conflicts.length === 0, 'unmergedConflicts: an unmerged file holding no marker is clean');
@@ -550,12 +550,40 @@ for (const step of STEPS) {
 
   // An add whose directory cannot be followed is not remembered as staging (and asks git nothing).
   calls.length = 0;
+
+  const journaled = journalText().length;
+
   evaluate(bash(clean.repoDir, `cd "$X" && git add -A; git -C "${slash(clean.repoDir)}" commit -m x`), { run: (args, options) => {
     calls.push(args);
 
     return clean.run(args, options);
   } });
-  report(calls.length === 2, 'an add after an unfollowable cd asks git nothing');
+  report(calls.length === 2 && journalText().length === journaled, 'an add after an unfollowable cd asks git nothing, and nothing goes wrong (no fail-open journal line)');
+
+  // A directory that is no repository is ONE failed call, never a probe of something else.
+  calls.length = 0;
+  evaluate(bash(plainDirectory, 'git commit -m x'), { run: (args, options) => {
+    calls.push(args);
+
+    return unmerged.run(args, options);
+  } });
+  report(calls.length === 1 && calls[0][0] === 'rev-parse', 'a directory that is no repository asks git once and stops');
+
+  // A probe that fails AFTER the repository was found is journaled as such, whichever probe it is.
+  const afterRevParse = (failing) => (args, options) => (args[0] === 'rev-parse' || !failing(args) ? markersStaged.run(args, options) : { status: 1, stdout: '', stderr: 'broke' });
+  const reasons = (command, failing) => {
+    const start = journalText().length;
+    const output = evaluate(bash(unmerged.repoDir, command), { run: afterRevParse(failing) });
+
+    return { output, added: journalText().slice(start) };
+  };
+  const listingFails = reasons('git commit -m x', (args) => args.includes('--name-status'));
+
+  report(verdict(listingFails.output) === 'allow' && listingFails.added.includes('git diff --cached --name-status: git exited 1: broke'), 'a failing prefilter is allowed and journaled with its reason');
+
+  const lsFails = reasons('git add -A && git commit -m x', (args) => args[0] === 'ls-files');
+
+  report(verdict(lsFails.output) === 'allow' && lsFails.added.includes('git ls-files -u: git exited 1: broke'), 'a failing unmerged listing is allowed and journaled with its reason');
 
   const fromSub = reasonOf(decide(configured, bash(`${slash(configured.repoDir)}/sub`, 'git commit -m x')));
 
@@ -587,8 +615,8 @@ for (const step of STEPS) {
   });
 
   report(declared('{"prefixes":["a/","b/c/"]}').prefixes.join() === 'a/,b/c/' && declared('{"prefixes":["a/"]}').failure === undefined, 'fixtures: a valid declaration is read');
-  report(declared(undefined, 'ENOENT').prefixes.join() === DEFAULT_FIXTURE_PREFIXES.join() && declared(undefined, 'ENOENT').failure === undefined, 'fixtures: an absent declaration means the default, without complaint');
-  report(declared(undefined, 'EACCES').prefixes.join() === DEFAULT_FIXTURE_PREFIXES.join() && declared(undefined, 'EACCES').failure.includes('EACCES'), 'fixtures: an unreadable declaration means the default and is reported');
+  report(declared(undefined, 'ENOENT').prefixes.join() === 'conflict-marker-guard/fixtures/' && DEFAULT_FIXTURE_PREFIXES.join() === 'conflict-marker-guard/fixtures/' && declared(undefined, 'ENOENT').failure === undefined, 'fixtures: an absent declaration means the default, without complaint');
+  report(declared(undefined, 'EACCES').prefixes.join() === DEFAULT_FIXTURE_PREFIXES.join() && declared(undefined, 'EACCES').failure?.includes('EACCES') === true, 'fixtures: an unreadable declaration means the default and is reported');
   report(['not json', '{}', '{"prefixes":"a/"}', '{"prefixes":["a"]}', '{"prefixes":["/a/"]}', '{"prefixes":[1]}'].every((text) => declared(text).prefixes.join() === DEFAULT_FIXTURE_PREFIXES.join() && declared(text).failure !== undefined), 'fixtures: a malformed declaration means the default and is reported');
   report(declaredFixturePrefixes().prefixes.join() === 'conflict-marker-guard/fixtures/', 'fixtures: the declaration in the tree names this guard\'s own fixtures');
 }
@@ -603,7 +631,15 @@ for (const step of STEPS) {
   report(conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n'))?.line === 2 && conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n')).kinds.join() === '=======,>>>>>>>', 'conflictIn: two kinds are a conflict, at the first marker line, with the kinds seen');
   report(conflictIn(numberedLines('a\n<<<<<<< HEAD\nb\n'))?.line === 2 && conflictIn(numberedLines('a\nb\n>>>>>>> 9f8e7d6\n'))?.line === 3, 'conflictIn: one labelled `<<<<<<< x` or `>>>>>>> x` line is a conflict on its own');
   report(conflictIn(numberedLines('a\n=======\nb\n'), { unmerged: true })?.line === 2 && conflictIn(numberedLines('a\n<<<<<<<\n'), { unmerged: true })?.line === 2, 'conflictIn: for an unmerged file ONE marker of any kind is a conflict');
-  report(conflictIn(numberedLines('a\nb\n'), { unmerged: true }) === undefined && (() => { try { return conflictIn([], { unmerged: true }); } catch { return 'threw'; } })() === undefined, 'conflictIn: an unmerged file with no marker is clean');
+  const judge = (lines) => {
+    try {
+      return conflictIn(lines, { unmerged: true });
+    } catch {
+      return 'threw';
+    }
+  };
+
+  report(judge([{ number: 1, text: 'a' }, { number: 2, text: 'b' }]) === undefined && judge([]) === undefined, 'conflictIn: an unmerged file with no marker is clean');
   const labelled = (line) => {
     try {
       return isLabelled(line);
@@ -614,7 +650,7 @@ for (const step of STEPS) {
 
   report(labelled('<<<<<<< HEAD') === true && labelled('>>>>>>> 9f8e7d6') === true && labelled('<<<<<<<') === false && labelled('>>>>>>> ') === false && labelled('=======') === false && labelled('plain') === false, 'isLabelled: seven characters, a space and a label; a bare run or `=======` is not, and a plain line never throws');
   report(isDeclaredFixture('x/a/fixtures/b.txt', ['a/fixtures/']) === false, 'isDeclaredFixture: the prefix must START the path');
-  report(conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n'), { unmerged: true }).kinds.join() === '=======', 'conflictIn: the scan of an unmerged file stops at the first marker');
+  report(conflictIn(numberedLines('a\n=======\nb\n>>>>>>> x\n'), { unmerged: true })?.kinds.join() === '=======', 'conflictIn: the scan of an unmerged file stops at the first marker');
   report(isDeclaredFixture('a/fixtures/b.txt', ['a/fixtures/']) && !isDeclaredFixture('b/fixtures/b.txt', ['a/fixtures/']) && !isDeclaredFixture('a/fixtures.txt', ['a/fixtures/']) && !isDeclaredFixture('x', []), 'isDeclaredFixture: a declared prefix, never a segment name anywhere');
 
   const patch = ['diff --git a/n.txt b/n.txt', 'new file mode 100644', '--- /dev/null', '+++ b/n.txt', '@@ -0,0 +1 @@', '+n', 'diff --git a/d.txt b/d.txt', 'deleted file mode 100644', '--- a/d.txt', '+++ /dev/null', '@@ -1 +0,0 @@', '-d', 'diff --git a/x.txt b/x.txt', 'index 1..2 100644', '--- a/x.txt', '+++ b/x.txt', '@@ -1,2 +1,0 @@', '-gone', '-gone2', '@@ -5,0 +6,3 @@', '+++ twin header', '+two', '\\ No newline at end of file', '+three'].join('\n');
