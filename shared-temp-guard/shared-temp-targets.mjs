@@ -43,7 +43,7 @@ const foldsCase = process.platform === 'win32';
  * folded where the file system folds it.
  * @es Una grafía canónica de `target`: resuelta por el sistema de ficheros hasta donde existe.
  */
-function canonical(target) {
+export function canonical(target) {
   let head = path.resolve(target);
   const tail = [];
 
