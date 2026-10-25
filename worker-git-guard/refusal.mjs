@@ -255,8 +255,8 @@ export const MESSAGES = {
       'USE INSTEAD: commit your work in progress on your branch, or ask the orchestrator to clear the index. To read',
       'a tree, set a temporary `GIT_INDEX_FILE` on the same command line (`GIT_INDEX_FILE=<tmp> git read-tree <tree>`),',
       'use `--index-output=<file>`, or check with `-n`/`--dry-run`; those leave the live index alone and are allowed.',
-      'The temporary path must be a literal one outside the git directory: naming `.git/index` (the live index) or',
-      'hiding the path behind a variable is refused.'
+      'Any literal temporary path is allowed, inside the git directory too (`.git/index.tmp`); only the live index',
+      'itself (`.git/index`, or the `index` of a linked worktree) and a path hidden behind a variable are refused.'
     ],
     es: [
       'WORKER-GIT GUARD RECHAZÓ este comando: un worker delegado no puede ejecutar `git read-tree` sobre el índice vivo ni con `-u` ni con `--reset` ({command}).',
@@ -268,8 +268,8 @@ export const MESSAGES = {
       'USAR EN SU LUGAR: haga commit de su trabajo a medias en su rama, o pida al orquestador que limpie el índice.',
       'Para leer un árbol, fije un `GIT_INDEX_FILE` temporal en la misma línea (`GIT_INDEX_FILE=<tmp> git read-tree <árbol>`),',
       'use `--index-output=<fichero>` o compruebe con `-n`/`--dry-run`; eso no toca el índice vivo y está permitido.',
-      'La ruta temporal debe ser literal y estar fuera del directorio de git: nombrar `.git/index` (el índice vivo) o',
-      'esconder la ruta tras una variable se rechaza.'
+      'Se permite cualquier ruta temporal literal, también dentro del directorio de git (`.git/index.tmp`); solo se',
+      'rechazan el propio índice vivo (`.git/index`, o el `index` de un worktree enlazado) y una ruta escondida tras una variable.'
     ]
   },
   checkoutIndex: {
