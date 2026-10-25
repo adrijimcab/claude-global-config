@@ -51,18 +51,32 @@ const droppedLocals = LOCALS.map((prefix) => [
   `const LOCAL_PREFIXES = [${LOCALS.filter((other) => other !== prefix).map((other) => `'${other}'`).join(', ')}];`
 ]);
 
-const TAILS_LINE = "const COMMON_TAILS = new Set(['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node']);";
-const TAILS = ['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node'];
+const COMMON_LINE = "const COMMON_WORDS = new Set(['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node']);";
+const COMMON = ['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node'];
 
-/** One mutant per common tail: the set without it. @es Un mutante por cola común. */
-const droppedTails = TAILS.map((tail) => [
-  `the tail ${tail} counts as a name`,
+/** One mutant per common word: the set without it. @es Un mutante por palabra común. */
+const droppedCommon = COMMON.map((word) => [
+  `the common word ${word} counts as a name`,
   NAMES,
-  TAILS_LINE,
-  `const COMMON_TAILS = new Set([${TAILS.filter((other) => other !== tail).map((other) => `'${other}'`).join(', ')}]);`
+  COMMON_LINE,
+  `const COMMON_WORDS = new Set([${COMMON.filter((other) => other !== word).map((other) => `'${other}'`).join(', ')}]);`
 ]);
 
-const MENTIONS_LINE = "return [name, name.slice(1, slash), ...(COMMON_TAILS.has(tail.toLowerCase()) ? [] : [tail])];";
+const PARTS_LINE = 'const parts = [name.slice(1, slash), name.slice(slash + 1)];';
+const MENTIONS_LINE = 'return [name, ...parts.filter((part) => !COMMON_WORDS.has(part.toLowerCase()))];';
+const OWN_LINE = 'for (const key of context.keys) if (!context.own.has(key)) for (const mention of mentionsOf(key)) names.add(mention);';
+
+// Each Spanish line of the rubric, broken once at its start. @es Cada línea en español de la rúbrica, rota una vez.
+const RUBRIC_MIRRORS = [
+  ['the intro', "'@es Un brief de delegación marca"],
+  ['the question', "'@es Pregunta: ¿alguna afirmación"],
+  ['the rules heading', "'@es Reglas:'"],
+  ['rule 1', "'@es 1. Una afirmación de comportamiento"],
+  ['rule 2', "'@es 2. No es una afirmación"],
+  ['rule 3', "'@es 3. Una afirmación en cualquier idioma"],
+  ['rule 4', "'@es 4. Ante la duda"],
+  ['the answer form', "'@es Contesta solo con"]
+].map(([part, start]) => [`the rubric's Spanish ${part} is not read`, JUDGE, start, `'${start.slice(5)}`]);
 
 const PACKAGES_LINE = 'return [...new Set(words(unit, NAME_SEPARATORS).map((word) => trimPeriods(word).toLowerCase()).filter((word) => folded.has(word)))];';
 
@@ -121,20 +135,23 @@ export const DEPENDENCY_MUTANTS = [
   ['an array section names its indexes', NAMES, ' || Array.isArray(entries)) continue;', ') continue;'],
   ...droppedLocals,
   ['a non-string version throws', NAMES, "typeof value === 'string' && LOCAL_PREFIXES", 'LOCAL_PREFIXES'],
-  ['local packages are named', NAMES, 'if (!isLocal(value)) for (const mention', 'for (const mention'],
+  ['local packages are named', NAMES, 'if (!isLocal(value)) context.keys.add(name);', 'context.keys.add(name);'],
   // How a scoped key is mentioned / Cómo se menciona una clave con ámbito
-  ['only the key is a name', NAMES, 'for (const mention of mentionsOf(name)) context.names.add(mention);', 'context.names.add(name);'],
+  ['only the key is a name', NAMES, 'for (const mention of mentionsOf(key)) names.add(mention);', 'names.add(key);'],
   ['an unscoped slashed key is split', NAMES, "if (!name.startsWith('@') || !name.includes('/'))", "if (!name.includes('/'))"],
   ['a scope with no slash is split', NAMES, "if (!name.startsWith('@') || !name.includes('/'))", "if (!name.startsWith('@'))"],
-  ['the scope is not a name', NAMES, MENTIONS_LINE, "return [name, ...(COMMON_TAILS.has(tail.toLowerCase()) ? [] : [tail])];"],
+  ['the scope is not a name', NAMES, PARTS_LINE, 'const parts = [name.slice(slash + 1)];'],
+  ['the tail is not a name', NAMES, PARTS_LINE, 'const parts = [name.slice(1, slash)];'],
   ['the scope keeps its @', NAMES, 'name.slice(1, slash)', 'name.slice(0, slash)'],
-  ['the tail is not a name', NAMES, MENTIONS_LINE, 'return [name, name.slice(1, slash)];'],
-  ['a common tail is a name', NAMES, MENTIONS_LINE, 'return [name, name.slice(1, slash), tail];'],
-  ['the tail is compared unfolded', NAMES, 'COMMON_TAILS.has(tail.toLowerCase())', 'COMMON_TAILS.has(tail)'],
   ['the tail keeps its slash', NAMES, 'name.slice(slash + 1)', 'name.slice(slash)'],
-  ...droppedTails,
+  ['a common word is a name', NAMES, MENTIONS_LINE, 'return [name, ...parts];'],
+  ['the full scoped key is not a name', NAMES, MENTIONS_LINE, 'return [...parts.filter((part) => !COMMON_WORDS.has(part.toLowerCase()))];'],
+  ['a part is compared unfolded', NAMES, 'COMMON_WORDS.has(part.toLowerCase())', 'COMMON_WORDS.has(part)'],
+  ...droppedCommon,
+  // Which keys are the project's own / Qué claves son del propio proyecto
   ["a manifest's own name is not recorded", NAMES, '  context.own.add(manifest.name);\n', ''],
-  ["the project's own names stay third-party", NAMES, 'for (const name of context.own) context.names.delete(name);', ''],
+  ["the project's own keys stay third-party", NAMES, OWN_LINE, 'for (const key of context.keys) for (const mention of mentionsOf(key)) names.add(mention);'],
+  ['the mentions of an own key are removed even when a third-party key produces them', NAMES, OWN_LINE, 'for (const key of context.keys) for (const mention of mentionsOf(key)) names.add(mention);\n  for (const own of context.own) if (typeof own === \'string\') for (const mention of mentionsOf(own)) names.delete(mention);'],
   ['a BOM-prefixed manifest is not read', NAMES, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
   ['a missing manifest is unreadable', NAMES, 'return { missing: true };', "return { reason: 'unreadable' };"],
   ['an unparsable manifest is missing', NAMES, 'return { reason: messageOf(error) };', 'return { missing: true };'],
@@ -197,13 +214,20 @@ export const DEPENDENCY_MUTANTS = [
   ['a refusal does not journal its packages', GUARD, 'packages: claims.flatMap((claim) => claim.packages), reason', 'packages: [], reason'],
   ["a refusal does not journal the judge's reason", GUARD, ', reason: verdict.reason });', ' });'],
   ["the refusal drops the judge's reason", GUARD, 'reason: verdict.reason, surface', "reason: '', surface"],
-  ['a refusal is worded for the wrong surface', GUARD, 'surface: brief.surface, toolName: brief.toolName })', "surface: 'delegation', toolName: brief.toolName })"],
-  ['a refusal names the wrong tool', GUARD, 'surface: brief.surface, toolName: brief.toolName })', "surface: brief.surface, toolName: 'Agent' })"],
+  ['a refusal is worded for the wrong surface', GUARD, 'surface: brief.surface, spanishSurface', "surface: 'delegation', spanishSurface"],
+  ['the Spanish refusal is worded for the wrong surface', GUARD, 'spanishSurface: brief.spanishSurface, toolName', "spanishSurface: 'esta delegación', toolName"],
+  ['a refusal names the wrong tool', GUARD, 'spanishSurface: brief.spanishSurface, toolName: brief.toolName })', "spanishSurface: brief.spanishSurface, toolName: 'Agent' })"],
   // The words / Las palabras
   ['a package named by two units is listed twice', REFUSAL, '[...new Set(refusal.claims.flatMap((claim) => claim.packages))].join', 'refusal.claims.flatMap((claim) => claim.packages).join'],
   ['packages are listed without a space', REFUSAL, ".join(', ');", ".join(',');"],
-  ["the judge's reason is not shown", REFUSAL, '    `  JUDGE — ${refusal.reason}`,\n', ''],
-  ['the claims read are not shown', REFUSAL, "...refusal.claims.map((claim) => `  READ — ${claim.unit.split('\\n').join(' / ')}`),", ''],
+  ["the judge's reason is not shown", REFUSAL, '    `  JUDGE — ${refusal.reason} @es JUEZ: motivo del juez, citado tal cual.`,\n', ''],
+  ["the JUDGE line has no Spanish half", REFUSAL, ' @es JUEZ: motivo del juez, citado tal cual.`', '`'],
+  ['the claims read are not shown', REFUSAL, "...refusal.claims.map((claim) => `  READ — ${claim.unit.split('\\n').join(' / ')} @es LEÍDO: afirmación leída, citada tal cual.`),", ''],
+  ['the READ line has no Spanish half', REFUSAL, ' @es LEÍDO: afirmación leída, citada tal cual.`', '`'],
+  ['the headline has no Spanish half', REFUSAL, '    `@es BRIEF-PROVENANCE RECHAZÓ ${refusal.spanishSurface}', '    `@es BRIEF-PROVENANCE ${refusal.spanishSurface}'],
+  ['the Spanish headline names no surface', REFUSAL, 'RECHAZÓ ${refusal.spanishSurface} (${refusal.toolName}): una afirmación', 'RECHAZÓ (${refusal.toolName}): una afirmación'],
+  ['the Spanish headline names no package', REFUSAL, 'una dependencia instalada (${packages}) y no cita fuente.', 'una dependencia instalada y no cita fuente.'],
+  ...RUBRIC_MIRRORS,
   ['a unit is shown on several lines', REFUSAL, "claim.unit.split('\\n').join(' / ')", 'claim.unit'],
   ['the HYPOTHESIS way out is not named', REFUSAL, "'  2. Move the claim to a HYPOTHESIS: line, so the worker tests it rather than inherits it.',", ''],
   ['the citation way out is not named', REFUSAL, "'  1. Read the installed source and cite it in the claim as dir/file:line (or dir/file:line:col),',", ''],

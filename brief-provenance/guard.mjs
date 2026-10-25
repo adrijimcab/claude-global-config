@@ -99,25 +99,30 @@ function diagnose({ word, state }) {
       `NEAR MISS — ${word} appears in the brief, but not at the START of a line.`,
       `  A marker is a HEADING, not a word inside a sentence. Put ${word} at the beginning of its own`,
       '  line, with a colon somewhere on that line. Anything you like may sit between the two:',
-      `    ${word} (by me, on develop just now): …`
+      `    ${word} (by me, on develop just now): …`,
+      `  @es CASI — ${word} aparece en el brief, pero no al COMIENZO de una línea. Un marcador es un ENCABEZADO:`,
+      `  @es pon ${word} al principio de su propia línea, con dos puntos en algún lugar de esa línea.`
     ];
 
   if (state === 'no-colon')
     return [
       `NEAR MISS — ${word} does start a line, but that line carries no colon.`,
       '  Add one. It is what separates the declaration from what is being declared:',
-      `    ${word}: …`
+      `    ${word}: …`,
+      `  @es CASI — ${word} empieza una línea, pero esa línea no lleva dos puntos: añádelos.`
     ];
 
   return [
     `ABSENT — the brief contains no ${word} line at all.`,
-    `  Add one at the top. If there is nothing to declare, say so: ${word}: none — exploratory task.`
+    `  Add one at the top. If there is nothing to declare, say so: ${word}: none — exploratory task.`,
+    `  @es AUSENTE — el brief no contiene ninguna línea ${word}. Añade una arriba; si no hay nada que declarar, dilo así.`
   ];
 }
 
 function reason(refusal) {
   return [
     `BRIEF-PROVENANCE REFUSED this ${refusal.surface} (${refusal.toolName}): the brief has nowhere to tell a measured fact from a guess.`,
+    `@es BRIEF-PROVENANCE RECHAZÓ ${refusal.spanishSurface} (${refusal.toolName}): el brief no tiene dónde separar un hecho medido de una suposición.`,
     '',
     'WHAT IS WRONG, precisely:',
     '',
@@ -144,7 +149,21 @@ function reason(refusal) {
     '',
     'This guard does not judge whether your claims are true — no hook can. It refuses a brief that has',
     'nowhere to tell a fact from a guess. Writing MEASURED next to a claim forces you to produce the',
-    'command; discovering you cannot is exactly the moment the claim belongs under HYPOTHESIS.'
+    'command; discovering you cannot is exactly the moment the claim belongs under HYPOTHESIS.',
+    '',
+    '@es LA REGLA: cada palabra marcadora EMPIEZA su propia línea, y esa línea lleva dos puntos.',
+    '@es Lo que va entre la palabra y los dos puntos es tuyo: un matiz, un paréntesis, una fecha. La comprobación',
+    '@es es un recorrido literal de líneas, nunca una regex. Añade las dos, cerca del principio:',
+    '@es MEASURED: cada número y mecanismo que sostiene el trabajo, con el comando que lo produjo.',
+    '@es Si no hay ninguno, escribe: MEASURED: none — exploratory task.',
+    '@es HYPOTHESIS: cada afirmación causal que NO reprodujiste en el caso mínimo, nombrada como suposición',
+    '@es para que el worker la PRUEBE en vez de heredarla.',
+    '@es Por qué se rechaza y no se sugiere: briefs y resumes llevaron una y otra vez una afirmación sin medir',
+    '@es escrita como hecho, y siempre la cazó el WORKER, nunca un control ("490 memorias" eran 66; "~34',
+    '@es símbolos" eran 24). Una causa ESTRECHA escrita como LA causa aparta al worker de la general.',
+    '@es Este guard no juzga si tus afirmaciones son ciertas: rechaza un brief que no tiene dónde separarlas de una suposición.',
+    '@es Escribir MEASURED junto a una afirmación te obliga a dar el comando; descubrir que no puedes es justo',
+    '@es el momento en que la afirmación va bajo HYPOTHESIS.'
   ].join('\n');
 }
 
@@ -184,16 +203,18 @@ async function dependencyClaimOutput(brief, payload, ask) {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'deny',
-      permissionDecisionReason: dependencyReason({ claims, reason: verdict.reason, surface: brief.surface, toolName: brief.toolName })
+      permissionDecisionReason: dependencyReason({ claims, reason: verdict.reason, surface: brief.surface, spanishSurface: brief.spanishSurface, toolName: brief.toolName })
     }
   };
 }
 
 /**
- * La salida de hook para un payload crudo (deny cuando el brief no declara MEASURED/HYPOTHESIS, o cuando el
+ * The hook output for a raw payload (deny when the brief declares no MEASURED/HYPOTHESIS, or when the claim
+ * judge refuses one), or `undefined`. Exported so `~/.claude/hook-dispatch/dispatch.mjs` runs it in its own
+ * process. `ask` is the judge's model question, injectable for the proof.
+ * @es La salida de hook para un payload crudo (deny cuando el brief no declara MEASURED/HYPOTHESIS, o cuando el
  * juez de afirmaciones rechaza una), o `undefined`. Exportada para que `~/.claude/hook-dispatch/dispatch.mjs` la
  * corra en su propio proceso. `ask` es la pregunta al modelo del juez, inyectable para la prueba.
- * @es Exported for the dispatcher; `ask` is the judge's model question, injected by the proof.
  */
 export async function evaluate(raw, { ask = defaultAsk } = {}) {
   let payload;

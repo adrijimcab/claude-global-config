@@ -138,9 +138,16 @@ function buildFixtures() {
   write('scoped/App', 'package.json', JSON.stringify({
     devDependencies: {
       '@playwright/test': '1.58.2', '@angular/core': '19.2.0', '@acme/widgets': '1.0.0', '@acme/cli': '1.0.0', '@acme/common': '1.0.0',
-      '@acme/types': '1.0.0', '@acme/utils': '1.0.0', '@acme/kit': '1.0.0', '@acme/Node': '1.0.0', '@lonely': '1.0.0', 'odd/name': '1.0.0'
+      '@acme/types': '1.0.0', '@acme/utils': '1.0.0', '@acme/kit': '1.0.0', '@acme/Node': '1.0.0', '@lonely': '1.0.0', 'odd/name': '1.0.0',
+      '@types/node': '20.0.0'
     }
   }));
+  // A scoped sibling workspace depended on by a plain range, alone and beside a third-party key of its scope.
+  // @es Un workspace hermano con ámbito del que se depende con un rango normal, solo y junto a un tercero de su ámbito.
+  write('scoped-sibling', 'package.json', JSON.stringify({ name: 'root-app', dependencies: { '@acme/ui': '^1.0.0' }, workspaces: ['libs/*'] }));
+  write('scoped-sibling/libs/ui', 'package.json', JSON.stringify({ name: '@acme/ui' }));
+  write('scoped-sibling-other', 'package.json', JSON.stringify({ name: 'root-app', dependencies: { '@acme/ui': '^1.0.0', '@acme/other': '1.0.0' }, workspaces: ['libs/*'] }));
+  write('scoped-sibling-other/libs/ui', 'package.json', JSON.stringify({ name: '@acme/ui' }));
   // A checkout whose npm project sits one folder down, as in a repository whose workspace is `App/`.
   write('nested/App', 'package.json', JSON.stringify({ devDependencies: { 'nested-app-dep': '1.0.0' }, workspaces: ['projects/*'] }));
   write('nested/App/projects/lib', 'package.json', JSON.stringify({ dependencies: { 'nested-lib-dep': '1.0.0' } }));
@@ -218,6 +225,19 @@ const cases = [
   ['deny', resume(long()), 'a SendMessage refusal names its surface', 'this message (SendMessage)'],
   ['deny', `﻿${agent(long())}`, 'a BOM-prefixed payload is still judged', 'ABSENT'],
   ['deny', agent('read src/x.ts and report the export list'), 'a SHORT prompt is refused too', 'ABSENT'],
+  // The refusal reaches a person, so every part of it carries its Spanish half.
+  // @es El rechazo llega a una persona, así que cada parte lleva su mitad en español.
+  ['deny', task(long()), 'the headline has its Spanish half', '@es BRIEF-PROVENANCE RECHAZÓ esta delegación (Task): el brief no tiene dónde separar un hecho medido de una suposición.'],
+  ['deny', resume(long()), 'the Spanish headline names a message', '@es BRIEF-PROVENANCE RECHAZÓ este mensaje (SendMessage)'],
+  ['deny', agent(long(MEASURED_LINE)), 'ABSENT has its Spanish half', '@es AUSENTE — el brief no contiene ninguna línea HYPOTHESIS.'],
+  ['deny', agent(long(HYPOTHESIS_LINE)), 'ABSENT names its word in Spanish too', '@es AUSENTE — el brief no contiene ninguna línea MEASURED.'],
+  ['deny', agent(long(`MEASURED 70 of 70 with no colon anywhere\n${HYPOTHESIS_LINE}`)), 'a colonless marker has its Spanish half', '@es CASI — MEASURED empieza una línea, pero esa línea no lleva dos puntos: añádelos.'],
+  ['deny', agent(long('as the MEASURED: value shows, and the HYPOTHESIS: was wrong')), 'a buried marker has its Spanish half', '@es CASI — MEASURED aparece en el brief, pero no al COMIENZO de una línea.'],
+  ['deny', agent(long()), 'the rule has its Spanish half', '@es LA REGLA: cada palabra marcadora EMPIEZA su propia línea, y esa línea lleva dos puntos.'],
+  ['deny', agent(long()), 'the markers have their Spanish half', '@es MEASURED: cada número y mecanismo que sostiene el trabajo, con el comando que lo produjo.'],
+  ['deny', agent(long()), 'the HYPOTHESIS marker has its Spanish half', '@es HYPOTHESIS: cada afirmación causal que NO reprodujiste en el caso mínimo, nombrada como suposición'],
+  ['deny', agent(long()), 'the Spanish headline names an Agent delegation', '@es BRIEF-PROVENANCE RECHAZÓ esta delegación (Agent)'],
+  ['deny', agent(long()), 'the reason for refusing has its Spanish half', '@es Este guard no juzga si tus afirmaciones son ciertas: rechaza un brief que no tiene dónde separarlas de una suposición.'],
 
   // THE RESUME SURFACE, in the payload the harness really sends. @es EL SURFACE DE RESUME.
   ['deny', resume(long()), 'REAL CASE: a resume with no declaration', 'ABSENT'],
@@ -244,6 +264,22 @@ const cases = [
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal carries the judge\'s reason', `JUDGE — ${JUDGE_REASON}`, REFUSE],
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal shows the claim the judge read', 'READ — MEASURED: playwright closes its children', REFUSE],
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal is bilingual', '@es Una afirmación sobre cómo se comporta', REFUSE],
+  ['deny', task(`${tenancy(PROJECT)}\nMEASURED: left-pad and playwright close\n${HYPOTHESIS_LINE}`), 'the headline has its Spanish half', '@es BRIEF-PROVENANCE RECHAZÓ esta delegación (Task): una afirmación MEASURED dice cómo se comporta una dependencia instalada (left-pad, playwright) y no cita fuente.', REFUSE],
+  ['deny', resume(`${tenancy(PROJECT)}\nMEASURED: playwright closes\n${HYPOTHESIS_LINE}`), 'the Spanish dependency headline names a message', '@es BRIEF-PROVENANCE RECHAZÓ este mensaje (SendMessage): una afirmación MEASURED', REFUSE],
+  ['deny', claim('MEASURED: playwright closes its children'), 'the JUDGE line has its Spanish half', `JUDGE — ${JUDGE_REASON} @es JUEZ: motivo del juez, citado tal cual.`, REFUSE],
+  ['deny', claim('MEASURED: playwright closes its children'), 'the READ line has its Spanish half', 'READ — MEASURED: playwright closes its children @es LEÍDO: afirmación leída, citada tal cual.', REFUSE],
+  // The rubric is runtime text too: each rule and the question carry their Spanish mirror, as the judge reads it.
+  // @es La rúbrica también es texto de ejecución: cada regla y la pregunta llevan su espejo en español.
+  ...[
+    '@es Un brief de delegación marca como MEASURED los hechos que su autor dice haber medido. Cada afirmación de abajo nombra un paquete de terceros del que depende el proyecto (listado tras ella).',
+    '@es Pregunta: ¿alguna afirmación dice cómo SE COMPORTA en ejecución un paquete nombrado (qué hace, cierra, reintenta, ignora, maneja, devuelve, envía) sin citar dónde se leyó (un fichero:línea de su código)?',
+    '@es Reglas:',
+    '@es 1. Una afirmación de comportamiento sin cita de fuente falla, lleve lo que lleve al lado: un código de salida, un comando entre comillas invertidas, una versión o la palabra package.json no la vuelven medida.',
+    '@es 2. No es una afirmación de comportamiento, así que pasa: el recibo de una ejecución (cuenta un comando con su código de salida o su salida), una versión o un rango leído de un manifiesto, un recuento o una lista de ficheros, y la prosa donde el nombre del paquete es una palabra corriente ("we ignore the generated folder").',
+    '@es 3. Una afirmación en cualquier idioma se juzga igual.',
+    '@es 4. Ante la duda de si una afirmación dice un comportamiento, contesta {"ok": true}.',
+    '@es Contesta solo con el objeto JSON: {"ok": true} o {"ok": false, "reason": "<motivo>"}. El motivo empieza por DEPENDENCY-CLAIM:, cita la afirmación que falla y nombra el comportamiento que afirma.'
+  ].map((mirror) => ['deny', claim('MEASURED: playwright closes its children'), `the judge reads the Spanish mirror ${mirror.slice(0, 24)}`, 'playwright', REFUSE, mirror]),
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal names the HYPOTHESIS way out', '2. Move the claim to a HYPOTHESIS: line', REFUSE],
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal names the citation way out', 'cite it in the claim as dir/file:line', REFUSE],
   ['deny', claim('MEASURED: playwright closes its children'), 'the refusal says an exit code does not measure a behaviour claim', 'an exit code beside a behaviour claim does not measure it', REFUSE],
@@ -391,6 +427,13 @@ const cases = [
     claim(`MEASURED: the ${word} folder holds 3 files`, fixtureDir('scoped')),
     `the common tail ${word} alone never counts as a name, so the judge is not asked`
   ]),
+  ['allow', claim('MEASURED: the types match', fixtureDir('scoped')), 'the common scope of @types/node alone never counts as a name'],
+  ['allow', claim('MEASURED: acme breaks on resize', fixtureDir('scoped-sibling')), 'the scope of a scoped sibling workspace is no third-party name'],
+  ['allow', claim('MEASURED: ui breaks on resize', fixtureDir('scoped-sibling')), 'the tail of a scoped sibling workspace is no third-party name'],
+  ['allow', claim('MEASURED: @acme/ui breaks on resize', fixtureDir('scoped-sibling')), 'a scoped sibling workspace is no third-party name'],
+  ['deny', claim('MEASURED: acme breaks on resize', fixtureDir('scoped-sibling-other')), 'a scope a third-party key also produces stays a name', 'acme', REFUSE],
+  ['allow', claim('MEASURED: ui breaks on resize', fixtureDir('scoped-sibling-other')), 'the sibling tail stays out beside a third-party key of its scope'],
+  ['deny', claim('MEASURED: other breaks on resize', fixtureDir('scoped-sibling-other')), 'the third-party tail beside a sibling is a name', 'other', REFUSE],
   ['allow', claim('MEASURED: lonel breaks', fixtureDir('scoped')), 'a scope with no slash is not split'],
   ['allow', claim('MEASURED: name breaks', fixtureDir('scoped')), 'an unscoped name with a slash is not split'],
   ['allow', claim('MEASURED: installed-root-dep closes', fixtureDir('nested')), 'node_modules is never read as a nested project'],

@@ -95,25 +95,26 @@ function readManifest(file, files) {
 }
 
 /**
- * The tails of a scoped name that are common English words, so never a name on their own (`@playwright/test`
- * adds `playwright` but not `test`). A prefilter hit only costs one judge call, so the list stays short.
- * @es Las colas de un nombre con ámbito que son palabras inglesas corrientes y nunca son un nombre por sí solas.
+ * The parts of a scoped name that are common English words, so never a name on their own: `@playwright/test`
+ * adds `playwright` but not `test`, and `@types/node` adds neither `types` nor `node`. A prefilter hit only costs
+ * one judge call, so the list stays short.
+ * @es Las partes de un nombre con ámbito que son palabras inglesas corrientes y nunca son un nombre por sí solas.
  */
-const COMMON_TAILS = new Set(['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node']);
+const COMMON_WORDS = new Set(['test', 'core', 'cli', 'common', 'types', 'utils', 'kit', 'node']);
 
 /**
  * The names a dependency key is mentioned by in prose: the key itself and, for a scoped `@scope/tail`, the scope
- * without its `@` and the tail unless it is a common word. Prose says "Playwright" for `@playwright/test`.
+ * without its `@` and the tail, each unless it is a common word. Prose says "Playwright" for `@playwright/test`.
  * @es Los nombres con que la prosa menciona una dependencia: la clave y, si tiene ámbito, el ámbito sin `@` y la
- * cola salvo que sea palabra común. La prosa dice «Playwright» por `@playwright/test`.
+ * cola, cada uno salvo que sea palabra común. La prosa dice «Playwright» por `@playwright/test`.
  */
 function mentionsOf(name) {
   if (!name.startsWith('@') || !name.includes('/')) return [name];
 
   const slash = name.indexOf('/');
-  const tail = name.slice(slash + 1);
+  const parts = [name.slice(1, slash), name.slice(slash + 1)];
 
-  return [name, name.slice(1, slash), ...(COMMON_TAILS.has(tail.toLowerCase()) ? [] : [tail])];
+  return [name, ...parts.filter((part) => !COMMON_WORDS.has(part.toLowerCase()))];
 }
 
 /** Whether a dependency value points inside the project's own tree. @es Si un valor de dependencia apunta al propio árbol. */
@@ -134,7 +135,7 @@ function addNames(manifest, context) {
 
     if (entries === null || typeof entries !== 'object' || Array.isArray(entries)) continue;
 
-    for (const [name, value] of Object.entries(entries)) if (!isLocal(value)) for (const mention of mentionsOf(name)) context.names.add(mention);
+    for (const [name, value] of Object.entries(entries)) if (!isLocal(value)) context.keys.add(name);
   }
 }
 
@@ -233,11 +234,16 @@ function collectCheckout(directory, context) {
  * pudo usar, con su motivo.
  */
 export function dependencyNamesOf(directories, files = diskFiles) {
-  const context = { files, names: new Set(), own: new Set(), undecided: [] };
+  const context = { files, keys: new Set(), own: new Set(), undecided: [] };
 
   for (const directory of directories) collectCheckout(directory, context);
 
-  for (const name of context.own) context.names.delete(name);
+  // A key the project defines itself adds no mention: `acme` of a sibling `@acme/ui` stays out, unless a
+  // third-party key (`@acme/other`) produces it too. @es Una clave que define el propio proyecto no aporta
+  // menciones: `acme` de un hermano `@acme/ui` queda fuera, salvo que una clave de terceros también la produzca.
+  const names = new Set();
 
-  return { names: context.names, undecided: context.undecided };
+  for (const key of context.keys) if (!context.own.has(key)) for (const mention of mentionsOf(key)) names.add(mention);
+
+  return { names, undecided: context.undecided };
 }

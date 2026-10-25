@@ -9,9 +9,10 @@ export function dependencyReason(refusal) {
 
   return [
     `BRIEF-PROVENANCE REFUSED this ${refusal.surface} (${refusal.toolName}): a MEASURED claim asserts how an installed dependency behaves (${packages}) and cites no source.`,
+    `@es BRIEF-PROVENANCE RECHAZÓ ${refusal.spanishSurface} (${refusal.toolName}): una afirmación MEASURED dice cómo se comporta una dependencia instalada (${packages}) y no cita fuente.`,
     '',
-    `  JUDGE — ${refusal.reason}`,
-    ...refusal.claims.map((claim) => `  READ — ${claim.unit.split('\n').join(' / ')}`),
+    `  JUDGE — ${refusal.reason} @es JUEZ: motivo del juez, citado tal cual.`,
+    ...refusal.claims.map((claim) => `  READ — ${claim.unit.split('\n').join(' / ')} @es LEÍDO: afirmación leída, citada tal cual.`),
     '',
     'A claim about how a dependency behaves at runtime is read in its INSTALLED source before it goes into a',
     'brief as measured. Do one of two things:',
