@@ -42,10 +42,10 @@
  * PROPIO (stdin ilegible, JSON inválido, una forma de payload desconocida).
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { decide, DELETE_TOOLS, SAVE_TOOLS, UPDATE_TOOLS } from './decide.mjs';
 import { reason } from './reason.mjs';
@@ -67,10 +67,6 @@ function journal(entry) {
   }
 }
 
-function withoutBom(raw) {
-  return raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-}
-
 /**
  * The hook output for a raw `PreToolUse` payload, or `undefined` to allow the tool call. Exported so
  * `~/.claude/hook-dispatch/dispatch.mjs` can run it inside its own process, and so `guard.mjs` remains a
@@ -79,13 +75,9 @@ function withoutBom(raw) {
  * dispatcher la corra en su propio proceso.
  */
 export function evaluate(raw) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    payload = JSON.parse(withoutBom(raw));
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   const toolName = payload?.tool_name;
 
@@ -110,34 +102,15 @@ export function evaluate(raw) {
     kind: refusal.kind
   });
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: reason(refusal)
-    }
-  };
+  return deny(reason(refusal));
 }
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    process.exit(0);
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-  process.exit(0);
-}
+const standalone = hookMain(evaluate);
 
 // Only when RUN as the hook — a module that EXPORTS runs no work when imported
-// (`guard-that-cannot-go-red`): main() runs only when this file is the process entry point, never on
+// (`guard-that-cannot-go-red`): the hook runs only when this file is the process entry point, never on
 // import, so the dispatcher (and this guard's own selftest) can import `evaluate` freely without also
-// triggering a stdin read.
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
-}
+// triggering a stdin read. The process then ends with status 0 once the decision is printed.
+// @es Solo cuando SE CORRE como hook: un módulo que EXPORTA no corre nada al importarse, así el dispatcher
+// y el selftest importan `evaluate` sin leer stdin. El proceso termina con estado 0 tras imprimir la decisión.
+runWhenMain(import.meta.url, () => standalone().then(() => process.exit(0)));

@@ -286,21 +286,35 @@ check(
   evaluate(rawPayload({ agent_id: 'a123', tool_name: 'mcp__engram__mem_save', tool_input: { topic_key: 'backlog/1.0.0-master' } }))?.hookSpecificOutput?.permissionDecision,
   'deny'
 );
+/**
+ * `evaluate` with a throw turned into a value, so a decision that crashes on an allowed call FAILS its check
+ * by assertion instead of aborting the whole selftest.
+ * @es `evaluate` con el lanzamiento convertido en valor: una decisión que revienta en una llamada permitida
+ * FALLA su check por aserción en vez de abortar todo el selftest.
+ */
+function evaluateSafely(raw) {
+  try {
+    return evaluate(raw);
+  } catch (error) {
+    return `THREW: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
 check(
-  'evaluate() allows a main-session mem_save onto the master topic_key',
-  evaluate(rawPayload({ session_id: 'main', tool_name: 'mcp__engram__mem_save', tool_input: { topic_key: 'backlog/1.0.0-master' } })),
+  'evaluate() allows a main-session mem_save onto the master topic_key, without throwing',
+  evaluateSafely(rawPayload({ session_id: 'main', tool_name: 'mcp__engram__mem_save', tool_input: { topic_key: 'backlog/1.0.0-master' } })),
   undefined
 );
 check(
-  'evaluate() allows a subagent mem_save onto a non-master topic_key',
-  evaluate(rawPayload({ agent_id: 'a123', tool_name: 'mcp__engram__mem_save', tool_input: { topic_key: 'discovery/x' } })),
+  'evaluate() allows a subagent mem_save onto a non-master topic_key, without throwing',
+  evaluateSafely(rawPayload({ agent_id: 'a123', tool_name: 'mcp__engram__mem_save', tool_input: { topic_key: 'discovery/x' } })),
   undefined
 );
 check('evaluate() allows malformed JSON (a malfunction of THIS guard fails open)', evaluate('{not json'), undefined);
 check('evaluate() allows a tool it does not cover', evaluate(rawPayload({ agent_id: 'a123', tool_name: 'Edit', tool_input: {} })), undefined);
 check(
   'evaluate() with a UTF-8 BOM still parses',
-  evaluate(`\uFEFF${rawPayload({ session_id: 'main', tool_name: 'mcp__engram__mem_save', tool_input: { topic_key: 'discovery/x' } })}`),
+  evaluateSafely(`\uFEFF${rawPayload({ session_id: 'main', tool_name: 'mcp__engram__mem_save', tool_input: { topic_key: 'discovery/x' } })}`),
   undefined
 );
 check(
