@@ -100,6 +100,15 @@ async function until(predicate, ms = 8000) {
 const lines = (file) => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((line) => line !== '') : []);
 const stamp = (log, entry) => Number(lines(log).find((line) => line.startsWith(entry))?.split(' ')[2]);
 const holdArgs = (log, label, holdMs) => [CHILD, 'hold', log, label, String(holdMs)];
+/** A JSON file read safely: its value, or `{}` when it is missing or not JSON, so a missing record fails a check instead of crashing. @es Un JSON leído sin riesgo: su valor, o `{}` si falta o no es JSON. */
+function readJson(file) {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
 const lockFree = () => !existsSync(LOCK) && !existsSync(HOLDER);
 
 /** Removes everything the lock left in the shared state. @es Quita todo lo que el lock dejó en el estado compartido. */
@@ -169,7 +178,7 @@ check('a child that ends with code 5 resolves 5', (await childProcessAdapter({ s
 
   await until(() => existsSync(HOLDER));
 
-  const holder = JSON.parse(readFileSync(HOLDER, 'utf8'));
+  const holder = readJson(HOLDER);
 
   check('the holder record names session, project and chain', holder.session === 'sess-a' && holder.project === 'proj-a' && holder.chain === 'chain-a', JSON.stringify(holder));
   check('the holder record names the runner pid, the start time and the command', holder.pid === first.child.pid && !Number.isNaN(Date.parse(holder.startedAt)) && holder.command.includes('chain-child.fixture.mjs'), JSON.stringify(holder));
@@ -217,7 +226,7 @@ check('a child that ends with code 5 resolves 5', (await childProcessAdapter({ s
   const result = await startRunner(['--chain', 'x', '--wait-seconds', '0.3', '--poll-ms', '100', '--', process.execPath, CHILD, 'exit', '0']);
 
   check('a held lock with no readable record still waits, then expires with 75', result.code === EXIT.waitExpired, `got ${String(result.code)}`);
-  check('that case says the record is not readable, in both languages', result.stderr.includes('not readable') && result.stderr.includes('no se puede leer'), result.stderr);
+  check('that case says the record is not readable, in both languages', result.stderr.includes('its record is not readable yet') && result.stderr.includes('su registro aún no se puede leer'), result.stderr);
 }
 
 // ── Stale holders ───────────────────────────────────────────────────────────────────────────────────────────
@@ -310,7 +319,7 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
   const say = { say: () => undefined, complain: (id, params) => told.push([id, params]), line: () => '' };
   let released = 0;
   const lock = { tryTake: () => true, readHolder: () => undefined, release: () => { released += 1; throw new Error('cannot remove'); } };
-  const code = await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 100, pollMs: 10 }, { lock, child: { run: () => Promise.resolve(9) }, clock: { now: () => 0, sleep }, say, processId: 1 });
+  const code = await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 100, pollMs: 10 }, { lock, child: { run: () => Promise.resolve(9) }, clock: { now: () => 0, sleep }, say, processId: 1 }).catch(() => 'threw');
 
   check('a release that fails never changes the command\'s exit code', code === 9);
   check('a release that fails is reported with its id', told.some(([id, params]) => id === 'release-failed' && params.detail === 'cannot remove') && released === 1);
@@ -348,12 +357,14 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
 
 {
   let now = 0;
+  let ran = 0;
   const sleeps = [];
   const told = [];
   const say = { say: () => undefined, complain: (id) => told.push(id), line: () => '' };
   const lock = { tryTake: () => false, readHolder: () => ({ chain: 'a', project: 'p', session: 's', pid: 1, startedAt: 't' }), release: () => { throw new Error('release of a lock never taken'); } };
-  const code = await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 250, pollMs: 100 }, { lock, child: { run: () => Promise.reject(new Error('must not run')) }, clock: { now: () => now, sleep: (ms) => { sleeps.push(ms); now += ms; return Promise.resolve(); } }, say, processId: 1 });
+  const code = await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 250, pollMs: 100 }, { lock, child: { run: () => { ran += 1; return Promise.resolve(0); } }, clock: { now: () => now, sleep: (ms) => { sleeps.push(ms); now += ms; return Promise.resolve(); } }, say, processId: 1 });
 
+  check('the command never runs when the lock is never taken', ran === 0);
   check('the last pause is shortened to the time left, then the wait expires', code === EXIT.waitExpired && sleeps.join(',') === '100,100,50', sleeps.join(','));
   check('a chain that never took the lock never releases one', !told.includes('release-failed'));
 }
@@ -371,7 +382,7 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
   const flags = parseArguments(['--chain', 'c', '--project', 'p', '--session', 's', '--wait-seconds', '2.5', '--poll-ms', '40', '--', 'x', '--chain', 'inner'], defaults).request;
 
   check('every flag is read, and flags after -- belong to the command', flags.project === 'p' && flags.session === 's' && flags.waitMs === 2500 && flags.pollMs === 40 && flags.args.join(' ') === '--chain inner');
-  check('only the FIRST -- separates: a later -- belongs to the command', parseArguments(['--chain', 'c', '--', 'x', '--', 'y'], defaults).request.args.join(' ') === '-- y');
+  check('only the FIRST -- separates: a later -- belongs to the command', parseArguments(['--chain', 'c', '--', 'x', '--', 'y'], defaults).request?.args.join(' ') === '-- y');
   check('no separator is a usage problem', problemOf(['--chain', 'c']) === 'usage-no-separator');
   check('an unknown flag is a usage problem', problemOf(['--bogus', '1', '--', 'x']) === 'usage-unknown-flag');
   check('a flag with no value is a usage problem', problemOf(['--chain', '--', 'x']) === 'usage-missing-value');
@@ -448,7 +459,7 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
 
   await until(() => existsSync(HOLDER));
 
-  const holder = JSON.parse(readFileSync(HOLDER, 'utf8'));
+  const holder = readJson(HOLDER);
 
   await ended;
 
@@ -472,8 +483,15 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
 
   for (const garbage of ['null', '42', '"text"', 'not json', '']) {
     writeFileSync(HOLDER, garbage);
-    check(`a record that is ${JSON.stringify(garbage)} reads as no record`, lock.readHolder() === undefined);
+    check(`a record that is ${JSON.stringify(garbage)} reads as no record`, (() => { try { return lock.readHolder() === undefined; } catch { return false; } })());
   }
+
+  clearState();
+  mkdirSync(HOLDER, { recursive: true });
+
+  const unwritable = (() => { try { lock.tryTake({ session: 's', project: 'p', chain: 'c', pid: process.pid, startedAt: 't', command: 'c' }); return false; } catch { return true; } })();
+
+  check('a take whose record cannot be written fails and does not keep the lock', unwritable && !existsSync(LOCK));
 
   clearState();
   check('with no record file there is no holder', lock.readHolder() === undefined);
