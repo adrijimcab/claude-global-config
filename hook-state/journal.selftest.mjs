@@ -187,7 +187,10 @@ try {
 
   check('every concurrent child finished cleanly', exits, Array(CHILDREN).fill(0));
   check('no concurrent increment was lost in silence: each one is counted or recorded as not counted', JSON.parse(readFileSync(firesPath('guard-race'), 'utf8')).count + raced.length, CHILDREN * PER_CHILD);
-  check('every increment not counted in the race was refused only by the busy lock', raced.every((record) => /stayed locked/.test(record.reason)), true);
+  // Contention ends a take one of two ways, both "another writer held it": through every attempt, or at the pause
+  // where its wait budget ran out. Never a fault. @es La contienda termina una toma de dos formas, ambas «otro
+  // escritor lo tenía»: en todos los intentos, o en la pausa donde se agotó su presupuesto. Nunca un fallo.
+  check('every increment not counted in the race was refused only by the busy lock, through its attempts or its budget', raced.every((record) => /stayed locked|wait budget .* was spent/.test(record.reason)), true);
   check('nothing but the counter (and its not-counted record) is left beside it: no temp, no lock', readdirSync(path.dirname(firesPath('guard-race'))).filter((name) => name !== 'fires-uncounted.jsonl'), ['fires.json']);
 
   // A fixed temp name is a collision waiting to happen: a leftover under that name must not block an increment.
@@ -295,6 +298,28 @@ try {
   const sharedOutcomes = ['guard-s1', 'guard-s2'].map((one) => notThrown(() => incrementFires(one, { lock: budget })));
 
   check('L5: two busy counters under one shared budget are both not counted, and sleep 200 ms together, not 200 each', [sharedOutcomes, sharedSlept.reduce((sum, ms) => sum + ms, 0), sharedSlept.every((ms) => ms <= 15)], [[null, null], 200, true]);
+
+  // Once the shared budget is spent, a later counter stops at its first pause: against a stale lock whose removal
+  // stays delete-pending it is recorded as not counted for the BUDGET, never as a lock that "could not be broken"
+  // after attempts that never waited. On the virtual clock. @es Agotado el presupuesto compartido, un contador
+  // posterior para en su primera pausa: ante un lock caducado cuyo borrado sigue pendiente se registra como no
+  // contado por el PRESUPUESTO, nunca como «no se pudo romper» tras intentos que nunca esperaron.
+  mkdirSync(path.dirname(firesPath('guard-s3')), { recursive: true });
+  writeFileSync(`${firesPath('guard-s3')}.lock`, 'no owner');
+
+  let spentNow = 0;
+  let pausesOfS3 = 0;
+  const spentBudget = journal.firesBudget?.({ now: () => spentNow, sleep: (ms) => { spentNow += ms; } });
+  const pendingRemoval = (target) => {
+    if (!target.endsWith('.breaker')) throw Object.assign(new Error('EPERM: injected'), { code: 'EPERM' });
+    rmSync(target, { force: true });
+  };
+
+  notThrown(() => incrementFires('guard-s1', { lock: spentBudget }));
+  const s3 = notThrown(() => incrementFires('guard-s3', { lock: { ...spentBudget, staleAfterMs: -1, platform: 'win32', remove: pendingRemoval, wait: () => { pausesOfS3 += 1; spentBudget.wait(); } } }));
+  const s3Reason = uncounted('guard-s3').at(-1)?.reason ?? '';
+
+  check('L5: after the shared budget is spent, a counter on a delete-pending stale lock stops at its first pause and is not counted for the budget, not as a fault', [s3, pausesOfS3, /wait budget .* was spent/.test(s3Reason), / @es /.test(s3Reason), /could not be broken/.test(s3Reason), existsSync(`${firesPath('guard-s3')}.lock`)], [null, 1, true, true, false, true]);
 
   let fakeNow = 0;
   const slept = [];

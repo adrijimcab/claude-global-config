@@ -115,7 +115,12 @@ const MUTANTS = [
   ['the default retry bound shrinks to one attempt', L, 'attempts = 40', 'attempts = 1'],
 
   // --- withLock
-  ['the work runs even though the lock is held', L, '  if (!takeLock(lockFile, options)) return { held: false };', '  takeLock(lockFile, options);'],
+  ['the work runs even though the lock is held', L, '  if (!takeLock(lockFile, options)) return options.spent?.() === true ? { held: false, spent: true } : { held: false };', '  takeLock(lockFile, options);'],
+  ['a take whose budget is spent is reported as plainly held', L, 'options.spent?.() === true ? { held: false, spent: true } : { held: false };', '{ held: false };'],
+  ['every take that is not held is reported as spent', L, 'options.spent?.() === true ? { held: false, spent: true } : { held: false };', '{ held: false, spent: true };'],
+  ['a take never stops when its budget is spent', L, '      if (spent()) return false;\n', ''],
+  ['a take whose budget is spent goes on to the fault of a lock that could not be broken', L, '      if (spent()) return false;', '      if (spent()) break;'],
+  ['a take with no budget is spent at once', L, 'report = toStderr, spent = () => false } = {}', 'report = toStderr, spent = () => true } = {}'],
   ['the lock is not released after a finished work', L, '  release();\n\n  return { held: true, value };', '  return { held: true, value };'],
   ['the lock is not released after a failed work', L, '    const failure = release();', '    const failure = undefined;'],
   ['the work value is lost', L, '  return { held: true, value };', '  return { held: true, value: undefined };'],

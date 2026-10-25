@@ -32,6 +32,10 @@ export const MESSAGE_TABLE = {
     en: 'The fires counter {file} stayed locked by another process; this fire was not counted.',
     es: 'Otro proceso mantuvo bloqueado el contador de disparos {file}; este disparo no se contó.'
   },
+  'fires-budget-spent': {
+    en: 'The fires counter {file} was not tried again: the wait budget it shares with the other counters of this run was spent; this fire was not counted.',
+    es: 'El contador de disparos {file} no se volvió a intentar: se agotó el presupuesto de espera que comparte con los demás contadores de esta corrida; este disparo no se contó.'
+  },
   'fires-uncounted': {
     en: 'This fire of {mechanism} was not counted; the reason is in the record.',
     es: 'Este disparo de {mechanism} no se contó; el motivo está en el registro.'

@@ -320,14 +320,18 @@ function releaseBreaker(breaker, token, escalate, { remove, platform, wait, repo
  * Takes the lock, or returns false once `attempts` are spent with the lock held. Every option is injectable so a
  * proof never sleeps: `create(file, token)` and `remove(file)` replace the file operations, `isAlive(pid)` the
  * process probe, `now()` the clock, `wait()` the pause between attempts, `platform` the platform whose removal
- * codes apply, and `report(line)` where a failure that must not stop the take is told (stderr by default).
+ * codes apply, `report(line)` where a failure that must not stop the take is told (stderr by default), and
+ * `spent()` whether a wait budget shared with other takes is spent. After each pause that finds it spent the take
+ * stops and returns false at once: the attempts it did not make never waited, so they prove no fault.
  * @throws {LockFault} when the lock cannot be created (not contention), when a stale lock could not be broken in
  * ANY attempt, or when the breaker path fails for a reason that does not clear by waiting.
- * @es Toma el lock, o devuelve false al agotar los intentos con el lock ocupado. Toda opción es inyectable. Lanza
- * `LockFault` si el lock no se puede crear, si un lock caducado no se pudo romper en NINGÚN intento, o si el
+ * @es Toma el lock, o devuelve false al agotar los intentos con el lock ocupado. Toda opción es inyectable;
+ * `spent()` dice si un presupuesto de espera compartido con otras tomas se agotó: tras cada pausa que lo encuentra
+ * agotado la toma para y devuelve false, porque los intentos que no hizo nunca esperaron y no prueban ningún fallo.
+ * Lanza `LockFault` si el lock no se puede crear, si un lock caducado no se pudo romper en NINGÚN intento, o si el
  * camino del breaker falla por algo que no pasa esperando.
  */
-export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_MS, ceilingMs = staleAfterMs * CEILING_FACTOR, now = Date.now, wait = pauseFor(50), isAlive = processExists, create = createWithToken, remove = removeFile, platform = process.platform, report = toStderr } = {}) {
+export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_MS, ceilingMs = staleAfterMs * CEILING_FACTOR, now = Date.now, wait = pauseFor(50), isAlive = processExists, create = createWithToken, remove = removeFile, platform = process.platform, report = toStderr, spent = () => false } = {}) {
   const settings = { staleAfterMs, ceilingMs, now, isAlive, create, remove, platform, report, wait };
   const token = newToken();
   let held = false;
@@ -355,6 +359,7 @@ export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_M
       }
 
       wait();
+      if (spent()) return false;
     }
   }
 
@@ -395,14 +400,14 @@ const canCarry = (error) => error !== null && typeof error === 'object' && Objec
  * changes what the work did: a work that returned still returns its value, a work that threw still throws its own
  * error (with the release failure attached as `suppressed` when the error can carry it, see `canCarry`), and the
  * release failure is reported, bilingual, through `options.report` (stderr by default).
- * @returns `{ held: true, value }`, or `{ held: false }` when the lock could not be taken: `work` did not run and the holder's lock is untouched.
+ * @returns `{ held: true, value }`, or `{ held: false }` when the lock could not be taken: `work` did not run and the holder's lock is untouched. `{ held: false, spent: true }` says the take stopped because its shared wait budget (`options.spent`) was spent. @es `{ held: false, spent: true }` dice que la toma paró porque su presupuesto de espera compartido se agotó.
  * @es Ejecuta `work` con el lock y lo suelta tanto si vuelve como si lanza. Un fallo al soltar nunca cambia lo que
  * hizo el trabajo: si volvió, vuelve con su valor; si lanzó, lanza su propio error (con el fallo al soltar adjunto
  * como `suppressed` si el error puede llevarlo, ver `canCarry`), y el fallo al soltar se informa, bilingüe. Con el
  * lock ocupado, `work` no corre.
  */
 export function withLock(lockFile, work, options = {}) {
-  if (!takeLock(lockFile, options)) return { held: false };
+  if (!takeLock(lockFile, options)) return options.spent?.() === true ? { held: false, spent: true } : { held: false };
 
   const report = options.report ?? toStderr;
   const release = () => {

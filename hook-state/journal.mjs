@@ -103,11 +103,13 @@ const FIRES_ATTEMPTS = 13;
 
 /**
  * The lock options of one wait budget: a deadline `totalMs` from now, and a wait that sleeps at most 15 ms and
- * never past the deadline, then not at all. One budget passed to several `incrementFires` calls bounds them
- * TOGETHER, so a Stop that counts several mechanisms waits about 200 ms in all, not 200 ms each; every counter
- * keeps its own file and its own lock. `now` and `sleep` are test seams.
+ * never past the deadline, then not at all; and `spent()`, true from the deadline on, which stops a take at its
+ * next pause instead of letting it make the rest of its attempts back to back. One budget passed to several
+ * `incrementFires` calls bounds them TOGETHER, so a Stop that counts several mechanisms waits about 200 ms in all,
+ * not 200 ms each; every counter keeps its own file and its own lock. `now` and `sleep` are test seams.
  * @es Las opciones de lock de un presupuesto de espera: un plazo `totalMs` desde ahora y una espera que duerme como
- * mucho 15 ms y nunca más allá del plazo, y luego nada. Un presupuesto compartido por varias llamadas a
+ * mucho 15 ms y nunca más allá del plazo, y luego nada; y `spent()`, verdadero desde el plazo, que para una toma en
+ * su siguiente pausa en vez de dejarle hacer el resto de sus intentos seguidos. Un presupuesto compartido por varias llamadas a
  * `incrementFires` las acota JUNTAS: un Stop que cuenta varios mecanismos espera unos 200 ms en total, no 200 cada
  * uno; cada contador conserva su fichero y su lock.
  */
@@ -120,7 +122,8 @@ export function firesBudget({ totalMs = FIRES_BUDGET_MS, now = Date.now, sleep =
       const left = deadline - now();
 
       if (left > 0) sleep(Math.min(FIRES_PAUSE_MS, left));
-    }
+    },
+    spent: () => deadline - now() <= 0
   };
 }
 
@@ -217,7 +220,7 @@ export function incrementFires(mechanism, { readFile = readFileSync, lock } = {}
       return count;
     }, { ...firesBudget(), ...lock });
 
-    if (!outcome.held) throw new Error(bilingual('fires-busy', { file }));
+    if (!outcome.held) throw new Error(bilingual(outcome.spent === true ? 'fires-budget-spent' : 'fires-busy', { file }));
 
     return outcome.value;
   } catch (error) {

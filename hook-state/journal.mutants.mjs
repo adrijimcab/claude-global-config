@@ -93,8 +93,11 @@ const MUTANTS = [
   ['the temp name is fixed again', J, "const temp = `${file}.${process.pid}.tmp`;", 'const temp = `${file}.tmp`;'],
   ['a failed publish leaves its temp behind', J, '        rmSync(temp, { force: true });\n\n        throw error;', '        throw error;'],
   ['a failed publish is swallowed', J, '        rmSync(temp, { force: true });\n\n        throw error;', '        rmSync(temp, { force: true });'],
-  ['a counter locked by another process is silently not counted', J, 'if (!outcome.held) throw new Error(bilingual(\'fires-busy\', { file }));', 'if (!outcome.held) return 0;'],
-  ['the busy refusal is English only', J, "bilingual('fires-busy', { file })", "'fires.json is locked'"],
+  ['a counter locked by another process is silently not counted', J, "if (!outcome.held) throw new Error(bilingual(outcome.spent === true ? 'fires-budget-spent' : 'fires-busy', { file }));", 'if (!outcome.held) return 0;'],
+  ['the busy refusal is English only', J, "bilingual(outcome.spent === true ? 'fires-budget-spent' : 'fires-busy', { file })", "'fires.json is locked'"],
+  ['a counter stopped by its spent budget is recorded as busy', J, "outcome.spent === true ? 'fires-budget-spent' : 'fires-busy'", "'fires-busy'"],
+  ['a budget is never spent', J, '    spent: () => deadline - now() <= 0', '    spent: () => false'],
+  ['a budget is spent only past its deadline, not at it', J, 'spent: () => deadline - now() <= 0', 'spent: () => deadline - now() < 0'],
   ['the lock options of the caller are ignored', J, '{ ...firesBudget(), ...lock }', '{ ...firesBudget() }'],
 
   // --- J-1: the counter never aborts its caller, and a run not counted is recorded ---

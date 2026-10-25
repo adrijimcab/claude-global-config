@@ -561,6 +561,25 @@ const failing = (codes) => {
   let ran = false;
 
   check('a held lock: the work does not run and the holder keeps its lock', [outcomeOf(() => lock.withLock(other, () => { ran = true; }, options())), ran, existsSync(other)], [{ held: false }, false, true]);
+
+  // A shared wait budget that is spent stops the take at its next pause, and says so.
+  // @es Un presupuesto de espera compartido que se agotó para la toma en su siguiente pausa, y lo dice.
+  let spentWaits = 0;
+  const afterOnePause = () => spentWaits >= 1;
+
+  check('a take whose shared budget is spent stops at its next pause, the work does not run, and the outcome says the budget was spent', [outcomeOf(() => lock.withLock(other, () => { ran = true; }, options({ attempts: 5, wait: () => { spentWaits += 1; }, spent: afterOnePause }))), spentWaits, ran], [{ held: false, spent: true }, 1, false]);
+
+  // A stale lock whose removal stays delete-pending, met with the budget already spent: the attempts it never made
+  // never waited, so it is not-held, never "could not be broken". @es Un lock caducado cuyo borrado sigue pendiente,
+  // con el presupuesto ya agotado: los intentos que no hizo nunca esperaron, así que no es «no se pudo romper».
+  const pendingStale = held('spent-stale', `${String(deadPid)}:x`, STALE + 10_000, AT);
+  const pendingRemoval = (target) => {
+    if (!target.endsWith('.breaker')) throw failure('EPERM');
+    rmSync(target, { force: true });
+  };
+
+  check('a stale lock still delete-pending when the budget is spent is not-held, never a "could not be broken" fault', outcomeOf(() => lock.takeLock(pendingStale, options({ platform: 'win32', attempts: 3, remove: pendingRemoval, spent: () => true }))), false);
+  check('NEAR MISS: the same stale lock with budget to spare is still the fault after every attempt', outcomeOf(() => lock.takeLock(pendingStale, options({ platform: 'win32', attempts: 3, remove: pendingRemoval }))).threw, 'LockFault');
 }
 
 // --- L2: a break journal that cannot be written never fails the take -------------------------------------

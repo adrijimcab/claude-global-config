@@ -34,6 +34,7 @@ const EXPECTED = {
   'bad-mechanism': [{ value: '"v"' }, 'A mechanism name must be a plain name (letters, digits, "-" and "_"), got "v". @es El nombre de un mecanismo debe ser un nombre simple (letras, dígitos, «-» y «_»), se recibió "v".'],
   'fires-corrupt': [{ file: 'F' }, 'The fires counter F is not a valid counter and was left untouched. @es El contador de disparos F no es un contador válido y se dejó intacto.'],
   'fires-busy': [{ file: 'F' }, 'The fires counter F stayed locked by another process; this fire was not counted. @es Otro proceso mantuvo bloqueado el contador de disparos F; este disparo no se contó.'],
+  'fires-budget-spent': [{ file: 'F' }, 'The fires counter F was not tried again: the wait budget it shares with the other counters of this run was spent; this fire was not counted. @es El contador de disparos F no se volvió a intentar: se agotó el presupuesto de espera que comparte con los demás contadores de esta corrida; este disparo no se contó.'],
   'fires-uncounted': [{ mechanism: 'm' }, 'This fire of m was not counted; the reason is in the record. @es Este disparo de m no se contó; el motivo está en el registro.'],
   'lock-create-fault': [{ file: 'L', code: 'EPERM', detail: 'd' }, 'The lock L could not be created (EPERM): d. This is a fault, not another writer holding it. @es No se pudo crear el lock L (EPERM): d. Es un fallo, no otro escritor que lo tiene.'],
   'lock-break-fault': [{ file: 'L', code: 'EIO', detail: 'd' }, 'The stale lock L could not be broken (EIO): d. @es No se pudo romper el lock caducado L (EIO): d.'],
