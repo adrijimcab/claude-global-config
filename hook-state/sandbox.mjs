@@ -21,8 +21,13 @@ import { CLAUDE_HOME_VARIABLE, STATE_ROOT_VARIABLE } from './locations.mjs';
 /** The tree this module belongs to. @es El árbol al que pertenece este módulo. */
 const TREE = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
-/** The files the state-location module needs, relative to the tree. @es Los ficheros que necesita el módulo de ubicaciones. */
-export const STATE_MODULE_FILES = Object.freeze(['hook-state/locations.mjs', 'hook-state/message-table.mjs', 'bilingual-output/speaker.mjs', 'bilingual-output/message.mjs']);
+/**
+ * The files a copied guard needs beside it, relative to the tree: the state-location module with what it imports,
+ * and the hook-io port every guard reads its payload and answers through.
+ * @es Los ficheros que necesita al lado una guardia copiada: el módulo de ubicaciones con lo que importa, y el
+ * puerto hook-io por el que toda guardia lee su payload y responde.
+ */
+export const STATE_MODULE_FILES = Object.freeze(['hook-state/locations.mjs', 'hook-state/message-table.mjs', 'bilingual-output/speaker.mjs', 'bilingual-output/message.mjs', 'hook-io/hook-io.mjs']);
 
 /**
  * Copies the state-location module and what it imports into the constructed Claude home `home`.
