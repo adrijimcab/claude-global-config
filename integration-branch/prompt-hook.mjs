@@ -19,7 +19,7 @@
 import path from 'node:path';
 
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
-import { parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
+import { context, hookMain, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { speaker } from './messages.mjs';
 import { originHeadState } from './origin-head-state.mjs';
 
@@ -45,29 +45,10 @@ export function evaluate(raw) {
     const { main, want, source } = state;
     const current = state.current ?? '(unset @es sin fijar)';
 
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'UserPromptSubmit',
-        additionalContext: speaker.line(notice, { main, want, source, current, sync: SYNC_COMMAND })
-      }
-    };
+    return context('UserPromptSubmit', speaker.line(notice, { main, want, source, current, sync: SYNC_COMMAND }));
   } catch {
     return undefined;
   }
 }
 
-/** Stdin in, the notice (or nothing) out; it always leaves with 0. @es Entra stdin, sale el aviso (o nada); siempre sale con 0. */
-async function main() {
-  let output;
-
-  try {
-    output = evaluate(await readStdin());
-  } catch {
-    output = undefined;
-  }
-
-  if (output !== undefined) process.stdout.write(JSON.stringify(output));
-  process.exitCode = 0;
-}
-
-runWhenMain(import.meta.url, main);
+runWhenMain(import.meta.url, hookMain(evaluate));

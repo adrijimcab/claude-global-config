@@ -8,10 +8,13 @@
  * `prompt-hook.selftest.mjs` debe ponerse en rojo por un check fallido, nunca por un crash. Sin runner
  * compartido sale con 2 (NO MEDIDO), nunca un veredicto.
  *
- * Retired: "runs when imported" and "BOM is not stripped" are pinned by hook-io's own mutants ('main runs
- * always', 'main never runs'; the BOM mutants of `parsePayload`), since the entry check and the parser moved
- * into the port. @es Retirados: «corre al importarse» y «el BOM no se quita» los fijan los mutantes propios de
- * hook-io, porque la comprobación de entrada y el parser pasaron al puerto.
+ * Retired, because the decision moved into the port and hook-io's own mutants pin it: "runs when imported"
+ * ('main runs always'), "BOM is not stripped" (the BOM mutants of `parsePayload`), "does not print the notice"
+ * ('hookMain prints a missing decision as null'), "exits non-zero" and the trailing line break ('hookMain
+ * prints without the line break'). @es Retirados porque la decisión pasó al puerto y los mutantes propios de
+ * hook-io la fijan: «corre al importarse» ('main runs always'), «el BOM no se quita» (los mutantes de
+ * `parsePayload`), «no imprime el aviso» ('hookMain prints a missing decision as null') y el salto de línea
+ * final ('hookMain prints without the line break').
  */
 
 import { existsSync } from 'node:fs';
@@ -35,13 +38,12 @@ const MUTANTS = [
   ['the notice names a different sync command', HOOK, 'sync: SYNC_COMMAND', "sync: 'sync.mjs'"],
   ['the notice names the cwd, not the main checkout', HOOK, 'const { main, want, source } = state;', 'const { want, source } = state;\n    const main = payload.cwd;'],
   ['an unset origin/HEAD is not tolerated', HOOK, "const current = state.current ?? '(unset @es sin fijar)';", 'const current = state.current;'],
-  ['the notice is delivered for the wrong event', HOOK, "hookEventName: 'UserPromptSubmit'", "hookEventName: 'PreToolUse'"],
-  ['the notice blocks the prompt', HOOK, '    return {\n      hookSpecificOutput: {', "    return {\n      decision: 'block',\n      hookSpecificOutput: {"],
-  ['a failure of its own blocks the prompt', HOOK, '  } catch {\n    return undefined;\n  }\n}\n\n/** Stdin', '  } catch {\n    return { decision: "block" };\n  }\n}\n\n/** Stdin'],
+  ['the notice is delivered for the wrong event', HOOK, "context('UserPromptSubmit',", "context('PreToolUse',"],
+  ['the notice blocks the prompt', HOOK, "    return context('UserPromptSubmit', speaker.line(notice, { main, want, source, current, sync: SYNC_COMMAND }));", "    return { decision: 'block', ...context('UserPromptSubmit', speaker.line(notice, { main, want, source, current, sync: SYNC_COMMAND })) };"],
+  ['a failure of its own blocks the prompt', HOOK, '  } catch {\n    return undefined;\n  }\n}\n\nrunWhenMain', '  } catch {\n    return { decision: "block" };\n  }\n}\n\nrunWhenMain'],
   ['the payload is not read through the port parser', HOOK, 'const payload = parsePayload(raw);', 'const payload = JSON.parse(raw);'],
-  ['the CLI does not print the notice', HOOK, 'if (output !== undefined) process.stdout.write(JSON.stringify(output));', ''],
-  ['the CLI exits non-zero', HOOK, 'process.exitCode = 0;', 'process.exitCode = 1;'],
-  ['the CLI does not run as the main process', HOOK, 'runWhenMain(import.meta.url, main);', ''],
+  ['the CLI does not run the evaluation', HOOK, 'hookMain(evaluate)', 'hookMain(() => undefined)'],
+  ['the CLI does not run as the main process', HOOK, 'runWhenMain(import.meta.url, hookMain(evaluate));', ''],
 
   // messages.mjs: the English and the Spanish half each carry the command that fixes the drift
   ['the English notice drops the sync command', MESSAGES, 'will start from the wrong branch. Fix it with: node "{sync}" "{main}"', 'will start from the wrong branch. Fix it with: node "{sync}"'],
