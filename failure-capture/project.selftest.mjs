@@ -55,6 +55,35 @@ function ceilingOf(directory) {
   }
 }
 
+/**
+ * The project `directory` belongs to, or the text of the fault reading it raised: a check that expects a project (or
+ * none) fails on a fault instead of crashing the run.
+ * @es El proyecto al que pertenece `directory`, o el texto del fallo al leerlo: una comprobación que espera un proyecto
+ * (o ninguno) falla ante un fallo en vez de tumbar la corrida.
+ */
+function projectAt(directory, options) {
+  try {
+    return projectOf(directory, options);
+  } catch (error) {
+    return `THREW: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+/**
+ * The `field` of the project `directory` belongs to, or the text of the fault reading it raised (never `undefined`
+ * for a fault, so a check that expects no project cannot pass on one).
+ * @es El campo `field` del proyecto al que pertenece `directory`, o el texto del fallo al leerlo (nunca `undefined`
+ * ante un fallo, para que una comprobación que espera ningún proyecto no pase con uno).
+ */
+function fieldAt(directory, field, options) {
+  const found = projectAt(directory, options);
+
+  return typeof found === 'string' ? found : found?.[field];
+}
+
+/** Whether a value read through `projectAt`/`fieldAt` is a fault. @es Si un valor leído así es un fallo. */
+const isFault = (value) => typeof value === 'string' && value.startsWith('THREW: ');
+
 function write(root, files) {
   for (const [relative, contents] of Object.entries(files)) {
     const absolute = path.join(root, ...relative.split('/'));
@@ -133,7 +162,7 @@ try {
   git(monorepo, 'commit', '--quiet', '-m', 'initial');
   git(monorepo, 'worktree', 'add', '--quiet', '-b', 'work', path.join(scratch, 'monorepo-worktree'));
 
-  equal('no project holds a plain folder', projectOf(plain), undefined);
+  equal('no project holds a plain folder', projectAt(plain), undefined);
 
   // THE ESCAPE (2026-09-30): HOME pointed at a fixture, cwd OUTSIDE it — the walk climbed to the account's
   // REAL home and took `~/.claude/CLAUDE.md` for a project. Probed in a child whose HOME is the fixture, and
@@ -146,12 +175,15 @@ try {
   writeFileSync(probe, `import { projectOf } from ${JSON.stringify(pathToFileURL(path.join(HERE, 'project.mjs')).href)};\nprocess.stdout.write(JSON.stringify(projectOf(process.cwd())?.root ?? null));\n`);
   const escaped = spawnSync(process.execPath, [probe], { cwd: outside, encoding: 'utf8', env: worldEnv(world.home) });
   equal('a cwd outside a fixture HOME never resolves to the account\'s real home', escaped.stdout, 'null');
-  equal('a top-level project: scope is the folder name by default', projectOf(path.join(app, 'src'))?.scope, 'app');
-  equal('...its ledger is its own .claude/lessons-ledger.md', projectOf(app)?.ledgerFile, path.join(app, '.claude', 'lessons-ledger.md'));
-  equal('...and its default worker contract is its .claude/CLAUDE.md', projectOf(app)?.workerContracts, [path.join(app, '.claude', 'CLAUDE.md')]);
-  equal('a subfolder project takes its configured scope', projectOf(api)?.scope, 'legacy-api');
-  equal('a sibling folder of the subfolder project is held by no project', projectOf(path.join(monorepo, 'services', 'web')), undefined);
-  equal('the same subfolder inside a LINKED worktree maps to the main checkout project', projectOf(path.join(scratch, 'monorepo-worktree', 'services', 'api'))?.root, projectOf(api)?.root);
+  equal('a top-level project: scope is the folder name by default', fieldAt(path.join(app, 'src'), 'scope'), 'app');
+  equal('...its ledger is its own .claude/lessons-ledger.md', fieldAt(app, 'ledgerFile'), path.join(app, '.claude', 'lessons-ledger.md'));
+  equal('...and its default worker contract is its .claude/CLAUDE.md', fieldAt(app, 'workerContracts'), [path.join(app, '.claude', 'CLAUDE.md')]);
+  equal('a subfolder project takes its configured scope', fieldAt(api, 'scope'), 'legacy-api');
+  equal('a sibling folder of the subfolder project is held by no project', projectAt(path.join(monorepo, 'services', 'web')), undefined);
+  const linked = fieldAt(path.join(scratch, 'monorepo-worktree', 'services', 'api'), 'root');
+  const main = fieldAt(api, 'root');
+
+  check('the same subfolder inside a LINKED worktree maps to the main checkout project', !isFault(main) && typeof main === 'string' && linked === main, JSON.stringify([linked, main]));
 
   write(app, { '.claude/failure-capture.json': JSON.stringify({ scop: 'typo' }) });
   let thrown = '';
@@ -200,7 +232,7 @@ try {
   write(claimedApp, { '.claude/CLAUDE.md': '# Proj\n', 'src/x.txt': 'x\n' });
   write(path.join(claimed, 'mono'), { '.claude/CLAUDE.md': '# Mono\n' });
   write(claimedApi, { '.claude/CLAUDE.md': '# Api\n', 'src/x.txt': 'x\n' });
-  const under = (directory) => projectOf(directory, { homes: [claimed] })?.root;
+  const under = (directory) => fieldAt(directory, 'root', { homes: [claimed] });
 
   equal('an injected home holding .claude/CLAUDE.md is not a project', under(claimed), undefined);
   equal('...nor is its own .claude folder', under(path.join(claimed, '.claude')), undefined);
