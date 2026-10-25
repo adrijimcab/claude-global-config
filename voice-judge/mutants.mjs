@@ -66,14 +66,14 @@ const MUTANTS = [
   ['the signature is the premise judge\'s', PROMPT, "'voice-judge rubric v7.'", "'premise-judge rubric v2.'"],
 
   // --- THE SHARED JOURNAL GUARD, FOR THE VOICE JUDGE.
-  ['the guard does not journal the voice judge', GUARD, '  { mechanism: VOICE_MECHANISM, marker: VOICE_MARKER },\n', ''],
+  ['the guard does not journal the voice judge', GUARD, "  { mechanism: VOICE_MECHANISM, module: '../voice-judge/prompt.mjs' },\n", ''],
   ['the voice mechanism is not the folder', GUARD, "VOICE_MECHANISM = 'voice-judge'", "VOICE_MECHANISM = 'voice-judgeX'"],
-  ['the voice judge is journaled under the premise mechanism', GUARD, '{ mechanism: VOICE_MECHANISM, marker: VOICE_MARKER }', '{ mechanism: MECHANISM, marker: VOICE_MARKER }'],
-  ['the premise judge is read with the voice marker', GUARD, '{ mechanism: MECHANISM, marker: MARKER }', '{ mechanism: MECHANISM, marker: VOICE_MARKER }'],
+  ['the voice judge is journaled under the premise mechanism', GUARD, "{ mechanism: VOICE_MECHANISM, module: '../voice-judge/prompt.mjs' }", "{ mechanism: MECHANISM, module: '../voice-judge/prompt.mjs' }"],
+  ['the premise judge is read with the voice marker', GUARD, "{ mechanism: MECHANISM, module: './prompt.mjs' }", "{ mechanism: MECHANISM, module: '../voice-judge/prompt.mjs' }"],
   ['the reasons are read with the default marker only', GUARD, 'judgeReasons(records, marker)', 'judgeReasons(records)'],
   ['the marker of a string is always the premise one', GUARD, "value.includes(marker) ? [value.slice(value.indexOf(marker))]", "value.includes(MARKER) ? [value.slice(value.indexOf(MARKER))]"],
   ['the journaled digests are always the premise ones', GUARD, 'const known = journaledDigests(mechanism);', "const known = journaledDigests('premise-judge');"],
-  ['only the premise judge counts its runs', GUARD, 'for (const { mechanism } of JUDGES) incrementFires(mechanism);', 'incrementFires(MECHANISM);'],
+  ['only the premise judge counts its runs', GUARD, 'for (const { mechanism } of JOURNALED_JUDGES) incrementFires(mechanism);', 'incrementFires(MECHANISM);'],
 ];
 
 const survivors = runMutants({

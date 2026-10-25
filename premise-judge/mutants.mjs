@@ -58,11 +58,17 @@ const MUTANTS = [
   ['the mechanism is not the folder', GUARD, "MECHANISM = 'premise-judge'", "MECHANISM = 'premise-judgeX'"],
 
   // --- THE HOOK.
-  ['a run is not counted', GUARD, '    for (const { mechanism } of JUDGES) incrementFires(mechanism);\n', ''],
-  ['the hook journals nothing', GUARD, '    journalJudgeBlocks(payload);\n', ''],
+  ['a run is not counted', GUARD, '    for (const { mechanism } of JOURNALED_JUDGES) incrementFires(mechanism);\n', ''],
+  ['the hook journals nothing', GUARD, '    journalJudgeBlocks(payload, await loadJournaledJudges({ importModule }));\n', ''],
+  ['the hook ignores its import seam', GUARD, 'await loadJournaledJudges({ importModule })', 'await loadJournaledJudges()'],
+  ['one broken prompt drops every judge', GUARD, '      return undefined;\n    }\n  }));', '      throw new Error(\'x\');\n    }\n  }));'],
+  ['a marker that is not text is kept', GUARD, "typeof marker === 'string' && marker !== '' ? { mechanism, marker } : undefined", "marker !== '' ? { mechanism, marker } : undefined"],
+  ['an empty marker is kept', GUARD, " && marker !== ''", ''],
+  ['the pending judge is not journaled', GUARD, "  { mechanism: PENDING_MECHANISM, module: '../pending-judge/prompt.mjs' },\n", ''],
+  ['the default import is not the real one', GUARD, 'importModule = importPromptModule } = {}) {\n  const loaded', "importModule = () => Promise.reject(new Error('x')) } = {}) {\n  const loaded"],
   ['a BOM-prefixed payload is not decoded', GUARD, "raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw", 'raw'],
   ['the hook returns something', GUARD, '  return undefined;\n}\n\nconst main', '  return {};\n}\n\nconst main'],
-  ['the process journals nothing', GUARD, "    evaluate(Buffer.concat(chunks).toString('utf8'));\n", ''],
+  ['the process journals nothing', GUARD, "    await evaluate(Buffer.concat(chunks).toString('utf8'));\n", ''],
   ['importing the guard runs it as a process', GUARD, 'path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))', 'true'],
 
   // --- THE LATENCY ARITHMETIC.
@@ -86,7 +92,9 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['premise-judge', 'judge-gate', 'voice-judge', 'hook-state', 'hook-dispatch', 'bilingual-output', 'settings.json'],
+  // `pending-judge/prompt.mjs` is imported by the journal guard at run time, which the import walk cannot follow.
+  // @es El journal lo importa en tiempo de ejecución, y el recorrido de imports no lo sigue.
+  paths: ['premise-judge', 'judge-gate', 'voice-judge', 'pending-judge/prompt.mjs', 'hook-state', 'hook-dispatch', 'bilingual-output', 'settings.json'],
   selftest: 'premise-judge/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

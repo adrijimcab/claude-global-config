@@ -45,7 +45,10 @@ const { MARKER, PROMPT, PROMPT_SIGNATURE, TIMEOUT_SECONDS } = await import('./pr
 const { hookCommand, loadJudge } = await import('../judge-gate/judges.mjs');
 // Only this judge is loaded, as its own hook process does. @es Solo se carga este juez, como su propio proceso.
 const GATE_JUDGE = await loadJudge('premise');
-const { MECHANISM, REASON_LIMIT, TAIL_RECORDS, evaluate, journalJudgeBlocks, judgeReasons } = await import('./journal-guard.mjs');
+const { MECHANISM, REASON_LIMIT, TAIL_RECORDS, evaluate, importPromptModule, journalJudgeBlocks, judgeReasons, loadJournaledJudges } = await import('./journal-guard.mjs');
+const { MARKER: VOICE_MARKER } = await import('../voice-judge/prompt.mjs');
+const { MARKER: PENDING_MARKER } = await import('../pending-judge/prompt.mjs');
+const JOURNALED = await loadJournaledJudges();
 const { judgeLatency, latencyReport, main: latencyMain } = await import('./latency.mjs');
 const { digestInput, firesPath, journalPath } = await import('../hook-state/journal.mjs');
 
@@ -117,7 +120,7 @@ const fires = () => {
 /** A throw is a verdict about the module, reported as a value, never an uncaught crash. @es Un throw se informa como valor. */
 const blocksOf = (payload) => {
   try {
-    return journalJudgeBlocks(payload);
+    return journalJudgeBlocks(payload, JOURNALED);
   } catch (error) {
     return `threw ${error.message}`;
   }
@@ -168,12 +171,51 @@ check('journal: only the transcript tail is read', blocksOf(stopPayload(far, { s
 const before = fires();
 const withB = transcript([feedback(reasonB)]);
 
-check('hook: evaluate never returns a verdict', evaluate(JSON.stringify(stopPayload(withB, { session_id: 's6' }))), undefined);
+check('hook: evaluate never returns a verdict', await evaluate(JSON.stringify(stopPayload(withB, { session_id: 's6' }))), undefined);
 check('hook: a run is counted', fires(), before + 1);
 check('hook: evaluate journals through the same path', journal().some((record) => record.inputDigest === digestInput(`s6\n${reasonB}`)), true);
-check('hook: a BOM-prefixed payload is read', [evaluate(`﻿${JSON.stringify(stopPayload(withB, { session_id: 's7' }))}`), journal().some((record) => record.inputDigest === digestInput(`s7\n${reasonB}`))], [undefined, true]);
-check('hook: an unreadable payload is not counted', [evaluate('{ no json'), fires()], [undefined, before + 2]);
-check('hook: a missing transcript fails open', evaluate(JSON.stringify(stopPayload(path.join(WORK, 'missing.jsonl')))), undefined);
+check('hook: a BOM-prefixed payload is read', [await evaluate(`﻿${JSON.stringify(stopPayload(withB, { session_id: 's7' }))}`), journal().some((record) => record.inputDigest === digestInput(`s7\n${reasonB}`))], [undefined, true]);
+check('hook: an unreadable payload is not counted', [await evaluate('{ no json'), fires()], [undefined, before + 2]);
+check('hook: a missing transcript fails open', await evaluate(JSON.stringify(stopPayload(path.join(WORK, 'missing.jsonl')))), undefined);
+
+// EACH JUDGE ON ITS OWN: a broken pending prompt leaves premise and voice journaled.
+// @es CADA JUEZ POR SU CUENTA: un prompt de pendientes roto deja registrados a premise y voice.
+{
+  const brokenPending = (specifier) => (specifier.startsWith('../pending-judge/') ? Promise.reject(new SyntaxError('broken pending prompt')) : importPromptModule(specifier));
+  const noVoiceMarker = (specifier) => (specifier.startsWith('../voice-judge/') ? Promise.resolve({ MARKER: 42 }) : importPromptModule(specifier));
+  const mechanismsOf = (importModule) => loadJournaledJudges({ importModule }).then((judges) => judges.map((judge) => judge.mechanism), (error) => `threw: ${error.message}`);
+  const voiceJournal = () => {
+    try {
+      return readFileSync(journalPath('voice-judge'), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line));
+    } catch {
+      return [];
+    }
+  };
+
+  check('lazy: every judge loads, in table order, with its own marker', JOURNALED.map((judge) => [judge.mechanism, judge.marker.endsWith(':')]), [['premise-judge', true], ['voice-judge', true], ['pending-judge', true]]);
+  check('lazy: a broken pending prompt is skipped alone', await mechanismsOf(brokenPending), ['premise-judge', 'voice-judge']);
+  check('lazy: a prompt with no marker text is skipped alone', await mechanismsOf(noVoiceMarker), ['premise-judge', 'pending-judge']);
+  check('lazy: an empty marker is no marker', await mechanismsOf((specifier) => (specifier.startsWith('../voice-judge/') ? Promise.resolve({ MARKER: '' }) : importPromptModule(specifier))), ['premise-judge', 'pending-judge']);
+
+  const voiceReason = `${VOICE_MARKER} rewrite it as a mentor would`;
+  const pendingReason = `${PENDING_MARKER} "Queda pendiente el hook." is left for later`;
+  const pendingJournal = () => {
+    try {
+      return readFileSync(journalPath('pending-judge'), 'utf8').split('\n').filter((line) => line !== '').length;
+    } catch {
+      return 0;
+    }
+  };
+  const all = transcript([feedback(reasonA), feedback(voiceReason), feedback(pendingReason)]);
+  const firesBefore = fires();
+  const pendingBefore = pendingJournal();
+
+  await evaluate(JSON.stringify(stopPayload(all, { session_id: 's9' })), { importModule: brokenPending });
+  check('lazy: past a broken pending prompt the hook journals premise and voice, skips pending, and counts the run', [journal().some((record) => record.inputDigest === digestInput(`s9\n${reasonA}`)), voiceJournal().some((record) => record.inputDigest === digestInput(`s9\n${voiceReason}`)), pendingJournal() - pendingBefore, fires()], [true, true, 0, firesBefore + 1]);
+  await evaluate(JSON.stringify(stopPayload(all, { session_id: 's10' })));
+  check('lazy: with every prompt loading, the pending block is journaled too', pendingJournal() - pendingBefore, 1);
+  check('lazy: the journal guard imports no other judge\'s prompt when it loads', readFileSync(path.join(HERE, 'journal-guard.mjs'), 'utf8').split('\n').filter((line) => line.startsWith('import ') && line.includes('-judge/')), []);
+}
 
 const alone = spawnSync(process.execPath, [path.join(HERE, 'journal-guard.mjs')], { input: JSON.stringify(stopPayload(withB, { session_id: 's8' })), encoding: 'utf8', env: { ...process.env, HOOK_STATE_DIR: STATE } });
 
