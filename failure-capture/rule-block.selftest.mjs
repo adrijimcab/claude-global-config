@@ -96,9 +96,51 @@ function memory(initial) {
     io: {
       writeFrom: (text) => { state.from = text; state.writes.push('from'); },
       writeTo: (text) => { state.to = text; state.writes.push('to'); },
-      readBack: () => ({ from: state.from, to: state.to })
+      readBack: () => ({ from: state.from, to: state.to }),
+      snapshot: () => ({ from: state.from, to: state.to }),
+      restore: (saved) => { state.from = saved.from; state.to = saved.to; state.writes.push('restore'); }
     }
   };
+}
+
+/** What `commitBlockRoute` threw, or `undefined`. @es Lo que lanzó `commitBlockRoute`, o `undefined`. */
+const thrownBy = (input) => {
+  try {
+    commitBlockRoute(input);
+  } catch (error) {
+    return error;
+  }
+
+  return undefined;
+};
+
+{
+  // The SECOND write throws after the first one landed: one transaction, so both files go back and the failure is
+  // rethrown in both languages.
+  // @es La SEGUNDA escritura lanza tras aterrizar la primera: una transacción, así que ambos ficheros vuelven y el
+  // fallo se relanza en los dos idiomas.
+  const world = memory(before);
+  const thrown = thrownBy({ before, plan, io: { ...world.io, writeFrom: () => { world.state.writes.push('from'); throw new Error('disk full'); } } });
+
+  check('a block write that throws after the first one is rethrown, in both languages, naming the cause', thrown instanceof Error && thrown.message.includes('route FAILED while writing (disk full)') && thrown.message.includes('route FALLÓ al escribir (disk full)'), String(thrown));
+  check('...and BOTH files are restored: a destination that did not exist back to NOT existing', world.state.from === SOURCE && world.state.to === undefined && world.state.writes.join() === 'to,from,restore', JSON.stringify(world.state));
+}
+
+{
+  const world = memory(before);
+  const thrown = thrownBy({ before, plan, io: { ...world.io, writeFrom: () => { throw new Error('disk full'); }, restore: () => { throw new Error('still full'); } } });
+
+  check('a block restore that fails too is named in the rethrown error, in both languages', thrown instanceof Error && thrown.message.includes('restoring the files failed too (still full)') && thrown.message.includes('restaurar los ficheros también falló (still full)'), String(thrown));
+}
+
+{
+  // A proof that fails after the write, whose restore then throws, is rethrown in both languages too.
+  // @es Una prueba que falla tras la escritura, cuya restauración lanza, también se relanza en los dos idiomas.
+  const world = memory(before);
+  let lied = false;
+  const thrown = thrownBy({ before, plan, io: { ...world.io, writeTo: (text) => { world.state.to = lied ? text : text.replace('first sentence', 'first sentences'); lied = true; }, restore: () => { throw new Error('still full'); } } });
+
+  check('a failed block proof whose restore throws is rethrown, in both languages, with the restore cause', thrown instanceof Error && thrown.message.includes('was not proved') && thrown.message.includes('no se probó') && thrown.message.includes('still full'), String(thrown));
 }
 
 {

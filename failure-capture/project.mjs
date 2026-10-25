@@ -38,6 +38,7 @@ import path from 'node:path';
 
 import { realpathOf, sameFolder } from '../agent-contract-parity/real-path.mjs';
 import { userHomes } from '../agent-contract-parity/user-home.mjs';
+import { isAreaLedgerText } from './area-ledger-header.mjs';
 import { areaProblems, normalizedAreas } from './project-areas.mjs';
 
 export const PROJECT_MARKER = path.join('.claude', 'CLAUDE.md');
@@ -60,15 +61,19 @@ const ENTRY_PREFIX = '- [';
 
 /**
  * The defects of a declaration that stopped declaring an area whose ledger still holds lessons: every
- * `.claude/rules/lessons-<area>.md` of the project whose area is not in `areas` and that holds a lesson line. Such a
- * file is no ledger of the project any more, so its lessons would be hidden from every capture (a recurrence would
- * be written a second time) and a spooled capture of that area would have nowhere to go.
+ * `.claude/rules/lessons-<area>.md` of the project whose area is not in `areas`, that begins with the header
+ * capture.mjs writes for that area (`area-ledger-header.mjs`; a hand-written rules file of the same name is not an area
+ * ledger) and that holds a lesson line. Such a file is no ledger of the project any more, so its lessons would be
+ * hidden from every capture (a recurrence would be written a second time) and a spooled capture of that area would
+ * have nowhere to go. `scope` is the project's, named in the command that moves a lesson back.
  * @es Los defectos de una declaración que dejó de declarar un área cuyo ledger aún tiene lecciones: cada
- * `.claude/rules/lessons-<área>.md` del proyecto cuya área no está en `areas` y que tiene una línea de lección. Ese
- * fichero ya no es un ledger del proyecto, así que sus lecciones quedarían ocultas a toda captura (una recurrencia se
- * escribiría dos veces) y una captura en el spool de esa área no tendría adónde ir.
+ * `.claude/rules/lessons-<área>.md` del proyecto cuya área no está en `areas`, que empieza con el encabezado que
+ * capture.mjs escribe para esa área (un fichero de reglas escrito a mano con el mismo nombre no es ledger de área) y
+ * que tiene una línea de lección. Ese fichero ya no es un ledger del proyecto, así que sus lecciones quedarían ocultas
+ * a toda captura y una captura en el spool de esa área no tendría adónde ir. `scope` es el del proyecto, nombrado en
+ * el comando que devuelve una lección.
  */
-function strandedAreaProblems(root, areas) {
+function strandedAreaProblems(root, areas, scope) {
   const directory = path.join(root, '.claude', 'rules');
   let names;
 
@@ -82,9 +87,11 @@ function strandedAreaProblems(root, areas) {
     .filter((name) => name.startsWith(AREA_FILE_PREFIX) && name.endsWith(AREA_FILE_SUFFIX))
     .map((name) => ({ name, area: name.slice(AREA_FILE_PREFIX.length, -AREA_FILE_SUFFIX.length) }))
     .filter(({ area }) => !Object.hasOwn(areas ?? {}, area))
-    .map(({ name, area }) => ({ name, area, count: readFileSync(path.join(directory, name), 'utf8').split('\n').filter((line) => line.startsWith(ENTRY_PREFIX)).length }))
+    .map(({ name, area }) => ({ name, area, text: readFileSync(path.join(directory, name), 'utf8') }))
+    .filter(({ area, text }) => isAreaLedgerText(area, text))
+    .map(({ name, area, text }) => ({ name, area, count: text.split('\n').filter((line) => line.startsWith(ENTRY_PREFIX)).length }))
     .filter(({ count }) => count > 0)
-    .map(({ name, area, count }) => `the area "${area}" is no longer declared, but .claude/rules/${name} still holds ${String(count)} lesson(s) that no capture would see any more; route its lessons out of that file before dropping or renaming the area (no route command moves a lesson out of a project area yet), or keep declaring it. @es el área "${area}" ya no está declarada, pero .claude/rules/${name} aún tiene ${String(count)} lección(es) que ninguna captura vería; enruta sus lecciones fuera de ese fichero antes de quitar o renombrar el área (ningún comando route mueve todavía una lección fuera de un área de proyecto), o sigue declarándola`);
+    .map(({ name, area, count }) => `the area "${area}" is no longer declared, but .claude/rules/${name} still holds ${String(count)} lesson(s) that no capture would see any more; declare it again and move each lesson back to the project ledger with "capture.mjs route --key <key> --to ${scope} --write" before dropping or renaming it. @es el área "${area}" ya no está declarada, pero .claude/rules/${name} aún tiene ${String(count)} lección(es) que ninguna captura vería; vuelve a declararla y devuelve cada lección al ledger del proyecto con "capture.mjs route --key <clave> --to ${scope} --write" antes de quitarla o renombrarla`);
 }
 
 function git(directory, ...args) {
@@ -133,7 +140,17 @@ export function projectRootOf(directory, homes = userHomes()) {
 export function readProjectConfig(root) {
   const file = path.join(root, CONFIG_FILE);
 
-  if (!existsSync(file)) return {};
+  // A config that is gone declares no area, so the area ledgers that still hold lessons are stranded exactly as when
+  // the config drops them.
+  // @es Una config que ya no está no declara ningún área, así que los ledgers de área que aún tienen lecciones quedan
+  // varados exactamente igual que cuando la config los quita.
+  if (!existsSync(file)) {
+    const stranded = strandedAreaProblems(root, undefined, path.basename(root));
+
+    if (stranded.length > 0) throw new Error(`${file} is absent: ${stranded.join('; ')}`);
+
+    return {};
+  }
 
   const config = JSON.parse(readFileSync(file, 'utf8'));
 
@@ -147,7 +164,7 @@ export function readProjectConfig(root) {
     ...(config.workerContracts === undefined || (Array.isArray(config.workerContracts) && config.workerContracts.length > 0 && config.workerContracts.every((entry) => typeof entry === 'string')) ? [] : ['"workerContracts" must be a non-empty list of relative paths']),
     ...(config.loadedSetCeiling === undefined || (Number.isInteger(config.loadedSetCeiling) && config.loadedSetCeiling > 0) ? [] : ['"loadedSetCeiling" must be a positive integer (characters). @es "loadedSetCeiling" debe ser un entero positivo (caracteres)']),
     ...declared,
-    ...(declared.length === 0 ? strandedAreaProblems(root, config.areas) : [])
+    ...(declared.length === 0 ? strandedAreaProblems(root, config.areas, typeof config.scope === 'string' ? config.scope : path.basename(root)) : [])
   ];
 
   if (problems.length > 0) throw new Error(`${file} is invalid: ${problems.join('; ')}`);

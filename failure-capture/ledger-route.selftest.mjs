@@ -9,7 +9,7 @@
  * escritura MIENTE (un fichero que vuelve distinto de lo escrito).
  */
 
-import { commitHeaderRoute as rawCommitHeaderRoute, commitRoute as rawCommitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute as rawPlanStubRoute, provesHeaderRoute, provesRoute as rawProvesRoute, routeOutcome } from './ledger-route.mjs';
+import { commitHeaderRoute as rawCommitHeaderRoute, commitHeaderRoutes as rawCommitHeaderRoutes, commitRoute as rawCommitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute as rawPlanStubRoute, provesHeaderRoute, provesRoute as rawProvesRoute, routeOutcome } from './ledger-route.mjs';
 
 const HEADER = '# Stubs\n\n---\n';
 const stub = (key, count = 2) => `- [promoted] 2026-09-30 — ${key}: no mechanism <!--fc:${key}#${String(count)}-->`;
@@ -32,6 +32,7 @@ const planStubRoute = (input) => answered(() => rawPlanStubRoute(input));
 const provesRoute = (input) => answered(() => rawProvesRoute(input));
 const commitRoute = (input) => answered(() => rawCommitRoute(input));
 const commitHeaderRoute = (input) => answered(() => rawCommitHeaderRoute(input));
+const commitHeaderRoutes = (input) => answered(() => rawCommitHeaderRoutes(input));
 
 const SOURCE = ['# Ledger', '', '---', lesson('keep-one'), stub('first-key', 14), lesson('keep-two'), stub('second-key'), ''];
 
@@ -94,17 +95,19 @@ check('a stub left in the source AND written to the destination is a duplicate, 
 // --- the commit, with writes that tell the truth and writes that lie
 function memory(initial) {
   const state = { source: initial.source, destination: initial.destination, writes: [] };
-
-  return {
+  const world = {
     state,
+    snapshots: 0,
     io: {
       writeSource: (next) => { state.source = next; state.writes.push('source'); },
       writeDestination: (next) => { state.destination = next; state.writes.push('destination'); },
       readBack: () => ({ source: state.source, destination: state.destination }),
-      snapshot: () => ({ source: state.source, destination: state.destination }),
+      snapshot: () => { world.snapshots += 1; return { source: state.source, destination: state.destination }; },
       restore: (saved) => { state.source = saved.source; state.destination = saved.destination; state.writes.push('restore'); }
     }
   };
+
+  return world;
 }
 
 {
@@ -159,7 +162,22 @@ function memory(initial) {
   const proof = commitRoute({ before, plan: planned, io: world.io });
 
   check('commit with honest writes: proved, both written, destination first', proof.ok && world.state.writes.join() === 'destination,source', JSON.stringify(world.state.writes));
+  check('...and the bytes were kept exactly once, before the first write', world.snapshots === 1, String(world.snapshots));
   check('...and the files are the planned ones', world.state.source?.join('\n') === planned.source?.join('\n') && world.state.destination?.join('\n') === planned.destination?.join('\n'));
+}
+
+{
+  const world = memory(before);
+  const liar = { ...world.io, writeDestination: (next) => { world.state.destination = next.filter((line) => !line.includes('second-key')); world.state.writes.push('destination'); }, restore: () => { throw new Error('still full'); } };
+  let thrown;
+
+  try {
+    rawCommitRoute({ before, plan: planned, io: liar });
+  } catch (error) {
+    thrown = error;
+  }
+
+  check('a failed proof whose restore throws is rethrown in both languages, naming the restore cause and the deficits', thrown instanceof Error && thrown.message.includes('was not proved') && thrown.message.includes('no se probó') && thrown.message.includes('still full') && thrown.message.includes('second-key'), String(thrown));
 }
 
 {
@@ -275,6 +293,30 @@ for (const [name, plan] of [
   }
 
   check('...and the command reports a refused header plan as a refused plan', routeOutcome({ proof: commitHeaderRoute({ before: old, plan: { ...plan, lines: plan.lines.filter((line) => !line.includes('second-key')) }, header: declared, io: { write: () => {}, readBack: () => old } }), count: 1 }).complain === 'route.planUnproven');
+
+  // A ledger that holds NO lesson has no text between lessons: its header is refreshed like any other.
+  // @es Un ledger SIN lecciones no tiene texto entre lecciones: su encabezado se refresca como cualquier otro.
+  const bare = ['# Lessons Ledger — global', '', '---', ''];
+  const fresh = planHeaderRoute({ lines: bare, header: declared });
+
+  check('a ledger with no lesson gets the declared header, proved', fresh.changed && provesHeaderRoute({ before: bare, after: fresh.lines, header: declared }).ok, JSON.stringify(provesHeaderRoute({ before: bare, after: fresh.lines, header: declared })));
+  check('...while a lesson that appears in a ledger that had none is still caught', !provesHeaderRoute({ before: bare, after: [...fresh.lines, lesson('new-key')], header: declared }).ok);
+  check('...and a lesson lost from a ledger that keeps none is still caught', !provesHeaderRoute({ before: old, after: declared.split('\n'), header: declared }).ok);
+
+  // Every ledger is refreshed and reported on its own: one that fails does not stop the ones after it.
+  // @es Cada ledger se refresca y se informa por su cuenta: uno que falla no detiene a los siguientes.
+  let first = old;
+  let second = bare;
+  let liedOnce = false;
+  const items = [
+    { name: 'first.md', before: old, plan, header: declared, io: { write: (lines) => { first = liedOnce ? lines : lines.filter((line) => !line.includes('first-key')); liedOnce = true; }, readBack: () => first } },
+    { name: 'second.md', before: bare, plan: fresh, header: declared, io: { write: (lines) => { second = lines; }, readBack: () => second } },
+  ];
+  const all = commitHeaderRoutes(items);
+
+  check('a failing header route does not stop the next: the second ledger is still refreshed', second.join('\n') === fresh.lines.join('\n') && first.join('\n') === old.join('\n'), JSON.stringify([first, second]));
+  check('...and the outcome names each ledger: the failed one with its deficit, the refreshed one as done', !all.ok && all.deficits.some((deficit) => deficit.startsWith('first.md: ') && deficit.includes(' @es ')) && all.refreshed?.join() === 'second.md', JSON.stringify(all));
+  check('...a set of header routes that all pass is ok', commitHeaderRoutes([{ ...items[1], before: second, plan: planHeaderRoute({ lines: second, header: declared }) }]).ok);
 }
 
 // --- moving a lesson of a PROJECT into an area of the SAME project
@@ -304,6 +346,41 @@ for (const [name, plan] of [
 
 check('a refusal into a project area says it is a PROJECT area, and into a home area a HOME area', toProjectArea(locateLesson([GLOBAL_LEDGER], 'go-key')).problems?.[0].includes('project area "ui-testing"') === true && toProjectArea(locateLesson([GLOBAL_LEDGER], 'go-key')).problems?.[0].includes('proyecto "ui-testing"') === true && at('stub-key').problems?.[0].includes('home area "guards"') === true, JSON.stringify([toProjectArea(locateLesson([GLOBAL_LEDGER], 'go-key')), at('stub-key')]));
 check('a refusal names the project areas among the areas', toProjectArea(locateLesson([PROJECT_LEDGER], 'go-key'), 'their-area').problems?.[0].includes('ui-testing') === true, JSON.stringify(toProjectArea(locateLesson([PROJECT_LEDGER], 'go-key'), 'their-area')));
+
+// --- moving a lesson of a project area BACK to the project ledger
+const areaLesson = (key) => projectLesson(key).replace('- [demo]', '- [ui-testing]');
+const AREA_LEDGER = { scope: 'ui-testing', lines: ['---', 'paths:', '  - "a"', '---', '# Area', '---', areaLesson('stay-key'), areaLesson('back-key'), ''] };
+const back = (found, project = PROJECT, key = 'back-key') => planLessonRoute({ found, area: 'demo', key, destination: PROJECT_LEDGER.lines, header: '# Project ledger\n---\n', project });
+
+{
+  const plan = back(locateLesson([PROJECT_LEDGER, AREA_LEDGER], 'back-key'));
+
+  check('a lesson of a project area moves BACK to the project ledger, retagged with the project scope, only its tag changed', plan.ok && plan.moved[0]?.line === projectLesson('back-key'), JSON.stringify(plan));
+  check('...the area ledger loses exactly that line, in order', plan.source?.join('\n') === AREA_LEDGER.lines.filter((line) => !line.includes('back-key')).join('\n'), plan.source?.join('\n'));
+  check('...the project ledger keeps what it had and gains the line', plan.destination?.join('\n') === [...PROJECT_LEDGER.lines.slice(0, -1), projectLesson('back-key'), ''].join('\n'), plan.destination?.join('\n'));
+  check('...and the move is proved by the no-loss proof, its retag declared', provesRoute({ before: { source: AREA_LEDGER.lines, destination: PROJECT_LEDGER.lines }, after: { source: plan.source, destination: plan.destination }, renamed: plan.renamed }).ok);
+
+  // The last lesson of a source that leaves after a blank line leaves two blank lines, which the ledger writer
+  // collapses to one: that collapse is not a change of the source's text, while any other blank line is.
+  // @es La última lección de un origen que sale tras una línea en blanco deja dos líneas en blanco, que el escritor del
+  // ledger colapsa a una: ese colapso no es un cambio del texto del origen, y cualquier otra línea en blanco sí lo es.
+  const lastOut = { source: ['# Area', '---', '', areaLesson('only-key'), ''], destination: PROJECT_LEDGER.lines };
+  const onlyPlan = back(locateLesson([{ scope: 'ui-testing', lines: lastOut.source }], 'only-key'), PROJECT, 'only-key');
+  const collapsed = onlyPlan.source?.slice(0, -1);
+
+  check('a source whose trailing blank lines were collapsed by the writer is still proved', provesRoute({ before: lastOut, after: { source: collapsed ?? [], destination: onlyPlan.destination }, renamed: onlyPlan.renamed }).ok, JSON.stringify(collapsed));
+  check('...while a blank line moved anywhere but the end is caught', !provesRoute({ before: lastOut, after: { source: ['# Area', '', '---', ''], destination: onlyPlan.destination }, renamed: onlyPlan.renamed }).ok);
+}
+
+for (const [name, plan] of [
+  ['a lesson of a HOME area into the project ledger', back(locateLesson([{ scope: 'guards', lines: [lesson('back-key').replace('- [global]', '- [guards]')] }], 'back-key'))],
+  ['a [global] lesson of the home into the project ledger', back(locateLesson([GLOBAL_LEDGER], 'go-key'), PROJECT, 'go-key')],
+  ['a line of the project area tagged for another scope', back(locateLesson([{ scope: 'ui-testing', lines: [projectLesson('back-key').replace('- [demo]', '- [other]')] }], 'back-key'))],
+  ['a key the project ledger already holds', back(locateLesson([AREA_LEDGER], 'stay-key'), PROJECT, 'stay-key')],
+  ['the project ledger when the command runs in no project', back(locateLesson([AREA_LEDGER], 'back-key'), null)],
+]) check(`planLessonRoute REFUSES ${name} (back to the project), bilingual`, !plan.ok && plan.problems.every((problem) => problem.includes(' @es ')), JSON.stringify(plan));
+
+check('a lesson already in the project ledger is nothing to move back', back(locateLesson([PROJECT_LEDGER], 'stay-key'), PROJECT, 'stay-key').moved?.length === 0);
 
 // --- the NO-LOSS proof is taken BEFORE the first write
 {

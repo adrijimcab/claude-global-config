@@ -25,6 +25,7 @@ export const CAPTURE_MESSAGES = {
   'capture.problem.lessonRule': { en: '--lesson must state the rule explicitly and contain the word RULE (ledger format: what went wrong -> root cause -> RULE)', es: '--lesson debe enunciar la regla y contener la palabra RULE (formato del ledger: qué falló -> causa raíz -> RULE)' },
   'capture.deferred': { en: 'RECORDED (spooled) — the ledger is locked by another writer; {count} entr(y/ies) will fold on the next capture. Nothing is lost.', es: 'REGISTRADA (en spool): el ledger está bloqueado por otro escritor; {count} entrada(s) se plegará(n) en la próxima captura. No se pierde nada.' },
   'capture.spooled': { en: 'RECORDED (spooled) — not folded in this pass; it will fold on the next capture.', es: 'REGISTRADA (en spool): no se plegó en esta pasada; se plegará en la próxima captura.' },
+  'capture.left': { en: 'NOTE — {count} spooled capture(s) could not be folded and stay in the spool (key: why):', es: 'NOTA: {count} captura(s) del spool no se pudieron plegar y se quedan en el spool (clave: por qué):' },
   'capture.new': {
     en: ['RECORDED in the lessons ledger as a NEW lesson: {key} (1x).', 'It stays an INCIDENT. If it happens again the loop will demand promotion AND a mechanism (or a written reason none is possible).'],
     es: ['REGISTRADA en el ledger de lecciones como lección NUEVA: {key} (1x).', 'Sigue siendo un INCIDENTE. Si vuelve a ocurrir el bucle exigirá promoción Y un mecanismo (o un motivo escrito de por qué no cabe ninguno).']
@@ -61,6 +62,7 @@ export const CAPTURE_MESSAGES = {
   'route.done': { en: 'route DONE: {count} item(s) changed; the files were re-read and no line was lost or invented.', es: 'route HECHO: {count} elemento(s) cambiado(s); se releyeron los ficheros y no se perdió ni se inventó ninguna línea.' },
   'route.proofFailed': { en: 'route FAILED — the re-read files do not prove the move lost nothing, so both were RESTORED as they were:', es: 'route FALLÓ: los ficheros releídos no prueban que el movimiento no perdió nada, así que ambos se RESTAURARON como estaban:' },
   'route.planUnproven': { en: 'route REFUSED — the plan would lose, duplicate or reword a lesson line or a rule block, so NOTHING was written:', es: 'route RECHAZADO: el plan perdería, duplicaría o reescribiría una línea de lección o un bloque de regla, así que NO se escribió NADA:' },
+  'route.refreshed': { en: 'route: {file} was refreshed and proved.', es: 'route: {file} se refrescó y se probó.' },
   'route.locked': { en: 'route REFUSED — the ledger is locked by another writer; re-run in a moment. Nothing was changed.', es: 'route RECHAZADO: el ledger está bloqueado por otro escritor; reintenta en un momento. No se cambió nada.' },
   'project.configUnreadable': { en: '{command} REFUSED — the project configuration cannot be read: {defect}. Nothing was changed.', es: '{command} RECHAZADO: no se puede leer la configuración del proyecto: {defect}. No se cambió nada.' },
 
@@ -82,6 +84,7 @@ export const CAPTURE_MESSAGES = {
       '  route     --key <key> --to <area> [--write]   move a lesson (or, once promoted, the text of its rule) to an area: a rules file the harness loads only when its paths are read',
       '            an area is a home area (for a [global] lesson) or one this project declares as "areas": { "<name>": { "about": "...", "paths": ["<glob>"] } } in .claude/failure-capture.json',
       '            (for a lesson of this same project, moved to .claude/rules/lessons-<name>.md); a lesson never crosses projects, and every write is refused unless no lesson line is lost, duplicated or reworded',
+      "  route     --key <key> --to <this project's scope> [--write]   move a lesson of a project area back to the project ledger (how an area is retired before it is dropped)",
       '  budget   [--project <dir>]            measure the always-loaded instruction set against its ceiling (exit 0 within, 1 over, 2 not measured)',
       '  status   counts, ledger token cost, and which lessons are due for promotion',
       "  Exit 2 when the project's .claude/failure-capture.json is invalid (only the commands that read the project fail)."
@@ -103,6 +106,7 @@ export const CAPTURE_MESSAGES = {
       '  route: --key <clave> --to <área> [--write] mueve una lección (o, ya promovida, el texto de su regla) a un área: un fichero de reglas que el harness carga solo cuando se leen sus rutas',
       '         un área es del home (para una lección [global]) o una que este proyecto declara como "areas": { "<nombre>": { "about": "...", "paths": ["<glob>"] } } en .claude/failure-capture.json',
       '         (para una lección de este mismo proyecto, movida a .claude/rules/lessons-<nombre>.md); una lección nunca cruza proyectos, y toda escritura se rechaza salvo que no se pierda, duplique ni reescriba ninguna línea de lección',
+      '  route: --key <clave> --to <alcance de este proyecto> [--write] devuelve una lección de un área del proyecto al ledger del proyecto (así se retira un área antes de quitarla)',
       '  budget: [--project <dir>] mide el conjunto de instrucciones siempre cargado frente a su techo (salida 0 dentro, 1 sobre el techo, 2 no medido)',
       '  status: recuentos, coste en tokens del ledger y qué lecciones tocan promoción',
       '  Salida 2 si el .claude/failure-capture.json del proyecto es inválido (solo fallan los comandos que leen el proyecto).'

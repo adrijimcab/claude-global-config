@@ -32,6 +32,9 @@ import { GLOBAL_LOADER, HEADER, PROJECT_LOADER, ledgerFiles } from './ledgers.mj
 import { areaProblems } from './project-areas.mjs';
 import { areasOfLedger, projectAreaFile, projectOf } from './project.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one.
 // @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca el vivo.
@@ -260,7 +263,77 @@ check('...a path-scoped glob that starts with "**" is still valid', areaProblems
   const world = worldOf('dropped-with-lessons', { config: { scope: 'demo', areas: {} }, files: { 'repo/.claude/lessons-ledger.md': projectHead('demo'), [`repo/.claude/rules/lessons-${AREA}.md`]: `${areaLedgerHeader(AREA, AREAS[AREA])}\n${lessonLine(AREA, KEY, 2)}` } });
   const refused = world.run(['status']);
 
-  check('a declaration that drops an area whose file still holds lessons is refused (exit 2), bilingual, naming the file and saying to route them out first', refused.status === 2 && refused.out.includes(`lessons-${AREA}.md`) && refused.out.includes('route its lessons out') && refused.out.includes('enruta sus lecciones fuera'), refused.out);
+  check('a declaration that drops an area whose file still holds lessons is refused (exit 2), bilingual, naming the file and the command that routes them out first', refused.status === 2 && refused.out.includes(`lessons-${AREA}.md`) && refused.out.includes('capture.mjs route --key <key> --to demo --write') && refused.out.includes('devuelve cada lección'), refused.out);
+}
+
+{
+  // The same holds with no "areas" key at all, and with no config file at all: the area ledger is recognised by the
+  // header capture.mjs wrote, wherever the declaration went.
+  // @es Lo mismo sin clave "areas", y sin fichero de config: el ledger de área se reconoce por el encabezado que
+  // escribió capture.mjs, se haya ido adonde se haya ido la declaración.
+  const owned = { 'repo/.claude/lessons-ledger.md': projectHead('demo'), [`repo/.claude/rules/lessons-${AREA}.md`]: `${areaLedgerHeader(AREA, AREAS[AREA])}\n${lessonLine(AREA, KEY, 2)}` };
+  const noKey = worldOf('dropped-no-areas-key', { config: { scope: 'demo' }, files: owned });
+  const noFile = worldOf('dropped-no-config-file', { files: owned });
+
+  rmSync(path.join(noFile.repo, '.claude', 'failure-capture.json'));
+
+  const withoutKey = noKey.run(['status']);
+  const withoutFile = noFile.run(['status']);
+
+  check('a config with no "areas" key while an area ledger still holds lessons is refused (exit 2), naming the file', withoutKey.status === 2 && withoutKey.out.includes(`lessons-${AREA}.md`), withoutKey.out);
+  check('a DELETED config while an area ledger still holds lessons is refused too (exit 2), naming the file, bilingual', withoutFile.status === 2 && withoutFile.out.includes(`lessons-${AREA}.md`) && withoutFile.out.includes('devuelve cada lección'), withoutFile.out);
+}
+
+{
+  // Hand-written rules files named lessons-*.md, a list of links and a task list, are not area ledgers: capture.mjs
+  // did not write them, so they never make a declaration invalid, with or without a config.
+  // @es Ficheros de reglas escritos a mano llamados lessons-*.md, una lista de enlaces y una lista de tareas, no son
+  // ledgers de área: no los escribió capture.mjs, así que nunca invalidan una declaración, con config o sin ella.
+  const handWritten = { 'repo/.claude/lessons-ledger.md': projectHead('demo'), 'repo/.claude/rules/lessons-links.md': '# Lessons we keep\n\n- [Angular docs](https://angular.dev)\n- [RxJS](https://rxjs.dev)\n', 'repo/.claude/rules/lessons-tasks.md': '# Open lessons\n\n- [ ] write the guard\n- [x] measure it\n' };
+  const declared = worldOf('hand-written-declared', { files: handWritten });
+  const undeclared = worldOf('hand-written-no-areas', { config: { scope: 'demo' }, files: handWritten });
+  const noConfig = worldOf('hand-written-no-config', { files: handWritten });
+
+  rmSync(path.join(noConfig.repo, '.claude', 'failure-capture.json'));
+
+  const statuses = [declared.run(['status']), undeclared.run(['status']), noConfig.run(['status'])];
+
+  check('hand-written lessons-*.md files with links and with tasks are accepted, with areas, without the key and without a config', statuses.every((one) => one.status === 0), statuses.map((one) => one.out).join('\n---\n'));
+}
+
+{
+  // A lesson of a project area moves BACK to the project ledger, which is how an area is retired.
+  // @es Una lección de un área de proyecto VUELVE al ledger del proyecto, que es como se retira un área.
+  const keep = lessonLine('demo', OTHER, 1);
+  const inArea = lessonLine(AREA, KEY, 3);
+  const world = worldOf('route-back', { files: { 'repo/.claude/lessons-ledger.md': `${projectHead('demo')}${keep}`, [`repo/.claude/rules/lessons-${AREA}.md`]: `${areaLedgerHeader(AREA, AREAS[AREA])}\n${inArea}` } });
+  const moved = world.run(['route', '--key', KEY, '--to', 'demo', '--write']);
+
+  check('route --key K --to <project scope> moves a project area lesson back to the project ledger, retagged and otherwise byte for byte', moved.status === 0 && holdsWholeLine(readOrEmpty(projectLedger(world)), inArea.trimEnd().replace(`- [${AREA}]`, '- [demo]')) && holdsWholeLine(readOrEmpty(projectLedger(world)), keep.trimEnd()), `${moved.out}\n${readOrEmpty(projectLedger(world))}`);
+  check('...the area ledger keeps its header and loses only that lesson', readOrEmpty(areaFile(world)) === areaLedgerHeader(AREA, AREAS[AREA]), readOrEmpty(areaFile(world)));
+
+  writeFileSync(path.join(world.repo, '.claude', 'failure-capture.json'), JSON.stringify({ scope: 'demo', areas: {} }), 'utf8');
+
+  check('...and once the area holds no lesson, it can be dropped from the declaration', world.run(['status']).status === 0);
+}
+
+{
+  // The second write of a lesson route lands and then fails (`write-fault.preload.cjs`): both files get back their
+  // exact bytes (the doubled blank line at the end included), and a file the route created is removed again.
+  // @es La segunda escritura de una ruta de lección aterriza y luego falla: ambos ficheros recuperan sus bytes exactos
+  // (incluida la línea en blanco doble del final), y un fichero que la ruta creó se borra otra vez.
+  const ledgerText = `${projectHead('demo')}${lessonLine('demo', OTHER, 1)}${lessonLine('demo', KEY, 2)}\n\n`;
+  const world = worldOf('route-fault', { files: { 'repo/.claude/lessons-ledger.md': ledgerText } });
+  const failed = world.run(['route', '--key', KEY, '--to', AREA, '--write'], { nodeArgs: ['--require', path.join(HERE, 'write-fault.preload.cjs')], env: { FC_FAULT_RENAME_MATCH: path.join('repo', '.claude', 'lessons-ledger.md') } });
+
+  check('a lesson route whose second write fails exits non-zero and says so in both languages, naming the cause', failed.status !== 0 && failed.out.includes('injected write fault') && failed.out.includes('route FAILED while writing') && failed.out.includes('route FALLÓ al escribir'), failed.out);
+  check('...the project ledger gets back its EXACT bytes and the area file the route created is gone', readOrEmpty(projectLedger(world)) === ledgerText && !existsSync(areaFile(world)), JSON.stringify([readOrEmpty(projectLedger(world)), existsSync(areaFile(world))]));
+
+  const existing = `${areaLedgerHeader(AREA, AREAS[AREA])}\n${lessonLine(AREA, OTHER.replace('stays', 'there'), 1)}\n\n`;
+  const second = worldOf('route-fault-existing', { files: { 'repo/.claude/lessons-ledger.md': ledgerText, [`repo/.claude/rules/lessons-${AREA}.md`]: existing } });
+  const refused = second.run(['route', '--key', KEY, '--to', AREA, '--write'], { nodeArgs: ['--require', path.join(HERE, 'write-fault.preload.cjs')], env: { FC_FAULT_RENAME_MATCH: path.join('repo', '.claude', 'lessons-ledger.md') } });
+
+  check('...and an area file that existed gets back its exact bytes too', refused.status !== 0 && readOrEmpty(areaFile(second)) === existing && readOrEmpty(projectLedger(second)) === ledgerText, JSON.stringify([readOrEmpty(areaFile(second)), readOrEmpty(projectLedger(second))]));
 }
 
 {
@@ -305,6 +378,7 @@ check('...a path-scoped glob that starts with "**" is still valid', areaProblems
 
   check('a spooled entry whose area was dropped does not wedge the spool: the next captures succeed and are written', first.status === 0 && second.status === 0 && readOrEmpty(projectLedger(world)).includes('<!--fc:first-after-drop-key#1-->') && readOrEmpty(projectLedger(world)).includes('<!--fc:second-after-drop-key#1-->'), `${first.out}\n${second.out}`);
   check('...the entry is left in the spool, written nowhere, with the reason it was deferred recorded in it, bilingual', left.key === 'spooled-dropped-key' && typeof left.deferred?.reason === 'string' && left.deferred.reason.includes(AREA) && left.deferred.reason.includes(' @es ') && typeof left.deferred.at === 'string' && !readOrEmpty(projectLedger(world)).includes('spooled-dropped-key'), JSON.stringify(left));
+  check('...and every capture that leaves it says so: how many, which key and why, in both languages', [first, second].every((one) => one.out.includes('1 spooled capture(s) could not be folded') && one.out.includes('1 captura(s) del spool no se pudieron plegar') && one.out.includes(`spooled-dropped-key: no ledger holds the scope "${AREA}"`)), `${first.out}\n${second.out}`);
 
   // Declared again, the scope has its ledger back: the entry folds into it, and the deferral record is not part of the capture.
   // @es Declarado de nuevo, el alcance recupera su ledger: la entrada se pliega en él, y la anotación de diferimiento no es parte de la captura.
@@ -313,7 +387,7 @@ check('...a path-scoped glob that starts with "**" is still valid', areaProblems
   const third = world.run(['capture', '--key', 'third-after-drop-key', '--scope', 'demo', '--actor', 'orchestrator', '--lesson', lessonFor('third-after-drop-key')]);
   const folded = readOrEmpty(world.incidents).split('\n').filter((line) => line.includes('spooled-dropped-key'));
 
-  check('...once the area is declared again the deferred entry folds into its ledger and leaves the spool, and its incident carries no deferral record', third.status === 0 && readOrEmpty(areaFile(world)).includes('<!--fc:spooled-dropped-key#1-->') && !existsSync(spooled) && folded.length === 1 && !folded[0].includes('deferred'), `${third.out}\n${readOrEmpty(areaFile(world))}\n${folded.join('\n')}`);
+  check('...once the area is declared again the deferred entry folds into its ledger and leaves the spool, and its incident carries no deferral record', third.status === 0 && readOrEmpty(areaFile(world)).includes('<!--fc:spooled-dropped-key#1-->') && !existsSync(spooled) && folded.length === 1 && !folded[0].includes('deferred') && !third.out.includes('could not be folded'), `${third.out}\n${readOrEmpty(areaFile(world))}\n${folded.join('\n')}`);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -334,6 +408,17 @@ check('...a path-scoped glob that starts with "**" is still valid', areaProblems
   const file = readOrEmpty(areaFile(world));
 
   check('route --headers --write gives the project area file its declared header (paths and about) and keeps its lesson byte for byte', done.status === 0 && file.startsWith(areaLedgerHeader(AREA, AREAS[AREA]).trimEnd()) && holdsWholeLine(file, lessonInArea.trimEnd()) && !file.includes('old/**'), `${done.out}\n${file}`);
+}
+
+{
+  // A home ledger that holds NO lesson and has an old header is refreshed too, and it does not stop the project area.
+  // @es Un ledger del home SIN lecciones y con un encabezado viejo también se refresca, y no detiene al área del proyecto.
+  const lessonInArea = lessonLine(AREA, KEY, 2);
+  const stale = `---\npaths:\n  - "old/**"\n---\n# Old area header\n\n---\n\n${lessonInArea}`;
+  const world = worldOf('headers-lessonless-home', { files: { 'repo/.claude/lessons-ledger.md': projectHead('demo'), [`repo/.claude/rules/lessons-${AREA}.md`]: stale } });
+  const done = world.run(['route', '--headers', '--write']);
+
+  check('route --headers --write refreshes a lesson-less home ledger AND the project area after it', done.status === 0 && readOrEmpty(world.ledger) === HEADER('global', GLOBAL_LOADER) && readOrEmpty(areaFile(world)).startsWith(areaLedgerHeader(AREA, AREAS[AREA]).trimEnd()) && holdsWholeLine(readOrEmpty(areaFile(world)), lessonInArea.trimEnd()), `${done.out}\n${readOrEmpty(world.ledger)}\n${readOrEmpty(areaFile(world))}`);
 }
 
 for (const [name, areas, wanted] of [

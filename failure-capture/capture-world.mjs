@@ -33,7 +33,7 @@ export const readOrEmpty = (file) => (existsSync(file) ? readFileSync(file, 'utf
 /**
  * @param scratch directory the world lives under; `name` its folder; `config` the project's
  *   `.claude/failure-capture.json`; `files` extra files, relative to the world root (`home/...`, `repo/...`).
- * @returns `{ home, repo, ledger, incidents, run }` where `run(args, { cwd })` gives `{ status, out }`.
+ * @returns `{ home, repo, ledger, incidents, run }` where `run(args, { cwd, nodeArgs, env })` gives `{ status, out }`.
  * @es `files` son ficheros extra, relativos a la raíz del mundo (`home/...`, `repo/...`).
  */
 export function makeCaptureWorld({ scratch, name, config = { scope: 'demo' }, files = {} }) {
@@ -50,8 +50,10 @@ export function makeCaptureWorld({ scratch, name, config = { scope: 'demo' }, fi
 
   writeFiles(root, { 'repo/.claude/CLAUDE.md': '# Project instructions\n', 'repo/.claude/failure-capture.json': JSON.stringify(config), 'home/.claude/rules/promoted-rules.md': '# Contract\n', ...files });
 
-  const run = (args, { cwd = repo } = {}) => {
-    const answer = spawnSync(process.execPath, [path.join(loop, 'capture.mjs'), ...args, ...(args[0] === 'capture' ? ['--ceiling', scratch] : [])], { cwd, encoding: 'utf8', env: worldEnv(home), timeout: 120_000 });
+  // `nodeArgs` go before the script (a `--require` test preload) and `env` is added to the world's own.
+  // @es `nodeArgs` van antes del script (un `--require` de prueba) y `env` se suma al del mundo.
+  const run = (args, { cwd = repo, nodeArgs = [], env = {} } = {}) => {
+    const answer = spawnSync(process.execPath, [...nodeArgs, path.join(loop, 'capture.mjs'), ...args, ...(args[0] === 'capture' ? ['--ceiling', scratch] : [])], { cwd, encoding: 'utf8', env: { ...worldEnv(home), ...env }, timeout: 120_000 });
 
     return { status: answer.status, out: `${answer.stdout}${answer.stderr}` };
   };

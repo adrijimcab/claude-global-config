@@ -128,7 +128,7 @@ export function writeLedger(ledger) {
  * @es Reemplaza `file` por `data` (texto en UTF-8, o bytes) mediante un fichero temporal a su lado renombrado encima,
  * así una escritura fallida deja el fichero anterior entero y ningún temporal detrás.
  */
-function replaceFile(file, data) {
+export function replaceFile(file, data) {
   const temp = `${file}.${String(process.pid)}.tmp`;
 
   try {

@@ -57,8 +57,8 @@ import { GLOBAL_TARGET, PROJECT_TARGET, promotionFiles, promotionTargetOf } from
 import { PROMOTE_MESSAGES } from './promote-messages.mjs';
 import { promotionParity } from './promote-parity.mjs';
 import { facesByFile, staleFiles } from './text-growth.mjs';
-import { HEADER, homeLedgerFiles, ledgerBytes, ledgerForScope, locateKey, PROJECT_LOADER, projectAreaLedgerFiles, readLedgers, restoreLedgerBytes, writeLedger } from './ledgers.mjs';
-import { commitHeaderRoute, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, routeOutcome } from './ledger-route.mjs';
+import { HEADER, homeLedgerFiles, ledgerBytes, ledgerForScope, locateKey, PROJECT_LOADER, projectAreaLedgerFiles, readLedgers, replaceFile, restoreLedgerBytes, writeLedger } from './ledgers.mjs';
+import { commitHeaderRoutes, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, routeOutcome } from './ledger-route.mjs';
 import { placeStub } from './stub-placement.mjs';
 import { PROMOTED_SCOPE, areaRulesFile, areaRulesHeader, areaScopes, isAreaScope, onDemandRulesFiles, stubScopeOf } from './ledger-routes.mjs';
 import { commitBlockRoute, findBlock, planBlockRoute } from './rule-block.mjs';
@@ -229,12 +229,14 @@ function spool(entry) {
 function deferEntry(full, entry, deferred) {
   const reason = `no ledger holds the scope "${entry.scope}" any more (the project no longer declares that area), so this capture stays in the spool until the scope is declared again. @es ningún ledger tiene ya el alcance "${entry.scope}" (el proyecto ya no declara esa área), así que esta captura se queda en el spool hasta que el alcance se declare de nuevo.`;
 
-  if (deferred?.reason === reason) return;
+  if (deferred?.reason !== reason) {
+    const temp = path.join(spoolDir(), `.${path.basename(full)}.tmp`);
 
-  const temp = path.join(spoolDir(), `.${path.basename(full)}.tmp`);
+    writeFileSync(temp, JSON.stringify({ ...entry, deferred: { reason, at: new Date().toISOString() } }), 'utf8');
+    renameSync(temp, full);
+  }
 
-  writeFileSync(temp, JSON.stringify({ ...entry, deferred: { reason, at: new Date().toISOString() } }), 'utf8');
-  renameSync(temp, full);
+  return reason;
 }
 
 /**
@@ -286,10 +288,11 @@ function reconcile() {
 
   const pending = readdirSync(spoolDir()).filter((f) => f.endsWith('.json') && !f.startsWith('.'));
 
-  if (pending.length === 0) return { folded: [], deferred: 0 };
+  if (pending.length === 0) return { folded: [], deferred: 0, left: [] };
 
   const outcome = withLock(lockFile(), () => {
     const folded = [];
+    const left = [];
     const ledgersOf = ledgerCache();
     const touched = new Set();
     const consumed = [];
@@ -326,7 +329,7 @@ function reconcile() {
       // de entrar la captura en el spool) se DIFIERE, nunca lanza: lanzar aquí haría fallar toda reconciliación
       // posterior y atascaría el spool. La entrada se queda, con el motivo anotado, hasta que su alcance se declare de nuevo.
       if (found === undefined && !ledgers.some((ledger) => ledger.scope === entry.scope)) {
-        deferEntry(full, entry, deferred);
+        left.push({ key: entry.key, reason: deferEntry(full, entry, deferred) });
         continue;
       }
 
@@ -371,10 +374,10 @@ function reconcile() {
       unlinkSync(full);
     }
 
-    return folded;
+    return { folded, left };
   });
 
-  return outcome.held ? { folded: outcome.value, deferred: 0 } : { folded: [], deferred: pending.length };
+  return outcome.held ? { folded: outcome.value.folded, deferred: 0, left: outcome.value.left } : { folded: [], deferred: pending.length, left: [] };
 }
 
 /**
@@ -465,9 +468,16 @@ function recordCapture(args) {
 
   spool({ key, scope, actor, lesson, ...(rule === undefined ? {} : { rule }), date: today(), session: session ?? 'unknown', at: new Date().toISOString(), ...(project === undefined ? {} : { project }) });
 
-  const { folded, deferred } = reconcile();
+  const { folded, deferred, left } = reconcile();
 
   stamp(session, 'capture');
+
+  // A spooled capture that could not be folded (its scope has no ledger any more) is said, never kept silent.
+  // @es Una captura del spool que no se pudo plegar (su alcance ya no tiene ledger) se dice, nunca se calla.
+  if (left.length > 0) {
+    speaker.say('capture.left', { count: left.length });
+    for (const one of left) speaker.data(`  ${one.key}: ${one.reason}`);
+  }
 
   if (deferred > 0) {
     speaker.say('capture.deferred', { count: deferred });
@@ -911,8 +921,12 @@ function blockRoute(key, area) {
 
   if (!plan.ok) return { problems: plan.problems };
 
+  // Every write is a temporary file renamed over the target (`replaceFile`), and the bytes both files had are kept
+  // and put back byte for byte when the transaction fails (`commitBlockRoute`).
+  // @es Cada escritura es un fichero temporal renombrado encima del destino, y los bytes de ambos ficheros se guardan
+  // y se reponen byte a byte cuando la transacción falla.
   const io = {
-    writeFrom: (text) => writeFileSync(from, text, 'utf8'),
+    writeFrom: (text) => replaceFile(from, text),
     writeTo: (text) => {
       if (text === undefined) {
         rmSync(target, { force: true });
@@ -921,9 +935,14 @@ function blockRoute(key, area) {
       }
 
       mkdirSync(path.dirname(target), { recursive: true });
-      writeFileSync(target, text, 'utf8');
+      replaceFile(target, text);
     },
-    readBack: () => ({ from: readFileOr(from, ''), to: existsSync(target) ? readFileOr(target, '') : undefined })
+    readBack: () => ({ from: readFileOr(from, ''), to: existsSync(target) ? readFileOr(target, '') : undefined }),
+    snapshot: () => ({ from: ledgerBytes(from), to: ledgerBytes(target) }),
+    restore: (saved) => {
+      restoreLedgerBytes(target, saved.to);
+      restoreLedgerBytes(from, saved.from);
+    }
   };
 
   return { count: plan.block.length, file: target, keys: [key], commit: () => commitBlockRoute({ before, plan, io }) };
@@ -948,22 +967,21 @@ function headersRoute(ledgers) {
 
   if (changing.length === 0) return { nothing: true };
 
-  const commit = () => {
-    for (const { ledger, plan } of changing) {
-      const io = {
-        write: (lines) => {
-          ledger.lines = lines;
-          writeLedger(ledger);
-        },
-        readBack: () => readLedgers(LEDGERS).find((one) => one.scope === ledger.scope).lines
-      };
-      const proof = commitHeaderRoute({ before: [...ledger.lines], plan, header: ledger.header, io });
-
-      if (!proof.ok) return proof;
+  // Each ledger is committed and reported on its own (`commitHeaderRoutes`): one that fails does not stop the others.
+  // @es Cada ledger se escribe y se informa por su cuenta: uno que falla no detiene a los demás.
+  const commit = () => commitHeaderRoutes(changing.map(({ ledger, plan }) => ({
+    name: ledger.file,
+    before: [...ledger.lines],
+    plan,
+    header: ledger.header,
+    io: {
+      write: (lines) => {
+        ledger.lines = lines;
+        writeLedger(ledger);
+      },
+      readBack: () => readLedgers(LEDGERS).find((one) => one.scope === ledger.scope).lines
     }
-
-    return { ok: true };
-  };
+  })));
 
   return { count: changing.length, file: changing.map(({ ledger }) => ledger.file).join(', '), keys: changing.map(({ ledger }) => ledger.scope), commit };
 }
@@ -1047,11 +1065,15 @@ function commandRoute(args) {
       return 0;
     }
 
-    const outcome = routeOutcome({ proof: wanted.commit(), count: wanted.count });
+    const proof = wanted.commit();
+    const outcome = routeOutcome({ proof, count: wanted.count });
 
     if (outcome.status !== 0) {
       speaker.complain(outcome.complain);
       for (const deficit of outcome.deficits) speaker.dataError(`  - ${deficit}`);
+      // A header route reports each ledger on its own: the ones refreshed before or after a failed one are named.
+      // @es Una ruta de encabezados informa de cada ledger por su cuenta: se nombran los refrescados antes o después de uno fallido.
+      for (const file of proof.refreshed ?? []) speaker.say('route.refreshed', { file });
 
       return outcome.status;
     }
