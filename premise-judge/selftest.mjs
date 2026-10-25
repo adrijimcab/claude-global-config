@@ -16,7 +16,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -276,6 +276,39 @@ const alone = spawnSync(process.execPath, [path.join(HERE, 'journal-guard.mjs')]
 
 check('hook: as its own process it prints nothing and exits 0', [alone.status, alone.stdout], [0, '']);
 check('hook: as its own process it journals', journal().some((record) => record.inputDigest === digestInput(`s8\n${reasonB}`)), true);
+
+// A lock failure that must not stop the hook (here a stale counter lock whose break cannot be journaled) goes to
+// the judge's own `lock-faults.jsonl`, and the hook still prints nothing, on stdout or stderr.
+// @es Un fallo del lock que no debe parar el hook (aquí, un lock caducado cuya rotura no se puede registrar) va al
+// `lock-faults.jsonl` del juez, y el hook sigue sin imprimir nada, ni en stdout ni en stderr.
+{
+  const FAULTED = mkdtempSync(path.join(tmpdir(), 'premise-judge-faults-'));
+  const judgeMechanisms = [MECHANISM, 'voice-judge'];
+
+  try {
+    for (const mechanism of judgeMechanisms) {
+      const staleLock = path.join(FAULTED, mechanism, 'fires.json.lock');
+
+      mkdirSync(`${staleLock}.breaks.jsonl`, { recursive: true });
+      writeFileSync(staleLock, 'no owner');
+      utimesSync(staleLock, new Date('2000-01-01T00:00:00Z'), new Date('2000-01-01T00:00:00Z'));
+    }
+
+    const faulted = spawnSync(process.execPath, [path.join(HERE, 'journal-guard.mjs')], { input: JSON.stringify(stopPayload(withB, { session_id: 's9' })), encoding: 'utf8', env: { ...process.env, HOOK_STATE_DIR: FAULTED } });
+    const faultsOf = (mechanism) => {
+      try {
+        return readFileSync(path.join(FAULTED, mechanism, 'lock-faults.jsonl'), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line));
+      } catch {
+        return [];
+      }
+    };
+    const described = (mechanism) => faultsOf(mechanism).map((one) => [one.mechanism, /could not be journaled/.test(one.message), / @es /.test(one.message)]);
+
+    check('hook: a lock failure on the Stop path is recorded in EACH judge\'s own lock-faults.jsonl, bilingual, and nothing is printed', [faulted.status, faulted.stdout, faulted.stderr, ...judgeMechanisms.map(described)], [0, '', '', ...judgeMechanisms.map((mechanism) => [[mechanism, true, true]])]);
+  } finally {
+    rmSync(FAULTED, { recursive: true, force: true });
+  }
+}
 
 // --- LATENCY. @es LATENCIA.
 const summary = (infos, timestamp = '2026-10-06T10:00:00.000Z') => ({ type: 'system', subtype: 'stop_hook_summary', timestamp, hookInfos: infos });

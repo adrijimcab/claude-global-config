@@ -17,7 +17,10 @@
  * search is deliberately format-agnostic for that reason. UNVERIFIED until H8 (`checklists/host-backlog.md`)
  * sees a real block journaled on the owner's host.
  *
- * FAIL OPEN: any error of its own leaves the turn alone; it never prints.
+ * FAIL OPEN: any error of its own leaves the turn alone, and it does not print. A run it could not count goes to
+ * `fires-uncounted.jsonl`, and a lock failure that must not stop it (a break it could not journal, a breaker or a
+ * counter lock it could not release) goes to `lock-faults.jsonl`, both in the judge's state directory. The one
+ * exception: a lock failure that not even that directory can take goes to stderr, because it would otherwise be lost.
  *
  * @es Hook Stop: el journal del juez de premisas. NUNCA bloquea: registra lo que decidió el hook `prompt` nativo,
  * que ningún otro hook ve, para que `guard-precision/` muestree y etiquete esos bloqueos como los de cualquier
@@ -27,13 +30,16 @@
  * herramienta. Cada motivo es un `decision` del mecanismo `premise-judge`, con clave sha256 de sesión y motivo,
  * así que la misma realimentación vista otra vez se registra una sola vez. Cada Stop cuenta una corrida del
  * juez. LO QUE NO SE SABE: el tipo de registro con que el harness escribe esa realimentación no está
- * documentado; por eso la búsqueda no depende del formato. NO VERIFICADO hasta H8. FALLA ABIERTO.
+ * documentado; por eso la búsqueda no depende del formato. NO VERIFICADO hasta H8. FALLA ABIERTO y no imprime: una
+ * corrida que no pudo contar va a `fires-uncounted.jsonl`, y un fallo del lock que no debe pararlo va a
+ * `lock-faults.jsonl`, ambos en el directorio de estado del juez. La única excepción: un fallo del lock que ni ese
+ * directorio admite va a stderr, porque si no se perdería.
  */
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { appendRecord, digestInput, firesBudget, incrementFires, journalPath, newId } from '../hook-state/journal.mjs';
+import { appendRecord, digestInput, firesBudget, incrementFires, journalPath, lockFaultsOf, newId } from '../hook-state/journal.mjs';
 import { lastRecords } from '../hook-state/jsonl-tail.mjs';
 import { MARKER as VOICE_MARKER } from '../voice-judge/prompt.mjs';
 import { MARKER } from './prompt.mjs';
@@ -173,7 +179,7 @@ export function evaluate(raw) {
 
   const budget = firesBudget();
 
-  for (const { mechanism } of JUDGES) incrementFires(mechanism, { lock: budget });
+  for (const { mechanism } of JUDGES) incrementFires(mechanism, { lock: { ...budget, report: lockFaultsOf(mechanism) } });
 
   try {
     journalJudgeBlocks(payload);

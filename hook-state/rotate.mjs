@@ -144,6 +144,7 @@ export const KINDS = Object.freeze([
   [ANY, 'fires.json', ARCHIVE, 'fires counter, reset with the journal whose rate it gives'],
   [ANY, 'fires.json.lock', LOCK, 'a fires counter increment in flight'],
   [ANY, 'fires-uncounted.jsonl', ARCHIVE, 'the runs a fires counter could not count, reset with the counter'],
+  [ANY, 'lock-faults.jsonl', ARCHIVE, 'the lock failures a hook that must not print recorded instead'],
   [ANY, '*.lock.breaker', LOCK, 'a writer breaking a stale lock'],
   [ANY, '*.lock.breaks.jsonl', ARCHIVE, 'the stale locks that were broken, and why'],
   [ANY, '*.tmp', PRUNE, 'the temporary file of an interrupted write (a fires counter, a rotated journal)', HOUR_MS]

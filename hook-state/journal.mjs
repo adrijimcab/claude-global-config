@@ -90,6 +90,9 @@ export const firesPath = (mechanism) => path.join(stateDir(mechanism), 'fires.js
 /** The path of the record of runs of `mechanism` that could not be counted. @es La ruta del registro de corridas no contadas. */
 export const uncountedPath = (mechanism) => path.join(stateDir(mechanism), 'fires-uncounted.jsonl');
 
+/** The path of the lock failures a hook of `mechanism` recorded instead of printing. @es La ruta de los fallos de lock que un hook registró en vez de imprimirlos. */
+export const lockFaultsPath = (mechanism) => path.join(stateDir(mechanism), 'lock-faults.jsonl');
+
 /**
  * The wait budget of the counter, which runs on every Stop: about 200 ms in all, in pauses of 15 ms. The pause is
  * 15 ms, not shorter, because a shorter sleep is not shorter on Windows: MEASURED 2026-10-19, forty pauses of 5 ms
@@ -228,6 +231,26 @@ export function incrementFires(mechanism, { readFile = readFileSync, lock } = {}
 
     return null;
   }
+}
+
+/**
+ * A `report` for the lock options of a hook that must not print: each lock failure it is told (a break that
+ * could not be journaled, a breaker or a lock that could not be released) becomes one line of
+ * `lock-faults.jsonl` in the state directory of `mechanism`, bilingual as the lock wrote it. Only when that
+ * directory cannot take the line does it go to stderr, because then it would otherwise be lost.
+ * @es Un `report` para las opciones de lock de un hook que no debe imprimir: cada fallo del lock que recibe es una
+ * línea de `lock-faults.jsonl` en el directorio de estado de `mechanism`, bilingüe como lo escribió el lock. Solo
+ * si ese directorio no admite la línea va a stderr, porque si no se perdería.
+ */
+export function lockFaultsOf(mechanism) {
+  return (line) => {
+    try {
+      mkdirSync(stateDir(mechanism), { recursive: true });
+      appendFileSync(lockFaultsPath(mechanism), `${JSON.stringify({ at: new Date().toISOString(), mechanism, message: line })}\n`);
+    } catch {
+      process.stderr.write(`${line}\n`);
+    }
+  };
 }
 
 /**

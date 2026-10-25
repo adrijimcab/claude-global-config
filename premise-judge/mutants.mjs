@@ -58,13 +58,15 @@ const MUTANTS = [
   ['the mechanism is not the folder', GUARD, "MECHANISM = 'premise-judge'", "MECHANISM = 'premise-judgeX'"],
 
   // --- THE HOOK.
-  ['a run is not counted', GUARD, '  for (const { mechanism } of JUDGES) incrementFires(mechanism, { lock: budget });\n', ''],
-  ['L5: each judge waits its own budget, so a busy Stop waits 400 ms', GUARD, 'incrementFires(mechanism, { lock: budget });', 'incrementFires(mechanism);'],
+  ['a run is not counted', GUARD, '  for (const { mechanism } of JUDGES) incrementFires(mechanism, { lock: { ...budget, report: lockFaultsOf(mechanism) } });\n', ''],
+  ['L5: each judge waits its own budget, so a busy Stop waits 400 ms', GUARD, 'incrementFires(mechanism, { lock: { ...budget, report: lockFaultsOf(mechanism) } });', 'incrementFires(mechanism, { lock: { report: lockFaultsOf(mechanism) } });'],
+  ['the Stop path prints its lock failures on stderr', GUARD, '{ lock: { ...budget, report: lockFaultsOf(mechanism) } }', '{ lock: budget }'],
+  ['every judge\'s lock failures go to the premise judge', GUARD, 'report: lockFaultsOf(mechanism) }', 'report: lockFaultsOf(MECHANISM) }'],
   ['the hook journals nothing', GUARD, '    journalJudgeBlocks(payload);\n', ''],
   ['J-1: an unreadable payload is counted as a run', GUARD, '    return undefined;\n  }\n\n  const budget', '  }\n\n  const budget'],
   ['J-1: a judge whose journal fails costs the other judge its records', GUARD, "    } catch {\n      // This judge's journal is unusable", "    } catch (error) {\n      throw error; // This judge's journal is unusable"],
   ['J-1: a journaling failure escapes the hook', GUARD, '  } catch {\n    // Journaling is evidence', '  } catch (error) {\n    throw error; // Journaling is evidence'],
-  ['J-1: only the first judge is counted', GUARD, '  for (const { mechanism } of JUDGES) incrementFires(mechanism, { lock: budget });', '  incrementFires(JUDGES[0].mechanism, { lock: budget });'],
+  ['J-1: only the first judge is counted', GUARD, '  for (const { mechanism } of JUDGES) incrementFires(mechanism, { lock: { ...budget, report: lockFaultsOf(mechanism) } });', '  incrementFires(JUDGES[0].mechanism, { lock: { ...budget, report: lockFaultsOf(JUDGES[0].mechanism) } });'],
   ['a BOM-prefixed payload is not decoded', GUARD, "raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw", 'raw'],
   ['the hook returns something', GUARD, '  return undefined;\n}\n\nconst main', '  return {};\n}\n\nconst main'],
   ['the process journals nothing', GUARD, "    evaluate(Buffer.concat(chunks).toString('utf8'));\n", ''],

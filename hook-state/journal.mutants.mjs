@@ -120,7 +120,15 @@ const MUTANTS = [
   ['the not-counted message is English only', J, "message: bilingual('fires-uncounted', { mechanism })", "message: 'not counted'"],
   ['the not-counted record has another name', J, "'fires-uncounted.jsonl'", "'fires-uncounted.json'"],
   ['the not-counted record replaces the earlier ones', J, 'appendFileSync(uncountedPath(mechanism),', 'writeFileSync(uncountedPath(mechanism),'],
-  ['a not-counted record that cannot be written aborts the caller', J, '  } catch {\n    // Nowhere left', '  } catch (error) {\n    throw error; // Nowhere left']
+  ['a not-counted record that cannot be written aborts the caller', J, '  } catch {\n    // Nowhere left', '  } catch (error) {\n    throw error; // Nowhere left'],
+
+  // --- the reporter of a hook that must not print
+  ['a lock fault of a quiet hook is printed instead of recorded', J, '      appendFileSync(lockFaultsPath(mechanism), `${JSON.stringify(', '      process.stderr.write(`${JSON.stringify('],
+  ['a lock fault whose state directory cannot be made is lost', J, '      process.stderr.write(`${line}\\n`);\n', ''],
+  ['the state directory of the lock faults is not made', J, '      mkdirSync(stateDir(mechanism), { recursive: true });\n      appendFileSync(lockFaultsPath', '      appendFileSync(lockFaultsPath'],
+  ['a lock fault record does not name its mechanism', J, 'mechanism, message: line })', 'message: line })'],
+  ['a lock fault record is not the line it was told', J, 'mechanism, message: line })', "mechanism, message: '' })"],
+  ['the lock faults have another name', J, "'lock-faults.jsonl'", "'lock-faults.json'"]
 ];
 
 const survivors = runMutants({

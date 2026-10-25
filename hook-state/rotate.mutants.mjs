@@ -44,6 +44,8 @@ const MUTANTS = [
   ['the obsolete stamp file is kept', R, "['failure-capture', 'last-capture.json', REMOVE,", "['failure-capture', 'last-capture.json', KEEP,"],
   ['the obsolete cooldown file is kept', R, "['failure-capture', 'guard-state.json', REMOVE,", "['failure-capture', 'guard-state.json', KEEP,"],
   ['the not-counted runs are unknown', R, "[ANY, 'fires-uncounted.jsonl', ARCHIVE,", "[ANY, 'fires-uncounted.jsonlx', ARCHIVE,"],
+  ['the lock failures a hook recorded are unknown', R, "[ANY, 'lock-faults.jsonl', ARCHIVE,", "[ANY, 'lock-faults.jsonlx', ARCHIVE,"],
+  ['the lock failures a hook recorded are kept forever', R, "[ANY, 'lock-faults.jsonl', ARCHIVE,", "[ANY, 'lock-faults.jsonl', KEEP,"],
   ['the breaker of any lock is not a lock', R, "[ANY, '*.lock.breaker', LOCK,", "[ANY, '*.lock.breaker', KEEP,"],
   ['the break journal is unknown', R, "[ANY, '*.lock.breaks.jsonl', ARCHIVE,", "[ANY, '*.lock.breaks.jsonlx', ARCHIVE,"],
   ['a prune rule loses its age', R, "...(rule[2] === PRUNE ? { maxAgeMs: rule[4] } : {})", '...{}'],

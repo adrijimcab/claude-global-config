@@ -157,6 +157,7 @@ try {
   check('J-3: the temporary file of a fires counter or a rotated journal, of any mechanism, is pruned by an hour', [classify('guard-anything', 'fires.json.4242.tmp').kind, classify('guard-anything', 'journal.jsonl.tmp').maxAgeMs], [PRUNE, HOUR]);
   check('J-3: the obsolete shared state files of failure-capture are removed, and only those', [classify('failure-capture', 'last-capture.json').kind, classify('failure-capture', 'guard-state.json').kind, classify('delegation-receipts', 'guard-state.json').kind], [REMOVE, REMOVE, KEEP]);
   check('the breaker of any lock is a lock, its break journal and the not-counted runs are archived', [classify('guard-anything', 'fires.json.lock.breaker').kind, classify('guard-anything', 'fires.json.lock.breaks.jsonl').kind, classify('failure-capture', 'ledger.lock.breaks.jsonl').kind, classify('guard-anything', 'fires-uncounted.jsonl').kind], [LOCK, ARCHIVE, ARCHIVE, ARCHIVE]);
+  check('the lock failures a hook recorded instead of printing are archived', classify('premise-judge', 'lock-faults.jsonl').kind, ARCHIVE);
   check('only a PRUNE rule carries an age', ['maxAgeMs' in classify('failure-capture', 'last-capture.json'), 'maxAgeMs' in classify('collision-guard', 'refusals.jsonl')], [false, false]);
   check('the hook journal of any mechanism is a journal', [classify('guard-anything', 'journal.jsonl').kind, classify('collision-guard', 'journal.jsonl').kind], [JOURNAL, JOURNAL]);
   check('the fires counter of any mechanism is archived', classify('guard-anything', 'fires.json').kind, ARCHIVE);

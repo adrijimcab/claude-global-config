@@ -269,6 +269,32 @@ try {
   writeFileSync(path.join(stateRoot, 'guard-w'), 'a file where the directory should be');
   check('J-1: a counter whose directory cannot be made returns null, never throws', notThrown(() => incrementFires('guard-w')), null);
 
+  // The reporter of a hook that must not print: a line goes to <stateDir>/lock-faults.jsonl, and only when that
+  // directory cannot take it, to stderr. @es El informante de un hook que no debe imprimir: la línea va a
+  // lock-faults.jsonl, y solo si ese directorio no la admite, a stderr.
+  const onStderr = (action) => {
+    const written = [];
+    const realWrite = process.stderr.write;
+
+    process.stderr.write = (chunk) => {
+      written.push(String(chunk));
+
+      return true;
+    };
+    try {
+      action();
+    } finally {
+      process.stderr.write = realWrite;
+    }
+
+    return written;
+  };
+  const faultsOf = (mechanism) => (existsSync(journal.lockFaultsPath?.(mechanism) ?? '') ? readFileSync(journal.lockFaultsPath(mechanism), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)) : []);
+  const recorded = onStderr(() => journal.lockFaultsOf?.('guard-lf')('The lock L could not be released (EIO): d. @es No se pudo soltar el lock L (EIO): d.'));
+
+  check('a lock fault of a hook that must not print is recorded at <stateDir>/lock-faults.jsonl, as it was told, and not printed', [journal.lockFaultsPath?.('guard-lf'), faultsOf('guard-lf').map((one) => [one.mechanism, one.message, typeof one.at]), recorded], [path.join(stateRoot, 'guard-lf', 'lock-faults.jsonl'), [['guard-lf', 'The lock L could not be released (EIO): d. @es No se pudo soltar el lock L (EIO): d.', 'string']], []]);
+  check('a lock fault whose state directory cannot be made goes to stderr instead of being lost', onStderr(() => journal.lockFaultsOf?.('guard-w')('L @es L')), ['L @es L\n']);
+
   // L3: an increment that landed is counted once, even when releasing its lock fails afterwards.
   // @es L3: un incremento que llegó se cuenta una vez, aunque soltar su lock falle después.
   const releaseReports = [];
