@@ -18,8 +18,8 @@
 import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
+import { parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
 import { stateDir as stateDirOf } from '../hook-state/locations.mjs';
 
 /** How many characters of each end of the message a record keeps. @es Cuántos caracteres de cada extremo guarda un registro. */
@@ -58,24 +58,19 @@ function append(stateDir, line) {
  */
 export function evaluate(raw, { stateDir = defaultStateDir(), now = new Date() } = {}) {
   try {
-    // PowerShell 5.1 prepends a BOM when it pipes a string into a native process. @es PowerShell 5.1 antepone un BOM.
-    append(stateDir, recordOf(JSON.parse(raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw), now));
+    // The port strips the BOM PowerShell 5.1 prepends. @es El puerto quita el BOM que antepone PowerShell 5.1.
+    append(stateDir, recordOf(parsePayload(raw), now));
   } catch (error) {
-    append(stateDir, { at: now.toISOString(), malfunction: error instanceof Error ? error.message : String(error), rawLength: raw.length });
+    // A parse failure keeps the parser's own message, the port's error cause. @es Un fallo de parseo conserva el mensaje del parser, la causa del error del puerto.
+    append(stateDir, { at: now.toISOString(), malfunction: error instanceof Error ? (error.cause ?? error).message : String(error), rawLength: raw.length });
   }
 
   return undefined;
 }
 
-function run() {
-  let raw = '';
-
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', (chunk) => (raw += chunk));
-  process.stdin.on('end', () => {
-    evaluate(raw);
-    process.exit(0);
-  });
+async function run() {
+  evaluate(await readStdin());
+  process.exit(0);
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) run();
+runWhenMain(import.meta.url, run);
