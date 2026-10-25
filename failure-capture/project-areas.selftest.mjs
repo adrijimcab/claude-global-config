@@ -348,7 +348,12 @@ check('...a path-scoped glob that starts with "**" is still valid', areaProblems
   // holds a lesson-shaped line: neither is an area ledger, so neither is read as a stranded area.
   // @es A su lado, un fichero de reglas que no es ledger de área tiene una lista de tareas markdown (`- [ ]`), y un
   // `lessons-*.txt` tiene una línea con forma de lección: ninguno es ledger de área, así que ninguno cuenta como área varada.
-  const world = worldOf('dropped-empty', { config: { scope: 'demo', areas: {} }, files: { 'repo/.claude/lessons-ledger.md': projectHead('demo'), [`repo/.claude/rules/lessons-${AREA}.md`]: areaLedgerHeader(AREA, AREAS[AREA]), 'repo/.claude/rules/checklist.md': '# Checklist\n\n- [ ] a task list item\n', 'repo/.claude/rules/lessons-notes.txt': lessonLine('notes', KEY, 1) } });
+  // Nor is a copy of an area ledger, its capture header and its lesson included, kept under another name: an archived
+  // `archive-<area>.md` and a backup `lessons-<area>.bk` are not the `lessons-<area>.md` the loop owns.
+  // @es Tampoco una copia de un ledger de área, con su encabezado de captura y su lección, guardada con otro nombre: un
+  // `archive-<área>.md` archivado y un `lessons-<área>.bk` de respaldo no son el `lessons-<área>.md` del bucle.
+  const copy = `${areaLedgerHeader(AREA, AREAS[AREA])}\n${lessonLine(AREA, KEY, 1)}`;
+  const world = worldOf('dropped-empty', { config: { scope: 'demo', areas: {} }, files: { 'repo/.claude/lessons-ledger.md': projectHead('demo'), [`repo/.claude/rules/lessons-${AREA}.md`]: areaLedgerHeader(AREA, AREAS[AREA]), 'repo/.claude/rules/checklist.md': '# Checklist\n\n- [ ] a task list item\n', 'repo/.claude/rules/lessons-notes.txt': lessonLine('notes', KEY, 1), [`repo/.claude/rules/archive-${AREA}.md`]: copy, [`repo/.claude/rules/lessons-${AREA}.bk`]: copy } });
   const accepted = world.run(['status']);
 
   check('...while dropping an area whose file holds no lesson is accepted, and rules files that are not area ledgers are not read as such', accepted.status === 0, accepted.out);

@@ -21,6 +21,7 @@ const LEDGERS = 'failure-capture/ledgers.mjs';
 const LOOP = 'failure-capture/loop-context.mjs';
 const COMMAND = 'failure-capture/capture.mjs';
 const PLAN = 'failure-capture/ledger-route.mjs';
+const HEADER = 'failure-capture/area-ledger-header.mjs';
 
 const END_TO_END = [
   // --- the declaration
@@ -49,8 +50,8 @@ const END_TO_END = [
   ['"**/**" is not read as every file', DECLARED, "rest.endsWith('/**') || ", ''],
   ['no glob is read as every file', DECLARED, "return rest === '**';", 'return false;'],
   ['the Windows separators of a glob are kept', DECLARED, "glob.replaceAll('\\\\', '/')", 'glob'],
-  ['a backslash is not escaped in the frontmatter', 'failure-capture/ledger-routes.mjs', ".replaceAll('\\\\', '\\\\\\\\')", ''],
-  ['a double quote is not escaped in the frontmatter', 'failure-capture/ledger-routes.mjs', ".replaceAll('\"', '\\\\\"')", ''],
+  ['a backslash is not escaped in the frontmatter', HEADER, ".replaceAll('\\\\', '\\\\\\\\')", ''],
+  ['a double quote is not escaped in the frontmatter', HEADER, ".replaceAll('\"', '\\\\\"')", ''],
   ['an unknown key inside an area is accepted', DECLARED, ".filter((key) => key !== 'about' && key !== 'paths')", '.filter(() => false)'],
   ['a refusal of the declaration loses its Spanish half', DECLARED, '@es "areas" debe ser un objeto nombre de área -> { about, paths }', ''],
 
@@ -58,13 +59,18 @@ const END_TO_END = [
   ['the areas key is unknown to the project config', PROJECT, "'loadedSetCeiling', 'areas'];", "'loadedSetCeiling'];"],
   ['the areas of a project config are not validated', PROJECT, 'const declared = areaProblems(config.areas);', 'const declared = [];'],
   ['the declared globs are not normalised when the config is read', PROJECT, 'if (config.areas !== undefined) config.areas = normalizedAreas(config.areas);', ''],
-  ['an area dropped while its file holds lessons is accepted', PROJECT, '...(declared.length === 0 ? strandedAreaProblems(root, config.areas) : [])', '...[]'],
+  ['an area dropped while its file holds lessons is accepted', PROJECT, '...(declared.length === 0 ? strandedAreaProblems(root, config.areas,', '...(false ? strandedAreaProblems(root, config.areas,'],
+  ['a deleted config strands no area ledger', PROJECT, "    if (stranded.length > 0) throw new Error(`${file} is absent: ${stranded.join('; ')}`);\n", ''],
+  ['any lessons-*.md file is read as an area ledger, by its name alone', PROJECT, '    .filter(({ area, text }) => isAreaLedgerText(area, text))\n', ''],
+  ['every text is recognised as an area ledger', HEADER, "  const lines = text.split('\\n');\n\n  if (lines[0]", "  return true;\n  const lines = text.split('\\n');\n\n  if (lines[0]"],
+  ['the header capture.mjs writes is not recognised as an area ledger', HEADER, "  return aboutEnd > 0 && !afterHead.slice(0, aboutEnd).includes('\\n');", '  return false;'],
   ['a declared area is read as dropped', PROJECT, '!Object.hasOwn(areas ?? {}, area)', 'true'],
   ['a dropped area whose file holds no lesson is refused', PROJECT, '.filter(({ count }) => count > 0)', ''],
   ['any line of a dropped area file counts as a lesson', PROJECT, 'line.startsWith(ENTRY_PREFIX)', 'true'],
   ['a rules file that is not a lessons ledger is read as an area ledger', PROJECT, "name.startsWith(AREA_FILE_PREFIX) && name.endsWith(AREA_FILE_SUFFIX)", 'name.endsWith(AREA_FILE_SUFFIX)'],
   ['a lessons file that is not markdown is read as an area ledger', PROJECT, "name.startsWith(AREA_FILE_PREFIX) && name.endsWith(AREA_FILE_SUFFIX)", 'name.startsWith(AREA_FILE_PREFIX)'],
-  ['the refusal of a dropped area loses its Spanish half', PROJECT, '@es el área "${area}" ya no está declarada, pero .claude/rules/${name} aún tiene ${String(count)} lección(es) que ninguna captura vería; enruta sus lecciones fuera de ese fichero antes de quitar o renombrar el área (ningún comando route mueve todavía una lección fuera de un área de proyecto), o sigue declarándola', ''],
+  ['the refusal of a dropped area loses its Spanish half', PROJECT, '@es el área "${area}" ya no está declarada, pero .claude/rules/${name} aún tiene ${String(count)} lección(es) que ninguna captura vería; vuelve a declararla y devuelve cada lección al ledger del proyecto con "capture.mjs route --key <clave> --to ${scope} --write" antes de quitarla o renombrarla', ''],
+  ['the refusal of a dropped area does not name the command that moves its lessons back', PROJECT, 'move each lesson back to the project ledger with "capture.mjs route --key <key> --to ${scope} --write"', 'route its lessons out'],
   ['the project context does not surface its areas', PROJECT, 'areas: config.areas ?? {}', 'areas: {}'],
   ['a project area ledger lives outside the project rules folder', PROJECT, "path.join(root, '.claude', 'rules', `lessons-${area}.md`)", "path.join(root, '.claude', `lessons-${area}.md`)"],
   ['the areas of a ledger are not read from its project config', PROJECT, 'readProjectConfig(path.dirname(path.dirname(ledgerFile))).areas ?? {}', '{}'],
@@ -91,7 +97,11 @@ const END_TO_END = [
   ['the area ledgers of a spooled entry are looked for in the wrong folder', COMMAND, 'root: path.dirname(path.dirname(project.ledgerFile)), areas', 'root: path.dirname(project.ledgerFile), areas'],
   ['a spooled entry of a project with an invalid declaration is not left in the spool', COMMAND, 'if (areas === undefined) return undefined;', ''],
   ['a spooled entry whose scope has no ledger throws and wedges the spool', COMMAND, 'if (found === undefined && !ledgers.some((ledger) => ledger.scope === entry.scope)) {', 'if (false) {'],
-  ['the reason a spooled entry was deferred is not recorded', COMMAND, '  if (deferred?.reason === reason) return;\n', '  return;\n'],
+  ['the reason a spooled entry was deferred is not recorded', COMMAND, '  if (deferred?.reason !== reason) {\n', '  if (false) {\n'],
+  ['a capture that leaves a spooled entry behind does not say so', COMMAND, '        left.push({ key: entry.key, reason: deferEntry(full, entry, deferred) });', '        deferEntry(full, entry, deferred);'],
+  ['the entries left in the spool are counted but not named with their reason', COMMAND, '    for (const one of left) speaker.data(`  ${one.key}: ${one.reason}`);\n', ''],
+  ['the reason an entry was left is not given back', COMMAND, '    renameSync(temp, full);\n  }\n\n  return reason;', '    renameSync(temp, full);\n  }\n\n  return undefined;'],
+  ['the note of entries left in the spool loses its Spanish half', 'failure-capture/capture-messages.mjs', "es: 'NOTA: {count} captura(s) del spool no se pudieron plegar y se quedan en el spool (clave: por qué):'", "es: 'NOTA:'"],
   ['a recorded deferral is folded into the incident log as part of the capture', COMMAND, 'const { deferred, ...entry } = spooled;', 'const { deferred } = spooled;\n      const entry = spooled;'],
   ['the reason of a deferral loses its Spanish half', COMMAND, ' @es ningún ledger tiene ya el alcance "${entry.scope}" (el proyecto ya no declara esa área), así que esta captura se queda en el spool hasta que el alcance se declare de nuevo.', ''],
   ['route --headers leaves the project area files out', COMMAND, '...Object.keys(PROJECT?.areas ?? {})];', '];']
@@ -104,8 +114,8 @@ const PURE = [
   ['a line tagged for another scope is moved out of the project ledger', PLAN, 'found.ledger.scope !== sourceScope || !found.line.startsWith(prefix)', 'found.ledger.scope !== sourceScope'],
   ['the refusal does not list the project areas', PLAN, 'const allAreas = [...areaScopes(), ...projectAreas];', 'const allAreas = [...areaScopes()];'],
   ['the refusal does not say which kind of area it was', PLAN, "to the ${ofProject ? 'project' : 'home'} area", 'to the home area'],
-  ['a plan that loses a line is still written', PLAN, 'if (!planned.ok) return { ...planned, written: false };\n\n  const saved', 'const saved'],
-  ['a refused plan is not marked as never written', PLAN, 'return { ...planned, written: false };\n\n  const saved', 'return planned;\n\n  const saved'],
+  ['a plan that loses a line is still written', PLAN, 'if (!planned.ok) return { ...planned, written: false };\n\n  return commitTransaction', 'return commitTransaction'],
+  ['a refused plan is not marked as never written', PLAN, 'return { ...planned, written: false };\n\n  return commitTransaction', 'return planned;\n\n  return commitTransaction'],
   ['a refused plan is reported as a failed write', PLAN, "proof.written === false ? 'route.planUnproven' : 'route.proofFailed'", "'route.proofFailed'"],
   ['the plan is proved against something other than the plan', PLAN, 'after: { source: plan.source, destination: plan.destination }, renamed: plan.renamed });\n\n  if (!planned.ok)', 'after: before, renamed: plan.renamed });\n\n  if (!planned.ok)'],
   ['a rename that rewords a line is accepted', PLAN, '...rewordedRenames.map(', '...[].map('],
