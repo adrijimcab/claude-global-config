@@ -123,7 +123,7 @@ function recordsOf(agentKey) {
     try {
       const record = JSON.parse(line);
 
-      if (typeof record?.k === 'string' && typeof record.id === 'string') records.push(record);
+      if (typeof record?.id === 'string') records.push(record);
     } catch {
       continue;
     }
@@ -199,7 +199,7 @@ export function readJournal(agentKey) {
 export function sameIdentity(target, confirmed, identify = identityOf) {
   const identity = identify(target);
 
-  return identity !== undefined && identity.id === confirmed.id && identity.born === confirmed.born;
+  return identity?.id === confirmed.id && identity.born === confirmed.born;
 }
 
 /**
@@ -209,5 +209,5 @@ export function sameIdentity(target, confirmed, identify = identityOf) {
 export function bornInside(target, intervals, identify = identityOf) {
   const born = identify(target)?.born;
 
-  return born !== undefined && intervals.some((interval) => born >= interval.start && born <= interval.end);
+  return intervals.some((interval) => born >= interval.start && born <= interval.end);
 }

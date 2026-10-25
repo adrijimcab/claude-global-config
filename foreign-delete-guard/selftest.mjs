@@ -204,6 +204,7 @@ try {
   announce(bash(`mkdir ${p('linkdir')} ${p('linkdir2')}`), `${at('linkdir')}/`, `${at('linkdir2')}/`, () => link(path.join(ROOT, 'outside'), at('linkdir', 'out')), () => link(at('mydir'), at('linkdir2', 'in')));
   link(at('mydir'), at('holder', 'lnk-owned')); // a link in a foreign folder, to a target the agent owns @es un enlace en una carpeta ajena, a un destino que el agente posee.
   announce(bash(`mkdir ${p('ownempty')}`), `${at('ownempty')}/`);
+  announce(bash(`mkdir ${p('nest2')} ${p('nest2', 'inner')}`), `${at('nest2')}/`, `${at('nest2', 'inner')}/`);
 
   // WHAT THE AGENT MERELY NAMES, all of it existing when the call is made: none of it may claim anything. @es Lo que el agente solo nombra, todo existente al llamar: nada de eso reclama nada.
   announce(asAgent('Edit', { file_path: at('chain-edited.mjs'), old_string: 'a', new_string: 'b' }));
@@ -503,6 +504,7 @@ try {
   expect('deny', bash(`rm ${p('linkdir', 'out')}`), 'the foreign junction itself, named directly');
   expect('deny', bash(`rm ${p('holder', 'lnk-owned')}`), 'a link in a foreign folder is foreign even when its target is owned');
   expect('allow', bash(`rm -rf ${p('ownempty')}`), 'an empty folder the agent made');
+  expect('allow', bash(`rm -rf ${p('nest2')}`), 'a folder the agent made holding an empty folder the agent also made');
   expect('deny', bash(`rmdir ${p('emptydir')}`), 'an empty folder the agent did not make');
   expect('allow', bash(`cmd /c del ${p('mine.mjs')}`), 'a nested cmd /c del with forward slashes is judged on its path');
   expect('deny', bash(`rm -rf ${p('holder')}`), 'a folder holding a foreign file and a junction');
@@ -598,7 +600,7 @@ try {
   check('targets: cmd //c and //k scripts are read, in any case', ['cmd //c', 'cmd //k', 'CMD //C'].every((launcher) => targetsOf(`${launcher} del ${p('provision.mjs')}`).some((target) => target.path !== undefined && path.basename(target.path) === 'provision.mjs')));
   check('targets: cmd //c with a backslash reports the reason', targetsOf('cmd //c del C:\\a\\b.txt').some((target) => target.unresolvable === 'backslash'));
   check('targets: cmd //c that deletes nothing reports nothing', targetsOf('cmd //c echo hi').length === 0);
-  check('targets: a move reports its sources, not its destination', names(targetsOf(`mv ${p('mine.mjs')} ${p('mine.txt')} ${p('shared')}`)).join() === 'mine.mjs,mine.txt' && names(targetsOf(`Move-Item -Destination ${p('shared')} ${p('mine.mjs')}`, 'powershell')).join() === 'mine.mjs');
+  check('targets: a move reports its sources, not its destination', safely(() => names(targetsOf(`mv ${p('mine.mjs')} ${p('mine.txt')} ${p('shared')}`)).join()) === 'mine.mjs,mine.txt' && safely(() => names(targetsOf(`Move-Item -Destination ${p('shared')} ${p('mine.mjs')}`, 'powershell')).join()) === 'mine.mjs');
   check('targets: a move with a target folder option', names(targetsOf(`mv -t ${p('shared')} ${p('mine.mjs')}`)).join() === 'mine.mjs');
 
   check('targets: rm names its operands only', targetsOf(`rm -rf -v ${p('mine.mjs')}`).map((target) => path.basename(target.path)).join() === 'mine.mjs');
@@ -722,8 +724,20 @@ try {
   safely(() => confirmCall('unit', 'c1', 7000, identify));
   check('journal: a call that already ended is not ended again', readJournal('unit').intervals.length === 2);
 
+  const both = (target) => ({ id: `7:${target}`, born: 1 });
+
+  recordCall('unit2', 'a', 10, ['/p']);
+  recordCall('unit2', 'b', 20, ['/q']);
+  safely(() => confirmCall('unit2', undefined, 30, both));
+  check('journal: with several calls open, the latest one is the one and only its targets are confirmed', readJournal('unit2').intervals.length === 1 && readJournal('unit2').intervals[0].start === 20 && readJournal('unit2').confirmed.has('/q') && !readJournal('unit2').confirmed.has('/p'));
+
+  recordCall('unit3', 'x', 1, ['/a']);
+  recordCall('unit3', 'y', 2, ['/b']);
+  safely(() => confirmCall('unit3', 'y', 3, both));
+  check('journal: a call confirms only its own targets', readJournal('unit3').confirmed.has('/b') && !readJournal('unit3').confirmed.has('/a'));
+
   mkdirSync(path.join(stateDir('foreign-delete-guard'), 'authored'), { recursive: true });
-  appendFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'torn.jsonl'), '{torn\n{"k":"confirm","id":"x","path":1,"ino":"1:1","born":1}\n{"k":"confirm","id":"x","path":"p","ino":"1:1","born":"x"}\n{"k":"start","id":"s","at":"x"}\n{"k":"end","id":"s","at":5}\n{"k":"mystery","id":"q"}\n{"k":"start","at":5}\n{"k":"end","at":9}\n');
+  appendFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'torn.jsonl'), '{torn\n{"k":"confirm","id":"x","path":1,"ino":"1:1","born":1}\n{"k":"confirm","id":"x","path":"p","ino":"1:1","born":"x"}\n{"k":"start","id":"s","at":"x"}\n{"k":"end","id":"s","at":5}\n{"k":"mystery","id":"q"}\n{"k":"start","at":5}\n{"k":"end","at":9}\n{"k":"confirm","id":"x","path":"q","ino":5,"born":1}\n{"k":"start","id":"s2","at":1}\n{"k":"end","id":"s2","at":"x"}\n');
   recordCall('torn', 'c', 10, ['/t']);
   safely(() => confirmCall('torn', 'c', 20, (target) => (target === '/t' ? { id: '2:2', born: 15 } : undefined)));
   check('journal: a torn or malformed line hides nothing around it and adds nothing', readJournal('torn').confirmed.size === 1 && readJournal('torn').confirmed.get('/t').born === 15 && readJournal('torn').intervals.length === 1);
@@ -743,6 +757,7 @@ try {
   check('identity: id is device:inode, and a birth of zero falls back to the change time', identityOf('x', () => ({ dev: 1n, ino: 2n, birthtimeMs: 0n, ctimeMs: 77n })).born === 77 && identityOf('x', () => ({ dev: 1n, ino: 2n, birthtimeMs: 50n, ctimeMs: 77n })).born === 50 && identityOf('x', () => ({ dev: 1n, ino: 2n, birthtimeMs: 50n, ctimeMs: 77n })).id === '1:2');
 
   const mine = readJournal('abc');
+  const mineOwns = (candidate) => safely(() => ownershipOf(mine, undefined).owns(candidate)) === true;
   const fakeTree = new Map([['/d', { id: '1:1', born: 1 }], ['/d/f', { id: '2:2', born: 15 }], ['/d/late', { id: '3:3', born: 25 }], ['/d/e', { id: '4:4', born: 2 }], ['/d/e/g', { id: '5:5', born: 16 }]]);
   const journalOfTree = (folderIdentity) => ({ confirmed: new Map([['/d', folderIdentity]]), intervals: [{ start: 10, end: 20 }] });
   const ownsInTree = (folderIdentity, target) => safely(() => ownershipOf(journalOfTree(folderIdentity), undefined, (candidate) => fakeTree.get(candidate)).ownsCanonical(target)) === true;
@@ -754,12 +769,12 @@ try {
   check('ownership: a higher confirmed folder still counts when a lower one changed identity', ownershipOf({ confirmed: new Map([['/d', { id: '1:1', born: 1 }], ['/d/e', { id: '0:0', born: 0 }]]), intervals: [{ start: 10, end: 20 }] }, undefined, (candidate) => fakeTree.get(candidate)).ownsCanonical('/d/e/g'));
 
 
-  check('ownership: a vouched file is owned', ownershipOf(mine, undefined).owns(at('mine.mjs')));
-  check('ownership: something under a vouched folder is owned', ownershipOf(mine, undefined).owns(at('work', 'built.bin')));
-  check('ownership: a sibling that only shares a prefix is not owned', !ownershipOf(mine, undefined).owns(`${at('mine.mjs')}x`) && !ownershipOf(mine, undefined).owns(at('mine.mjs.bak')));
-  check('ownership: a foreign file is not owned', !ownershipOf(mine, undefined).owns(at('provision.mjs')));
-  check('ownership: the scratchpad root is not owned, a folder the agent made is', !ownershipOf(mine, undefined).owns(SCRATCH) && ownershipOf(mine, undefined).owns(at('mydir', 'out.log')));
-  check('ownership: writing a file INTO a folder does not make the folder the agent\'s', ownershipOf(mine, undefined).owns(at('shared', 'y.txt')) && !ownershipOf(mine, undefined).owns(at('shared', 'x.txt')) && !ownershipOf(mine, undefined).owns(at('shared')));
+  check('ownership: a vouched file is owned', mineOwns(at('mine.mjs')));
+  check('ownership: something under a vouched folder is owned', mineOwns(at('work', 'built.bin')));
+  check('ownership: a sibling that only shares a prefix is not owned', !mineOwns(`${at('mine.mjs')}x`) && !mineOwns(at('mine.mjs.bak')));
+  check('ownership: a foreign file is not owned', !mineOwns(at('provision.mjs')));
+  check('ownership: the scratchpad root is not owned, a folder the agent made is', !mineOwns(SCRATCH) && mineOwns(at('mydir', 'out.log')));
+  check('ownership: writing a file INTO a folder does not make the folder the agent\'s', mineOwns(at('shared', 'y.txt')) && !mineOwns(at('shared', 'x.txt')) && !mineOwns(at('shared')));
   check('ownership: the tenancy worktree is owned when given', ownershipOf(EMPTY, worktree).owns(path.join(worktree, 'a', 'b.ts')) && !ownershipOf(EMPTY, worktree).owns(path.join(otherWorktree, 'a')));
 
   check('linkedWorktreeRoot: a linked worktree from a subfolder', linkedWorktreeRoot(path.join(worktree, 'src', 'sub')) === worktree);
@@ -802,16 +817,24 @@ try {
   expect('allow', bash(`rm ${p('conc-a.txt')}`), 'two calls in flight: the completed one confirms ITS target by call id');
   expect('deny', bash(`rm ${p('conc-b.txt')}`), 'two calls in flight: the other, never completed, confirms nothing');
 
-  check('declaredPaths: every separator of a declaration splits its words', [' ', '\t', '\r', ',', ';', '"', '\'', '`', '(', ')'].every((separator) => declaredPaths(`TENANCY:${separator}${slashes(worktree)}${separator}`).includes(canonical(worktree))));
+  check('declaredPaths: every separator of a declaration splits its words', [' ', '\t', ',', ';', '"', '\'', '`', '(', ')'].every((separator) => declaredPaths(`TENANCY:${separator}${slashes(worktree)}${separator}`).includes(canonical(worktree))));
   check('declaredPaths: a line with no colon declares nothing, even with a path in it', declaredPaths(`TENANCY ${slashes(worktree)}`).length === 0);
   check('declaredPaths: a bare folder name is not a path', declaredPaths('TENANCY: wt-mine').length === 0);
   check('declaredPaths: the colon of a drive letter does not close the marker, whichever slash follows', declaredPaths(`TENANCY ${worktree}`).length === 0 && declaredPaths(`TENANCY ${slashes(worktree)}`).length === 0);
   check('declaredPaths: a qualifier before the colon is allowed, and its colon closes the marker', declaredPaths(`TENANCY note: ${slashes(worktree)}`).includes(canonical(worktree)) && declaredPaths(`TENANCY (a): ${slashes(worktree)}`).includes(canonical(worktree)));
+  check('declaredPaths: only a colon after TWO letters, or after a non-letter, closes the marker', declaredPaths(`TENANCY note:${gitBash(worktree)}`).includes(canonical(worktree)) && declaredPaths(`TENANCY 1:${gitBash(worktree)}`).includes(canonical(worktree)));
+  check('declaredPaths: a letter and a colon that is not followed by a slash closes the marker', declaredPaths(`TENANCY C: ${slashes(worktree)}`).includes(canonical(worktree)));
   expect('deny', inTree(worktree, rmOld(worktree)), 'a TENANCY line with no colon grants nothing', { records: byBrief(`TENANCY ${slashes(worktree)}`) });
   expect('deny', inTree(worktree, rmOld(worktree)), 'a brief that declares another worktree grants nothing', { records: byBrief(`TENANCY: ${slashes(otherWorktree)}`) });
 
   check('targets: cmd /c is read once, not twice', targetsOf(`cmd /c del ${p('provision.mjs')}`).length === 1);
-  check('targets: every mover reads its sources', ['mv', 'move', 'mi', 'move-item'].every((mover) => names(targetsOf(`${mover} ${p('mine.mjs')} ${p('shared')}`, 'powershell')).join() === 'mine.mjs'));
+  check('targets: every mover reads its sources', ['mv', 'move', 'mi', 'move-item'].every((mover) => safely(() => names(targetsOf(`${mover} ${p('mine.mjs')} ${p('shared')}`, 'powershell')).join()) === 'mine.mjs'));
+  check('targets: a cmd //c script is read with bash grammar, whatever the outer dialect', targetsOf(`cmd //c del -WhatIf ${p('provision.mjs')}`).some((target) => target.path !== undefined));
+
+  const seenPreviews = [];
+
+  deletionTargets(`cmd //c "del ${p('mine.mjs')}; git clean -f"`, 'bash', SCRATCH, { cleanPreview: (_directory, args) => { seenPreviews.push(args.join(' ')); return { ok: true, paths: [] }; } });
+  check('targets: the options given to the scan reach a cmd //c script', seenPreviews.length === 1 && seenPreviews[0] === 'clean -n -f', seenPreviews.join(' | '));
   check('targets: cmd //c after a cd that cannot be followed reports the folder', safely(() => targetsOf(`cd "$X" && cmd //c del ${p('provision.mjs')}`).some((target) => target.unresolvable === 'directory')) === true);
 
   // --- the shape of the output ------------------------------------------------------------------------
@@ -871,7 +894,7 @@ try {
   check('shim: a delegated rm of a foreign file is denied on stdout, exit 0', viaShim.status === 0 && viaShim.stdout.includes('"permissionDecision":"deny"'), viaShim.stderr);
   check('shim: the main session prints nothing, exit 0', viaShimMain.status === 0 && viaShimMain.stdout === '');
   check('shim: a delegated rm of an own file prints nothing, exit 0', viaShimQuiet.status === 0 && viaShimQuiet.stdout === '');
-  check('shim: a delegated Write prints nothing and journals the file, exit 0', viaShimWrite.status === 0 && viaShimWrite.stdout === '' && readFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'abc.jsonl'), 'utf8').toLowerCase().includes('via-shim.txt'));
+  check('shim: a delegated Write prints nothing and journals the file, exit 0', viaShimWrite.status === 0 && viaShimWrite.stdout === '' && safely(() => readFileSync(path.join(stateDir('foreign-delete-guard'), 'authored', 'abc.jsonl'), 'utf8')).toLowerCase().includes('via-shim.txt'));
 } finally {
   // Junctions go first and alone: removing a junction removes the link, never what it points at. @es Las junctions primero y solas: quitar una junction quita el enlace, nunca su destino.
   for (const where of links) {

@@ -94,7 +94,7 @@ export function tenancyWorktree({ cwd, agentKey, records = agentRecords }) {
 }
 
 /** The characters that separate the words of a `TENANCY:` declaration. @es Los caracteres que separan las palabras de una declaración `TENANCY:`. */
-const WORD_SEPARATORS = ' \t\r,;"\'`()';
+const WORD_SEPARATORS = ' \t,;"\'`()';
 
 /** Whether the character at `index` of `text` is a letter. @es Si el carácter en `index` de `text` es una letra. */
 const isLetterAt = (text, index) => text.charAt(index).toLowerCase() !== text.charAt(index).toUpperCase();
