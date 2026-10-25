@@ -1,6 +1,6 @@
 {
   "id": "real-v8-red-664a8a26-10182049",
-  "expect": "fail",
-  "source": "664a8a26 2026-10-18T20:49:07.820Z (tuning set of rubric v8; real final reply to the owner that the owner rejects, the v8 pass test fails: third-person log with a bullet list of what runs; the close is a next step)",
+  "expect": "unadjudicated",
+  "source": "UNADJUDICATED since 2026-10-19 (Judgment Day round 2, W1 and W2): this real reply has no label from the owner, and silence is not a label, so it is printed with its verdict and never scored; the notes that follow are its history.664a8a26 2026-10-18T20:49:07.820Z (tuning set of rubric v8; real final reply to the owner that the owner rejects, the v8 pass test fails: third-person log with a bullet list of what runs; the close is a next step)",
   "message": "Te aclaro algo de mi mensaje anterior, para que la imagen sea la real. Las órdenes de arranque a W7 y a suscripciones las rechazó primero el guard de procedencia, porque les faltaban las líneas de `MEASURED` y `HYPOTHESIS`. Las reenvié corregidas en el mismo turno y las dos devolvieron su recibo de que el agente retomó el trabajo, así que **los dos están corriendo de verdad**. Los envíos rechazados quedaron anotados como reemplazados con `abandon.mjs`, para que el registro de delegaciones no muestre trabajo perdido.\n\nEn concreto, ahora tenés corriendo:\n- **W7:** las pruebas en navegador y los quiebres a propósito del anillo de foco y del script que fija el tema antes de que arranque Angular.\n- **Suscripciones:** Karma, el test del gate de lint y el e2e del cambio de proyecto.\n- **P8 S3:** su ronda de arreglos de la lista blanca.\n\nApenas entre el primer resultado te aviso, y si P8 S3 sale aprobada la integro antes de cerrar la ola 5."
 }

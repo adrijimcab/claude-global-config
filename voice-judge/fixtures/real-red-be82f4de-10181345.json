@@ -1,6 +1,6 @@
 {
   "id": "real-red-be82f4de-10181345",
-  "expect": "fail",
-  "source": "be82f4de 2026-10-18T13:45:27.503Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
+  "expect": "unadjudicated",
+  "source": "UNADJUDICATED since 2026-10-19 (Judgment Day round 2, W1 and W2): this real reply has no label from the owner, and silence is not a label, so it is printed with its verdict and never scored; the notes that follow are its history.be82f4de 2026-10-18T13:45:27.503Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
   "message": "La master está volviendo a aterrizar su checkpoint 41, y ya le confirmé que estoy en pausa. Mientras dure, no corro ni `land.mjs` ni la suite e2e completa, y no toco `~/.claude`. Mis dos writers siguen trabajando con sus propios specs, que no cuentan como cadena completa.\n\nEse checkpoint trae cuatro cosas que nos importan:\n- **Guard de worktrees.** Se arregla el que bloqueaba los commits en mis worktrees.\n- **Revisión para riesgo medio.** Entra la regla de la revisión externa para los cambios de riesgo medio.\n- **Rutas bloqueadas.** Una lista compartida, que usan todas las sesiones.\n- **Git de los workers.** Un guard nuevo que les prohíbe ciertos comandos de git: `reset`, `checkout`/`switch`, un `restore` que toque el árbol, `clean -f` y los commits o pushes con `--no-verify`.\n\nPara que ninguno se tope con un rechazo a mitad de trabajo, sumé esa lista de prohibidos a las instrucciones comunes de los writers y se la avisé a los dos que están corriendo. Si necesitan deshacer algo, editan el archivo o hacen un commit nuevo."
 }

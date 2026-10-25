@@ -1,6 +1,6 @@
 {
   "id": "real-red-be82f4de-10181310",
-  "expect": "fail",
-  "source": "be82f4de 2026-10-18T13:10:44.744Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
+  "expect": "unadjudicated",
+  "source": "UNADJUDICATED since 2026-10-19 (Judgment Day round 2, W1 and W2): this real reply has no label from the owner, and silence is not a label, so it is printed with its verdict and never scored; the notes that follow are its history.be82f4de 2026-10-18T13:10:44.744Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
   "message": "La master ya retomó (su checkpoint 40 quedó en `dbce6ba`), así que arranqué la integración del marco, F4 a F7, en `meet`. Le avisé a la `-11` que no lance ninguna cadena completa hasta que esto termine, porque la memoria de la máquina es compartida.\n\nLa master también cambió tres hooks, que se recargan en vivo:\n- **Revisión.** El hook de revisión ahora corre solo en worktrees vinculados. Con eso deja de trabarme cada turno con el candidato acumulado de `meet`.\n- **Voz.** El juez de voz acepta el subjuntivo del voseo y el «su» en tercera persona.\n- **Autoría.** El guard de sincronización le atribuye cada archivo a quien lo escribió de verdad, ya no a la sesión que tenía una shell abierta en ese momento.\n\nMe pidió que revise mis próximos cierres de turno y le cuente si algo se rompió. El arreglo del guard de los worktrees llega aparte."
 }
