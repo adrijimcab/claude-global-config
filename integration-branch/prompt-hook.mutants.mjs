@@ -59,7 +59,7 @@ const { runMutants } = await import(pathToFileURL(RUNNER).href);
 
 const survivors = runMutants({
   fleetRoot: path.resolve(import.meta.dirname, '..'),
-  paths: ['integration-branch', 'hook-state', 'bilingual-output', 'hook-caller', 'worktree-landing'],
+  paths: ['integration-branch', 'hook-state', 'bilingual-output', 'hook-caller', 'worktree-landing', 'hook-io'],
   selftest: 'integration-branch/prompt-hook.selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

@@ -55,7 +55,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['settings.json', 'git-worktree', 'selftest-fixtures', 'hook-state'],
+  paths: ['settings.json', 'git-worktree', 'selftest-fixtures', 'hook-state', 'hook-io'],
   selftest: 'review-site/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

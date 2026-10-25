@@ -79,7 +79,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['subagent-contract-pointer', 'engineering-standard.md', 'rules', 'settings.json', 'agent-contract-parity', 'brief-feasibility', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['subagent-contract-pointer', 'engineering-standard.md', 'rules', 'settings.json', 'agent-contract-parity', 'brief-feasibility', 'mutation-proof', 'hook-state', 'bilingual-output', 'hook-io'],
   selftest: 'subagent-contract-pointer/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'
