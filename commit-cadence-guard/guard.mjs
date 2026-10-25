@@ -119,9 +119,12 @@ export function evaluate(raw, deps = {}) {
     }
 
     const committing = commitsIn(payload);
-    const measured = committing ? { held: [], fresh: false, state: { ...state, measuredAtMs: undefined, held: undefined } } : heldFor(state, context);
+    const measured = heldFor(state, context);
 
-    writeAgentState(key, measured.state);
+    // A commit line is judged like any other (it passes the refusal only through its allowance), and then the stored
+    // measurement is dropped so the call after the commit sees it. @es Una línea de commit se juzga como cualquier
+    // otra y luego se borra la medición guardada para que la llamada siguiente vea el commit.
+    writeAgentState(key, committing ? { ...measured.state, measuredAtMs: undefined, held: undefined } : measured.state);
 
     if (measured.held.length === 0) return undefined;
 

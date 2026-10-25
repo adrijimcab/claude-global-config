@@ -111,7 +111,16 @@ const call = (scene, tool, input, { cwd = scene.main, agent = scene.agent } = {}
 
 const orchestratorCall = (scene, tool, input) => JSON.stringify({ session_id: 's', transcript_path: 'C:/Users/x/.claude/projects/p/session.jsonl', cwd: scene.main, hook_event_name: 'PreToolUse', tool_name: tool, tool_input: input });
 
-const decide = (at, raw, deps = {}) => evaluate(raw, { now: () => at, ...deps });
+/** `evaluate` at a fake time; a throw becomes a value no check accepts, so it fails a check instead of the run. @es `evaluate` a una hora falsa; un lanzamiento es un valor que ningún check acepta. */
+const decide = (at, raw, deps = {}) => {
+  try {
+    return evaluate(raw, { now: () => at, ...deps });
+  } catch (error) {
+    return { threw: String(error) };
+  }
+};
+
+const journalText = () => { try { return readFileSync(path.join(mechanismStateDir(), 'journal.jsonl'), 'utf8'); } catch { return ''; } };
 
 const isDeny = (output) => output?.hookSpecificOutput?.permissionDecision === 'deny';
 const noticeOf = (output) => output?.hookSpecificOutput?.additionalContext;
@@ -140,7 +149,8 @@ function arrive(scene, files = ['f.txt']) {
   report(noticeOf(advised)?.includes('held uncommitted work for 15 minutes') === true, 'a 16-minute-old path is advised, naming the age');
   report(!isDeny(advised), 'the notice does not deny');
   report(noticeOf(advised)?.includes('f.txt') === true && noticeOf(advised)?.includes('git commit -m "<msg>" -- f.txt') === true, 'the notice names the path and the exact commit command');
-  report(noticeOf(advised)?.includes('@es AVISO DE CADENCIA') === true, 'the notice carries its Spanish mirror');
+  report(noticeOf(advised)?.includes('Commit now (git add any new file first): git commit') === true && noticeOf(advised)?.includes('Commitea ahora') === true, 'the notice tells the agent to commit now, in both languages');
+  report(noticeOf(advised)?.includes('@es AVISO DE CADENCIA') === true,'the notice carries its Spanish mirror');
 }
 
 // --- refusal and its allowances ---
@@ -157,7 +167,9 @@ function arrive(scene, files = ['f.txt']) {
   report(reasonOf(denied).includes('TO UNBLOCK') && reasonOf(denied).includes('git commit -m "<msg>" -- f.txt g.txt'), 'the refusal says exactly how to unblock');
   report(reasonOf(denied).includes('@es COMMIT-CADENCE GUARD RECHAZÓ') && reasonOf(denied).includes('PARA DESBLOQUEAR'), 'the refusal carries its Spanish mirror');
   report(reasonOf(denied).includes('Read, Grep, Glob') && reasonOf(denied).includes('SubagentHandback') && !reasonOf(denied).includes('more'), 'the refusal says what stays allowed and the exit hatch, and counts no hidden paths when none are hidden');
-  report(readFileSync(path.join(mechanismStateDir(), 'journal.jsonl'), 'utf8').includes('"verdict":"deny"'), 'a refusal is journaled');
+  report(reasonOf(denied).includes('report that blocker with SubagentHandback') && reasonOf(denied).includes('TO UNBLOCK: commit'), 'the refusal names the exit hatch and the unblock step in English');
+  report(journalText().includes('"verdict":"deny"'), 'a refusal is journaled');
+  decide(T0, call(scene, 'Edit', edit(scene), { agent: '../evil' }));
   report(decide(at, call(scene, 'Edit', edit(scene), { agent: '../evil' })) === undefined, 'an agent id that is not a plain name is not judged (and cannot climb out of the state directory)');
 
   const denies = {
@@ -168,6 +180,7 @@ function arrive(scene, files = ['f.txt']) {
     'git push': ['Bash', { command: 'git push origin main' }],
     'git stash': ['Bash', { command: 'git stash' }],
     'a mixed line': ['Bash', { command: 'git status && npm test' }],
+    'a commit chained with a forbidden command': ['Bash', { command: 'git commit -m x -- f.txt && npm test' }],
     'allowed git then a forbidden git': ['Bash', { command: 'git status && git push' }],
     'a piped line': ['Bash', { command: 'git log | head -3' }],
     'PowerShell Remove-Item': ['PowerShell', { command: 'Remove-Item f.txt' }]
@@ -245,10 +258,10 @@ function arrive(scene, files = ['f.txt']) {
 // --- the caller ---
 {
   const scene = scenario('caller');
-
-  arrive(scene);
-
   const raw = orchestratorCall(scene, 'Edit', edit(scene));
+
+  decide(T0, raw);
+  arrive(scene);
 
   report(decide(T0 + 31 * MINUTE, raw) === undefined, 'the orchestrator is never judged, even with a 31-minute-old dirty worktree');
   report(readAgentState('agentcaller') !== undefined && readAgentState('agentcaller').worktree !== undefined, 'the delegated agent was judged: its state holds the worktree');
@@ -381,11 +394,14 @@ function arrive(scene, files = ['f.txt']) {
 
   const lonely = scenario('search');
   const locate = () => { searches += 1; return undefined; };
+  let measured = 0;
+  const measure = () => { measured += 1; return { ok: true, held: [] }; };
   const mainFile = { file_path: path.join(lonely.main, 'base.txt') };
 
-  decide(T0, call(lonely, 'Edit', mainFile, { agent: 'agentsearch' }), { locate });
-  decide(T0 + 10_000, call(lonely, 'Edit', mainFile, { agent: 'agentsearch' }), { locate });
+  decide(T0, call(lonely, 'Edit', mainFile, { agent: 'agentsearch' }), { locate, measure });
+  decide(T0 + 10_000, call(lonely, 'Edit', mainFile, { agent: 'agentsearch' }), { locate, measure });
   report(searches === 1, 'an agent whose worktree is not found is searched for once per window');
+  report(measured === 0, 'and git is never measured for an agent that has no worktree');
   decide(T0 + 61_000, call(lonely, 'Edit', mainFile, { agent: 'agentsearch' }), { locate });
   report(searches === 2, 'and again after the window');
   report(readAgentState('agentsearch')?.arrivalMs === T0, 'the arrival time survives calls that found no worktree');
@@ -499,6 +515,8 @@ function arrive(scene, files = ['f.txt']) {
   report(JSON.stringify(loadConfig(path.join(dir, 'missing.json'))) === JSON.stringify({ noticeMs: DEFAULTS.noticeMinutes * MINUTE, refuseMs: DEFAULTS.refuseMinutes * MINUTE, remeasureMs: DEFAULTS.remeasureSeconds * 1000 }), 'config: a missing file gives the defaults (15 min, 30 min, 60 s)');
   report(loadConfig(writeConfig('own.json', '{"noticeMinutes":1,"refuseMinutes":2,"remeasureSeconds":5}')).refuseMs === 2 * MINUTE && loadConfig(path.join(dir, 'own.json')).noticeMs === MINUTE && loadConfig(path.join(dir, 'own.json')).remeasureMs === 5000, 'config: the file sets the windows');
   report(loadConfig(writeConfig('inverted.json', '{"noticeMinutes":9,"refuseMinutes":3}')).refuseMs === DEFAULTS.refuseMinutes * MINUTE, 'config: a notice window that is not shorter than the refusal falls back to the defaults');
+  report(JSON.stringify(loadConfig(path.join(dir, 'missing.json'))) === '{"noticeMs":900000,"refuseMs":1800000,"remeasureMs":60000}', 'config: the defaults are 15 minutes, 30 minutes and 60 seconds, literally');
+  report(loadConfig(writeConfig('infinite.json', '{"noticeMinutes":5,"refuseMinutes":1e999}')).refuseMs === 30 * MINUTE, 'config: a window that is not a finite number falls back to the defaults');
   report(loadConfig(writeConfig('equal.json', '{"noticeMinutes":3,"refuseMinutes":3}')).refuseMs === DEFAULTS.refuseMinutes * MINUTE, 'config: equal windows fall back to the defaults');
   report(loadConfig(writeConfig('junk.json', '{"noticeMinutes":"x","refuseMinutes":-1,"remeasureSeconds":0}')).remeasureMs === DEFAULTS.remeasureSeconds * 1000, 'config: non-positive or non-numeric values fall back to the defaults');
   report(loadConfig(writeConfig('broken.json', '{not json')).noticeMs === DEFAULTS.noticeMinutes * MINUTE, 'config: unparseable JSON falls back to the defaults');
