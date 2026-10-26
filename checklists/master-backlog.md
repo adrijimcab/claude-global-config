@@ -462,6 +462,12 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
 - T8 port units still to do after this landing: F2 (re-export company-remote's fold), G2/G3 (git consumers), G4
   (delete the wrappers), P2u (rotate and file-lock liveness), J1-J4 (journal port), H4 and H8 (remaining guards),
   Z (census enforcement). Design: engram #1885. PENDING, reason (4): each is its own unit on the landed master.
+- eval-guard follow-ups (T4B worker, 2026-10-26):
+  - The tokenizer does not honour the PowerShell escape `` `" `` inside a double-quoted string, so a command
+    after `"x`"y";` can sit inside a misread quote and go unjudged. This predates T4B.
+  - An arithmetic `(( ... ))` whose quoted operand crosses its line is read as plain parentheses, so it fails
+    closed, and a harmless multi-line arithmetic in a delegated script is refused.
+  PENDING, reason (3).
 - commit-cadence-guard follow-ups (T10 worker, 2026-10-26):
   - The guard is listed in hook-dispatch/manifests/pretooluse-language.json, the only PreToolUse manifest with no
     matcher, so the name no longer says what it covers. Renaming it (for example pretooluse-all) needs a
