@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
-import { DEPENDENCY_MUTANTS } from './dependency-mutants.mjs';
+import { DEPENDENCY_MUTANTS } from './dependency-mutant-set.mjs';
 
 const PROVENANCE = 'brief-provenance/provenance.mjs';
 const GUARD = 'brief-provenance/guard.mjs';
