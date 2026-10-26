@@ -196,16 +196,24 @@ const V8G = await import('./rubrics/v8g.mjs').catch(() => ({}));
 
 check('measure: --rubric measures the v8g candidate by name', measure.rubricPathOf(['--rubric', 'v8g']), path.join(HERE, 'rubrics', 'v8g.mjs'));
 check('rubrics: v8g is v8f with the register the owner hears as Argentine, and a Rioplatense turn as address', [V8G.PROMPT_SIGNATURE, V8G.PROMPT?.startsWith('voice-judge rubric v8g.\n'), V8G.PROMPT?.includes('in a Rioplatense register that a porteño reader hears as Argentine: a warm, colloquial cadence carried by natural Rioplatense turns of phrase aimed at him, not by the vos conjugation alone; voseo or shared forms inside an otherwise neutral Spanish lexicon do not sound Argentine and fail (a), however good the content.'), V8G.PROMPT?.includes('no particular expression is required'), V8G.PROMPT?.includes('the pronoun vos, or a colloquial Rioplatense turn or vocative aimed at him, which is address in itself.'), V8G.PROMPT?.split('\n').slice(1).join('\n').length > PROMPT.split('\n').slice(1).join('\n').length], ['voice-judge rubric v8g.', true, true, false, true, true]);
-check('promotion: v8g is not live without a MET record either', measure.promotionAllowed(V8G.PROMPT ?? '', V7.PROMPT, measure.readShipBarRecord()), false);
+check('promotion: without the owner record, v8g would not be allowed live, its bar not met', measure.promotionAllowed(V8G.PROMPT ?? '', V7.PROMPT, measure.readShipBarRecord(), undefined), false);
 check('measure: a named rubric loads its own text', [await loaded(measure.rubricPathOf(['--rubric', 'v7'])).then((rubric) => rubric.prompt === V7.PROMPT), await loaded(measure.rubricPathOf(['--rubric', 'v8f'])).then((rubric) => rubric.prompt === PROMPT)], [true, true]);
 
-// --- PROMOTION: the live rubric is v7 until measure.mjs records the ship bar MET for the exact live text.
+// --- PROMOTION: a rubric other than v7 is live only with a MET ship-bar record or an owner promotion record of its
+// exact text. On 2026-10-26 the owner promoted v8g with its bar not met.
 const metRecord = (prompt) => ({ promptSha256: sha256(prompt), met: true });
+const ownerRecord = (prompt, fields = {}) => ({ promptSha256: sha256(prompt), promotedBy: 'owner', quote: 'dejalo metido', ...fields });
+const OWNER_QUOTE = 'Deja el que mas cosas tenga y el que mejor hecho este de la voz, no te preocupes por lo que yo piense de las respuestas. dejalo metido';
+
+check('promotion: an owner record of the exact text allows a rubric whose bar is not met', [measure.promotionAllowed(PROMPT, V7.PROMPT, undefined, ownerRecord(PROMPT)), measure.promotionAllowed(PROMPT, V7.PROMPT, undefined, ownerRecord(`${PROMPT} `)), measure.promotionAllowed(PROMPT, V7.PROMPT, undefined, ownerRecord(PROMPT, { promotedBy: 'agent' })), measure.promotionAllowed(PROMPT, V7.PROMPT, undefined, ownerRecord(PROMPT, { quote: '' }))], [true, false, false, false]);
+check('promotion: the owner promotion record lives beside the rubrics', measure.PROMOTION_RECORD, path.join(HERE, 'promotion.json'));
+check('rubrics: the live v8g imports no other rubric, so editing a candidate cannot change the live judge', /from '\.\/v\w+\.mjs'/.test(readFileSync(path.join(HERE, 'rubrics', 'v8g.mjs'), 'utf8')), false);
+check('promotion: the hook runs v8g, promoted by the owner on 2026-10-26 with his words, its bar not met', [LIVE_PROMPT === V8G.PROMPT, measure.readPromotionRecord?.()], [true, { rubric: 'rubrics/v8g.mjs', promptSha256: sha256(V8G.PROMPT), promotedBy: 'owner', on: '2026-10-26', quote: OWNER_QUOTE, bar: 'not met' }]);
 
 check('promotion: v7 is always allowed live', measure.promotionAllowed(V7.PROMPT ?? 'v7', V7.PROMPT ?? 'v7', undefined), true);
 check('promotion: another rubric is allowed only with a MET record of its exact text', [measure.promotionAllowed(PROMPT, V7.PROMPT, undefined), measure.promotionAllowed(PROMPT, V7.PROMPT, { promptSha256: sha256(PROMPT), met: false }), measure.promotionAllowed(PROMPT, V7.PROMPT, metRecord(`${PROMPT} `)), measure.promotionAllowed(PROMPT, V7.PROMPT, metRecord(PROMPT))], [false, false, false, true]);
-check('promotion: the live rubric is allowed by the recorded ship bar', measure.promotionAllowed(LIVE_PROMPT, V7.PROMPT, measure.readShipBarRecord()), true);
-check('promotion: the hook runs v7 while the recorded ship bar has not passed', [measure.readShipBarRecord()?.met === true, LIVE_PROMPT === V7.PROMPT], [false, true]);
+check('promotion: the live rubric is allowed by the records on disk', measure.promotionAllowed(LIVE_PROMPT, V7.PROMPT, measure.readShipBarRecord(), measure.readPromotionRecord?.()), true);
+check('promotion: the recorded ship bar still has not passed, so only the owner record allows v8g', measure.readShipBarRecord()?.met === true, false);
 check('promotion: the ship-bar record lives beside the rubrics', measure.SHIP_BAR_RECORD, path.join(HERE, 'ship-bar.json'));
 check('promotion: a ship-bar record names the rubric, its text hash, the verdict and the owner labels', measure.shipBarRecord({ path: path.join(HERE, 'rubrics', 'v8f.mjs'), prompt: 'P $ARGUMENTS' }, { met: false, en: 'not enough owner labels (2/10)' }, 2, 6, '2026-10-25'), { rubric: 'rubrics/v8f.mjs', promptSha256: sha256('P $ARGUMENTS'), met: false, verdict: 'not enough owner labels (2/10)', ownerLabels: 2, runs: 6, measuredOn: '2026-10-25' });
 check('measure: a module with no PROMPT is an error', await thrown(() => measure.loadRubric(noPrompt)), `the rubric module ${noPrompt} exports no PROMPT string holding $ARGUMENTS`);
