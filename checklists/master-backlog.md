@@ -455,7 +455,9 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   The written entry stays, with resolveCommand(...).index === -1, and the carried command is a nested script.
   Next: vendored sync and check in the worktree feat/c8-vendored-launchers (b4d9ee2), then the importer selftests
   and campaigns, then integration. b100 still has open: 3 stale ungated-landing-guard mutants and the unmodelled
-  cmd `( )` grouping. PENDING, reason (3): the owner froze new work until backlog-1-6 lands (L18). It is the
+  cmd `( )` grouping. Master read b100's source on 2026-10-26 (shell-command.mjs:81-130, :584) and passed two
+  more gaps to b100: `cmd //c` (the Git Bash spelling) is not recognised as a nested script, and a `%VAR%` word
+  gives no "unresolvable" signal that consumers can use to fail closed. PENDING, reason (3): the owner froze new work until backlog-1-6 lands (L18). It is the
   first unit of the next batch.
 - T8 port units still to do after this landing: F2 (re-export company-remote's fold), G2/G3 (git consumers), G4
   (delete the wrappers), P2u (rotate and file-lock liveness), J1-J4 (journal port), H4 and H8 (remaining guards),
