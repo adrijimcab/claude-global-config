@@ -1,6 +1,7 @@
 /**
- * The premise judge: the rubric of the native `prompt` Stop hook wired in `~/.claude/settings.json`, kept here
- * as the one source the selftest compares the settings entry against, byte for byte.
+ * The premise judge: the rubric the Stop command hook `node "$HOME/.claude/judge-gate/run.mjs" premise` asks a model,
+ * kept here as its one source (`../judge-gate/judges.mjs` loads it; the selftest refuses a native prompt hook that
+ * still carries it).
  *
  * WHY. Owner directive 2026-10-06 (`rules/00-owner-mandates.md`): every premise the assistant acts on, the
  * owner's own included, is judged before it is acted on or presented as a constraint. The claim guard
@@ -11,9 +12,12 @@
  * CONTRACT (code.claude.com/docs/en/hooks, "Prompt-based hooks", read 2026-10-06): `type: "prompt"`, the hook
  * input JSON replaces `$ARGUMENTS`, the default model is the one Claude Code uses for background work, the
  * default timeout is 30 s, and the model answers `{"ok": true}` or `{"ok": false, "reason": "..."}`. On `Stop`,
- * `ok: false` feeds the reason back as Claude's next instruction and the turn continues. `stop_hook_active` is
- * true while Claude continues because of a stop hook; a prompt hook has no code to check it, so rule 1 of the
- * rubric makes the model pass on it, and the harness's own cap of 8 consecutive continuations is the backstop.
+ * `ok: false` feeds the reason back as Claude's next instruction and the turn continues. That was the native hook's
+ * contract; since 2026-10-12 the judge runs through `../judge-gate/`, a command hook that keeps the same answer
+ * shape and decides in CODE what the native hook left to the model: `stop_hook_active` (a continued stop is judged
+ * only until its turn has had `MAX_BLOCKS_PER_TURN` blocks) and an answer that is no verdict (it passes as
+ * `non-verdict`). No rule of the rubric asks the model to test `stop_hook_active`; the harness's cap of 8
+ * consecutive continuations stays the outer backstop.
  *
  * RUBRIC v5 (2026-10-12): v4 with rule 1 rewritten. The gate (`../judge-gate/`) now passes a continued stop in code, so
  * the model is no longer asked to test `stop_hook_active`; measured on the voice judge, the model failed that test in 1 of 5
@@ -41,14 +45,17 @@
  * never mistaken for a block. `PROMPT_SIGNATURE` is the rubric's first line, which `latency.mjs` uses to find
  * this hook's duration among the Stop hooks of a transcript.
  *
- * @es El juez de premisas: la rúbrica del hook `prompt` de Stop cableado en `~/.claude/settings.json`, guardada
- * aquí como la única fuente con la que el selftest compara esa entrada, byte a byte. POR QUÉ: directiva del
+ * @es El juez de premisas: la rúbrica que el hook de comando de Stop `judge-gate/run.mjs premise` le pregunta a un
+ * modelo, guardada aquí como su única fuente. POR QUÉ: directiva del
  * dueño 2026-10-06, toda premisa se juzga antes de actuar o de presentarla como restricción. La guardia de
  * afirmaciones caza los giros que un patrón ve; este hook pregunta a un modelo lo que un patrón no puede.
  * CONTRATO (docs oficiales, leídas el 2026-10-06): `$ARGUMENTS` es el JSON de entrada, modelo de fondo por
  * defecto, 30 s de timeout, respuesta `{"ok": true}` o `{"ok": false, "reason": "..."}`; en Stop, `ok: false`
- * devuelve el motivo como siguiente instrucción. La regla 1 de la rúbrica hace pasar con `stop_hook_active`, y el
- * tope del harness de 8 continuaciones seguidas es la red. MEDIDO: el motivo empieza por la marca
+ * devuelve el motivo como siguiente instrucción. Ese era el contrato del hook nativo; desde el 2026-10-12 el juez corre
+ * por `../judge-gate/`, un hook de comando que decide en CÓDIGO `stop_hook_active` (una parada continuada se juzga
+ * solo hasta que su turno lleve `MAX_BLOCKS_PER_TURN` bloqueos) y una respuesta que no es veredicto (pasa como
+ * `non-verdict`); ninguna regla le pide al modelo probar `stop_hook_active`, y el tope del harness de 8
+ * continuaciones seguidas sigue siendo la red exterior. MEDIDO: el motivo empieza por la marca
  * `PREMISE-JUDGE:`, que `journal-guard.mjs` encuentra en el transcript y registra; la rúbrica la deletrea en
  * palabras, nunca literal, para que el texto del prompt no se confunda con un bloqueo.
  */

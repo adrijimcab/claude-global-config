@@ -75,7 +75,7 @@ export function pendingCreations(call) {
 }
 
 /**
- * The ownership the journal and the tenancy give: `owns` / `ownsCanonical` answer whether a path is the agent's.
+ * The ownership the journal and the tenancy give: `ownsCanonical` answers whether a canonical path is the agent's.
  * A path is owned when it is the tenancy worktree or below it; when it is a confirmed path whose identity is
  * unchanged; or when it lies below such a confirmed folder AND was born inside one of the agent's own call
  * intervals (what its child processes dropped there).
@@ -106,5 +106,5 @@ export function ownershipOf(journal, ownTreeRoot, identify = identityOf) {
     }
   };
 
-  return { ownsCanonical, owns: (candidate) => ownsCanonical(canonical(candidate)) };
+  return { ownsCanonical };
 }

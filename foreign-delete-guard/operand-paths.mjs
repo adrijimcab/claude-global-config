@@ -6,7 +6,11 @@
  *
  * GIT BASH `/tmp`. Git Bash maps `/tmp` to the user's temp folder, but the path arrives here as `C:/tmp/...`, a
  * folder that does not exist, so a deletion there would look like deleting nothing. The rebasing is the one
- * `shared-temp-guard/shared-temp-targets.mjs` already owns (`spellingsUnder`); both spellings are judged.
+ * `shared-temp-guard/shared-temp-targets.mjs` already owns (`spellingsUnder`); both spellings are judged. A
+ * spelling is a second LOCATION only where it names a different place: Git Bash exists only on Windows, and on any
+ * other platform `/tmp` is a real folder of its own, so rebasing it onto the temp root (`TMPDIR=/var/tmp`) would
+ * judge a path the command never reaches, and rebasing it onto `/tmp` itself would list the same path twice. So the
+ * second spelling is made only for `win32`, and only when it differs from the first.
  *
  * REASON CODES, the vocabulary `refusal.mjs` words in both languages: `variable` (a `$` or `%` expansion, a
  * backtick substitution in bash, a brace range) and `directory` (the line's own `cd` cannot be followed).
@@ -17,7 +21,11 @@
  * se puede saber antes de ejecutar (variable, sustitución de comandos, rango de llaves, un `cd` imposible de
  * seguir) vuelve como entrada `unresolvable` con un CÓDIGO de motivo, nunca como una conjetura. EL `/tmp` DE
  * GIT BASH llega como `C:/tmp/...`, una carpeta que no existe, y borrar allí parecería no borrar nada; la
- * reubicación es la que ya posee `shared-temp-targets.mjs` (`spellingsUnder`), y se juzgan las dos grafías.
+ * reubicación es la que ya posee `shared-temp-targets.mjs` (`spellingsUnder`), y se juzgan las dos grafías. Una
+ * grafía es un segundo LUGAR solo donde nombra otro sitio: Git Bash solo existe en Windows, y en cualquier otra
+ * plataforma `/tmp` es una carpeta propia, así que reubicarla sobre la raíz temporal (`TMPDIR=/var/tmp`) juzgaría una
+ * ruta que el comando nunca toca, y reubicarla sobre el propio `/tmp` listaría la misma ruta dos veces. Por eso la
+ * segunda grafía solo se hace en `win32`, y solo cuando difiere de la primera.
  */
 
 import path from 'node:path';
@@ -32,11 +40,17 @@ function dependsOnExpansion(word, dialect) {
   return word.includes('$') || word.includes('%') || (dialect === DIALECTS.BASH && word.includes('`'));
 }
 
-/** The spellings of an absolute path: its own, and where Git Bash's `/tmp` really is. @es Las grafías de una ruta absoluta: la propia y donde está de verdad el `/tmp` de Git Bash. */
-function spellings(absolute) {
-  const rebased = sharedTempRoots().map((root) => spellingsUnder(absolute, canonical(root))[1]).find((spelling) => spelling !== undefined);
+/**
+ * The locations an absolute path names: its own and, on Windows, where Git Bash's `/tmp` really is when that is
+ * another place. @es Los lugares que nombra una ruta absoluta: el propio y, en Windows, donde está de verdad el
+ * `/tmp` de Git Bash cuando es otro sitio.
+ */
+function spellings(absolute, platform, tempRoots) {
+  if (platform !== 'win32') return [absolute];
 
-  return rebased === undefined ? [absolute] : [absolute, rebased];
+  const rebased = tempRoots.map((root) => spellingsUnder(absolute, canonical(root))[1]).find((spelling) => spelling !== undefined);
+
+  return rebased === undefined || rebased === canonical(absolute) ? [absolute] : [absolute, rebased];
 }
 
 /**
@@ -45,10 +59,11 @@ function spellings(absolute) {
  * @param {string} via The command, named in the refusal.
  * @param {string} dialect `bash` or `powershell`.
  * @param {string} platform Injectable for the Git Bash path translation.
+ * @param {string[]} [tempRoots] The shared temp roots Git Bash's `/tmp` maps to, injectable.
  * @returns {Array<{ path: string, via: string } | { path: undefined, unresolvable: string, via: string }>}
  * @es Las rutas que la palabra puede significar, o una entrada `unresolvable` con su código.
  */
-export function resolveOperand(raw, directory, via, dialect, platform = process.platform) {
+export function resolveOperand(raw, directory, via, dialect, platform = process.platform, tempRoots = sharedTempRoots()) {
   if (dependsOnExpansion(raw, dialect)) return [{ path: undefined, unresolvable: 'variable', via }];
   if (directory === undefined) return [{ path: undefined, unresolvable: 'directory', via }];
 
@@ -59,7 +74,7 @@ export function resolveOperand(raw, directory, via, dialect, platform = process.
   const entries = [];
 
   for (const word of words) {
-    for (const absolute of spellings(path.resolve(directory, nativeSpelling(word, platform)))) {
+    for (const absolute of spellings(path.resolve(directory, nativeSpelling(word, platform)), platform, tempRoots)) {
       if (hasWildcard(word)) entries.push(...expandPath(absolute).map((expanded) => ({ path: expanded, via })));
 
       entries.push({ path: absolute, via });

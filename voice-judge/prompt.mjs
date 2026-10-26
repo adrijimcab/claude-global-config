@@ -1,5 +1,5 @@
 /**
- * The voice judge: the LIVE rubric (v8g) of the second native `prompt` Stop hook wired in `~/.claude/settings.json`, the
+ * The voice judge: the LIVE rubric (v8g) the Stop command hook `judge-gate/run.mjs voice` asks a model, the
  * one source `../judge-gate/judges.mjs` runs and `../premise-judge/journal-guard.mjs` reads the marker of.
  *
  * WHY. Owner order 2026-10-11: «Lo de GENTLEMAN, para ti y para todas las sesiones... siempre lo impongo y nunca
@@ -16,9 +16,11 @@
  * voz, no te preocupes por lo que yo piense de las respuestas. dejalo metido»), with its ship bar not met: on his 12
  * labels it agrees with him on 61 of 72 judgments, v7 on 22.
  *
- * CONTRACT. Same as `../premise-judge/prompt.mjs`: `type: "prompt"`, the hook input replaces `$ARGUMENTS`,
- * `{"ok": true}` or `{"ok": false, "reason": "..."}`, `ok: false` on Stop feeds the reason back and the turn
- * continues, and `stop_hook_active` is passed by rule 1 of the rubric. This judge NEVER sets `impossible`.
+ * CONTRACT. Same as `../premise-judge/prompt.mjs`: the hook input replaces `$ARGUMENTS`, `{"ok": true}` or
+ * `{"ok": false, "reason": "..."}`, a block on Stop feeds the reason back and the turn continues, and the gate, not
+ * the rubric, decides `stop_hook_active` and an answer that is no verdict (`../judge-gate/gate.mjs`); rule 1 only
+ * tells the model it may see a rewrite. The candidate v8h (`rubrics/v8h.mjs`) is measured, never live, until a MET
+ * ship bar or the owner promotes it (`DECISION.md`). This judge NEVER sets `impossible`.
  * Its blocks start with `MARKER`, which the journal guard journals under the `voice-judge` mechanism so
  * `guard-precision/` measures it like any other guard. Every rubric spells the marker in words.
  *
@@ -32,9 +34,9 @@
  * - 2026-10-19: rubric v8, after two Judgment Day rounds and the owner's calibration of replies A and B.
  * - 2026-10-11: rubric v7, live since then.
  *
- * @es El juez de voz: la rúbrica VIVA del segundo hook `prompt` de Stop en `~/.claude/settings.json`, la única
- * fuente que corre la compuerta y de la que la guardia de journal lee la marca. POR QUÉ: orden del dueño
- * 2026-10-11; un estilo de salida es una guía, no una garantía. VIVA Y CON NOMBRE: cada rúbrica vive en `rubrics/`;
+ * @es El juez de voz: la rúbrica VIVA que el hook de comando de Stop `judge-gate/run.mjs voice` le pregunta a un
+ * modelo, la única fuente que corre la compuerta y de la que la guardia de journal lee la marca. POR QUÉ: orden
+ * del dueño 2026-10-11; un estilo de salida es una guía, no una garantía. VIVA Y CON NOMBRE: cada rúbrica vive en `rubrics/`;
  * `v8g.mjs` está viva y `v7.mjs` y `v8f.mjs` siguen como rúbricas con nombre que `measure.mjs` puede medir. Una
  * rúbrica distinta de la v7 solo puede estar viva si su texto exacto (su sha256) tiene la barra ALCANZADA en
  * `ship-bar.json` o una promoción del dueño en `promotion.json`, escrita a mano desde sus palabras; el selftest
