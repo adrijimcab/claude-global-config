@@ -43,7 +43,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DECLARED_RUN_OUTPUT, undeclaredPartOf } from './declared-run-output.mjs';
+import { DECLARED_RUN_OUTPUT, isReceiptedInstall, undeclaredPartOf } from './declared-run-output.mjs';
+import { RECEIPT } from '../worktree-install/own-install.mjs';
+import { hashFile } from '../worktree-install/verdict-store.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 import { decide, evaluate, sharedLiveness } from './guard.mjs';
 import { integrationBase } from './integration-base.mjs';
@@ -448,7 +450,7 @@ try {
   // wtC: created by nobody in either transcript, integrated: nobody's, so nobody is offered it.
   const own = repository('repo-own', 'develop');
 
-  commit(own, '.gitignore', 'scratch/\n', 'own1');
+  commit(own, '.gitignore', 'scratch/\nnode_modules\n', 'own1');
   commit(own, 'base.txt', 'base\n', 'own2');
   git(own, 'push', '--quiet', '-u', 'origin', 'develop');
   git(own, 'remote', 'set-head', 'origin', 'develop');
@@ -544,6 +546,35 @@ try {
   check('declared output: a directory that cannot be read beside the declared path is returned whole, as work', undeclaredPartOf(path.join(root, 'nowhere'), 'scratch/').join() === 'scratch/');
   check('declared output: a worktree holding only declared scratch is removable end to end', censusSafely(own, only(scratchOnly))[0]?.kind === 'removable');
   check('declared output: an undeclared ignored entry reads as stranded end to end', censusSafely(own, only(scratchOther))[0]?.kind === 'stranded');
+
+  // ---- declared installer output: the worktree's OWN install, proven by its receipt -------------
+  // `junctioned-node-modules-broke-vitest-coverage`: the own install is the default worktree tree, so a
+  // node_modules that the receipt ties to the lockfile beside it is reproducible, not work; anything else is.
+  // @es La instalación PROPIA, probada por su recibo, es reproducible y no trabajo; lo demás sí lo es.
+  const ownInstall = (branch, receipt) => {
+    const directory = worktree(own, branch, 'origin/develop');
+
+    commit(directory, 'package-lock.json', '{"lockfileVersion":3}\n', 'lock');
+    mkdirSync(path.join(directory, 'node_modules', 'left-pad'), { recursive: true });
+    writeFileSync(path.join(directory, 'node_modules', 'left-pad', 'index.js'), 'module.exports = 1;\n');
+    if (receipt !== undefined) writeFileSync(path.join(directory, 'node_modules', RECEIPT), JSON.stringify(receipt(directory)));
+
+    return directory;
+  };
+  const lockHash = (directory) => hashFile(path.join(directory, 'package-lock.json'));
+  const receipted = ownInstall('own/install-receipted', (directory) => ({ lockfile: 'package-lock.json', lockfileHash: lockHash(directory) }));
+  const unreceipted = ownInstall('own/install-unreceipted');
+  const stale = ownInstall('own/install-stale', (directory) => ({ lockfile: 'package-lock.json', lockfileHash: lockHash(directory) }));
+  const escaping = ownInstall('own/install-escaping', (directory) => ({ lockfile: '../package-lock.json', lockfileHash: lockHash(directory) }));
+
+  commit(stale, 'package-lock.json', '{"lockfileVersion":3,"packages":{}}\n', 'lock moved on');
+
+  check('installer output: an own install its receipt ties to the lockfile holds no work', (() => { const state = workingTreeState(receipted); return state.measured && state.work.length === 0; })());
+  check('installer output: a node_modules with NO receipt is work', workingTreeState(unreceipted).work.some((entry) => entry.startsWith('node_modules')));
+  check('installer output: a receipt whose lockfile moved on since the install is work', workingTreeState(stale).work.some((entry) => entry.startsWith('node_modules')));
+  check('installer output: a receipt naming a PATH, not a bare file, is work', workingTreeState(escaping).work.some((entry) => entry.startsWith('node_modules')));
+  check('installer output: only a folder named node_modules can be an install', isReceiptedInstall(receipted, ['scratch']) === false);
+  check('installer output: a receipt with no hash is work', (() => { writeFileSync(path.join(unreceipted, 'node_modules', RECEIPT), JSON.stringify({ lockfile: 'package-lock.json' })); return isReceiptedInstall(unreceipted, ['node_modules']); })() === false);
 
   // ---- noticed sets -----------------------------------------------------------------------------
   const memory = path.join(root, 'memory');
