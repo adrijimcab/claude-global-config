@@ -92,6 +92,18 @@ const sha256 = (text) => createHash('sha256').update(text).digest('hex');
  */
 export const shipBarRecord = (rubric, bar, ownerLabels, runs, measuredOn) => ({ rubric: path.relative(HERE, rubric.path).split(path.sep).join('/'), promptSha256: sha256(rubric.prompt), met: bar.met, verdict: bar.en, ownerLabels, runs, measuredOn });
 
+/**
+ * `date` as a local ISO timestamp with its offset, to the second (`2026-10-26T00:30:05+01:00`), so a record says
+ * both the local day and the instant. @es `date` como marca ISO local con su desfase, al segundo.
+ */
+export function isoWithOffset(date) {
+  const two = (value) => String(value).padStart(2, '0');
+  const minutes = -date.getTimezoneOffset();
+  const offset = `${minutes < 0 ? '-' : '+'}${two(Math.floor(Math.abs(minutes) / 60))}:${two(Math.abs(minutes) % 60)}`;
+
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}T${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}${offset}`;
+}
+
 /** The ship-bar record on disk, or `undefined` when there is none. @es El registro de la barra en disco, o `undefined` si no hay. */
 export function readShipBarRecord() {
   try {
@@ -353,7 +365,7 @@ async function rates(fixtures, runs, model, parallel, rubric, ask, record) {
   const bar = shipBarOf(ownerSets);
 
   console.log(`rubric=${rubric.path} cost=$${cost.toFixed(4)} ship-bar(owner labels, every run: recall>=90% and precision>=95%)=${bar.en} @es rúbrica=${rubric.path} costo=$${cost.toFixed(4)} barra(etiquetas del dueño, toda corrida: recall>=90% y precisión>=95%)=${bar.es}`);
-  if (record !== undefined) record(shipBarRecord(rubric, bar, (ownerSets[0]?.red ?? 0) + (ownerSets[0]?.green ?? 0), runs, new Date().toISOString().slice(0, 10)));
+  if (record !== undefined) record(shipBarRecord(rubric, bar, (ownerSets[0]?.red ?? 0) + (ownerSets[0]?.green ?? 0), runs, isoWithOffset(new Date())));
 
   return bar.met ? 0 : 1;
 }

@@ -289,7 +289,12 @@ const prefixAsked = asked.splice(0);
 const recordExit = await measure.main(['--rates', '--runs', '1', '--prefix', 'held-owner-', '--record', '--rubric', goodRubric, '--only', 'held-owner-red-5f411d3c-10181322'], { ask: fakeAsk, writeRecord }).catch((error) => `threw: ${error.message}`);
 
 printedLines.splice(0);
-check('measure: --rates writes the ship-bar record only with --record, for the rubric it measured', [recordExit, written.length, written[0]?.rubric, written[0]?.promptSha256, written[0]?.met, written[0]?.ownerLabels, written[0]?.runs, /^\d{4}-\d{2}-\d{2}$/.test(written[0]?.measuredOn ?? '')], [1, 1, path.relative(HERE, goodRubric).split(path.sep).join('/'), sha256('judge $ARGUMENTS'), false, 1, 1, true]);
+check('measure: --rates writes the ship-bar record only with --record, for the rubric it measured', [recordExit, written.length, written[0]?.rubric, written[0]?.promptSha256, written[0]?.met, written[0]?.ownerLabels, written[0]?.runs, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(written[0]?.measuredOn ?? '')], [1, 1, path.relative(HERE, goodRubric).split(path.sep).join('/'), sha256('judge $ARGUMENTS'), false, 1, 1, true]);
+
+const instant = new Date(Date.UTC(2026, 9, 25, 23, 30, 5));
+const stamped = measure.isoWithOffset?.(instant) ?? '';
+
+check('measure: a local timestamp carries its offset and names the same instant', [/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(stamped), new Date(stamped).getTime() === instant.getTime(), stamped.slice(-6) === (() => { const minutes = -instant.getTimezoneOffset(); const abs = Math.abs(minutes); return `${minutes < 0 ? '-' : '+'}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`; })()], [true, true, true]);
 
 console.log = consoleLog;
 check('measure: --prefix selects what --rates measures, plus every rule-4 pin, once per run', [prefixExit, prefixAsked.length, prefixAsked.filter((prompt) => prompt.includes('Ya tomé la decisión que me pidió Discovery')).length], [1, 2 * (1 + pinnedCount), 2]);
