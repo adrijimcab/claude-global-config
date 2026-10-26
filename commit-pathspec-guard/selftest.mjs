@@ -84,7 +84,8 @@ const cases = [
   // --- `git -C <path> commit`, cwd deliberately UNRELATED — proves `-C` decides, not cwd.
   ['deny', bashAt(b100ProjectRoot, `git -C "${forwardSlashClaudePath}" commit -m "x"`), 'FORWARD-SLASH `-C` path, cwd elsewhere'],
   ['deny', bashAt(b100ProjectRoot, `git -C "${claudeRepo.worktree}" commit -m "x"`), 'WINDOWS (backslash) `-C` path, cwd elsewhere'],
-  ['deny', bashAt(b100ProjectRoot, `git -C="${claudeRepo.worktree}" commit -m "x"`), 'the FUSED `-C=value` spelling is honoured too'],
+  ['allow', bashAt(b100ProjectRoot, `git -C="${claudeRepo.worktree}" commit -m "x"`), 'the FUSED `-C=value` spelling is no `-C`: git rejects it as an unknown option (measured 2026-10-19), so nothing commits'],
+  ['deny', bashAt(b100ProjectRoot, `cd "$SOMEWHERE" && git -C "${claudeRepo.worktree}" commit -m "x"`), 'an ABSOLUTE `-C` decides even after a `cd` the line cannot follow'],
   ['deny', bashAt(claudeRepo.worktree, `git -C "${b100Repo.worktree}" commit -m "x"`), 'a PLAIN git commit reaching the OTHER declared repo through `-C`, bypassing the wrapper entirely'],
   ['allow', bashAt(b100ProjectRoot, `git -C "${claudeRepo.worktree}" commit -m "x" -- foo.txt`), '`-C` plus an explicit pathspec'],
   ['deny', bashAt(claudeRepo.worktree, 'git commit -m "x" --'), 'NEAR MISS: a bare trailing `--` names NO path at all — still refuse'],

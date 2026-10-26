@@ -18,7 +18,9 @@
  *
  * TWO SHAPES REACH THE SAME REPO, and both are covered:
  *   - a plain `git [-C <path>] commit ...`, resolved through the line's own `cd`s (`working-directory.mjs`)
- *     and any `-C` (`git-invocations.mjs`, which already applies `~`/Git-Bash path translation);
+ *     and any `-C` (`git-invocations.mjs`, which already applies `~`/Git-Bash path translation, folded in order
+ *     by `company-remote/invocation-directory.mjs`, the one `-C` fold the guards share; git itself rejects a
+ *     fused `-C=<dir>` with "unknown option", measured 2026-10-19, so that spelling runs nothing);
  *   - `node <...>/backup-repo.mjs commit ...` — detected by resolving the SCRIPT ARGUMENT's own directory
  *     (never the invoking `node`'s cwd) against the declared repo whose wrapper it is, because the wrapper
  *     hardcodes its work-tree to its OWN directory regardless of where it is invoked from.
@@ -46,6 +48,7 @@
 
 import path from 'node:path';
 
+import { invocationDirectory } from '../company-remote/invocation-directory.mjs';
 import { declaredRepos } from '../config-sync-guard/repos.mjs';
 import { nativeSpelling, withWorkingDirectories } from '../cherry-pick-guard/working-directory.mjs';
 import { gitInvocations } from '../shell-command/git-invocations.mjs';
@@ -82,30 +85,6 @@ function resolveAgainst(directory, value) {
   return path.resolve(directory, value);
 }
 
-/**
- * The directory a git invocation's OWN `-C` option(s) point at, applied in order over the directory its
- * `cd`s already resolved to. `git-invocations.mjs` already native-spells a `-C` value (`~`, Git-Bash
- * `/c/...`), so this only has to fold it against what came before.
- * @es El directorio al que apunta el/los `-C` propios de una invocación, aplicados en orden.
- */
-function gitOptionDirectory(gitOptions, startDirectory) {
-  let directory = startDirectory;
-
-  for (let index = 0; index < gitOptions.length; index += 1) {
-    const option = gitOptions[index];
-
-    if (option === '-C') {
-      directory = resolveAgainst(directory, gitOptions[index + 1]);
-      index += 1;
-      continue;
-    }
-
-    if (option.startsWith('-C=')) directory = resolveAgainst(directory, option.slice('-C='.length));
-  }
-
-  return directory;
-}
-
 /** Whether `args` names an explicit pathspec: `-- <path>` or the bare `--only` flag. @es Si `args` nombra un pathspec explícito. */
 function hasExplicitPathspec(args) {
   const separatorAt = args.indexOf(PATHSPEC_SEPARATOR);
@@ -122,7 +101,7 @@ function gitCommitInvocations(script, dialect, cwd) {
   for (const invocation of gitInvocations(script, dialect, cwd)) {
     if (invocation.subcommand !== 'commit') continue;
 
-    const repo = repoAt(gitOptionDirectory(invocation.gitOptions, invocation.directory));
+    const repo = repoAt(invocationDirectory(invocation));
 
     if (repo === undefined) continue;
 

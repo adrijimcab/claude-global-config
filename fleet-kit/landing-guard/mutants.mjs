@@ -6,7 +6,6 @@ import { runCampaign } from '../testing/campaign.mjs';
 const B = 'landing-guard/branch-moves.mjs';
 const M = 'landing-guard/move-resolution.mjs';
 const D = 'landing-guard/decision.mjs';
-const I = 'lib/invocation-directory.mjs';
 const G = 'landing-guard/guard.mjs';
 const R = 'lib/invocation-repository.mjs';
 
@@ -34,5 +33,5 @@ runCampaign('landing-guard/selftest.mjs', [
   ['GIT_DIR beats --git-dir', R, 'option === undefined ? environmentGitDir(invocation.text, dialect, platform) : option.value', 'environmentGitDir(invocation.text, dialect, platform) ?? option?.value'],
   ['a relative --git-dir ignores the -C before it', R, 'option === undefined ? invocation.gitOptions.length : option.at', '0'],
   ['the repository lookup ignores the invocation options', D, 'const ask = gitAsker(directory, repositoryOptions(request.invocation, dialect));', 'const ask = gitAsker(directory);'],
-  ['-C is not followed', I, "if (invocation.gitOptions[index] === '-C' && directory !== undefined) directory =", 'if (false) directory =']
+  ['-C is not followed', D, 'const directory = invocationDirectory(request.invocation);', 'const directory = request.invocation.directory;']
 ]);
