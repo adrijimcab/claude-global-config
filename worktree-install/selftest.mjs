@@ -182,10 +182,10 @@ check('source: an unknown kind throws, bilingual', () => probeSource({ style: 'g
   check('store: absent -> no record', readRecorded(store, '/p'), undefined);
   recordVerdict(store, { projectKey: '/p', verdict: 'fail' });
   recordVerdict(store, { projectKey: '/q', verdict: 'pass' });
-  check('store: a record reads back', readRecorded(store, '/p').verdict, 'fail');
+  check('store: a record reads back', () => readRecorded(store, '/p').verdict, 'fail');
   recordVerdict(store, { projectKey: '/p', verdict: 'pass' });
-  check('store: recording again replaces', readRecorded(store, '/p').verdict, 'pass');
-  check('store: other projects survive', readRecorded(store, '/q').verdict, 'pass');
+  check('store: recording again replaces', () => readRecorded(store, '/p').verdict, 'pass');
+  check('store: other projects survive', () => readRecorded(store, '/q').verdict, 'pass');
   check('store: no staging file left', readdirSync(path.dirname(store)), ['verdicts.json']);
   writeFileSync(store, '{not json');
   check('store: corrupt -> no record (own install), never a throw', readRecorded(store, '/p'), undefined);
@@ -213,16 +213,17 @@ check('source: an unknown kind throws, bilingual', () => probeSource({ style: 'g
   check('farm: node_modules is a real directory', lstatSync(path.join(worktree, 'node_modules')).isSymbolicLink(), false);
   check('farm: a third-party entry resolves into main', realpathSync(path.join(worktree, 'node_modules', 'left-pad')), path.join(main, 'node_modules', 'left-pad'));
   check('farm: a workspace-local entry resolves to the worktree copy', realpathSync(path.join(worktree, 'node_modules', 'plugin')), path.join(worktree, 'tools', 'plugin'));
-  check('farm: an existing tree is never replaced', linkFarm({ mainTop: main, mainProject: main, worktreeTop: worktree, worktreeProject: worktree }).refused, 'the worktree already has a node_modules');
+  check('farm: an existing tree is never replaced', () => linkFarm({ mainTop: main, mainProject: main, worktreeTop: worktree, worktreeProject: worktree }).refused, 'the worktree already has a node_modules');
   check('farm: no main tree', linkFarm({ mainTop: root, mainProject: path.join(root, 'none'), worktreeTop: root, worktreeProject: fresh('farm-empty') }).refused, 'the main checkout has no node_modules');
 
   mkdirSync(path.join(worktree, 'node_modules', '.vite'));
   check('unfarm: a real directory is kept, links removed', unlinkFarm(worktree), { removed: false, kept: ['.vite'] });
   check('unfarm: the target is never followed (witness survives)', readFileSync(path.join(main, 'node_modules', 'left-pad', 'witness'), 'utf8'), 'keep');
   rmSync(path.join(worktree, 'node_modules', '.vite'), { recursive: true });
-  check('unfarm: an emptied farm is removed', unlinkFarm(worktree), { removed: true, kept: [] });
+  check('unfarm: an emptied farm is removed', [unlinkFarm(worktree), existsSync(path.join(worktree, 'node_modules'))], [{ removed: true, kept: [] }, false]);
   check('unfarm: nothing there', unlinkFarm(worktree), { removed: true, kept: [] });
 
+  rmSync(path.join(worktree, 'node_modules'), { recursive: true, force: true });
   symlinkSync(path.join(main, 'node_modules'), path.join(worktree, 'node_modules'), 'junction');
   check('unfarm: a wholesale link is unlinked', unlinkFarm(worktree), { removed: true, kept: [] });
   check('unfarm: wholesale target survives', existsSync(path.join(main, 'node_modules', 'left-pad', 'witness')), true);
@@ -240,12 +241,12 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
   const incident = runProbe({ projectRoot: junctioned, plan: vitestPlan, timeoutMs: 60_000 });
 
   check('INCIDENT: a junctioned worktree whose runner serves through Vite -> fail', incident.verdict, 'fail');
-  check('INCIDENT: the red probe failed, so the runner did run', incident.red.status, 1);
-  check('INCIDENT: the evidence names the refused module', incident.green.tail.some((line) => line.includes('Failed to fetch dynamically imported module')), true);
+  check('INCIDENT: the red probe failed, so the runner did run', () => incident.red.status, 1);
+  check('INCIDENT: the evidence names the refused module', () => incident.green.tail.some((line) => line.includes('Failed to fetch dynamically imported module')), true);
   check('cleanup: the probe file is gone', existsSync(path.join(junctioned, vitestPlan.file)), false);
   check('cleanup: the coverage report the run created is gone', existsSync(path.join(junctioned, 'coverage')), false);
   check('cleanup: the worktree is clean apart from node_modules', spawnSync('git', ['status', '--porcelain'], { cwd: junctioned, encoding: 'utf8' }).stdout, '');
-  check('cleanup: the farm is untouched', readdirSync(path.join(junctioned, 'node_modules')).sort(), ['@vitest', 'vitest']);
+  check('cleanup: the farm is untouched', () => readdirSync(path.join(junctioned, 'node_modules')).sort(), ['@vitest', 'vitest']);
 
   writeFileSync(path.join(junctioned, 'keep.txt'), 'mine');
   runProbe({ projectRoot: junctioned, plan: vitestPlan, timeoutMs: 60_000 });
@@ -253,8 +254,8 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
   rmSync(path.join(junctioned, 'keep.txt'));
 
   writeFileSync(path.join(junctioned, vitestPlan.file), 'mine');
-  check('occupied probe path -> could-not-run, the file kept', [runProbe({ projectRoot: junctioned, plan: vitestPlan, timeoutMs: 60_000 }).verdict, readFileSync(path.join(junctioned, vitestPlan.file), 'utf8')], ['could-not-run', 'mine']);
-  rmSync(path.join(junctioned, vitestPlan.file));
+  check('occupied probe path -> could-not-run, the file kept', () => [runProbe({ projectRoot: junctioned, plan: vitestPlan, timeoutMs: 60_000 }).verdict, readFileSync(path.join(junctioned, vitestPlan.file), 'utf8')], ['could-not-run', 'mine']);
+  rmSync(path.join(junctioned, vitestPlan.file), { force: true });
 
   writeFileSync(path.join(junctioned, 'fake-runner.json'), JSON.stringify({ servesThroughVite: false }));
   check('a runner that does not serve through Vite passes through the junction', runProbe({ projectRoot: junctioned, plan: vitestPlan, timeoutMs: 60_000 }).verdict, 'pass');
@@ -265,12 +266,24 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
   writeFileSync(path.join(junctioned, 'fake-runner.json'), JSON.stringify({ hang: true }));
   check('a hang -> timeout, not pass', runProbe({ projectRoot: junctioned, plan: vitestPlan, timeoutMs: 1_500 }).verdict, 'timeout');
 
+  // A probe file in a folder that already existed (Angular's `src/`) is removed by name, not as a new entry.
+  mkdirSync(path.join(junctioned, 'src'), { recursive: true });
+  writeFileSync(path.join(junctioned, 'src', 'keep.mjs'), 'mine');
+
+  const nested = { ...vitestPlan, file: 'src/worktree-install-probe.spec.mjs', args: ['run', '--coverage.enabled=true', 'src/worktree-install-probe.spec.mjs'] };
+
+  writeFileSync(path.join(junctioned, 'fake-runner.json'), JSON.stringify({ servesThroughVite: false }));
+  check('a nested probe runs', runProbe({ projectRoot: junctioned, plan: nested, timeoutMs: 60_000 }).verdict, 'pass');
+  check('cleanup: a nested probe file is removed, its folder kept', () => readdirSync(path.join(junctioned, 'src')), ['keep.mjs']);
+  rmSync(path.join(junctioned, 'src'), { recursive: true });
+  writeFileSync(path.join(junctioned, 'fake-runner.json'), '{}');
+
   check('no plan -> no-probe, nothing run', runProbe({ projectRoot: junctioned, plan: { ok: false, reason: 'no-test-runner' } }), { verdict: 'no-probe', reason: 'no-test-runner' });
 
   const empty = project.worktree('wt-empty');
 
   check('no runner in the tree -> could-not-run', runProbe({ projectRoot: empty, plan: vitestPlan, timeoutMs: 60_000 }).verdict, 'could-not-run');
-  check('bin: string form', (() => {
+  check('bin: string form', () => (() => {
     const dir = fresh('bin');
 
     mkdirSync(path.join(dir, 'node_modules', 'x'), { recursive: true });
@@ -278,6 +291,13 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
 
     return binOf(dir, 'x', 'x');
   })().endsWith(path.join('node_modules', 'x', 'cli.js')), true);
+  {
+    const broken = fresh('broken-bin');
+
+    mkdirSync(path.join(broken, 'node_modules', 'vitest'), { recursive: true });
+    writeFileSync(path.join(broken, 'node_modules', 'vitest', 'package.json'), JSON.stringify({ bin: { vitest: 'gone.mjs' } }));
+    check('a bin entry naming a missing file -> could-not-run, never spawned', runProbe({ projectRoot: broken, plan: vitestPlan, timeoutMs: 60_000 }).verdict, 'could-not-run');
+  }
   check('bin: missing entry', binOf(project.main, 'vitest', 'other'), undefined);
   check('bin: scoped packages resolve', binOf(project.main, '@vitest/coverage-v8', 'x'), undefined);
 }
@@ -295,7 +315,7 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
 
   check('own: installs and verifies', installed.ok, true);
   check('own: the receipt names the lockfile and its hash', installed.receipt === undefined ? undefined : [installed.receipt.lockfile, installed.receipt.lockfileHash], ['package-lock.json', hashFile(lockfile)]);
-  check('own: the receipt is on disk', JSON.parse(readFileSync(path.join(worktree, 'node_modules', RECEIPT), 'utf8')).lockfileHash, hashFile(lockfile));
+  check('own: the receipt is on disk', () => JSON.parse(readFileSync(path.join(worktree, 'node_modules', RECEIPT), 'utf8')).lockfileHash, hashFile(lockfile));
   check('own: the runner passes in its own tree', runProbe({ projectRoot: worktree, plan: vitestPlan, timeoutMs: 60_000 }).verdict, 'pass');
 
   const failing = project.worktree('wt-fail');
@@ -317,7 +337,7 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
   check('own: unreadable lockfile', ownInstall({ installDir: foreign, lockfile: path.join(foreign, 'absent'), command, cli: lying }).reason, `the lockfile ${path.join(foreign, 'absent')} cannot be read`);
   check('own: a spawn error', ownInstall({ installDir: foreign, lockfile, command, cli: lying, spawn: () => ({ error: { code: 'ENOENT' } }) }).reason, 'the install could not start: ENOENT');
   check('npm cli: npm_execpath first', npmCli({ env: { npm_execpath: '/x/npm-cli.js' }, execPath: '/n/node', exists: () => true }), '/x/npm-cli.js');
-  check('npm cli: a non-npm execpath is skipped', npmCli({ env: { npm_execpath: '/x/yarn.js' }, execPath: '/n/bin/node', exists: (p) => p.endsWith(path.join('lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')) }), path.join('/n/bin', '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'));
+  check('npm cli: a non-npm execpath is skipped', npmCli({ env: { npm_execpath: '/x/yarn.js' }, execPath: '/n/bin/node', exists: (p) => p === '/x/yarn.js' || p.endsWith(path.join('lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')) }), path.join('/n/bin', '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'));
   check('npm cli: the Windows layout', npmCli({ env: {}, execPath: '/n/node.exe', exists: (p) => p === path.join('/n', 'node_modules', 'npm', 'bin', 'npm-cli.js') }), path.join('/n', 'node_modules', 'npm', 'bin', 'npm-cli.js'));
   check('npm cli: none', npmCli({ env: {}, execPath: '/n/node', exists: () => false }), undefined);
 }
@@ -330,38 +350,38 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
 
   process.env.FAKE_NPM_TEMPLATES = project.templates;
 
-  check('situation: unproven at first', situationOf(project.main, { storeFile }).decision, { strategy: 'own-install', reason: 'unproven', needsProbe: true });
+  check('situation: unproven at first', () => situationOf(project.main, { storeFile }).decision, { strategy: 'own-install', reason: 'unproven', needsProbe: true });
 
   const refused = provision({ mainTop: project.main, worktreeTop: first, storeFile, timeoutMs: 60_000, cli: project.npmCli });
 
-  check('provision: the INCIDENT project gets its own install', [refused.ok, refused.strategy, refused.decision.reason], [true, 'own-install', 'probe-fail']);
-  check('provision: the steps are reported', refused.steps, ['junction form: 2 entries linked', 'probe: fail', 'junction form removed']);
-  check('provision: the worktree tree is its own', lstatSync(path.join(first, 'node_modules', 'vitest')).isSymbolicLink(), false);
-  check('provision: the verdict is recorded', readRecorded(storeFile, directoryKey(project.main)).verdict, 'fail');
+  check('provision: the INCIDENT project gets its own install', () => [refused.ok, refused.strategy, refused.decision.reason], [true, 'own-install', 'probe-fail']);
+  check('provision: the steps are reported', () => refused.steps, ['junction form: 2 entries linked', 'probe: fail', 'junction form removed']);
+  check('provision: the worktree tree is its own', () => lstatSync(path.join(first, 'node_modules', 'vitest')).isSymbolicLink(), false);
+  check('provision: the verdict is recorded', () => readRecorded(storeFile, directoryKey(project.main)).verdict, 'fail');
 
   const second = project.worktree('wt-2');
   const cached = provision({ mainTop: project.main, worktreeTop: second, storeFile, timeoutMs: 60_000, cli: project.npmCli });
 
-  check('provision: the cached verdict is reused, no probe re-run', cached.steps, []);
-  check('provision: cached -> own install', cached.strategy, 'own-install');
+  check('provision: the cached verdict is reused, no probe re-run', () => cached.steps, []);
+  check('provision: cached -> own install', () => cached.strategy, 'own-install');
 
   // A lockfile change invalidates the verdict; the new tree's runner no longer serves through Vite.
   writeFileSync(path.join(project.main, 'package-lock.json'), JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: {} }));
   writeFileSync(path.join(project.main, 'fake-runner.json'), JSON.stringify({ servesThroughVite: false }));
   project.commit('lockfile change');
-  check('situation: a lockfile change invalidates the verdict', situationOf(project.main, { storeFile }).decision.reason, 'lockfile-changed');
+  check('situation: a lockfile change invalidates the verdict', () => situationOf(project.main, { storeFile }).decision.reason, 'lockfile-changed');
 
   const third = project.worktree('wt-3');
 
-  check('situation: the main checkout is asked for its worktree', situationOf(project.main, { storeFile, worktreeTop: third }).decision.needsProbe, true);
+  check('situation: the main checkout is asked for its worktree', () => situationOf(project.main, { storeFile, worktreeTop: third }).decision.needsProbe, true);
   const proven = provision({ mainTop: project.main, worktreeTop: third, storeFile, timeoutMs: 60_000, cli: project.npmCli });
 
-  check('provision: a proven junction is kept', [proven.strategy, proven.steps], ['junction', ['junction form: 2 entries linked', 'probe: pass']]);
-  check('provision: the kept junction resolves into main', realpathSync(path.join(third, 'node_modules', 'vitest')), path.join(project.main, 'node_modules', 'vitest'));
+  check('provision: a proven junction is kept', () => [proven.strategy, proven.steps], ['junction', ['junction form: 2 entries linked', 'probe: pass']]);
+  check('provision: the kept junction resolves into main', () => realpathSync(path.join(third, 'node_modules', 'vitest')), path.join(project.main, 'node_modules', 'vitest'));
 
   const fourth = project.worktree('wt-4');
 
-  check('provision: a proven verdict is reused as a junction, no probe', provision({ mainTop: project.main, worktreeTop: fourth, storeFile, timeoutMs: 60_000, cli: project.npmCli }).steps, ['junction form: 2 entries linked']);
+  check('provision: a proven verdict is reused as a junction, no probe', () => provision({ mainTop: project.main, worktreeTop: fourth, storeFile, timeoutMs: 60_000, cli: project.npmCli }).steps, ['junction form: 2 entries linked']);
 
   // A worktree whose lockfile differs from the main checkout's never gets the main tree.
   const fifth = project.worktree('wt-5');
@@ -369,39 +389,39 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
   writeFileSync(path.join(fifth, 'package-lock.json'), JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: { other: {} } }));
   const differs = provision({ mainTop: project.main, worktreeTop: fifth, storeFile, timeoutMs: 60_000, cli: project.npmCli });
 
-  check('provision: a worktree locking another tree gets its own install', [differs.strategy, differs.decision.reason], ['own-install', 'worktree-lockfile-differs']);
-  check('probe: never measured from a worktree locking another tree', probeAndRecord({ mainTop: project.main, worktreeTop: fifth, storeFile }).probe, undefined);
-  check('provision: a worktree with a node_modules already is refused', provision({ mainTop: project.main, worktreeTop: fourth, storeFile: path.join(fresh('s'), 'v.json'), cli: project.npmCli }).reason, 'the worktree already has a node_modules');
-  check('provision: no project', provision({ mainTop: fresh('nothing'), worktreeTop: fresh('nothing-wt'), storeFile }).reason, 'no JS/TS project');
+  check('provision: a worktree locking another tree gets its own install', () => [differs.strategy, differs.decision.reason], ['own-install', 'worktree-lockfile-differs']);
+  check('probe: never measured from a worktree locking another tree', () => probeAndRecord({ mainTop: project.main, worktreeTop: fifth, storeFile }).probe, undefined);
+  check('provision: a worktree with a node_modules already is refused', () => provision({ mainTop: project.main, worktreeTop: fourth, storeFile: path.join(fresh('s'), 'v.json'), cli: project.npmCli }).reason, 'the worktree already has a node_modules');
+  check('provision: no project', () => provision({ mainTop: fresh('nothing'), worktreeTop: fresh('nothing-wt'), storeFile }).reason, 'no JS/TS project');
 
   // ── CLI ──
   const lines = [];
   const write = (line) => lines.push(line);
 
-  check('cli: decide exits 0 with JSON', [runCli(['decide', '--main', project.main], { write, storeFile }), JSON.parse(lines.at(-1)).decision.strategy], [0, 'junction']);
-  check('cli: unknown step -> 2, bilingual usage', [runCli(['explode', '--main', project.main], { write, storeFile }), lines.at(-1).includes(' @es ')], [2, true]);
-  check('cli: probe without a worktree -> 2', runCli(['probe', '--main', project.main], { write, storeFile }), 2);
-  check('cli: an unknown option -> 2', runCli(['decide', '--main', project.main, '--yes', 'y'], { write, storeFile }), 2);
-  check('cli: a dangling option -> 2', runCli(['decide', '--main'], { write, storeFile }), 2);
-  check('cli: a bad timeout -> 2', runCli(['probe', '--main', project.main, '--worktree', fourth, '--timeout-ms', '0'], { write, storeFile }), 2);
-  check('cli: probe exits 0 and prints the decision', [runCli(['probe', '--main', project.main, '--worktree', fourth], { write, storeFile }), JSON.parse(lines.at(-1)).probe.verdict], [0, 'pass']);
-  check('cli: probe with nothing to probe -> 1', runCli(['probe', '--main', fresh('none'), '--worktree', fourth], { write, storeFile }), 1);
-  check('cli: install of a non-project -> 1', runCli(['install', '--main', fresh('none'), '--worktree', fourth], { write, storeFile }), 1);
-  check('cli: provision of a non-project -> 1', runCli(['provision', '--main', fresh('none'), '--worktree', fourth], { write, storeFile }), 1);
+  check('cli: decide exits 0 with JSON', () => [runCli(['decide', '--main', project.main], { write, storeFile }), JSON.parse(lines.at(-1)).decision.strategy], [0, 'junction']);
+  check('cli: unknown step -> 2, bilingual usage', () => [runCli(['explode', '--main', project.main], { write, storeFile }), lines.at(-1).includes(' @es ')], [2, true]);
+  check('cli: probe without a worktree -> 2', () => runCli(['probe', '--main', project.main], { write, storeFile }), 2);
+  check('cli: an unknown option -> 2', () => runCli(['decide', '--main', project.main, '--yes', 'y'], { write, storeFile }), 2);
+  check('cli: a dangling option -> 2', () => runCli(['decide', '--main'], { write, storeFile }), 2);
+  check('cli: a bad timeout -> 2', () => runCli(['probe', '--main', project.main, '--worktree', fourth, '--timeout-ms', '0'], { write, storeFile }), 2);
+  check('cli: probe exits 0 and prints the decision', () => [runCli(['probe', '--main', project.main, '--worktree', fourth], { write, storeFile }), JSON.parse(lines.at(-1)).probe.verdict], [0, 'pass']);
+  check('cli: probe with nothing to probe -> 1', () => runCli(['probe', '--main', fresh('none'), '--worktree', fourth], { write, storeFile }), 1);
+  check('cli: install of a non-project -> 1', () => runCli(['install', '--main', fresh('none'), '--worktree', fourth], { write, storeFile }), 1);
+  check('cli: provision of a non-project -> 1', () => runCli(['provision', '--main', fresh('none'), '--worktree', fourth], { write, storeFile }), 1);
 
   const sixth = project.worktree('wt-6');
 
   // The CLI runs the REAL npm, which cannot install the fixture's fake lockfile: a failed install is exit 1, no receipt.
-  check('cli: a failing install exits 1, no receipt', [runCli(['install', '--main', project.main, '--worktree', sixth], { write, storeFile }), existsSync(path.join(sixth, 'node_modules', RECEIPT)), JSON.parse(lines.at(-1)).ok], [1, false, false]);
+  check('cli: a failing install exits 1, no receipt', () => [runCli(['install', '--main', project.main, '--worktree', sixth], { write, storeFile }), existsSync(path.join(sixth, 'node_modules', RECEIPT)), JSON.parse(lines.at(-1)).ok], [1, false, false]);
 
   const seventh = project.worktree('wt-7');
 
-  check('cli: provision exits 0', runCli(['provision', '--main', project.main, '--worktree', seventh], { write, storeFile }), 0);
+  check('cli: provision exits 0', () => runCli(['provision', '--main', project.main, '--worktree', seventh], { write, storeFile }), 0);
 
   const program = spawnSync(process.execPath, [path.join(HERE, 'worktree-install.mjs'), 'decide', '--main', project.main], { encoding: 'utf8', env: { ...process.env } });
 
-  check('cli process: runs as a program', [program.status, JSON.parse(program.stdout || '{}').decision?.strategy !== undefined], [0, true]);
-  check('cli process: importing it runs nothing', spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(path.join(HERE, 'worktree-install.mjs')).href)});`], { encoding: 'utf8' }).stdout, '');
+  check('cli process: runs as a program', () => [program.status, JSON.parse(program.stdout || '{}').decision?.strategy !== undefined], [0, true]);
+  check('cli process: importing it runs nothing', () => spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(path.join(HERE, 'worktree-install.mjs')).href)});`], { encoding: 'utf8' }).stdout, '');
 }
 
 check('strategy names', Object.values(INSTALL_STRATEGY), ['own-install', 'junction']);
