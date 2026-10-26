@@ -166,6 +166,14 @@ try {
   check('a mechanism-specific rule wins over a general one', [classify('fleet-kit', 'handback/refusals.jsonl').kind, classify('fleet-kit', 'landing-guard/refusals.jsonl').kind], [KEEP, ARCHIVE]);
   check('* is exactly one segment', [classify('fleet-kit', 'repos/k/verdicts/t.json').kind, classify('fleet-kit', 'repos/k/verdicts/deeper/t.json').kind], [KEEP, UNKNOWN]);
   check('** is one or more segments', [classify('fleet-kit', 'repos/k/diff-coverage/run-1/summary.json').kind, classify('failure-capture', 'condense/run/ledger.md').kind, classify('failure-capture', 'condense').kind], [ARCHIVE, ARCHIVE, UNKNOWN]);
+  check('prefix*suffix matches a segment with that start and ending', [pathMatches('stale-*.json', 'stale-ab12.json'), pathMatches('stale-*.json', 'stale-a.json')], [true, true]);
+  check('prefix*suffix needs the star to hold at least one character', [pathMatches('stale-*.json', 'stale-.json'), pathMatches('a*a', 'a'), pathMatches('a*a', 'aa')], [false, false, false]);
+  check('prefix*suffix needs both its start and its ending', [pathMatches('stale-*.json', 'other-ab.json'), pathMatches('stale-*.json', 'stale-ab.jsonl'), pathMatches('stale-*.json', 'stale-ab.txt')], [false, false, false]);
+  check('prefix*suffix is one segment', [pathMatches('stale-*.json', 'x/stale-ab.json'), pathMatches('x/stale-*.json', 'x/stale-ab.json')], [false, true]);
+  check('a segment with no star is compared whole, a segment with two stars is not a glob', [pathMatches('ab', 'abc'), pathMatches('a*b*c', 'axbxc'), pathMatches('a*b*c', 'a*b*c')], [false, false, true]);
+  check('a pattern with two stars is compared whole even when a glob on its first star would match', pathMatches('a*b*c', 'axb*c'), false);
+  check('a lone * matches any non-empty segment', [pathMatches('*', 'x'), pathMatches('a/*', 'a/anything.json')], [true, true]);
+  check('the stale records of commit-index-guard are kept', [classify('commit-index-guard', 'stale-0123abcd.json').kind, classify('commit-index-guard', 'stale-.json').kind], [KEEP, UNKNOWN]);
   check('a rule of one mechanism does not apply to another', classify('guard-anything', 'refusals.jsonl').kind, UNKNOWN);
   check('a file no rule names is unknown, with no reason', classify('collision-guard', 'surprise.txt'), { kind: UNKNOWN, reason: '' });
   check('a known kind carries its reason', classify('stash-watch', 'noticed.json').reason.length > 0, true);

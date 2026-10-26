@@ -73,10 +73,11 @@ const SESSIONS_FOLDER = 'sessions';
 /**
  * Every known state kind: `[mechanism, pattern, kind, reason]`, and for PRUNE a fifth element, the age in ms past
  * which the file is removed; first match wins. A pattern is a path relative to the mechanism's state directory,
- * `/`-separated; a segment `*` is any one segment, `*.ext` any one segment with that ending, and a last segment
- * `**` any one or more.
+ * `/`-separated; a segment `*` is any one segment, `prefix*suffix` (`*.ext` included) any one segment with that
+ * start and ending and at least one character between them, and a last segment `**` any one or more.
  * @es Cada tipo de estado conocido: `[mecanismo, patrón, tipo, motivo]`, y para PRUNE un quinto elemento, la edad
- * en ms a partir de la cual se borra; gana la primera coincidencia.
+ * en ms a partir de la cual se borra; gana la primera coincidencia. Un segmento `prefijo*sufijo` (incluido `*.ext`)
+ * es un segmento con ese comienzo y ese final y al menos un carácter entre ambos.
  */
 export const KINDS = Object.freeze([
   ['agent-liveness', 'lifecycle.jsonl', ARCHIVE, 'subagent start and stop events; a rotation refuses while a session lives, so no agent is running'],
@@ -92,6 +93,9 @@ export const KINDS = Object.freeze([
   ['brief-tenancy', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['collision-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['collision-guard', 'guard-errors.jsonl', ARCHIVE, 'malfunction journal'],
+  ['commit-index-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
+  ['commit-index-guard', 'errors.jsonl', ARCHIVE, 'git errors and timeouts that let a command go'],
+  ['commit-index-guard', 'stale-*.json', KEEP, 'paths a hook left stale after a commit, read by the next commit (the guard removes a settled one)'],
   ['config-sync-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['config-sync-guard', 'dismissals.jsonl', KEEP, 'dismissals in force'],
   ['config-sync-guard', 'pending.jsonl', KEEP, 'paths still waiting for a commit'],
@@ -156,10 +160,14 @@ export const KINDS = Object.freeze([
 
 /** Whether one path segment matches one pattern segment. @es Si un segmento de ruta casa con uno de patrón. */
 function segmentMatches(pattern, segment) {
-  if (pattern === '*') return true;
-  if (pattern.startsWith('*.')) return segment.endsWith(pattern.slice(1)) && segment.length > pattern.length - 1;
+  const star = pattern.indexOf('*');
 
-  return pattern === segment;
+  if (star === -1 || pattern.indexOf('*', star + 1) !== -1) return pattern === segment;
+
+  const prefix = pattern.slice(0, star);
+  const suffix = pattern.slice(star + 1);
+
+  return segment.length > prefix.length + suffix.length && segment.startsWith(prefix) && segment.endsWith(suffix);
 }
 
 /** Whether `relative` (`/`-separated) matches `pattern`. @es Si `relative` casa con `pattern`. */

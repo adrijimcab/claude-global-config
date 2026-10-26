@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a commit with no pathspec (or --include) commits the whole index, and after a hook rewrote committed paths the index holds a stale variant of them (MM); three agents saw MM and committed on, so the next sweeping commit is refused until the paths are named or settled."
+}

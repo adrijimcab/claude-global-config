@@ -108,6 +108,9 @@
 !/company-remote/**
 !/company-config/
 !/company-config/**
+!/commit-index-guard/
+!/commit-index-guard/**
+/commit-index-guard/state/
 !/cwd-change-guard/
 !/cwd-change-guard/**
 /cwd-change-guard/state/

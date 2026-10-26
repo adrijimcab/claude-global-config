@@ -1,6 +1,7 @@
 {
   "event": "PostToolUse",
   "guards": [
-    "../../gentle-ai-overlay/post-command-hook.mjs"
+    "../../gentle-ai-overlay/post-command-hook.mjs",
+    "../../commit-index-guard/guard.mjs"
   ]
 }
