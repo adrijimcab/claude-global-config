@@ -2,7 +2,7 @@
  * The DECISION of the brief-feasibility guard: does a brief instruct its worker to do something the
  * worker's own environment will refuse or cannot resolve?
  *
- * Three faces, each a measured incident of `instructed-a-worker-to-run-a-denied-command`:
+ * Five faces, the first three each a measured incident of `instructed-a-worker-to-run-a-denied-command`:
  *   - `denied-command` — an instructed command falls under a permission DENY rule that applies to the
  *     worker (a brief ordered `git rebase`, which `b100-am-ui/.claude/settings.local.json` denies);
  *   - `worktree-inside-a-worktree` — a worker that already runs in a linked worktree is told to create
@@ -10,14 +10,19 @@
  *     every shell call, and `ExitWorktree` is refused to subagents, so the worker is stranded;
  *   - `relative-tooling-path` — a worker in a linked worktree is told to use a `.claude/…` file by a
  *     RELATIVE path, where that file is gitignored and exists only in the main checkout.
+ *   - `worker-git-refused` — an instructed git command `worker-git-guard` refuses to every delegated worker
+ *     (`git switch`, `git checkout -- <path>`), asked of the guard's own decision (`worker-git.mjs`);
+ *   - `shell-less-role` — an `Agent` brief tells a role whose definition reaches no shell tool to run git or npm
+ *     (`shell-less-role.mjs`).
  * Each finding carries the line, the face and the working alternative, so the refusal can say all three.
  *
  * It decides FEASIBILITY, never wisdom: a brief that orders something permitted but unwise passes.
  *
  * @es La DECISIÓN del guard: ¿ordena el brief algo que el entorno del worker rechazará o no podrá
- * resolver? Tres caras, cada una un incidente medido: un comando que casa con una regla DENY, crear o
- * entrar en otro worktree desde un worktree, y una ruta RELATIVA a tooling gitignorado que solo existe
- * en el checkout principal. Decide FACTIBILIDAD, nunca sensatez.
+ * resolver? Cinco caras: un comando que casa con una regla DENY, crear o entrar en otro worktree desde un
+ * worktree, una ruta RELATIVA a tooling gitignorado que solo existe en el checkout principal, un comando git
+ * que `worker-git-guard` rechaza a todo worker (preguntado a su propia decisión), y git o npm ordenados a un rol
+ * cuya definición no alcanza ningún shell. Decide FACTIBILIDAD, nunca sensatez.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -28,12 +33,16 @@ import { commandWordIndex, executableName } from '../shell-command/shell-command
 
 import { denyRules, matchingRule } from './deny-rules.mjs';
 import { instructedCommands, instructedMentions } from './instructions.mjs';
+import { shellLessRoleRefusals } from './shell-less-role.mjs';
+import { workerGitRefusals } from './worker-git.mjs';
 import { workerLocation } from './worker-location.mjs';
 
 export const FACES = Object.freeze({
   DENIED_COMMAND: 'denied-command',
   WORKTREE_INSIDE_A_WORKTREE: 'worktree-inside-a-worktree',
-  RELATIVE_TOOLING_PATH: 'relative-tooling-path'
+  RELATIVE_TOOLING_PATH: 'relative-tooling-path',
+  WORKER_GIT_REFUSED: 'worker-git-refused',
+  SHELL_LESS_ROLE: 'shell-less-role'
 });
 
 /** The harness tool a brief may tell a worker to call to change its worktree. @es La herramienta del harness que cambia de worktree. */
@@ -132,6 +141,8 @@ export function inspectFeasibility(brief, payload, { processCwd = process.cwd(),
   const location = workerLocation(payload, brief.text, processCwd);
   const findings = [
     ...deniedCommands(instructions, denyRules(location.mainCheckout, home)),
+    ...workerGitRefusals(instructions, location.mainCheckout).map((finding) => ({ face: FACES.WORKER_GIT_REFUSED, ...finding })),
+    ...shellLessRoleRefusals(instructions, payload, location.mainCheckout, home === undefined ? undefined : join(home, '.claude')).map((finding) => ({ face: FACES.SHELL_LESS_ROLE, ...finding })),
     ...(location.linkedWorktree ? [...nestedWorktrees(instructions, brief.text, location), ...relativeToolingPaths(instructions, location)] : [])
   ];
 

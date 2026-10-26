@@ -39,7 +39,9 @@ const stateDirectory = () => stateDir('brief-feasibility');
 const FACE_TITLES = {
   [FACES.DENIED_COMMAND]: 'DENIED COMMAND — the worker\'s permission settings refuse this command\n  @es COMANDO DENEGADO — los permisos del worker rechazan este comando',
   [FACES.WORKTREE_INSIDE_A_WORKTREE]: 'WORKTREE INSIDE A WORKTREE — the worker already runs in a linked worktree\n  @es WORKTREE DENTRO DE UN WORKTREE — el worker ya corre en un worktree enlazado',
-  [FACES.RELATIVE_TOOLING_PATH]: 'RELATIVE TOOLING PATH — gitignored tooling does not exist in the worker\'s worktree\n  @es RUTA RELATIVA A TOOLING — el tooling gitignorado no existe en el worktree del worker'
+  [FACES.RELATIVE_TOOLING_PATH]: 'RELATIVE TOOLING PATH — gitignored tooling does not exist in the worker\'s worktree\n  @es RUTA RELATIVA A TOOLING — el tooling gitignorado no existe en el worktree del worker',
+  [FACES.WORKER_GIT_REFUSED]: 'WORKER GIT REFUSED — worker-git-guard refuses this git command to every delegated worker\n  @es GIT RECHAZADO AL WORKER — worker-git-guard rechaza este comando git a todo worker delegado',
+  [FACES.SHELL_LESS_ROLE]: 'SHELL-LESS ROLE — the delegated role declares no tool that runs a command\n  @es ROL SIN SHELL — el rol delegado no declara ninguna herramienta que ejecute órdenes'
 };
 
 function journal(entry) {
