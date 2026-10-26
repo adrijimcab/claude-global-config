@@ -9,7 +9,7 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 
 - [promoted] 2026-09-30 — stale-artifact-read-as-this-runs-result: mechanism .claude/gate-run/run-attribution.mjs <!--fc:stale-artifact-read-as-this-runs-result#10-->
 - [promoted] 2026-09-30 — bounded-search-read-as-absence: no mechanism <!--fc:bounded-search-read-as-absence#16-->
-- [promoted] 2026-10-02 — instructed-a-worker-to-run-a-denied-command: mechanism C:/Users/adrian.jimenez/.claude/brief-feasibility/guard.mjs <!--fc:instructed-a-worker-to-run-a-denied-command#5-->
+- [promoted] 2026-10-02 — instructed-a-worker-to-run-a-denied-command: mechanism C:/Users/adrian.jimenez/.claude/brief-feasibility/guard.mjs <!--fc:instructed-a-worker-to-run-a-denied-command#6-->
 - [promoted] 2026-09-22 — provisioning-bound-to-delegation-not-worktree-creation: mechanism .claude/fleet-env/worktree-created.mjs <!--fc:provisioning-bound-to-delegation-not-worktree-creation#3-->
 - [promoted] 2026-10-04 — worker-claim-about-unreachable-file-committed-as-fact: no mechanism <!--fc:worker-claim-about-unreachable-file-committed-as-fact#19-->
 - [promoted] 2026-09-29 — guard-that-cannot-go-red: mechanism .claude/entry-point-check/check.mjs <!--fc:guard-that-cannot-go-red#15-->
