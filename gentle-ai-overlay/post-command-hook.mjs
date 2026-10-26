@@ -22,14 +22,11 @@
  * su nombre; ejecutado solo, se vuelve un systemMessage. Siempre sale con 0: el comando ya corrió y este
  * hook nunca decide sobre él.
  */
-import { readFileSync, realpathSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
-const BYTE_ORDER_MARK = 0xfe_ff;
+import { parsePayload, readStdin, runWhenMain } from '../hook-io/hook-io.mjs';
 
 export async function evaluate(raw) {
   const { reapplyTrigger } = await import('./reapply-triggers.mjs');
-  const payload = JSON.parse(raw.charCodeAt(0) === BYTE_ORDER_MARK ? raw.slice(1) : raw);
+  const payload = parsePayload(raw);
   if (reapplyTrigger(payload?.tool_input?.command, payload?.tool_name) === null) return undefined;
   const { contextFromEnvironment } = await import('./context.mjs');
   const { hookOutput, reapplySyncSafe } = await import('./reapply-hook-output.mjs');
@@ -38,7 +35,7 @@ export async function evaluate(raw) {
 
 async function main() {
   try {
-    const output = await evaluate(readFileSync(0, 'utf8'));
+    const output = await evaluate(await readStdin());
     if (output !== undefined) process.stdout.write(`${JSON.stringify(output)}\n`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -47,12 +44,4 @@ async function main() {
   process.exitCode = 0;
 }
 
-const isEntryPoint = () => {
-  try {
-    return realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
-};
-
-if (process.argv[1] !== undefined && isEntryPoint()) await main();
+runWhenMain(import.meta.url, main);

@@ -16,16 +16,14 @@
  * aviso nunca queda a ciegas.
  */
 
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
+import { context, hookMain, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { speaker } from './messages.mjs';
 import { originHeadState } from './origin-head-state.mjs';
 
 const SYNC_COMMAND = path.join(import.meta.dirname, 'sync.mjs');
-const withoutBom = (raw) => (raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
 /** The notice each drifted verdict gets; a verdict with none (in sync, ungoverned, no repository) is silence. @es El aviso de cada veredicto con deriva; un veredicto sin aviso (sincronizado, sin gobierno, sin repositorio) es silencio. */
 const NOTICE_BY_VERDICT = { set: 'drift-set', 'missing-remote-ref': 'drift-missing-ref' };
 
@@ -35,7 +33,7 @@ const NOTICE_BY_VERDICT = { set: 'drift-set', 'missing-remote-ref': 'drift-missi
  */
 export function evaluate(raw) {
   try {
-    const payload = JSON.parse(withoutBom(raw));
+    const payload = parsePayload(raw);
 
     if (isSubagentCaller(payload)) return undefined;
 
@@ -47,26 +45,10 @@ export function evaluate(raw) {
     const { main, want, source } = state;
     const current = state.current ?? '(unset @es sin fijar)';
 
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'UserPromptSubmit',
-        additionalContext: speaker.line(notice, { main, want, source, current, sync: SYNC_COMMAND })
-      }
-    };
+    return context('UserPromptSubmit', speaker.line(notice, { main, want, source, current, sync: SYNC_COMMAND }));
   } catch {
     return undefined;
   }
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  let output;
-
-  try {
-    output = evaluate(readFileSync(0, 'utf8'));
-  } catch {
-    output = undefined;
-  }
-
-  if (output !== undefined) process.stdout.write(JSON.stringify(output));
-  process.exitCode = 0;
-}
+runWhenMain(import.meta.url, hookMain(evaluate));

@@ -204,7 +204,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['gentle-ai-overlay', 'gentle-ai-sync-guard', 'hook-dispatch', 'hook-state', 'bilingual-output', 'settings.json'],
+  paths: ['gentle-ai-overlay', 'gentle-ai-sync-guard', 'hook-dispatch', 'hook-state', 'bilingual-output', 'settings.json', 'hook-io'],
   selftest: 'gentle-ai-overlay/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',
