@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { digestInput as digestPolicy } from './input-digest.mjs';
 import * as journal from './journal.mjs';
 
 const { KINDS, appendRecord, createIdGenerator, digestInput, firesPath, incrementFires, journalPath } = journal;
@@ -132,6 +133,9 @@ try {
   check('the sampled flag and the seed are written to the journal line', lines('guard-c').filter((record) => record.seed === 'abc').map((record) => record.sampled), [true]);
   check('a field outside the record shape is not written', 'secret' in appendRecord('guard-c', { kind: 'decision', ...GOOD, secret: 'x' }), false);
   check('a mechanism that is a path is refused', /@es /.test(thrown(() => appendRecord('../x', { kind: 'decision', ...GOOD })) ?? ''), true);
+
+  // --- digest ---
+  check('the journal re-exports the one digest policy, so every journal digests alike', digestInput === digestPolicy, true);
 
   // --- ids ---
   const times = [255, 4096, 65536, CLOCK, CLOCK + 1, CLOCK + 1000, CLOCK * 2];
