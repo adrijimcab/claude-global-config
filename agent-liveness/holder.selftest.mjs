@@ -18,13 +18,15 @@ import { fileURLToPath } from 'node:url';
 
 import { declarationOf, tenancyLines } from '../brief-tenancy/tenancy-declaration.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
-import { EXHAUSTED_TRANSCRIPT_BYTES, exhaustionOf, holderOf, takeoverDeclaration } from './holder.mjs';
+import { EXHAUSTED_TRANSCRIPT_BYTES, RESUMABLE_WINDOW_MS, holderOf, resumabilityOf, sessionOf, takeoverDeclaration } from './holder.mjs';
 import { lifecycleFrom } from './lifecycle-log.mjs';
 import { agentRecords } from './liveness.mjs';
 
 isolateState('agent-liveness');
 
 const NOW = Date.parse('2026-10-26T12:00:00Z');
+/** The dispatching session, and the folder its records sit in. @es La sesión que despacha y la carpeta de sus registros. */
+const SESSION = 'session-1';
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const scratch = mkdtempSync(join(tmpdir(), 'holder-selftest-'));
@@ -51,11 +53,11 @@ function linkedWorktree(name) {
  */
 function store(agents) {
   const root = mkdtempSync(join(scratch, 'store-'));
-  const folder = join(root, 'C--repo', 'session-1', 'subagents');
 
-  mkdirSync(folder, { recursive: true });
+  for (const { id, worktreePath = '', brief = '', last = '{}', ageMs = 2 * HOUR, sizeBytes = 0, transcript = true, session = SESSION } of agents) {
+    const folder = join(root, 'C--repo', session, 'subagents');
 
-  for (const { id, worktreePath = '', brief = '', last = '{}', ageMs = 2 * HOUR, sizeBytes = 0, transcript = true } of agents) {
+    mkdirSync(folder, { recursive: true });
     writeFileSync(join(folder, `agent-${id}.meta.json`), JSON.stringify({ agentType: 'general-purpose', description: `errand of ${id}`, ...(worktreePath === '' ? {} : { worktreePath }) }));
 
     if (!transcript) continue;
@@ -75,7 +77,7 @@ function store(agents) {
 
 const recorded = (...events) => lifecycleFrom(events.map(([event, id, ageMs]) => JSON.stringify({ event, agent_id: id, time: new Date(NOW - ageMs).toISOString() })).join('\n'));
 const NOTHING = new Map();
-const holder = (worktree, records, lifecycle = NOTHING) => holderOf(worktree, { records, now: NOW, lifecycle });
+const holder = (worktree, records, lifecycle = NOTHING, session = SESSION) => holderOf(worktree, { records, now: NOW, lifecycle, session });
 const brief = (path) => `MEASURED: none.\nTENANCY: ${path} — taking it over.\nGOAL: finish it.`;
 
 let failures = 0;
@@ -114,7 +116,25 @@ const OTHER_CLASS = JSON.stringify({ ...JSON.parse(CONTEXT_STOP), error: 'rate_l
 
 check('the context-length text with another error class (a rate limit) stays resumable', state(holder(W, store([{ id: 'aRATE', worktreePath: W, last: OTHER_CLASS }]))), ['resumable', 'agent-aRATE']);
 check('the context reason names the context failure', holder(W, store([{ id: 'aCONTEXT', worktreePath: W, last: CONTEXT_STOP }])).reason.includes('context-length failure'), true);
-check('the classification is shared: oversized and exhausted', [exhaustionOf(join(scratch, 'no-such'), EXHAUSTED_TRANSCRIPT_BYTES + 1), exhaustionOf(join(scratch, 'no-such'), EXHAUSTED_TRANSCRIPT_BYTES)], [{ oversized: true, exhausted: true }, { oversized: false, exhausted: false }]);
+const probe = (bytes, lastWrite, session = SESSION) => resumabilityOf({ transcript: join(scratch, 'C--repo', SESSION, 'subagents', 'agent-none.jsonl') }, { now: NOW, session, bytes, lastWrite });
+
+check('the per-record answer: a small fresh own record is resumable', [probe(10, NOW - HOUR).resumable, probe(10, NOW - HOUR).causes], [true, []]);
+check('the per-record answer names every cause, in order', probe(EXHAUSTED_TRANSCRIPT_BYTES + 1, NOW - RESUMABLE_WINDOW_MS - 1, 'another').causes, ['oversized', 'stale', 'other-session']);
+check('exhausted is the context or size half alone', [probe(EXHAUSTED_TRANSCRIPT_BYTES + 1, NOW).exhausted, probe(10, NOW - RESUMABLE_WINDOW_MS - 1).exhausted], [true, false]);
+check('exactly the window edge is still inside it', probe(10, NOW - RESUMABLE_WINDOW_MS).resumable, true);
+check('the session is the folder above subagents/', sessionOf({ transcript: join('store', 'C--repo', 'sess-x', 'subagents', 'agent-a.jsonl') }), 'sess-x');
+
+// --- RESUMABLE FROM THE DISPATCHING SESSION, inside the window (2026-10-26): a subagent resumes only from the
+// session that spawned it, and only inside RESUMABLE_WINDOW_MS, so outside either it is unresumable here.
+// @es REANUDABLE DESDE LA SESIÓN QUE DESPACHA y dentro de la ventana: fuera de cualquiera es irreanudable aquí.
+check('a holder last written outside the window: unresumable', state(holder(W, store([{ id: 'aSTALE', worktreePath: W, ageMs: RESUMABLE_WINDOW_MS + HOUR }]))), ['unresumable', 'agent-aSTALE']);
+check('the window reason says so, in both languages', ['outside the 24 h resume window', 'fuera de la ventana de 24 h'].every((part) => holder(W, store([{ id: 'aSTALE', worktreePath: W, ageMs: RESUMABLE_WINDOW_MS + HOUR }])).reason.includes(part)), true);
+check('a holder of ANOTHER session: unresumable', state(holder(W, store([{ id: 'aFOREIGN', worktreePath: W, session: 'session-2' }]))), ['unresumable', 'agent-aFOREIGN']);
+check('the session reason names both sessions, in both languages', ['belongs to session session-2, not the dispatching one (session-1)', 'solo se reanuda desde la sesión que lo lanzó'].every((part) => holder(W, store([{ id: 'aFOREIGN', worktreePath: W, session: 'session-2' }])).reason.includes(part)), true);
+const unknownSession = holderOf(W, { records: store([{ id: 'aSMALL', worktreePath: W }]), now: NOW, lifecycle: NOTHING });
+
+check('with no dispatching session, no holder is its own: unresumable', [state(unknownSession), unknownSession.reason.includes('(unknown)')], [['unresumable', 'agent-aSMALL'], true]);
+check('a live holder of another session is still live', state(holder(W, store([{ id: 'aFOREIGNBUSY', worktreePath: W, session: 'session-2', ageMs: MINUTE }]))), ['live', 'agent-aFOREIGNBUSY']);
 
 // --- several records on one worktree: the most recent decides
 // `agentRecords` lists a store in directory order, so the ids are chosen to put the older record FIRST in one

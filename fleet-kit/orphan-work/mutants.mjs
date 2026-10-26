@@ -18,6 +18,8 @@ runCampaign('orphan-work/selftest.mjs', [
   ['a resumable holder is told the unresumable advice', G, "const instead = holder.state === 'resumable'", 'const instead = false'],
   ['every declared holder is told to resume', G, "const instead = holder.state === 'resumable'", 'const instead = true'],
   ['the holder line loses its Spanish half', G, "    `      @es TENANCY declara este worktree, pero su titular${who} es ${holder.state}: ${instead[1]}`\n", ''],
+  ['the holder is judged without the payload session', G, 'withDeclaredHolder(entry, declared, { records, now, session: payload.session_id })', 'withDeclaredHolder(entry, declared, { records, now })'],
+  ['the holder is judged from the holder\'s own session', G, 'withDeclaredHolder(entry, declared, { records, now, session: payload.session_id })', "withDeclaredHolder(entry, declared, { records, now, session: 'session-2' })"],
   ['the declaring brief is not told which agent holds the worktree', G, "const who = holder.agentId === undefined ? '' : ` ${holder.agentId}`;", "const who = '';"],
   ['the injected options are dropped by the hook decision', G, 'const parked = parkedWork(payload, options);', 'const parked = parkedWork(payload);'],
   ['a live agent\'s worktree is parked', G, '.filter((worktree) => activeOwner(worktree.path, records, now) === undefined)', '.filter((worktree) => true)'],

@@ -280,23 +280,22 @@ try {
   // rechazaba. Los registros se leen de un store construido con `agentRecords`: su forma es la real.
   const harness = (agents) => {
     const store = path.join(root, `store-${Math.random().toString(16).slice(2)}`);
-    const folder = path.join(store, 'C--repo', 'session-1', 'subagents');
+    for (const { id, worktree, sizeBytes = 100, session = 'session-1', age = twoHoursAgo } of agents) {
+      const folder = path.join(store, 'C--repo', session, 'subagents');
 
-    mkdirSync(folder, { recursive: true });
-
-    for (const { id, worktree, sizeBytes = 100 } of agents) {
+      mkdirSync(folder, { recursive: true });
       writeFileSync(path.join(folder, `agent-${id}.meta.json`), JSON.stringify({ agentType: 'general-purpose', description: `errand ${id}`, worktreePath: worktreeOf(worktree) }));
 
       const transcript = path.join(folder, `agent-${id}.jsonl`);
 
       writeFileSync(transcript, '{}\n');
       truncateSync(transcript, sizeBytes);
-      utimesSync(transcript, twoHoursAgo, twoHoursAgo);
+      utimesSync(transcript, age, age);
     }
 
     return agentRecords(store);
   };
-  const taken = (records, prompt) => parkedWork({ tool_name: 'Agent', cwd: repository, tool_input: { prompt } }, { records, lastWorked: () => 0 }).map(({ worktree }) => path.basename(worktree.path)).filter((name) => name.startsWith('take-')).sort();
+  const taken = (records, prompt, session = 'session-1') => parkedWork({ session_id: session, tool_name: 'Agent', cwd: repository, tool_input: { prompt } }, { records, lastWorked: () => 0 }).map(({ worktree }) => path.basename(worktree.path)).filter((name) => name.startsWith('take-')).sort();
   const tenancy = (name) => takeoverDeclaration(worktreeOf(name)).en;
 
   add('take-a');
@@ -317,6 +316,17 @@ try {
   check('(e) a declared worktree with NO holder record keeps today\'s refusal', taken([], tenancy('take-a')), ['take-a', 'take-b']);
   check('(a) a holder at exactly the ledger threshold is resumable: still refused', taken(harness([{ id: 'aEDGE00000000000', worktree: 'take-a', sizeBytes: EXHAUSTED_TRANSCRIPT_BYTES }]), tenancy('take-a')), ['take-a', 'take-b']);
   check('(a) one byte past the ledger threshold is unresumable: cleared', taken(harness([{ id: 'aOVER00000000000', worktree: 'take-a', sizeBytes: EXHAUSTED_TRANSCRIPT_BYTES + 1 }]), tenancy('take-a')), ['take-b']);
+  // Resumable FROM THIS SESSION, inside the window: the same answer resume-before-fresh gives (2026-10-26).
+  // @es Reanudable DESDE ESTA SESIÓN y dentro de la ventana: la misma respuesta que da resume-before-fresh.
+  const foreign = harness([{ id: 'aFOREIGN00000000', worktree: 'take-a', session: 'session-2' }]);
+  const stale = harness([{ id: 'aSTALE0000000000', worktree: 'take-a', age: new Date(Date.now() - 30 * 60 * 60 * 1000) }]);
+
+  check('a declared takeover of a holder of ANOTHER session is cleared: it cannot be resumed from here', taken(foreign, tenancy('take-a')), ['take-b']);
+  check('the same holder of another session, undeclared, still refuses', taken(foreign, 'GOAL: finish it.'), ['take-a', 'take-b']);
+  check('a declared takeover of a holder outside the resume window is cleared', taken(stale, tenancy('take-a')), ['take-b']);
+  check('the same stale holder, undeclared, still refuses', taken(stale, 'GOAL: finish it.'), ['take-a', 'take-b']);
+  check('the holder is judged from the PAYLOAD session: seen from its own session it is resumable and refuses', taken(foreign, tenancy('take-a'), 'session-2'), ['take-a', 'take-b']);
+  check('with no session id no holder is the dispatcher\'s own: a declared takeover is cleared', parkedWork({ tool_name: 'Agent', cwd: repository, tool_input: { prompt: tenancy('take-a') } }, { records: harness([{ id: 'aSMALL0000000000', worktree: 'take-a' }]), lastWorked: () => 0 }).map(({ worktree }) => path.basename(worktree.path)).filter((name) => name.startsWith('take-')), ['take-b']);
   check('the declaration is read by its path, never its wording', taken(unresumableA, `TENANCY: you write ONLY in ${worktreeOf('take-a')} now.`), ['take-b']);
   check('a TENANCY line with no colon declares nothing', taken(unresumableA, `TENANCY ${worktreeOf('take-a')}`), ['take-a', 'take-b']);
   check('a TENANCY inside a sentence declares nothing', taken(unresumableA, `See the TENANCY: ${worktreeOf('take-a')} line.`), ['take-a', 'take-b']);
@@ -324,15 +334,15 @@ try {
   check('the declared tenancies are the canonical paths on the marker lines', [...declaredTenancies({ tool_input: { prompt: `x\n- TENANCY: ${worktreeOf('take-a')}, and ${worktreeOf('take-b')}.\nTENANCYWISE: /nope` } })], [worktreeOf('take-a'), worktreeOf('take-b')].map((folder) => folder.split(path.sep).join('/')));
   check('a payload with no prompt declares nothing', declaredTenancies({ tool_input: {} }).size, 0);
 
-  const refusedResumable = (await evaluateWith({ records: harness([{ id: 'aSMALL0000000000', worktree: 'take-a' }]), lastWorked: () => 0 })(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { prompt: tenancy('take-a') } })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+  const refusedResumable = (await evaluateWith({ records: harness([{ id: 'aSMALL0000000000', worktree: 'take-a' }]), lastWorked: () => 0 })(JSON.stringify({ session_id: 'session-1', tool_name: 'Agent', cwd: repository, tool_input: { prompt: tenancy('take-a') } })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
 
   check('the refusal of a declared resumable holder says to resume it, in both languages', [refusedResumable.includes('TENANCY declares this worktree, but its holder agent-aSMALL0000000000 is resumable'), refusedResumable.includes('instead of replacing it'), refusedResumable.includes('@es TENANCY declara este worktree')], [true, true, true]);
 
-  const refusedNone = (await evaluateWith({ records: [], lastWorked: () => 0 })(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { prompt: tenancy('take-a') } })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+  const refusedNone = (await evaluateWith({ records: [], lastWorked: () => 0 })(JSON.stringify({ session_id: 'session-1', tool_name: 'Agent', cwd: repository, tool_input: { prompt: tenancy('take-a') } })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
 
   check('the refusal of a declared worktree with no holder says a takeover needs an unresumable one', [refusedNone.includes('its holder is none'), refusedNone.includes('only from an UNRESUMABLE holder'), refusedNone.includes('IRREANUDABLE')], [true, true, true]);
 
-  const refusedUndeclared = (await evaluateWith({ records: unresumableA, lastWorked: () => 0 })(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { prompt: 'GOAL: finish it.' } })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+  const refusedUndeclared = (await evaluateWith({ records: unresumableA, lastWorked: () => 0 })(JSON.stringify({ session_id: 'session-1', tool_name: 'Agent', cwd: repository, tool_input: { prompt: 'GOAL: finish it.' } })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
 
   check('an undeclared parked worktree is described without a holder line', refusedUndeclared.includes('TENANCY declares'), false);
 

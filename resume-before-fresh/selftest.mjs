@@ -322,7 +322,9 @@ for (const [expected, description, label] of cases) {
 
   const population = [
     record({ id: 'agent-aOLDEXHAUSTED00', description: 'Shard the chart legend renderer', lastRecord: EXHAUSTED_RECORD, worktreePath: newerTree, ageMs: 3 * HOUR }),
-    record({ id: 'agent-aNEWERRESUME000', description: 'Unrelated follow-up wording here', worktreePath: newerTree, ageMs: 2 * HOUR, session: OTHER_SESSION }),
+    // The newer holder is of THIS session: only then can it be resumed from here (another session's is unresumable).
+    // @es El titular más nuevo es de ESTA sesión: solo así se reanuda desde aquí.
+    record({ id: 'agent-aNEWERRESUME000', description: 'Unrelated follow-up wording here', worktreePath: newerTree, ageMs: 2 * HOUR }),
     record({ id: 'agent-aEXHAUSTEDLIVE0', description: 'Split the gauge needle animation', lastRecord: EXHAUSTED_RECORD, worktreePath: liveTree, ageMs: 3 * HOUR }),
     record({ id: 'agent-aLIVEOTHER00000', description: 'Another live errand entirely', worktreePath: liveTree, ageMs: 1 * MINUTE, session: OTHER_SESSION })
   ];
@@ -334,6 +336,51 @@ for (const [expected, description, label] of cases) {
     [newer.includes('NOT for takeover') && newer.includes('aNEWERRESUME000') && newer.includes('@es NO se releva'), 'and the advice says why, naming the newer holder, in both languages'],
     [newer.includes('TENANCY: <that worktree folder>'), 'with no worktree to advise, the template shape is printed'],
     [live.includes('aEXHAUSTEDLIVE0') && !live.includes(`TENANCY: ${liveTree}`) && live.includes('aLIVEOTHER00000'), 'another LIVE agent in the worktree: not advised for takeover, the live one named']
+  ];
+
+  for (const [ok, label] of checks) {
+    checked += 1; if (!ok) failures += 1;
+
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  }
+}
+
+// --- RESUMABLE FROM HERE IS ONE ANSWER, added 2026-10-26: the resume window and the dispatching session joined
+//     the shared per-record decision (`resumabilityOf`), so the refusal and the holder decision `orphan-work`
+//     reads can never differ. A holder outside the window, or of another session, cannot be resumed from here:
+//     it is never offered, and with a worktree its takeover is advised; without one it stays silent, as before.
+//     An older agent of a worktree whose NEWER holder is another agent is not offered either.
+// @es REANUDABLE DESDE AQUÍ ES UNA SOLA RESPUESTA: la ventana y la sesión que despacha entraron en la decisión
+//     compartida. Un titular fuera de la ventana o de otra sesión nunca se ofrece; con worktree se aconseja
+//     relevarlo, sin worktree calla, como antes. Tampoco se ofrece el agente viejo de un worktree cuyo titular
+//     más nuevo es otro.
+{
+  const staleTree = join(scratch, 'wt-stale-holder');
+  const foreignTree = join(scratch, 'wt-foreign-holder');
+  const supersededTree = join(scratch, 'wt-superseded-holder');
+
+  for (const tree of [staleTree, foreignTree, supersededTree]) mkdirSync(tree);
+
+  const population = [
+    record({ id: 'agent-aSTALEHOLDER000', description: 'Carve the minimap tile cache', worktreePath: staleTree, ageMs: 30 * HOUR }),
+    record({ id: 'agent-aFOREIGNHOLDER0', description: 'Carve the radar sweep shader', worktreePath: foreignTree, session: OTHER_SESSION }),
+    record({ id: 'agent-aSUPERSEDEDOLD0', description: 'Carve the compass rose glyphs', worktreePath: supersededTree, ageMs: 3 * HOUR }),
+    record({ id: 'agent-aSUPERSEDEDNEW0', description: 'Different later wording here', worktreePath: supersededTree, ageMs: 2 * HOUR })
+  ];
+  const outcome = (description) => decide(description, '', REPO, population, NOW, SESSION);
+  const context = (description) => outcome(description)?.hookSpecificOutput?.additionalContext ?? '';
+  const stale = context('Carve the minimap tile cache');
+  const foreign = context('Carve the radar sweep shader');
+  const superseded = context('Carve the compass rose glyphs');
+  const checks = [
+    [outcome('Carve the minimap tile cache')?.hookSpecificOutput?.permissionDecision === undefined && stale.includes(`TENANCY: ${staleTree} — taking over`), 'a holder outside the resume window is never offered; its worktree is advised for takeover'],
+    [stale.includes('outside the 24 h resume window') && stale.includes('fuera de la ventana de 24 h'), 'and the advice says it is outside the window, in both languages'],
+    [outcome('Carve the radar sweep shader')?.hookSpecificOutput?.permissionDecision === undefined && foreign.includes(`TENANCY: ${foreignTree} — taking over`), 'a holder of ANOTHER session is never offered; its worktree is advised for takeover'],
+    [foreign.includes(`belongs to session ${OTHER_SESSION}`) && foreign.includes('solo se reanuda desde la sesión que lo lanzó'), 'and the advice names its session, in both languages'],
+    [outcome('Carve the compass rose glyphs')?.hookSpecificOutput?.permissionDecision === undefined && superseded.includes('a newer agent (aSUPERSEDEDNEW0, resumable) holds its worktree'), 'an older agent whose worktree a newer agent holds is not offered, and the advice says who holds it'],
+    [!superseded.includes(`TENANCY: ${supersededTree}`) && superseded.includes('NOT for takeover'), 'and that worktree is not advised for takeover: its holder can be resumed'],
+    [decide('Rotate the registry credential', '', REPO, records, NOW, SESSION) === undefined, 'a holder outside the window with NO worktree stays silent, as before'],
+    [decide('Compile the typography scale report', '', REPO, records, NOW, SESSION) === undefined, 'a holder of another session with NO worktree stays silent, as before']
   ];
 
   for (const [ok, label] of checks) {
@@ -404,7 +451,7 @@ for (const [expected, description, label] of cases) {
     record({ id: 'agent-aTENBETA0000000', description: 'Rework dashboard grid spacing', worktreePath: BETA }),
     record({ id: 'agent-aTENPLAIN000000', description: 'Compile the icon sprite', brief: 'MEASURED: none.\nGOAL: compile.' }),
     record({ id: 'agent-aTENMAIN0000000', description: 'Tune the legend marker weights', brief: brief(MAIN) }),
-    record({ id: 'agent-aTENHARNESS0000', description: 'Polish the toolbar overflow menu', worktreePath: BETA, brief: brief(ALPHA) }),
+    record({ id: 'agent-aTENHARNESS0000', description: 'Polish the toolbar overflow menu', worktreePath: BETA, brief: brief(ALPHA), ageMs: 6 * MINUTE }),
     record({ id: 'agent-aTENGHOST0000000', description: 'Polish the icon gutter', brief: brief(GHOST) }),
     // An oversized agent: unresumable, so it never refuses, but a fresh launch into ITS worktree is told so.
     // @es Un agente sobredimensionado: irreanudable, no rechaza, pero un lanzamiento fresco en SU worktree se entera.
@@ -426,7 +473,8 @@ for (const [expected, description, label] of cases) {
     [['aTENPLAIN000000'], names('Compile the icon sprite', brief(GAMMA)), 'a stopped agent that names no worktree falls back to wording'],
     [['aTENALPHA000000'], names('Alpha migrate sidebar tokens', 'GOAL: no tenancy line here.'), 'a new brief that names no worktree falls back to wording'],
     [[], names('Something else altogether', 'GOAL: no tenancy line here.'), 'no worktree and no wording overlap: nothing'],
-    [['aTENBETA0000000', 'aTENHARNESS0000'], names('Unrelated phrase one', brief(BETA)), 'a harness-recorded worktree is an identity too, and wins over the brief of the same agent'],
+    [['aTENBETA0000000'], names('Unrelated phrase one', brief(BETA)), 'a harness-recorded worktree is an identity too, and wins over the brief of the same agent; only its LATEST holder is offered'],
+    [['aTENALPHA000000'], names('Unrelated phrase five', brief(ALPHA)), 'the older agent of BETA claims ALPHA only in its brief: the harness worktree wins, so it is not ALPHA\'s errand'],
     [[], names('Unrelated phrase two', brief(MAIN)), 'a main checkout (.git directory) is shared by everyone: never an identity, so the wording rule decides and nothing here overlaps the words'],
   ];
 

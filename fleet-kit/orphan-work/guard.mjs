@@ -309,8 +309,9 @@ function withDeclaredHolder(entry, declared, holderContext) {
  * 21.87 MB transcript; `resume-before-fresh` advised a fresh replacement with `TENANCY: <worktree> — taking
  * over…`, and this guard refused exactly that replacement. Both now read one holder decision
  * (`../../agent-liveness/holder.mjs`): a parked worktree leaves THIS delegation's set only when its holder is
- * `unresumable` AND the brief declares exactly that worktree. A resumable holder still refuses (resume it
- * instead), a holder of `none` still refuses (nothing says the work has an owner), a declaration of another
+ * `unresumable` — exhausted, outside the resume window, or of another session than the payload's, the one
+ * answer `resume-before-fresh` also gives — AND the brief declares exactly that worktree. A resumable holder
+ * still refuses (resume it instead), a holder of `none` still refuses (nothing says the work has an owner), a declaration of another
  * worktree clears nothing, and every other parked worktree still refuses.
  * @es Los worktrees aparcados visibles desde el repositorio del payload. UN RELEVO DECLARADO DE UN TITULAR
  * IRREANUDABLE NO ES TRABAJO APARCADO PARA ESTA DELEGACIÓN: medido el 2026-10-26, `resume-before-fresh`
@@ -339,7 +340,7 @@ export function parkedWork(payload, { records = agentRecords(), now = Date.now()
     .filter((worktree) => now - lastWorked(worktree) >= ACTIVE_WINDOW_MS)
     .map((worktree) => ({ worktree, work: workIn(worktree, integrationBranch, liveBranches) }))
     .filter(({ work }) => holdsWork(work))
-    .map((entry) => withDeclaredHolder(entry, declared, { records, now }))
+    .map((entry) => withDeclaredHolder(entry, declared, { records, now, session: payload.session_id }))
     .filter(({ holder }) => holder?.state !== 'unresumable');
 }
 

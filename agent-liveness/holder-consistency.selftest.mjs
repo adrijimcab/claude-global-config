@@ -4,7 +4,8 @@
  * parked worktree, one harness store, one lifecycle — fed to BOTH `resume-before-fresh` and
  * `fleet-kit/orphan-work`, over the matrix {live, resumable, unresumable, none} × {no TENANCY, TENANCY of this
  * worktree, TENANCY of another worktree}, plus a fifth row: the incident's exhausted agent SUPERSEDED by a newer
- * resumable holder of the same worktree, where the latest-record rule decides.
+ * resumable holder of the same worktree, where the latest-record rule decides; a holder of ANOTHER session; and
+ * a holder last written OUTSIDE the resume window (both unresumable from the dispatching session).
  *
  * THE INCIDENT IT REPRODUCES (2026-10-26, the Discovery session): a worktree with 37 unlanded commits whose
  * agent `ac19aff` held a 21.87 MB transcript. `resume-before-fresh` advised a fresh replacement carrying a
@@ -18,7 +19,11 @@
  *       (orphan-work refuses because of W);
  *   I2  following the advice clears it: the brief plus every advised line is never refused because of an
  *       advised worktree;
- *   I3  orphan-work never clears W unless the holder is unresumable and the brief declares exactly W.
+ *   I3  orphan-work never clears W unless the holder is unresumable and the brief declares exactly W;
+ *   I4  resume-before-fresh offers a resume exactly when the holder decision reads the holder resumable (or
+ *       live) from the dispatching session and the brief names that holder's errand: by W itself, or by the
+ *       wording of the holder's own errand (the superseded row's wording names the OLD agent, not the holder).
+ *       A brief naming another worktree is another errand.
  * The literal "never both on the same brief" cannot hold for a brief that does NOT yet declare W: there the
  * advice is to ADD the line, and refusing the undeclared brief is case (d) of the design. I2 is the form of
  * the invariant that this case owes.
@@ -101,21 +106,26 @@ try {
     if (stopped) appendLifecycle({ event: 'stop', agent_id: id, time: new Date(NOW - ageMs).toISOString() });
   };
   const world = (state) => {
-    const store = path.join(root, `store-${state}`);
+    const store = path.join(root, `store-${state.split(' ').join('-')}`);
 
     mkdirSync(store, { recursive: true });
 
     if (state === 'live') holderRecord(store, { id: 'ac19afflive', stopped: false });
     if (state === 'resumable') holderRecord(store, { id: 'ac19affresumable' });
     if (state === 'unresumable') holderRecord(store, { id: 'ac19affunresumable', bytes: INCIDENT_BYTES });
+    // A small, recent holder that cannot be resumed FROM HERE: spawned by another session, or written outside the
+    // resume window. Both are unresumable in the one decision, so both guards must treat them as the incident.
+    // @es Un titular pequeño y reciente que no se reanuda DESDE AQUÍ: de otra sesión, o fuera de la ventana.
+    if (state === 'other session') holderRecord(store, { id: 'ac19affforeign', session: 'another-session' });
+    if (state === 'older than window') holderRecord(store, { id: 'ac19affstale', ageMs: 30 * HOUR });
 
-    // SUPERSEDED: the incident's exhausted agent, then a NEWER resumable one of another session on the same
-    // worktree. The holder is the newer one, so a takeover must be neither advised nor accepted.
-    // @es SUSTITUIDO: el agente agotado del incidente y luego uno MÁS NUEVO y reanudable de otra sesión en el
-    // mismo worktree. El titular es el nuevo: no se aconseja ni se acepta un relevo.
+    // SUPERSEDED: the incident's exhausted agent, then a NEWER one of THIS session, resumable from here, on the
+    // same worktree. The holder is the newer one, so a takeover must be neither advised nor accepted.
+    // @es SUSTITUIDO: el agente agotado del incidente y luego uno MÁS NUEVO de ESTA sesión, reanudable desde
+    // aquí, en el mismo worktree. El titular es el nuevo: no se aconseja ni se acepta un relevo.
     if (state === 'superseded') {
       holderRecord(store, { id: 'ac19affsuperseded', bytes: INCIDENT_BYTES, ageMs: 5 * HOUR });
-      holderRecord(store, { id: 'anewersuperseded', session: 'another-session', description: 'Carry on with the study notes', ageMs: 3 * HOUR });
+      holderRecord(store, { id: 'anewersuperseded', description: 'Carry on with the study notes', ageMs: 3 * HOUR });
     }
 
     return agentRecords(store);
@@ -142,7 +152,7 @@ try {
 
   check('INCIDENT fixture: the worktree holds 37 commits in no integration branch', parkedWork(payload(briefs['no TENANCY']), { records: incidentRecords, now: NOW }).find(({ worktree }) => canonical(worktree.path) === w)?.work, { dirty: 0, unintegrated: INCIDENT_COMMITS });
   check('INCIDENT fixture: the record shape is the harness store\'s', Object.keys(incidentRecords[0]).sort(), ['description', 'id', 'project', 'transcript', 'worktree', 'worktreePath']);
-  check('INCIDENT fixture: its holder is unresumable for its 21.87 MB transcript', [holderOf(W, { records: incidentRecords, now: NOW }).state, holderOf(W, { records: incidentRecords, now: NOW }).reason.includes(`${INCIDENT_BYTES} bytes`)], ['unresumable', true]);
+  check('INCIDENT fixture: its holder is unresumable for its 21.87 MB transcript', [holderOf(W, { records: incidentRecords, now: NOW, session: SESSION }).state, holderOf(W, { records: incidentRecords, now: NOW, session: SESSION }).reason.includes(`${INCIDENT_BYTES} bytes`)], ['unresumable', true]);
 
   // What each guard says, cell by cell. The rows are the design's cases (a)-(e); the invariants follow.
   // @es Lo que dice cada guard, celda a celda; las filas son los casos (a)-(e) del diseño.
@@ -151,14 +161,16 @@ try {
     resumable: { 'no TENANCY': [false, true], 'TENANCY same': [false, true], 'TENANCY other': [false, true] },
     unresumable: { 'no TENANCY': [true, true], 'TENANCY same': [true, false], 'TENANCY other': [false, true] },
     none: { 'no TENANCY': [false, true], 'TENANCY same': [false, true], 'TENANCY other': [false, true] },
-    superseded: { 'no TENANCY': [false, true], 'TENANCY same': [false, true], 'TENANCY other': [false, true] }
+    superseded: { 'no TENANCY': [false, true], 'TENANCY same': [false, true], 'TENANCY other': [false, true] },
+    'other session': { 'no TENANCY': [true, true], 'TENANCY same': [true, false], 'TENANCY other': [false, true] },
+    'older than window': { 'no TENANCY': [true, true], 'TENANCY same': [true, false], 'TENANCY other': [false, true] }
   };
-  const holderState = { live: 'live', resumable: 'resumable', unresumable: 'unresumable', none: 'none', superseded: 'resumable' };
+  const holderState = { live: 'live', resumable: 'resumable', unresumable: 'unresumable', none: 'none', superseded: 'resumable', 'other session': 'unresumable', 'older than window': 'unresumable' };
 
-  for (const state of ['live', 'resumable', 'unresumable', 'none', 'superseded']) {
+  for (const state of ['live', 'resumable', 'unresumable', 'none', 'superseded', 'other session', 'older than window']) {
     const records = state === 'unresumable' ? incidentRecords : world(state);
 
-    check(`[${state}] the holder decision reads ${holderState[state]}`, holderOf(W, { records, now: NOW }).state, holderState[state]);
+    check(`[${state}] the holder decision reads ${holderState[state]}`, holderOf(W, { records, now: NOW, session: SESSION }).state, holderState[state]);
 
     for (const [shape, prompt] of Object.entries(briefs)) {
       const advised = advisedTakeovers(records, prompt);
@@ -175,9 +187,15 @@ try {
 
       check(`[${state} × ${shape}] I2: the brief that follows the advice is refused over no advised worktree`, refusedBecauseOf(records, followed).filter((folder) => advised.includes(folder)), []);
 
-      // I3 — W is cleared only for an unresumable holder declared exactly.
-      const holder = holderOf(W, { records, now: NOW }).state;
+      const holder = holderOf(W, { records, now: NOW, session: SESSION }).state;
 
+      // I4 — the offer to resume derives from the same answer: resume-before-fresh refuses (offering a resume)
+      // only while the holder decision reads W's holder resumable or live, and always when it does.
+      const offered = resumeEvaluate(JSON.stringify(payload(prompt)), { records, now: NOW })?.hookSpecificOutput?.permissionDecision === 'deny';
+
+      check(`[${state} × ${shape}] I4: a resume is offered exactly when the holder can be resumed from here`, offered, ['resumable', 'live'].includes(holder) && shape !== 'TENANCY other' && !(state === 'superseded' && shape === 'no TENANCY'));
+
+      // I3 — W is cleared only for an unresumable holder declared exactly.
       if (holder !== 'live' && !refused.includes(w)) check(`[${state} × ${shape}] I3: W is cleared only for a declared unresumable holder`, [holder, declaresW], ['unresumable', true]);
     }
   }

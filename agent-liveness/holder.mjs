@@ -12,9 +12,11 @@
  * THE DECISION, per worktree, from the agent records the harness wrote (`liveness.mjs` `agentRecords`):
  *   - `live`        an agent is working there now (`active-owner.mjs`: its recorded lifecycle, else the
  *                   transcript mtime window);
- *   - `unresumable` the MOST RECENT holder stopped on a context-length failure, or its transcript is past
- *                   `EXHAUSTED_TRANSCRIPT_BYTES`: a resume replays that oversized history, so it cannot help;
- *   - `resumable`   the most recent holder can be resumed by its id;
+ *   - `unresumable` the MOST RECENT holder cannot be resumed FROM THE DISPATCHING SESSION: it stopped on a
+ *                   context-length failure, its transcript is past `EXHAUSTED_TRANSCRIPT_BYTES` (a resume
+ *                   replays that oversized history), it was last written outside `RESUMABLE_WINDOW_MS`, or it
+ *                   belongs to another session (a subagent resumes only from the session that spawned it);
+ *   - `resumable`   the most recent holder can be resumed by its id from the dispatching session;
  *   - `none`        no record holds it (or none has a readable transcript: there is nothing to resume).
  * "Holds" means what `liveness.mjs` means: the harness `worktreePath`, or, for an agent launched without
  * isolation, a `TENANCY:` line of its brief naming that linked worktree. Several records on one worktree are
@@ -36,7 +38,7 @@
  */
 
 import { closeSync, fstatSync, openSync, readSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import { declarationOf } from '../brief-tenancy/tenancy-declaration.mjs';
 import { activeOwner } from './active-owner.mjs';
@@ -115,16 +117,56 @@ export function stoppedOnContextLength(transcript) {
 }
 
 /**
- * Whether a transcript of `bytes` bytes can no longer be resumed: `oversized` past the ledger size, and
- * `exhausted` when it is oversized or its agent stopped on a context-length failure. The one classification
- * both guards read; `bytes` is passed in so a caller that already stat-ed the transcript stats it once.
- * @es Si un transcript de `bytes` bytes ya no se puede reanudar: `oversized` pasado el tamaño del ledger y
- * `exhausted` si lo está o su agente paró por longitud de contexto. La única clasificación que leen ambos guards.
+ * How recent a stopped agent must be for resuming it to beat starting over. Beyond this the trunk has
+ * moved, the measurements inside its transcript have expired, and a fresh agent is the honest choice.
+ * Moved here from `resume-before-fresh` (2026-10-26) so its refusal and this decision read one window.
+ * @es Cuán reciente debe ser un agente parado para que reanudarlo gane a empezar de cero. Movido aquí desde
+ * `resume-before-fresh` para que su rechazo y esta decisión lean una sola ventana.
  */
-export function exhaustionOf(transcript, bytes) {
-  const oversized = bytes > EXHAUSTED_TRANSCRIPT_BYTES;
+export const RESUMABLE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-  return { oversized, exhausted: stoppedOnContextLength(transcript) || oversized };
+/**
+ * The session that spawned an agent, read from where the harness put its transcript:
+ * `<store>/<project>/<session>/subagents/<id>.jsonl`. Derived from the record's own `transcript` rather than
+ * added to the shared liveness record, which is byte-pinned from the reference fleet.
+ * @es La sesión que lanzó a un agente, leída de dónde el harness puso su transcript.
+ */
+export function sessionOf(record) {
+  return basename(dirname(dirname(record.transcript)));
+}
+
+/**
+ * Whether ONE agent record can be resumed from the dispatching `session`, and every reason it cannot, in
+ * the order they are checked: `context-length` (its last record is the context-length stop), `oversized`
+ * (past the ledger size), `stale` (last written outside the window) and `other-session` (spawned by another
+ * session, or the dispatching session is unknown: then no record is its own). The one per-record answer
+ * `holderOf` gives for a worktree's latest holder and `resume-before-fresh` gives for each errand holder.
+ * @param options `now`, `session`, and the transcript's `bytes` and `lastWrite`, already stat-ed by the caller.
+ * @returns `{ resumable, exhausted, oversized, causes, en, es }`; `exhausted` is the context or size half alone.
+ * @es Si UN registro de agente se puede reanudar desde la `session` que despacha, y cada motivo por el que no:
+ * `context-length`, `oversized`, `stale` (escrito fuera de la ventana) y `other-session` (lo lanzó otra sesión,
+ * o la sesión que despacha es desconocida). La única respuesta por registro que dan ambos guards.
+ */
+export function resumabilityOf(record, { now, session, bytes, lastWrite }) {
+  const contextStopped = stoppedOnContextLength(record.transcript);
+  const oversized = bytes > EXHAUSTED_TRANSCRIPT_BYTES;
+  const stale = now - lastWrite > RESUMABLE_WINDOW_MS;
+  const otherSession = sessionOf(record) !== session;
+  const reasons = [
+    contextStopped && ['context-length', 'it stopped on a context-length failure', 'paró por un fallo de longitud de contexto'],
+    oversized && ['oversized', `its transcript is ${bytes} bytes, past ${EXHAUSTED_TRANSCRIPT_BYTES} (${SIZE_RULE_LEDGER_KEY})`, `su transcript tiene ${bytes} bytes, más de ${EXHAUSTED_TRANSCRIPT_BYTES}`],
+    stale && ['stale', `it was last written ${Math.round((now - lastWrite) / 3_600_000)} h ago, outside the ${RESUMABLE_WINDOW_MS / 3_600_000} h resume window`, `se escribió por última vez hace ${Math.round((now - lastWrite) / 3_600_000)} h, fuera de la ventana de ${RESUMABLE_WINDOW_MS / 3_600_000} h`],
+    otherSession && ['other-session', `it belongs to session ${sessionOf(record)}, not the dispatching one (${session ?? 'unknown'}), and a subagent resumes only from the session that spawned it`, `pertenece a la sesión ${sessionOf(record)}, no a la que despacha (${session ?? 'desconocida'}), y un subagente solo se reanuda desde la sesión que lo lanzó`]
+  ].filter((reason) => reason !== false);
+
+  return {
+    resumable: reasons.length === 0,
+    exhausted: contextStopped || oversized,
+    oversized,
+    causes: reasons.map(([cause]) => cause),
+    en: reasons.map(([, en]) => en).join('; '),
+    es: reasons.map(([, , es]) => es).join('; ')
+  };
 }
 
 /** Whether `path` is a LINKED worktree: its `.git` is a FILE. @es Si `path` es un worktree ENLAZADO: su `.git` es un FICHERO. */
@@ -152,11 +194,12 @@ function claims(record, wanted, linked) {
 
 /**
  * Who holds `worktreePath` and whether it can continue.
- * @param options `records` (default: the harness store), `now`, and `lifecycle` (`lifecycle-log.mjs`), all injectable.
+ * @param options `records` (default: the harness store), `now`, `lifecycle` (`lifecycle-log.mjs`), and the
+ *   dispatching `session` (a payload's `session_id`; unknown means no record is the dispatcher's own).
  * @returns `{ state: 'live'|'resumable'|'unresumable'|'none', agentId?, reason }`, `reason` bilingual.
  * @es Quién tiene `worktreePath` y si puede continuar. Devuelve el estado, el agente y una razón bilingüe.
  */
-export function holderOf(worktreePath, { records = agentRecords(), now = Date.now(), lifecycle = readLifecycle() } = {}) {
+export function holderOf(worktreePath, { records = agentRecords(), now = Date.now(), lifecycle = readLifecycle(), session = undefined } = {}) {
   const live = activeOwner(worktreePath, records, now, lifecycle);
 
   if (live !== undefined) return { state: 'live', agentId: live.id, reason: `agent ${live.id} is working there now @es el agente ${live.id} trabaja ahí ahora` };
@@ -183,15 +226,12 @@ export function holderOf(worktreePath, { records = agentRecords(), now = Date.no
 
   if (newest === undefined) return { state: 'none', reason: 'no agent record with a readable transcript holds it @es ningún registro de agente con transcript legible lo tiene' };
 
-  const { record, bytes } = newest;
-  const { oversized, exhausted } = exhaustionOf(record.transcript, bytes);
+  const { record, bytes, mtimeMs } = newest;
+  const resumability = resumabilityOf(record, { now, session, bytes, lastWrite: mtimeMs });
 
-  if (!exhausted) return { state: 'resumable', agentId: record.id, reason: `its latest holder ${record.id} can be resumed by its id (${bytes} bytes) @es su último titular ${record.id} se puede reanudar por su id` };
+  if (resumability.resumable) return { state: 'resumable', agentId: record.id, reason: `its latest holder ${record.id} can be resumed by its id from this session (${bytes} bytes) @es su último titular ${record.id} se puede reanudar por su id desde esta sesión` };
 
-  const why = oversized ? `its transcript is ${bytes} bytes, past ${EXHAUSTED_TRANSCRIPT_BYTES} (${SIZE_RULE_LEDGER_KEY})` : 'it stopped on a context-length failure';
-  const porque = oversized ? `su transcript tiene ${bytes} bytes, más de ${EXHAUSTED_TRANSCRIPT_BYTES}` : 'paró por un fallo de longitud de contexto';
-
-  return { state: 'unresumable', agentId: record.id, reason: `its latest holder ${record.id} is unresumable: ${why} @es su último titular ${record.id} es irreanudable: ${porque}` };
+  return { state: 'unresumable', agentId: record.id, reason: `its latest holder ${record.id} is unresumable: ${resumability.en} @es su último titular ${record.id} es irreanudable: ${resumability.es}` };
 }
 
 /**
