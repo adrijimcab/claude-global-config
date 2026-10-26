@@ -1,10 +1,10 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-25T19:17:40.461Z",
+  "syncedAt": "2026-10-26T09:28:23.679Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
-      "sha256": "9599900b05d174657a7a8256601da25931333537e1a6ffc81e16f09a0bae5422"
+      "sha256": "e4a0bdb70d93f8702bbfb2387946880467364048bb58a30097bd8093287a2e7f"
     },
     {
       "path": "shell-command/git-invocations.mjs",
@@ -20,11 +20,11 @@
     },
     {
       "path": "shell-command/launchers.selftest.mjs",
-      "sha256": "da93c25538b5b537bc0141858ddef30e30c1f500aba0629adfd85179fab058d3"
+      "sha256": "1c280f929ddc6c9daa4425e6a737dd225243776e177074aa8bc81efcc33e75e1"
     },
     {
       "path": "shell-command/launchers.mutants.mjs",
-      "sha256": "3608441289ab85cb330c08cafd5a8b2ce5e9d87392a1979b2504a17afe2124c8"
+      "sha256": "858d9ae993c0608012ff93ee19c5fa40cb4b05ecd965c423c001f8e13448692c"
     },
     {
       "path": "cherry-pick-guard/working-directory.mjs",

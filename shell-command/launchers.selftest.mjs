@@ -11,7 +11,7 @@
 
 import { gitInvocations } from './git-invocations.mjs';
 import { powershellRunnerScript } from './powershell-runners.mjs';
-import { commandWordIndex, DIALECTS, simpleCommands } from './shell-command.mjs';
+import { commandWordIndex, DIALECTS, resolveCommand, simpleCommands } from './shell-command.mjs';
 
 let failures = 0;
 let total = 0;
@@ -189,6 +189,31 @@ expect('powershell inert: Start-Process without an argument list', () => !runsGi
 expect('powershell inert: a mention after Write-Output', () => !runsGit("Write-Output 'iex git reset'", DIALECTS.POWERSHELL));
 expect('powershell: the runner scripts are emitted as nested commands', () => simpleCommands("iex 'git reset'", DIALECTS.POWERSHELL).some((command) => command.words[0] === 'git'));
 expect('powershell: includeNested false does not follow the runner', () => !simpleCommands("iex 'git reset'", DIALECTS.POWERSHELL, { includeNested: false }).some((command) => command.words[0] === 'git'));
+
+/** The commands of a line whose resolved program is `program`: a runner's written command has none. @es Los comandos cuyo programa resuelto es `program`. */
+const runningProgram = (script, dialect, program) => simpleCommands(script, dialect).filter((command) => {
+  const at = commandWordIndex(command.words);
+
+  return at !== -1 && command.words[at].toLowerCase() === program;
+});
+
+expect('powershell dedup: Start-Process node runs node once', () => runningProgram('Start-Process node -ArgumentList bin/www', DIALECTS.POWERSHELL, 'node').length === 1);
+expect('powershell dedup: saps runs node once', () => runningProgram('saps node -ArgumentList bin/www', DIALECTS.POWERSHELL, 'node').length === 1);
+expect('powershell dedup: iex runs git once', () => runningProgram("iex 'git reset'", DIALECTS.POWERSHELL, 'git').length === 1);
+expect('powershell dedup: Invoke-Expression runs git once', () => runningProgram("Invoke-Expression 'git reset'", DIALECTS.POWERSHELL, 'git').length === 1);
+expect('powershell dedup: the written Start-Process is still listed once', () => simpleCommands('Start-Process node -ArgumentList bin/www', DIALECTS.POWERSHELL).filter((command) => command.words[0] === 'Start-Process').length === 1);
+expect('powershell dedup: the written Start-Process names no program of its own', () => commandWordIndex(['Start-Process', 'node', '-ArgumentList', 'bin/www']) === -1);
+expect('powershell dedup: the written iex names no program of its own', () => commandWordIndex(['iex', 'git reset']) === -1);
+expect('powershell dedup: a runner carries its script as the command', () => {
+  const resolved = resolveCommand(['Start-Process', 'node', '-ArgumentList', 'bin/www']);
+
+  return resolved.index === -1 && resolved.script === "'node' bin/www" && resolved.dialect === DIALECTS.POWERSHELL;
+});
+expect('powershell dedup: iex carries its string in the PowerShell grammar', () => resolveCommand(['iex', 'git reset']).dialect === DIALECTS.POWERSHELL);
+expect('powershell dedup: a launcher behind a launcher still reaches the runner', () => resolveCommand(['timeout', '5', 'iex', 'git reset']).script === 'git reset');
+expect('powershell dedup: a runner with nothing to run is the command word', () => resolveCommand(['Start-Process', '-Wait']).index === 0);
+expect('bash dedup: env -S carries its string in the bash grammar', () => resolveCommand(['env', '-S', 'git reset']).dialect === DIALECTS.BASH);
+expect('bash dedup: bash -c keeps the written command and its nested one', () => simpleCommands("bash -c 'git reset'", DIALECTS.BASH).length === 2);
 
 process.stdout.write(`shell-command launchers selftest: ${total - failures}/${total} passed\n`);
 process.exitCode = failures === 0 ? 0 : 1;

@@ -19,9 +19,22 @@
  * Commands inside `$(...)`, backticks, `bash -c`, `powershell -Command` and `cmd /c` are emitted BEFORE
  * the command that contains them, because a substitution runs first.
  *
+ * THE CONTRACT, stated once:
+ *   - ONE ENTRY PER WRITTEN COMMAND. `simpleCommands` lists each command as written, exactly once.
+ *   - THE EFFECTIVE PROGRAM comes from `resolveCommand(words)` on that entry (through `timeout`, `env`, ...).
+ *     A command that carries its work as a STRING (`env -S '...'`, `iex '...'`, `Start-Process x
+ *     -ArgumentList ...`) has no program of its own (`index` -1) and hands back that `script` and its `dialect`.
+ *   - NESTED SCRIPTS come only through the nested-script path: `bash -c`, `powershell -Command`, `cmd /c`
+ *     (read with the CMD dialect, where a backslash is literal), `$(...)`, backticks and the carried scripts
+ *     above are listed before their container when `includeNested` is true (the default), and not at all
+ *     when it is false. A launcher or runner never adds a second entry for its program by any other road.
+ *
  * WHAT IT IS NOT, stated so nobody relies on it for more: a full shell grammar. Parameter expansion and
- * aliases are not evaluated; a word holding `$` stays literal, and callers treat it as UNRESOLVABLE
- * rather than guessing its value.
+ * aliases are not evaluated; a word holding `$` (bash, PowerShell) or `%` (cmd `%VAR%`) stays literal, and
+ * callers treat it as UNRESOLVABLE rather than guessing its value. `isUnresolvableWord(word)` is the ONE
+ * shared answer to that question: a consumer that resolves a word as a path or a program asks it, and fails
+ * closed when it says yes, instead of re-deriving the test. `cmd //c` (Git Bash spelling of `cmd /c`, since
+ * MSYS rewrites a lone `/c` into a path) and `( )` command groups in the CMD dialect are modelled.
  *
  * NO REGEX (M5): a cursor with one named reader per lexical construct.
  *
@@ -30,14 +43,28 @@
  * (`echo git cherry-pick abc`), y borrar lo entrecomillado borra también la ruta que el comando real
  * necesita. La respuesta es la de la shell: una palabra es COMANDO solo en posición de comando, el
  * cuerpo de un heredoc y un comentario no son palabras, y `$(...)` / `bash -c "..."` corren comandos
- * propios. No es una gramática completa: una palabra con `$` queda literal y es NO RESOLUBLE.
+ * propios. No es una gramática completa: una palabra con `$` (bash, PowerShell) o `%` (`%VAR%` de cmd) queda
+ * literal y es NO RESOLUBLE. `isUnresolvableWord(word)` es la respuesta ÚNICA y compartida: el consumidor que
+ * resuelve una palabra como ruta o programa la consulta y falla cerrado si dice que sí, sin rederivar la prueba.
+ * Se modelan `cmd //c` (grafía de Git Bash de `cmd /c`, porque MSYS reescribe un `/c` suelto como ruta) y los
+ * grupos `( )` del dialecto CMD.
+ *
+ * EL CONTRATO: UNA ENTRADA POR COMANDO ESCRITO, una sola vez. El PROGRAMA EFECTIVO sale de `resolveCommand`
+ * sobre esa entrada; un comando que lleva su trabajo como cadena (`env -S`, `iex`, `Start-Process`) no tiene
+ * programa propio (`index` -1) y devuelve su `script` y su `dialect`. Los SCRIPTS ANIDADOS (`bash -c`,
+ * `powershell -Command`, `cmd /c` con el dialecto CMD, donde la barra invertida es literal, `$(...)` y los
+ * scripts anteriores) salen solo por la vía de anidados, antes de su contenedor, con `includeNested` activo.
  */
 
 import { launcherNamed, unwrapLauncher } from './launchers.mjs';
 import { powershellRunnerScript } from './powershell-runners.mjs';
 
-/** The two dialects the harness offers as tools. @es Los dos dialectos que el harness ofrece. */
-export const DIALECTS = Object.freeze({ BASH: 'bash', POWERSHELL: 'powershell' });
+/**
+ * The dialects the harness offers as tools (BASH, POWERSHELL) plus CMD, which only ever appears as the script
+ * of `cmd /c`. @es Los dialectos que el harness ofrece (BASH, POWERSHELL) más CMD, que solo aparece como el
+ * script de `cmd /c`.
+ */
+export const DIALECTS = Object.freeze({ BASH: 'bash', POWERSHELL: 'powershell', CMD: 'cmd' });
 
 /** The dialect of a harness tool, or `undefined` for a tool that runs no shell. @es El dialecto de una herramienta. */
 export function dialectOfTool(toolName) {
@@ -50,25 +77,71 @@ export function dialectOfTool(toolName) {
 /**
  * The per-dialect lexical facts, longest operator first so `&&` is never read as two `&`.
  * PowerShell has no `&` separator: a leading `&` is its CALL operator, which stays a prefix word.
- * @es Los hechos léxicos de cada dialecto; en PowerShell `&` es el operador de LLAMADA, no un separador.
+ * CMD: backslash is a path separator, `^` the escape (not inside `"`), `'` and `#` ordinary characters,
+ * `$(` no substitution, `%VAR%` opaque text (see `isUnresolvableWord`); `&`, `&&`, `||` and `|` separate commands;
+ * `( )` delimit a command GROUP (`commandGroups`, CMD only: bash and PowerShell list their parentheses as operators).
+ * `commentMarker` starts a comment word; `singleQuotes` and `substitutions` say whether `'...'` and `$(...)`
+ * mean anything; `escapeInDoubleQuotes` is `'listed'` (bash), `'always'` (PowerShell) or `'never'` (CMD).
+ * @es Los hechos léxicos de cada dialecto; en PowerShell `&` es el operador de LLAMADA, no un separador. En
+ * CMD la barra invertida es separador de ruta, `^` es el escape (no dentro de `"`), `'` y `#` son caracteres
+ * normales, `$(` no sustituye y `%VAR%` es texto opaco (ver `isUnresolvableWord`); `( )` delimitan un GRUPO de
+ * comandos (`commandGroups`, solo CMD: bash y PowerShell ya listan sus paréntesis como operadores).
  */
 const GRAMMAR = Object.freeze({
   [DIALECTS.BASH]: {
     escape: '\\',
     operators: ['&&', '||', ';;', '|&', ';', '|', '&', '(', ')', '\n'],
     redirections: ['&>>', '&>', '<<<', '<<-', '<<', '<>', '<&', '>>', '>&', '>|', '<', '>'],
-    doubledQuoteEscapes: false
+    doubledQuoteEscapes: false,
+    commentMarker: '#',
+    singleQuotes: true,
+    substitutions: true,
+    escapeInDoubleQuotes: 'listed'
   },
   [DIALECTS.POWERSHELL]: {
     escape: '`',
     operators: ['&&', '||', ';', '|', '{', '}', '(', ')', '\n'],
     redirections: ['>>', '>', '<'],
-    doubledQuoteEscapes: true
+    doubledQuoteEscapes: true,
+    commentMarker: '#',
+    singleQuotes: true,
+    substitutions: true,
+    escapeInDoubleQuotes: 'always'
+  },
+  [DIALECTS.CMD]: {
+    escape: '^',
+    operators: ['&&', '||', '|', '&', '\n'],
+    redirections: ['>>', '>', '<'],
+    doubledQuoteEscapes: false,
+    commentMarker: undefined,
+    singleQuotes: false,
+    substitutions: false,
+    escapeInDoubleQuotes: 'never',
+    commandGroups: true
   }
 });
 
+/**
+ * The ONE answer to "does this word's value depend on an expansion the lexer never evaluates?". A word holding
+ * `$` (bash and PowerShell variables and substitutions) or `%` (cmd `%VAR%`, `%1`, `%~dp0`) stays literal text
+ * here, so a consumer that resolves it as a path or a program would read the unexpanded spelling
+ * (`%TEMP%\x.tmp` as a relative path). Such a word, an empty word and a non-string are UNRESOLVABLE: the
+ * consumer fails closed. The test is deliberately dialect-blind and conservative: `%` in a bash word
+ * (`date +%s`) is also reported, which only ever costs a refusal, never a missed one.
+ * @es LA respuesta única a «¿el valor de esta palabra depende de una expansión que el lexer nunca evalúa?».
+ * Una palabra con `$` (variables y sustituciones de bash y PowerShell) o `%` (`%VAR%`, `%1`, `%~dp0` de cmd)
+ * queda como texto literal: un consumidor que la resuelva como ruta o programa leería la grafía sin expandir.
+ * Esa palabra, una vacía y un valor que no es cadena son NO RESOLUBLES: el consumidor falla cerrado. Es
+ * conservadora y no depende del dialecto: un `%` en bash también se informa, lo que solo cuesta un rechazo.
+ */
+export function isUnresolvableWord(word) {
+  return typeof word !== 'string' || word.length === 0 || word.includes('$') || word.includes('%');
+}
+
 const BLANKS = ' \t\r';
 const WORD_BREAKERS = ' \t\r\n;&|<>()';
+/** The CMD words whose header may be followed by a `( ... )` group. @es Las palabras de CMD cuya cabecera admite un grupo `( ... )`. */
+const GROUP_HEADERS = ['if', 'else', 'for'];
 const FILE_DESCRIPTOR_CHARACTERS = '0123456789*';
 
 /**
@@ -76,13 +149,27 @@ const FILE_DESCRIPTOR_CHARACTERS = '0123456789*';
  * and wrappers that run their argument as the command.
  * @es Palabras que PRECEDEN a un comando sin serlo.
  */
-const COMMAND_PREFIXES = new Set(['&', '.', '!', '{', '}', 'if', 'elif', 'then', 'else', 'do', 'while', 'until']);
+const COMMAND_PREFIXES = new Set([
+  '&',
+  '.',
+  '!',
+  '{',
+  '}',
+  'if',
+  'elif',
+  'then',
+  'else',
+  'do',
+  'while',
+  'until'
+]);
 
 /** Executables that run a script string of their own. @es Ejecutables que corren un script propio. */
 const NESTED_SHELLS = [
   { names: ['bash', 'sh', 'zsh', 'dash'], flags: ['-c'], dialect: DIALECTS.BASH },
   { names: ['powershell', 'pwsh'], flags: ['-command', '-c'], dialect: DIALECTS.POWERSHELL },
-  { names: ['cmd'], flags: ['/c', '/k'], dialect: DIALECTS.BASH }
+  // `//c` and `//k` are how Git Bash spells the switches: MSYS rewrites a lone `/c` into a path and passes a doubled slash through as `/c`.
+  { names: ['cmd'], flags: ['/c', '/k', '//c', '//k'], dialect: DIALECTS.CMD }
 ];
 
 /** The executable a word names, without directory, extension or case: `C:\Git\cmd\git.EXE` is `git`. @es El ejecutable que nombra una palabra. */
@@ -99,7 +186,11 @@ const NAME_CHARACTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012
 function isAssignment(word) {
   const name = word.slice(0, Math.max(0, word.indexOf('=')));
 
-  return name.length > 0 && !'0123456789'.includes(name.charAt(0)) && [...name].every((character) => NAME_CHARACTERS.includes(character));
+  return (
+    name.length > 0 &&
+    !'0123456789'.includes(name.charAt(0)) &&
+    [...name].every((character) => NAME_CHARACTERS.includes(character))
+  );
 }
 
 /**
@@ -114,14 +205,25 @@ export function commandWordIndex(words) {
 }
 
 /**
- * The command a word list runs: `index` of its program word (-1 when none) and, when a launcher carries the
- * command as one string (`env -S 'git reset'`), that `script`. @es El comando que corre la lista de palabras.
+ * The command a word list runs: `index` of its program word (-1 when none) and, when the command is carried
+ * as one string (`env -S 'git reset'`, `iex '...'`, `Start-Process node -ArgumentList bin/www`), that `script`
+ * and the `dialect` it is written in. A command that carries a script has NO program of its own (-1): the
+ * program is the one the script runs, which `simpleCommands` lists as a nested command, so the written
+ * command and the program behind it are never both "the program". @es El comando que corre la lista de
+ * palabras. Un comando que lleva un script no tiene programa propio (-1): el programa es el del script, que
+ * `simpleCommands` lista como comando anidado.
  */
 export function resolveCommand(words) {
-  let at = words.findIndex((word) => !COMMAND_PREFIXES.has(word.toLowerCase()) && !isAssignment(word));
+  let at = words.findIndex(
+    (word) => !COMMAND_PREFIXES.has(word.toLowerCase()) && !isAssignment(word)
+  );
 
   while (at !== -1) {
     const name = executableName(words[at]);
+    const runnerScript = powershellRunnerScript(name, words.slice(at + 1));
+
+    if (runnerScript !== undefined)
+      return { index: -1, script: runnerScript, dialect: DIALECTS.POWERSHELL };
 
     if (launcherNamed(name) === undefined) return { index: at };
 
@@ -129,7 +231,8 @@ export function resolveCommand(words) {
 
     // An unwrap either advances past the launcher, finds no program (-1), carries a script (-1) or runs
     // nothing (`command -v`, the same index): only an advance goes round again, so the loop always ends.
-    if (unwrapped.index <= at) return unwrapped;
+    if (unwrapped.index <= at)
+      return unwrapped.script === undefined ? unwrapped : { ...unwrapped, dialect: DIALECTS.BASH };
 
     at = unwrapped.index;
   }
@@ -199,6 +302,7 @@ class Lexer {
     this.tokens = [];
     this.word = undefined;
     this.pendingHeredocs = [];
+    this.groupDepth = 0;
   }
 
   tokenize() {
@@ -218,7 +322,8 @@ class Lexer {
 
     if (redirection !== undefined) return this.readRedirection(redirection);
 
-    const operator = grammar.operators.find((candidate) => cursor.startsWith(candidate));
+    const operator =
+      grammar.operators.find((candidate) => cursor.startsWith(candidate)) ?? this.groupOperator();
 
     if (operator !== undefined) return this.readOperator(operator);
 
@@ -232,16 +337,81 @@ class Lexer {
 
     if (cursor.startsWith(`${grammar.escape}\n`)) return void cursor.take(2);
     if (cursor.startsWith(grammar.escape)) return this.appendEscaped();
-    if (cursor.startsWith("'")) return this.readSingleQuoted();
+    if (grammar.singleQuotes && cursor.startsWith("'")) return this.readSingleQuoted();
     if (cursor.startsWith('"')) return this.readDoubleQuoted();
-    if (cursor.startsWith('$(')) return this.readSubstitution();
+    if (grammar.substitutions && cursor.startsWith('$(')) return this.readSubstitution();
     if (this.dialect === DIALECTS.BASH && cursor.startsWith('`')) return this.readBacktick();
 
     this.word.value += cursor.take();
   }
 
+  /**
+   * The `(` or `)` at the cursor when it is a command GROUP delimiter, in a dialect whose grammar models groups
+   * (CMD), else `undefined`. cmd.exe reads `(` as special only where a command may start: at the head of a
+   * command, or after an `if` / `else` / `for ... do` header, never inside the `in (...)` set of a `for` or
+   * in the middle of an argument (`echo (a)` prints its parentheses). `)` is special only while a group is open.
+   * @es El `(` o `)` del cursor cuando delimita un GRUPO de comandos, en un dialecto que los modela (CMD). cmd.exe
+   * trata `(` como especial solo donde puede empezar un comando: al inicio, o tras la cabecera de `if` / `else` /
+   * `for ... do`, nunca en el conjunto `in (...)` de un `for` ni en mitad de un argumento (`echo (a)` imprime los
+   * paréntesis). `)` es especial solo mientras haya un grupo abierto.
+   */
+  groupOperator() {
+    if (!this.grammar.commandGroups) return undefined;
+
+    if (this.cursor.startsWith(')') && this.groupDepth > 0) {
+      this.groupDepth -= 1;
+      return ')';
+    }
+
+    if (this.cursor.startsWith('(') && this.word === undefined && this.opensGroup()) {
+      this.groupDepth += 1;
+      return '(';
+    }
+
+    return undefined;
+  }
+
+  /** Whether a command could start here: nothing precedes it, or an `if` / `else` / `for` header is complete. @es Si aquí puede empezar un comando. */
+  opensGroup() {
+    const lastOperator = this.tokens.findLastIndex((token) => token.kind === 'operator');
+    const header = this.commandWordsSince(lastOperator + 1);
+
+    if (header.length === 0) return true;
+
+    return GROUP_HEADERS.includes(header[0]) && header.at(-1) !== 'in';
+  }
+
+  /** The lowercased words of the command being read, redirections and their targets left out. @es Las palabras del comando en curso, en minúsculas, sin redirecciones ni sus destinos. */
+  commandWordsSince(from) {
+    const words = [];
+    let skipTarget = false;
+
+    for (const token of this.tokens.slice(from)) {
+      if (token.kind === 'redirection') {
+        skipTarget = token.consumesTarget;
+        continue;
+      }
+
+      if (skipTarget) {
+        skipTarget = false;
+        continue;
+      }
+
+      words.push(token.value.toLowerCase());
+    }
+
+    return words;
+  }
+
   startWord() {
-    this.word ??= { kind: 'word', value: '', start: this.cursor.index, end: this.cursor.index, nested: [], data: false };
+    this.word ??= {
+      kind: 'word',
+      value: '',
+      start: this.cursor.index,
+      end: this.cursor.index,
+      nested: [],
+      data: false
+    };
   }
 
   endWord() {
@@ -254,9 +424,9 @@ class Lexer {
 
   /** `#` comments, PowerShell `<# #>` blocks and `@' '@` here-strings — all data. @es Comentarios y here-strings: dato. */
   readCommentOrHereString() {
-    const { cursor } = this;
+    const { cursor, grammar } = this;
 
-    if (cursor.startsWith('#')) {
+    if (grammar.commentMarker !== undefined && cursor.startsWith(grammar.commentMarker)) {
       cursor.toEndOfLine();
       return true;
     }
@@ -289,7 +459,10 @@ class Lexer {
 
   readRedirection(operator) {
     const { cursor } = this;
-    const fused = this.word !== undefined && this.word.value.length > 0 && [...this.word.value].every((character) => FILE_DESCRIPTOR_CHARACTERS.includes(character));
+    const fused =
+      this.word !== undefined &&
+      this.word.value.length > 0 &&
+      [...this.word.value].every((character) => FILE_DESCRIPTOR_CHARACTERS.includes(character));
     const start = fused ? this.word.start : cursor.index;
 
     if (fused) this.word = undefined;
@@ -301,9 +474,16 @@ class Lexer {
 
     const isHeredoc = operator === '<<' || operator === '<<-';
 
-    if (isHeredoc) this.pendingHeredocs.push({ delimiter: this.readDelimiter(), stripTabs: operator === '<<-' });
+    if (isHeredoc)
+      this.pendingHeredocs.push({ delimiter: this.readDelimiter(), stripTabs: operator === '<<-' });
 
-    this.tokens.push({ kind: 'redirection', value: operator, start, end: cursor.index, consumesTarget: !isHeredoc });
+    this.tokens.push({
+      kind: 'redirection',
+      value: operator,
+      start,
+      end: cursor.index,
+      consumesTarget: !isHeredoc
+    });
   }
 
   /** The delimiter word after `<<`, unquoted. @es La palabra delimitadora tras `<<`, sin comillas. */
@@ -399,7 +579,7 @@ class Lexer {
         continue;
       }
 
-      if (cursor.startsWith('$(')) {
+      if (grammar.substitutions && cursor.startsWith('$(')) {
         this.readSubstitution();
         continue;
       }
@@ -415,14 +595,15 @@ class Lexer {
   /**
    * Whether the escape character at the cursor escapes something inside double quotes. PowerShell's
    * backtick always does; bash's backslash only before `$`, a backtick, `"`, `\` or a newline, so
-   * `"C:\x"` keeps its backslash.
-   * @es Si el carácter de escape escapa algo dentro de comillas dobles: en bash solo ante `$`, `` ` ``, `"`, `\` o salto.
+   * `"C:\x"` keeps its backslash; cmd's `^` never does.
+   * @es Si el carácter de escape escapa algo dentro de comillas dobles: en bash solo ante `$`, `` ` ``, `"`, `\` o salto; en cmd nunca.
    */
   escapesInsideDoubleQuotes() {
     const { cursor, grammar } = this;
 
     if (!cursor.startsWith(grammar.escape)) return false;
-    if (this.dialect === DIALECTS.POWERSHELL) return true;
+    if (grammar.escapeInDoubleQuotes === 'never') return false;
+    if (grammar.escapeInDoubleQuotes === 'always') return true;
 
     const escaped = cursor.source.charAt(cursor.index + 1);
 
@@ -482,12 +663,17 @@ class Lexer {
  * capture.mjs lanza la línea con `shell: true` (cmd.exe en Windows, /bin/sh en el resto), así que se lee
  * con la gramática bash, igual que `cmd /c` en la tabla de arriba.
  */
-const SCRIPT_WRAPPERS = [{ runner: 'node', script: 'capture.mjs', separator: '--', dialect: DIALECTS.BASH }];
+const SCRIPT_WRAPPERS = [
+  { runner: 'node', script: 'capture.mjs', separator: '--', dialect: DIALECTS.BASH }
+];
 
 /** El script que corre un envoltorio de `SCRIPT_WRAPPERS`, si `words` es uno. @es Ver `SCRIPT_WRAPPERS`. */
 function wrappedScript(words, at) {
   const runner = executableName(words[at]);
-  const wrapper = SCRIPT_WRAPPERS.find((candidate) => candidate.runner === runner && candidate.script === executableName(words[at + 1] ?? ''));
+  const wrapper = SCRIPT_WRAPPERS.find(
+    (candidate) =>
+      candidate.runner === runner && candidate.script === executableName(words[at + 1] ?? '')
+  );
 
   if (wrapper === undefined) return undefined;
 
@@ -498,11 +684,26 @@ function wrappedScript(words, at) {
   return { script: words.slice(separatorAt + 1).join(' '), dialect: wrapper.dialect };
 }
 
+/**
+ * The script string the words after a shell's `-c` / `/c` flag make. cmd.exe re-parses the command line it
+ * receives, so when SEVERAL words follow, a word holding a blank was quoted and goes back in double quotes
+ * (`cmd /c rd "C:\a b"`); a single word is already the whole script (`cmd /c "rd C:\a b"`).
+ * @es El script que forman las palabras tras la bandera `-c` / `/c`. cmd.exe vuelve a analizar la línea que
+ * recibe: con VARIAS palabras, la que contiene un blanco estaba entrecomillada y vuelve a sus comillas dobles.
+ */
+function scriptOfWords(words, dialect) {
+  if (dialect !== DIALECTS.CMD || words.length === 1) return words.join(' ');
+
+  return words
+    .map((word) => ([...BLANKS].some((blank) => word.includes(blank)) ? `"${word}"` : word))
+    .join(' ');
+}
+
 /** The script a nested-shell invocation runs, if `words` is one. @es El script que ejecuta una shell anidada. */
 function nestedShellScript(words) {
-  const { index: at, script: launcherScript } = resolveCommand(words);
+  const { index: at, script: carriedScript, dialect: carriedDialect } = resolveCommand(words);
 
-  if (launcherScript !== undefined) return { script: launcherScript, dialect: DIALECTS.BASH };
+  if (carriedScript !== undefined) return { script: carriedScript, dialect: carriedDialect };
 
   if (at === -1) return undefined;
 
@@ -511,19 +712,17 @@ function nestedShellScript(words) {
   if (wrapped !== undefined) return wrapped;
 
   const name = executableName(words[at]);
-  const runnerScript = powershellRunnerScript(name, words.slice(at + 1));
-
-  if (runnerScript !== undefined) return { script: runnerScript, dialect: DIALECTS.POWERSHELL };
-
   const shell = NESTED_SHELLS.find((candidate) => candidate.names.includes(name));
 
   if (shell === undefined) return undefined;
 
-  const flagAt = words.findIndex((word, index) => index > at && shell.flags.includes(word.toLowerCase()));
+  const flagAt = words.findIndex(
+    (word, index) => index > at && shell.flags.includes(word.toLowerCase())
+  );
 
   if (flagAt === -1 || flagAt + 1 >= words.length) return undefined;
 
-  return { script: words.slice(flagAt + 1).join(' '), dialect: shell.dialect };
+  return { script: scriptOfWords(words.slice(flagAt + 1), shell.dialect), dialect: shell.dialect };
 }
 
 function emptyCommand() {
@@ -552,14 +751,21 @@ export function simpleCommands(script, dialect = DIALECTS.BASH, { includeNested 
 
   const flush = (separator) => {
     if (includeNested) {
-      for (const nested of current.nested) commands.push(...simpleCommands(nested.script, nested.dialect));
+      for (const nested of current.nested)
+        commands.push(...simpleCommands(nested.script, nested.dialect));
 
       const inner = nestedShellScript(current.words);
 
       if (inner !== undefined) commands.push(...simpleCommands(inner.script, inner.dialect));
     }
 
-    if (current.words.length > 0) commands.push({ words: current.words, text: script.slice(current.start, current.end), separator, depth });
+    if (current.words.length > 0)
+      commands.push({
+        words: current.words,
+        text: script.slice(current.start, current.end),
+        separator,
+        depth
+      });
 
     current = emptyCommand();
     targetPending = false;
