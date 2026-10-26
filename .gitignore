@@ -147,6 +147,9 @@
 !/shared-resource-guard/
 !/shared-resource-guard/**
 /shared-resource-guard/state/
+!/foreign-delete-guard/
+!/foreign-delete-guard/**
+/foreign-delete-guard/state/
 !/integrated-worktree-guard/
 !/integrated-worktree-guard/**
 /integrated-worktree-guard/state/

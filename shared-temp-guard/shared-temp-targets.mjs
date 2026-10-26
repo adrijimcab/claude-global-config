@@ -43,7 +43,7 @@ const foldsCase = process.platform === 'win32';
  * folded where the file system folds it.
  * @es Una grafía canónica de `target`: resuelta por el sistema de ficheros hasta donde existe.
  */
-function canonical(target) {
+export function canonical(target) {
   let head = path.resolve(target);
   const tail = [];
 
@@ -86,7 +86,7 @@ const isInSessionTree = (candidate, root) => candidate.startsWith(`${root}/${SES
  * @es Cada grafía canónica que puede tener un destino bajo `root`: la propia y, si es `<unidad>:/tmp/...`
  * (cómo llega el `/tmp` de Git Bash), el mismo lugar reubicado sobre la raíz.
  */
-function spellingsUnder(target, root) {
+export function spellingsUnder(target, root) {
   const own = canonical(target);
   const withoutDrive = own.charAt(1) === ':' ? own.slice(2) : own;
 

@@ -56,6 +56,15 @@
           }
         ],
         "matcher": "Bash|PowerShell"
+      },
+      {
+        "hooks": [
+          {
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/posttooluse-authoring.json\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|MultiEdit"
       }
     ],
     "PreToolUse": [

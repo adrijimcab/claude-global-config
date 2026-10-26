@@ -129,6 +129,7 @@ export const KINDS = Object.freeze([
   ['fleet-kit', 'repos/*/run.lock', LOCK, 'a running gate'],
   ['fleet-kit', 'repos/*/verdicts/*', KEEP, 'the gate verdicts a landing reads'],
   ['fleet-kit', 'repos/*/diff-coverage/**', ARCHIVE, 'output of past coverage runs'],
+  ['foreign-delete-guard', 'authored/*.jsonl', ARCHIVE, 'per-agent journal of the paths a delegated agent created; a rotation refuses while a session lives, so no agent is running'],
   ['hook-dispatch', 'errors.jsonl', ARCHIVE, 'dispatcher malfunction journal'],
   ['integrated-worktree-guard', 'observed.jsonl', ARCHIVE, 'observation journal'],
   ['integrated-worktree-guard', 'noticed.json', KEEP, 'the worktree sets each session was shown'],

@@ -2,6 +2,7 @@
   "event": "PostToolUse",
   "guards": [
     "../../gentle-ai-overlay/post-command-hook.mjs",
-    "../../commit-index-guard/guard.mjs"
+    "../../commit-index-guard/guard.mjs",
+    "../../foreign-delete-guard/guard.mjs"
   ]
 }
