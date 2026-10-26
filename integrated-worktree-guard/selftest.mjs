@@ -565,7 +565,7 @@ try {
   const receipted = ownInstall('own/install-receipted', (directory) => ({ lockfile: 'package-lock.json', lockfileHash: lockHash(directory) }));
   const unreceipted = ownInstall('own/install-unreceipted');
   const stale = ownInstall('own/install-stale', (directory) => ({ lockfile: 'package-lock.json', lockfileHash: lockHash(directory) }));
-  const escaping = ownInstall('own/install-escaping', (directory) => ({ lockfile: '../package-lock.json', lockfileHash: lockHash(directory) }));
+  const escaping = ownInstall('own/install-escaping', (directory) => ({ lockfile: './package-lock.json', lockfileHash: lockHash(directory) }));
 
   commit(stale, 'package-lock.json', '{"lockfileVersion":3,"packages":{}}\n', 'lock moved on');
 
@@ -573,7 +573,12 @@ try {
   check('installer output: a node_modules with NO receipt is work', workingTreeState(unreceipted).work.some((entry) => entry.startsWith('node_modules')));
   check('installer output: a receipt whose lockfile moved on since the install is work', workingTreeState(stale).work.some((entry) => entry.startsWith('node_modules')));
   check('installer output: a receipt naming a PATH, not a bare file, is work', workingTreeState(escaping).work.some((entry) => entry.startsWith('node_modules')));
-  check('installer output: only a folder named node_modules can be an install', isReceiptedInstall(receipted, ['scratch']) === false);
+  check('installer output: only a folder named node_modules can be an install', (() => {
+    mkdirSync(path.join(receipted, 'vendor'), { recursive: true });
+    writeFileSync(path.join(receipted, 'vendor', RECEIPT), JSON.stringify({ lockfile: 'package-lock.json', lockfileHash: lockHash(receipted) }));
+
+    return isReceiptedInstall(receipted, ['vendor']);
+  })() === false);
   check('installer output: a receipt with no hash is work', (() => { writeFileSync(path.join(unreceipted, 'node_modules', RECEIPT), JSON.stringify({ lockfile: 'package-lock.json' })); return isReceiptedInstall(unreceipted, ['node_modules']); })() === false);
 
   // ---- noticed sets -----------------------------------------------------------------------------
