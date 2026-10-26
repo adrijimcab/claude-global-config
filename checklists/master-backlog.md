@@ -435,6 +435,15 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   - Last, the T8 port migrations.
   PENDING, reason (2): the owner ordered the landing without these judgments. Run a judgment-day on each fix
   delta, in that order.
+- Voice judge calibration (T9A, landed 2026-10-26). On the owner's 12 labels, 6 runs each, the live v7 agrees on
+  22 of 72 judgments, v8f on 52 and v8g on 61. v8g was derived from those same labels, so 61 is optimistic.
+  No rubric meets the ship bar (ship-bar.json: v8g, met: false). Master keeps v7 live: promotion needs a met bar,
+  and v8g's 92% block rate on unlabelled replies means promoting it untested would block most replies.
+  Next step: the owner labels the 10-reply v8g packet (scratchpad t9a-owner-packet.md, also reproducible with
+  measure.mjs --packet). That is the first out-of-sample test, and v8g is promoted only if it then meets the bar.
+  The model and the owner hear the register differently; see the worker's three examples in engram #1823 / L16.
+  Open in it: the `third-person-su-possessive` fixture is unstable (it passes 2 of 6 under v8g), and
+  ship-bar.json's measuredOn is a UTC date. PENDING, reason (2): the owner's labels decide.
 - Voice judge and pending judge stay as candidates (backlog-1-6 L16, L17). The voice judge keeps rubric v7 live
   until a candidate passes its 10-owner-label ship bar. The pending judge stays off the live Stop hook until its
   ship bar passes, and backlog-guard stays live meanwhile. PENDING, reason (2): promoting either one is the
