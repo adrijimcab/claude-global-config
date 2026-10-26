@@ -326,7 +326,7 @@ try {
 
   const refusedResumable = (await evaluateWith({ records: harness([{ id: 'aSMALL0000000000', worktree: 'take-a' }]), lastWorked: () => 0 })(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { prompt: tenancy('take-a') } })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
 
-  check('the refusal of a declared resumable holder says to resume it, in both languages', [refusedResumable.includes('TENANCY declares this worktree, but its holder is resumable'), refusedResumable.includes('instead of replacing it'), refusedResumable.includes('@es TENANCY declara este worktree')], [true, true, true]);
+  check('the refusal of a declared resumable holder says to resume it, in both languages', [refusedResumable.includes('TENANCY declares this worktree, but its holder agent-aSMALL0000000000 is resumable'), refusedResumable.includes('instead of replacing it'), refusedResumable.includes('@es TENANCY declara este worktree')], [true, true, true]);
 
   const refusedNone = (await evaluateWith({ records: [], lastWorked: () => 0 })(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { prompt: tenancy('take-a') } })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
 

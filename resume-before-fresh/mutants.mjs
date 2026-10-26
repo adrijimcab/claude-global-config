@@ -69,6 +69,7 @@ const MUTANTS = [
   ['the exhausted agent read live by its own fresh transcript is not advised', G, " || (holder.state === 'live' && holder.agentId === agent.id)", ''],
   ['the concrete takeover line is never printed, only the template', G, "advised.length === 0 ? [takeoverDeclaration('<that worktree folder>')] : advised.map((worktree) => takeoverDeclaration(worktree))", "[takeoverDeclaration('<that worktree folder>')]"],
   ['a worktree not advised for takeover is named as if it were', G, '  if (takeover.advised) return `${head}\\n    worktree: ${agent.worktreePath}`;', '  return `${head}\\n    worktree: ${agent.worktreePath}`;'],
+  ['the refused takeover does not name the holder', G, "const heldBy = (holder) => (holder.agentId === undefined ? '' : ` (${address(holder.agentId)})`);", "const heldBy = () => '';"],
   ['the Spanish takeover line is dropped', G, "    ...lines.map((line) => `@es   ${line.es}`)", '    ...[]'],
   ['an agent older than the window is offered', G, '    if (now - lastWrite > RESUMABLE_WINDOW_MS) continue;\n', ''],
   ['a record from another project is offered', G, 'if (projectSlug(record.project) !== slug) continue;', ''],

@@ -607,6 +607,9 @@ function takeoverOf(agent, holderContext) {
   return { advised, holder };
 }
 
+/** The holder's address in parentheses, or nothing when no agent holds it. @es La dirección del titular entre paréntesis, o nada. */
+const heldBy = (holder) => (holder.agentId === undefined ? '' : ` (${address(holder.agentId)})`);
+
 /** How one unresumable agent is named, with what its worktree allows. @es Cómo se nombra a un agente irreanudable y qué permite su worktree. */
 function namedAgent(agent, takeover) {
   const head = `  ${address(agent.id)}  —  "${agent.description}"`;
@@ -616,8 +619,8 @@ function namedAgent(agent, takeover) {
 
   return [
     `${head}\n    worktree: ${agent.worktreePath}`,
-    `    NOT for takeover: ${takeover.holder.reason}`,
-    '    @es NO se releva: la decisión de titular de ese worktree no es «irreanudable».'
+    `    NOT for takeover: its holder${heldBy(takeover.holder)} is ${takeover.holder.state}, so a takeover would be refused; resume or ask that holder instead.`,
+    `    @es NO se releva: su titular${heldBy(takeover.holder)} es ${takeover.holder.state}, así que el relevo se rechazaría; reanuda o consulta a ese titular.`
   ].join('\n');
 }
 

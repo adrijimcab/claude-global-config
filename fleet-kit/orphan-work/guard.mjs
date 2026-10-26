@@ -358,13 +358,15 @@ function describe({ worktree, work, holder }) {
 function declaredButHeld(holder) {
   if (holder === undefined) return [];
 
+  const who = holder.agentId === undefined ? '' : ` ${holder.agentId}`;
+
   const instead = holder.state === 'resumable'
     ? ['resume that agent by its raw agentId (SendMessage) instead of replacing it.', 'reanuda ese agente por su agentId crudo (SendMessage) en vez de reemplazarlo.']
     : ['a takeover is accepted only from an UNRESUMABLE holder; land, salvage or discard the work first.', 'un relevo solo se acepta de un titular IRREANUDABLE; integra, rescata o descarta primero el trabajo.'];
 
   return [
-    `      TENANCY declares this worktree, but its holder is ${holder.state} (${holder.reason}): ${instead[0]}`,
-    `      @es TENANCY declara este worktree, pero su titular es ${holder.state}: ${instead[1]}`
+    `      TENANCY declares this worktree, but its holder${who} is ${holder.state}: ${instead[0]}`,
+    `      @es TENANCY declara este worktree, pero su titular${who} es ${holder.state}: ${instead[1]}`
   ];
 }
 
