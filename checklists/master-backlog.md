@@ -494,6 +494,32 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
 - Loaded-set budget: `capture.mjs budget` measured 9,684 OVER the 147,000 global ceiling, counting a worktree's
   CLAUDE.md as a project (T6C worker, 2026-10-26). Re-measure on master after the landing, and decide whether a
   linked worktree counts as a project. PENDING, reason (3).
+- backlog-1-6 landed on master at cab5a3a (2026-10-26), pushed to adrijimcab. The full selftest runner gave 172/172
+  green on that tree, and land.mjs exited 0. Integration found four seam defects that each unit's own gates could
+  not see. All four are DONE on master:
+  - fixture-loop expected two hook-state modules, but LOCKS made the ledger lock use file-lock.mjs (c090690).
+  - T4C named a data table dependency-mutants.mjs, a campaign name; it is now dependency-mutant-set.mjs (a938e54).
+  - T4B made eval-guard import the digest from the hook journal, so the producers scan read its own refusal
+    kinds as journal kinds. The digest policy moved to hook-state/input-digest.mjs, with its selftest and 3/3
+    mutants (f4493ad, cab5a3a).
+  - The foreign-delete-guard selftest left the <tmp>/claude folder it created (d70affc).
+  Proof of the cleanup fix: in an empty private TEMP the fixed run leaves nothing and the old run leaves `claude`.
+- Peers after the landing (2026-10-26): b100-am-ui-f8 and di-1700002-discovery-fe-6b both reported ok (Bash,
+  Write, delegation, capture.mjs keys). Neither can restart itself, so both still run the old settings.json until
+  the owner restarts them. PENDING, reason (2): the owner restarts the sessions.
+- Worktrees closed after the landing: 28 integrated worktrees and their branches were removed, each re-measured
+  just before removal (git cherry empty, clean, no reparse point), and git branch -d refused none. A process sweep
+  of those worktrees was refused by the permission classifier, so it did not run. No removal failed on a locked
+  file. PENDING, reason (2): the owner allows the sweep or does it.
+- Six ~/.claude worktrees still hold commits master lacks. Each needs integration or a decision, PENDING:
+  - feat/c8-vendored-launchers: 1 commit, the C8 vendored sync. First unit of the next batch, reason (3).
+  - feat/gate-summary: 1 commit of 2026-10-11, gate-summary run-and-verdict command. Reason (4).
+  - wip/pollution: 1 commit of 2026-10-05, the stopped selftest-runner pollution detector. Reason (4).
+  - wip/transcript-index: 5 commits of 2026-10-05, the incremental transcript index. Reason (4).
+  - fix/t6b-claude-md-lazy-review: 1 commit of 2026-10-19, which keeps the review execution contract lazy. Reason (3).
+  - fix/t5-angular-refs: 2 commits of 2026-10-19 (Angular hydration, zoneless and reportProgress notes). Their
+    patch-ids are not in master although T5 was recorded as landed (10b2993). Check whether that content is on
+    master under another patch before integrating or dropping it. Reason (3).
 
 ## ORDER (decided 2026-10-11)
 
