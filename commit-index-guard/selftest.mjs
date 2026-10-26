@@ -441,7 +441,7 @@ const movedAway = makeRepo();
 commitNamed(movedAway, ['a.txt']);
 run(after, post('git commit -m work -- a.txt', { cwd: movedAway }));
 git(movedAway, 'rm', '-q', '-f', '--cached', '--', 'a.txt');
-check('a recorded path removed from the index with no new name settles: nothing is followed, nothing is refused', [run(before, pre('git commit -m next', { cwd: movedAway })), pathsRecorded(movedAway)], [undefined, []]);
+check('a recorded path removed from the index with no new name: nothing is refused, and the record keeps it under its old name', [run(before, pre('git commit -m next', { cwd: movedAway })), pathsRecorded(movedAway), journalLines('errors.jsonl')], [undefined, ['a.txt'], []]);
 
 clearState();
 const movedGitFails = makeRepo();
@@ -461,6 +461,50 @@ const wholeRepositoryFails = (args, options) => {
 };
 
 check('rename: when the whole-repository read fails the commit is allowed and the reason journaled', [run(before, pre('git commit -m next', { cwd: movedGitFails }), { git: wholeRepositoryFails }), statusCalls, journalLines('errors.jsonl').map((line) => line.step)], [undefined, 1, ['status']]);
+check('rename: when the whole-repository read fails the record is left exactly as it was', recordedStale(topOf(movedGitFails)).map((entry) => entry.path), ['a.txt']);
+
+// A failed whole-repository read still refuses for the paths that WERE measured stale, and leaves the whole record alone.
+clearState();
+const halfMeasured = makeRepo();
+
+commitNamed(halfMeasured, ['a.txt', 'sub/c.txt']);
+run(after, post('git commit -m work -- a.txt sub/c.txt', { cwd: halfMeasured }));
+git(halfMeasured, 'mv', 'a.txt', 'moved.txt');
+
+const halfRefusal = denialOf(run(before, pre('git commit -m next', { cwd: halfMeasured }), { git: wholeRepositoryFails }));
+
+check('rename: a failed whole-repository read refuses for the measured path only', [halfRefusal?.includes('sub/c.txt [MM]'), halfRefusal?.includes('moved.txt')], [true, false]);
+check('rename: a failed whole-repository read keeps both recorded paths', pathsRecorded(halfMeasured), ['a.txt', 'sub/c.txt']);
+
+// Several paths hold the stale blob: the move cannot be told, so the record keeps the old name and nothing is refused.
+clearState();
+const ambiguous = makeRepo();
+
+commitNamed(ambiguous, ['a.txt']);
+run(after, post('git commit -m work -- a.txt', { cwd: ambiguous }));
+
+const staleBlob = recordedStale(topOf(ambiguous))[0].blob;
+
+git(ambiguous, 'mv', 'a.txt', 'moved.txt');
+writeFileSync(path.join(ambiguous, 'copy.txt'), 'a copy, different in the worktree\n');
+git(ambiguous, 'update-index', '--add', '--cacheinfo', `100644,${staleBlob},copy.txt`);
+check('ambiguous move: two paths hold the stale blob and both are MM', status(ambiguous).split('\n').filter((line) => line !== '').sort(), ['AM copy.txt', 'AM moved.txt', 'D  a.txt']);
+check('ambiguous move: nothing is refused and the record keeps the old name', [run(before, pre('git commit -m next', { cwd: ambiguous })), pathsRecorded(ambiguous)], [undefined, ['a.txt']]);
+
+// Another stale path already holds the same blob: it is not a candidate, so the move still resolves to the one other path.
+clearState();
+const shared = makeRepo();
+
+writeFileSync(path.join(shared, 'a.txt'), 'same content  \n');
+writeFileSync(path.join(shared, 'sub', 'c.txt'), 'same content  \n');
+git(shared, 'commit', '-q', '-m', 'work', '--', 'a.txt', 'sub/c.txt');
+run(after, post('git commit -m work -- a.txt sub/c.txt', { cwd: shared }));
+check('shared blob: both paths are recorded with one blob', [pathsRecorded(shared), new Set(recordedStale(topOf(shared)).map((entry) => entry.blob)).size], [['a.txt', 'sub/c.txt'], 1]);
+git(shared, 'mv', 'a.txt', 'moved.txt');
+
+const sharedRefusal = denialOf(run(before, pre('git commit -m next', { cwd: shared })));
+
+check('shared blob: the move resolves to the one path that is not already stale', [sharedRefusal?.includes('moved.txt ['), sharedRefusal?.includes('sub/c.txt ['), pathsRecorded(shared)], [true, true, ['moved.txt', 'sub/c.txt']]);
 
 // (5) --pathspec-from-file, in both forms, and the other ways to commit only what is named.
 clearState();
@@ -492,7 +536,25 @@ clearState();
 run(after, post('git commit -m work -- a.txt', { cwd: fromFile }));
 check('pathspec file: the stale path is recorded again for the next commit', pathsRecorded(fromFile), ['a.txt']);
 check('BEFORE `--pathspec-from-file=` (fused): not a sweep, allowed', run(before, pre('git commit -m next --pathspec-from-file=other.txt', { cwd: fromFile })), undefined);
-check('BEFORE `--pathspec-from-file` (separated): not a sweep, allowed', run(before, pre('git commit -m next --pathspec-from-file other.txt', { cwd: fromFile })), undefined);
+writeFileSync(path.join(fromFile, 'names-a.lst'), 'a.txt\n');
+writeFileSync(path.join(fromFile, 'names-b.lst'), 'b.txt\n');
+writeFileSync(path.join(fromFile, 'empty.lst'), '');
+writeFileSync(path.join(fromFile, 'nul-a.lst'), 'a.txt\0');
+writeFileSync(path.join(fromFile, 'nul-b.lst'), 'b.txt\0');
+check('BEFORE a pathspec file naming ANOTHER path: not a sweep, allowed', run(before, pre('git commit -m next --pathspec-from-file=names-b.lst', { cwd: fromFile })), undefined);
+check('BEFORE a pathspec file naming the stale path: allowed', run(before, pre('git commit -m next --pathspec-from-file=names-a.lst', { cwd: fromFile })), undefined);
+check('BEFORE a pathspec file with `-i` naming ANOTHER path: git commits the whole index, refused', typeof denialOf(run(before, pre('git commit -i -m next --pathspec-from-file=names-b.lst', { cwd: fromFile }))), 'string');
+check('BEFORE a pathspec file with `--include`, separated form: refused', typeof denialOf(run(before, pre('git commit --include -m next --pathspec-from-file names-b.lst', { cwd: fromFile }))), 'string');
+check('BEFORE a pathspec file with `-i` naming the stale path: allowed', run(before, pre('git commit -i -m next --pathspec-from-file=names-a.lst', { cwd: fromFile })), undefined);
+check('BEFORE an EMPTY pathspec file: it names no path, refused', typeof denialOf(run(before, pre('git commit -m next --pathspec-from-file=empty.lst', { cwd: fromFile }))), 'string');
+check('BEFORE a NUL pathspec file with `-i` naming another path: refused', typeof denialOf(run(before, pre('git commit -i -m next --pathspec-from-file=nul-b.lst --pathspec-file-nul', { cwd: fromFile }))), 'string');
+check('BEFORE a NUL pathspec file with `-i` naming the stale path: allowed', run(before, pre('git commit -i -m next --pathspec-from-file=nul-a.lst --pathspec-file-nul', { cwd: fromFile })), undefined);
+check('BEFORE a NUL file read as lines would not name the path: the NUL flag is honoured', run(before, pre('git commit -i -m next --pathspec-from-file=nul-a.lst', { cwd: fromFile })) === undefined, false);
+check('BEFORE a pathspec file the line cannot follow (cd that cannot be followed): allowed', run(before, pre('cd "$UNKNOWN" && git commit -i -m next --pathspec-from-file=names-b.lst', { cwd: fromFile })), undefined);
+clearState();
+recordStale(topOf(fromFile), [{ path: 'a.txt', code: 'MM', blob: git(fromFile, 'rev-parse', ':a.txt').trim() }]);
+check('BEFORE an unreadable pathspec file with `-i`: allowed, and the reason is journaled', [run(before, pre('git commit -i -m next --pathspec-from-file=missing.lst', { cwd: fromFile })), journalLines('errors.jsonl').map((line) => line.step)], [undefined, ['pathspec-file']]);
+check('BEFORE `--pathspec-from-file` (separated): not a sweep, allowed',run(before, pre('git commit -m next --pathspec-from-file other.txt', { cwd: fromFile })), undefined);
 check('BEFORE `--amend -o` with no path: not a sweep, allowed', run(before, pre('git commit --amend -o -m next', { cwd: fromFile })), undefined);
 check('BEFORE `--only` with no path: not a sweep, allowed', run(before, pre('git commit --only -m next', { cwd: fromFile })), undefined);
 check('BEFORE `--onl` abbreviated: not a sweep, allowed', run(before, pre('git commit --onl -m next', { cwd: fromFile })), undefined);

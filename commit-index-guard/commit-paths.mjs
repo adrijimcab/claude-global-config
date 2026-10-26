@@ -1,8 +1,9 @@
 /**
  * What a `git commit` invocation names and how it reads the index: the paths of its pathspec, whether it
  * sweeps the whole index (`--include`, or no pathspec at all), whether it commits only what it names (`-o`,
- * `--only`, `--pathspec-from-file`), and whether it first re-stages every tracked path (`--all`). The words are
- * those of `gitInvocations()` after `commit`.
+ * `--only`), the file named by `--pathspec-from-file` (its entries are paths the CALLER reads; with
+ * `--include`, or with an empty file, such a commit still takes the whole index), and whether it first
+ * re-stages every tracked path (`--all`). The words are those of `gitInvocations()` after `commit`.
  *
  * WHY THIS READS git's OWN OPTION TABLE. A word after `commit` is a path only when no option consumed it:
  * `-m "msg"`, `-F file`, `-C <commit>`, `-U 3`, `--author <a>` and the cluster `-am "msg"` all carry a separate
@@ -19,8 +20,9 @@
  * not here; `-S`/`-u` take only an attached value; git aliases are configuration the line does not show.
  *
  * @es Qué nombra una invocación de `git commit` y cómo lee el índice: las rutas de su pathspec, si arrastra
- * TODO el índice (`--include`, o ningún pathspec), si commitea solo lo que nombra (`-o`, `--only`,
- * `--pathspec-from-file`) y si antes vuelve a poner en stage cada ruta rastreada (`--all`). Se lee la tabla de
+ * TODO el índice (`--include`, o ningún pathspec), si commitea solo lo que nombra (`-o`, `--only`), el fichero
+ * que nombra `--pathspec-from-file` (sus entradas son rutas que lee QUIEN LLAMA; con `--include`, o con un
+ * fichero vacío, ese commit sigue tomando todo el índice) y si antes vuelve a poner en stage cada ruta rastreada (`--all`). Se lee la tabla de
  * opciones propia de git: una palabra tras `commit` es una ruta solo si ninguna opción la consumió. Las opciones
  * largas son las que imprime `git commit -h` (git 2.54, medido el 2026-10-25), cada una con si toma valor, y la
  * forma `--no-` de los interruptores. `--unified` e `--inter-hunk-context` son opciones reales de `git commit`
