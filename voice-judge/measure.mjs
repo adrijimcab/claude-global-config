@@ -92,6 +92,18 @@ const sha256 = (text) => createHash('sha256').update(text).digest('hex');
  */
 export const shipBarRecord = (rubric, bar, ownerLabels, runs, measuredOn) => ({ rubric: path.relative(HERE, rubric.path).split(path.sep).join('/'), promptSha256: sha256(rubric.prompt), met: bar.met, verdict: bar.en, ownerLabels, runs, measuredOn });
 
+/**
+ * `date` as a local ISO timestamp with its offset, to the second (`2026-10-26T00:30:05+01:00`), so a record says
+ * both the local day and the instant. @es `date` como marca ISO local con su desfase, al segundo.
+ */
+export function isoWithOffset(date) {
+  const two = (value) => String(value).padStart(2, '0');
+  const minutes = -date.getTimezoneOffset();
+  const offset = `${minutes < 0 ? '-' : '+'}${two(Math.floor(Math.abs(minutes) / 60))}:${two(Math.abs(minutes) % 60)}`;
+
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}T${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}${offset}`;
+}
+
 /** The ship-bar record on disk, or `undefined` when there is none. @es El registro de la barra en disco, o `undefined` si no hay. */
 export function readShipBarRecord() {
   try {
@@ -102,11 +114,31 @@ export function readShipBarRecord() {
 }
 
 /**
- * Whether `livePrompt` may be the live rubric: v7 always may; any other text only when `record` holds the ship bar
- * MET for that exact text. @es Si `livePrompt` puede ser la rúbrica viva: la v7 siempre; cualquier otro texto solo
- * cuando `record` tiene la barra ALCANZADA para ese texto exacto.
+ * Where the owner's promotion record lives: his decision to put a rubric live whatever its ship bar, written by hand
+ * from his words, never by a measurement, so a later `--record` cannot overwrite it.
+ * @es Donde vive el registro de promoción del dueño: su decisión de poner viva una rúbrica sea cual sea su barra,
+ * escrita a mano desde sus palabras y nunca por una medición, para que un `--record` posterior no la pise.
  */
-export const promotionAllowed = (livePrompt, v7Prompt, record) => livePrompt === v7Prompt || (record?.met === true && record.promptSha256 === sha256(livePrompt));
+export const PROMOTION_RECORD = path.join(HERE, 'promotion.json');
+
+/** The owner's promotion record on disk, or `undefined` when there is none. @es El registro de promoción del dueño, o `undefined`. */
+export function readPromotionRecord() {
+  try {
+    return JSON.parse(readFileSync(PROMOTION_RECORD, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether `livePrompt` may be the live rubric: v7 always may; any other text only when `record` holds the ship bar
+ * MET for that exact text, or `promotion` is an owner promotion of that exact text that carries his words.
+ * @es Si `livePrompt` puede ser la rúbrica viva: la v7 siempre; cualquier otro texto solo cuando `record` tiene la
+ * barra ALCANZADA para ese texto exacto, o `promotion` es una promoción del dueño de ese texto exacto con sus palabras.
+ */
+export const promotionAllowed = (livePrompt, v7Prompt, record, promotion) => livePrompt === v7Prompt
+  || (record?.met === true && record.promptSha256 === sha256(livePrompt))
+  || (promotion?.promotedBy === 'owner' && typeof promotion.quote === 'string' && promotion.quote !== '' && promotion.promptSha256 === sha256(livePrompt));
 
 /** Writes the ship-bar record to `SHIP_BAR_RECORD`. @es Escribe el registro de la barra en `SHIP_BAR_RECORD`. */
 const writeShipBarRecord = (record) => writeFileSync(SHIP_BAR_RECORD, `${JSON.stringify(record, null, 2)}\n`);
@@ -353,7 +385,7 @@ async function rates(fixtures, runs, model, parallel, rubric, ask, record) {
   const bar = shipBarOf(ownerSets);
 
   console.log(`rubric=${rubric.path} cost=$${cost.toFixed(4)} ship-bar(owner labels, every run: recall>=90% and precision>=95%)=${bar.en} @es rúbrica=${rubric.path} costo=$${cost.toFixed(4)} barra(etiquetas del dueño, toda corrida: recall>=90% y precisión>=95%)=${bar.es}`);
-  if (record !== undefined) record(shipBarRecord(rubric, bar, (ownerSets[0]?.red ?? 0) + (ownerSets[0]?.green ?? 0), runs, new Date().toISOString().slice(0, 10)));
+  if (record !== undefined) record(shipBarRecord(rubric, bar, (ownerSets[0]?.red ?? 0) + (ownerSets[0]?.green ?? 0), runs, isoWithOffset(new Date())));
 
   return bar.met ? 0 : 1;
 }
