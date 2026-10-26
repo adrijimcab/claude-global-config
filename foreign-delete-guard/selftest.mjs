@@ -775,7 +775,7 @@ try {
   check('ownership: below a folder the agent made, what was born outside its call intervals is foreign', !ownsInTree({ id: '1:1', born: 1 }, '/d/late') && !ownsInTree({ id: '1:1', born: 1 }, '/d/e'));
   check('ownership: a folder whose identity changed owns nothing below it', !ownsInTree({ id: '1:0', born: 1 }, '/d/f') && !ownsInTree({ id: '1:1', born: 2 }, '/d/f'));
   check('ownership: a confirmed path is owned whatever its birth, while its identity holds', ownsInTree({ id: '1:1', born: 1 }, '/d'));
-  check('ownership: a higher confirmed folder still counts when a lower one changed identity', ownershipOf({ confirmed: new Map([['/d', { id: '1:1', born: 1 }], ['/d/e', { id: '0:0', born: 0 }]]), intervals: [{ start: 10, end: 20 }] }, undefined, (candidate) => fakeTree.get(candidate)).ownsCanonical('/d/e/g'));
+  check('ownership: a higher confirmed folder still counts when a lower one changed identity', safely(() => ownershipOf({ confirmed: new Map([['/d', { id: '1:1', born: 1 }], ['/d/e', { id: '0:0', born: 0 }]]), intervals: [{ start: 10, end: 20 }] }, undefined, (candidate) => fakeTree.get(candidate)).ownsCanonical('/d/e/g')) === true);
 
 
   check('ownership: a vouched file is owned', mineOwns(at('mine.mjs')));
