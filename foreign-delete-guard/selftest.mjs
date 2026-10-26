@@ -42,11 +42,12 @@ import { fileURLToPath } from 'node:url';
 import { messageProblems } from '../bilingual-output/message.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
 import { canonical } from '../shared-temp-guard/shared-temp-targets.mjs';
-import { agentKeyOf, bornInside, confirmCall, identityOf, readJournal, recordCall, sameIdentity } from './authored-journal.mjs';
+import { agentKeyOf, bornInside, confirmCall, fileSystemNow, identityOf, readJournal, recordCall, sameIdentity } from './authored-journal.mjs';
 import { creationsOfCall, ownershipOf, pendingCreations } from './authorship.mjs';
 import { creationTargets } from './creation-targets.mjs';
 import { deletionTargets, previewFrom } from './deletion-targets.mjs';
 import { foreignLeaves } from './foreign-paths.mjs';
+import { resolveOperand } from './operand-paths.mjs';
 import { evaluate } from './guard.mjs';
 import { judgeDeletion } from './judge.mjs';
 import { declaredPaths, linkedWorktreeRoot, tenancyWorktree } from './own-tree.mjs';
@@ -102,6 +103,22 @@ const MAIN_TRANSCRIPT = path.join(ROOT, 'session', 'main.jsonl');
 const TMP_FILE = path.join(os.tmpdir(), `fdg-selftest-tmp-${process.pid}.txt`);
 const slashes = (value) => value.split('\\').join('/');
 const gitBash = (value) => `/${value.charAt(0).toLowerCase()}${slashes(value).slice(2)}`;
+
+/**
+ * THE PLATFORM IS A PARAMETER, NOT THE HOST. The Git Bash spellings exist only on win32, so the checks that read a
+ * line as Windows does pass `{ platform: 'win32' }` to the guard and run on every host. A drive spelling `/q/x`
+ * becomes `Q:/x` under that platform; on a win32 host that is the drive itself, and on any other host the path
+ * resolver reads `Q:/x` inside the working directory, so the real file the word must reach is put THERE. On both,
+ * the word reaches the file only through the translation. @es LA PLATAFORMA ES UN PARÁMETRO, NO EL ANFITRIÓN: los
+ * checks que leen la línea como Windows pasan `{ platform: 'win32' }` y corren en todo anfitrión. `/q/x` pasa a
+ * `Q:/x`; en win32 es la unidad misma y en otro anfitrión el resolutor lo lee dentro del directorio de trabajo, así
+ * que el fichero real se pone ALLÍ. En ambos, la palabra llega al fichero solo a través de la traducción.
+ */
+const AS_WINDOWS = { platform: 'win32' };
+const driveSpelled = (name) => (process.platform === 'win32' ? { word: gitBash(path.join(SCRATCH, name)), file: path.join(SCRATCH, name) } : { word: `/q/${name}`, file: path.join(SCRATCH, 'Q:', name) });
+
+/** The spelling of an absolute path that starts with a slash: Git Bash's on win32, the native one elsewhere. @es La grafía de una ruta absoluta que empieza por barra: la de Git Bash en win32, la nativa en otro sitio. */
+const slashLeading = (value) => (process.platform === 'win32' ? gitBash(value) : slashes(value));
 const links = [];
 
 /** A file on disk, with its folder. @es Un fichero en disco, con su carpeta. */
@@ -171,14 +188,34 @@ function announceWithoutCompleting(payload, ...effects) {
 
 let callCounter = 0;
 
-/** Waits a few milliseconds so that file births and call intervals never share a clock tick. @es Espera unos milisegundos para que nacimientos e intervalos no compartan un tic de reloj. */
-function tick(milliseconds = 4) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+/**
+ * Waits until the FILE-SYSTEM clock, the one that stamps births and call intervals, has moved on: what happens
+ * after a tick is stamped strictly later than what happened before it. An ORDERING, never a guessed duration (that
+ * clock's tick is coarser than the process clock's and varies by machine). @es Espera hasta que el reloj del
+ * SISTEMA DE FICHEROS, el que sella nacimientos e intervalos, avance: lo que pasa después de un tic queda sellado
+ * estrictamente después de lo anterior. Un ORDEN, nunca una duración adivinada.
+ */
+function tick() {
+  const before = fileSystemNow('selftest-tick');
+
+  while (fileSystemNow('selftest-tick') <= before) {
+    // the clock has not moved yet @es el reloj aún no avanzó
+  }
 }
 
 const agentWrites = (file) => announce(asAgent('Write', { file_path: file, content: 'x' }), file);
 
 try {
+  // THE FILE-SYSTEM CLOCK, read while the state folder is still empty, so the stamp's folder is made by the clock.
+  // @es EL RELOJ DEL SISTEMA DE FICHEROS, leído con la carpeta de estado aún vacía.
+  const firstStamp = fileSystemNow('clock-probe', { fallback: () => -1 });
+  const bornAfterStamp = identityOf(put(path.join(ROOT, 'clock-born.txt')))?.born;
+
+  check('clock: a stamp is read from the file system, its folder made on the first call', firstStamp !== -1 && bornAfterStamp >= firstStamp, `${firstStamp} then ${bornAfterStamp}`);
+  check('clock: the stamp is the modification time the file system gives it', fileSystemNow('clock-probe', { stat: () => ({ mtimeMs: 123n }) }) === 123);
+  check('clock: a key that is not plain writes no stamp and uses the stand-in clock', fileSystemNow('../escape', { fallback: () => -2 }) === -2 && !existsSync(path.join(stateDir('foreign-delete-guard'), 'escape.clock')));
+  check('clock: a stamp that cannot be read uses the stand-in clock', fileSystemNow('clock-probe', { stat: () => { throw new Error('unreadable'); }, fallback: () => -3 }) === -3);
+
   // THE ORCHESTRATOR'S AND OTHER ACTORS' FILES: they exist before the agent does anything. @es Los ficheros del orquestador y de otros actores: existen antes de que el agente haga nada.
   for (const name of ['provision.mjs', 'engram-save.mjs', 'mirror-odd.mjs', 'split-backlog.mjs', 'contrast.mjs']) put(at(name));
 
@@ -196,12 +233,16 @@ try {
   put(path.join(ROOT, 'afile.txt'));
   put(path.join(ROOT, 'outside', 'outside-file.txt'));
   put(TMP_FILE);
+  put(driveSpelled('drive-foreign.mjs').file);
+  put(at('aliased', 'keep.txt'));
   mkdirSync(at('emptydir'), { recursive: true });
+  link(at('aliased'), at('alias'));
   link(path.join(ROOT, 'outside'), at('holder', 'lnk'));
 
   // WHAT THE AGENT MAKES, each announced while absent and then appearing. @es Lo que hace el agente: anunciado con el fichero ausente, aparece durante la llamada.
   agentWrites(at('mine.mjs'));
   agentWrites(at('mine-too.mjs'));
+  agentWrites(at('alias', 'via-alias.txt'));
   announce(bash(`echo hi > ${p('mine.txt')}`), at('mine.txt'));
   announce(pwsh(`New-Item -ItemType Directory -Path '${at('mydir')}'`), `${at('mydir')}/`, at('mydir', 'out.log')); // out.log: dropped by a child process of the call @es out.log: lo dejó un proceso hijo de la llamada.
   agentWrites(at('mydir', 'a.txt'));
@@ -291,6 +332,23 @@ try {
   expect('deny', bash(`rm -rf ${p('sharedroot')}`), 'a shared root the agent happened to make first does not capture what others put in it');
   expect('allow', bash(`rm ${p('sharedroot', 'during.txt')}`), 'KNOWN LIMIT: a file written during one of the agent\'s own calls is taken for its child process\'s');
 
+  // A process clock an hour off either way changes nothing: the interval is stamped on the clock that stamps births.
+  // @es Un reloj de proceso desviado una hora hacia cualquier lado no cambia nada: el intervalo se sella en el reloj
+  // de los nacimientos.
+  for (const [label, skew] of [['behind', -3_600_000], ['ahead', 3_600_000]]) {
+    const realNow = Date.now;
+
+    Date.now = () => realNow() + skew;
+
+    try {
+      announce(bash(`mkdir ${p(`skew-${label}`)}`), `${at(`skew-${label}`)}/`, at(`skew-${label}`, 'child.txt'));
+    } finally {
+      Date.now = realNow;
+    }
+
+    expect('allow', bash(`rm ${p(`skew-${label}`, 'child.txt')}`), `a child process's file is the agent's with the process clock an hour ${label}`);
+  }
+
   agentWrites(at('moveme.txt'));
   announce(bash(`mv ${p('moveme.txt')} ${p('moved.txt')}`), () => renameSync(at('moveme.txt'), at('moved.txt')));
   expect('allow', bash(`rm ${p('moved.txt')}`), 'the destination of the agent\'s own move is confirmed by the file identity, which a rename keeps');
@@ -330,13 +388,16 @@ try {
     ['rm in bash -c', `bash -c "rm ${p('provision.mjs')}"`],
     ['rm after a pipe separator', `echo x | rm ${p('provision.mjs')}`],
     ['cmd /c del with its flags and forward slashes', `cmd /c del /f /q ${p('provision.mjs')}`],
-    ['rm of a Git Bash drive spelling', `rm ${gitBash(at('provision.mjs'))}`],
     ['rm with an upper-case drive spelling', `rm ${upperDrive(p('provision.mjs'))}`]
   ]) {
     expect('deny', bash(command), label);
   }
 
+  expect('deny', bash(`rm ${driveSpelled('drive-foreign.mjs').word}`), 'rm of a Git Bash drive spelling, read as win32 reads it', AS_WINDOWS);
+  expect('allow', bash(`rm ${driveSpelled('drive-foreign.mjs').word}`), 'the same word read as a platform without drive spellings names a path that does not exist', { platform: 'linux' });
   expect('allow', bash(`rm ${gitBash(at('mine.mjs'))}`), 'own file named in the Git Bash drive spelling');
+  expect('allow', bash(`rm ${p('aliased', 'via-alias.txt')}`), 'a file the agent wrote through a link is its own under its real path (recorded canonically)');
+  expect('deny', bash(`rm ${p('aliased', 'keep.txt')}`), 'a foreign file beside it is not');
   expect('allow', bash(`rm ${slashes(at('MINE.MJS'))}`), 'own file named in another case (Windows folds case)');
   expect('allow', bash(`cd ${p('')} && rm mine.mjs`), 'own file through a cd and a relative name');
   expect('deny', bash(`cd ${p('')} && rm provision.mjs`), 'foreign file through a cd and a relative name');
@@ -344,9 +405,9 @@ try {
   expect('allow', bash('rm -rf'), 'rm with options only');
 
   // --- Git Bash /tmp and a nested cmd /c ---------------------------------------------------------------
-  expect('deny', bash(`rm /tmp/${path.basename(TMP_FILE)}`), 'Git Bash /tmp is the real temp folder, not C:\\tmp');
-  expect('deny', bash(`rm -f /tmp/fdg-*-tmp-${process.pid}.txt`), 'a glob under Git Bash /tmp');
-  expect('allow', bash(`rm /tmp/fdg-selftest-never-existed-${process.pid}.txt`), 'a file that exists in neither spelling deletes nothing');
+  expect('deny', bash(`rm /tmp/${path.basename(TMP_FILE)}`), 'Git Bash /tmp is the real temp folder, not C:\\tmp', AS_WINDOWS);
+  expect('deny', bash(`rm -f /tmp/fdg-*-tmp-${process.pid}.txt`), 'a glob under Git Bash /tmp', AS_WINDOWS);
+  expect('allow', bash(`rm /tmp/fdg-selftest-never-existed-${process.pid}.txt`), 'a file that exists in neither spelling deletes nothing', AS_WINDOWS);
   expect('deny', bash(`cmd /c del ${SCRATCH}\\*.mjs`), 'a nested cmd /c del with a backslash path cannot be located (refused as unresolvable)');
   expect('deny', bash(`cmd /c rd /s /q ${at('shared')}`), 'a nested cmd /c rd with a backslash path');
   check('the cmd backslash refusal names its reason in both languages', reasonOf(bash(`cmd /c del ${SCRATCH}\\*.mjs`)).includes('loses the backslashes') && reasonOf(bash(`cmd /c del ${SCRATCH}\\*.mjs`)).includes('pierde las barras invertidas'));
@@ -488,7 +549,9 @@ try {
   expect('deny', inTree(worktree, rmOld(worktree)), 'a brief with no TENANCY line', { records: byBrief('Please tidy the repository.') });
   expect('deny', inTree(worktree, rmOld(worktree)), 'a brief that names the worktree only by its folder name declares no path', { records: byBrief('TENANCY: wt-mine') });
   expect('deny', inTree(worktree, rmOld(worktree)), 'a brief that declares a same-named worktree elsewhere grants nothing', { records: byBrief(`TENANCY: ${slashes(path.join(ROOT, 'elsewhere', 'wt-mine'))}`) });
-  expect('allow', inTree(worktree, rmOld(worktree)), 'a brief that declares the path in Git Bash spelling and quotes', { records: byBrief(`TENANCY: "${gitBash(worktree)}", checkout`) });
+  expect('allow', inTree(worktree, rmOld(worktree)), 'a brief that declares the path in its slash-leading spelling (Git Bash\'s on Windows) and quotes', { records: byBrief(`TENANCY: "${slashLeading(worktree)}", checkout`) });
+  check('declaredPaths: a home spelling is translated', declaredPaths('TENANCY: ~/fdg-declared').includes(canonical(path.join(os.homedir(), 'fdg-declared'))));
+  check('declaredPaths: a declared path is compared in its canonical form', declaredPaths(`TENANCY: ${slashes(worktree)}/../${path.basename(worktree)}`).includes(canonical(worktree)));
   expect('allow', inTree(worktree, rmOld(worktree)), 'a brief that declares two paths, one of them this worktree', { records: byBrief(`TENANCY: ${slashes(otherWorktree)} ${slashes(worktree)}`) });
   check('declaredPaths: only absolute paths of TENANCY lines count, canonical', declaredPaths(`Intro\nTENANCY: wt-mine, ${slashes(worktree)} (see)\nnot a TENANCY line ${slashes(otherWorktree)}`).join() === canonical(worktree));
   check('declaredPaths: a TENANCY line with no colon or no path declares nothing', declaredPaths('TENANCY\nTENANCY: none').length === 0);
@@ -602,6 +665,14 @@ try {
   check('refusal: a walk limit is worded in both languages', safely(() => refusalText({ kind: 'unresolved', code: 'limit', via: 'rm' })).includes('more entries') && safely(() => refusalText({ kind: 'unresolved', code: 'limit', via: 'rm' })).includes('más entradas'));
 
   const targetsOf = (command, dialect = 'bash') => deletionTargets(command, dialect, SCRATCH);
+  const FAKE_TEMP = path.join(ROOT, 'fake-temp');
+  const tmpWord = (platform, roots) => resolveOperand('/tmp/fdg-x.txt', SCRATCH, 'rm', 'bash', platform, roots).map((entry) => entry.path);
+
+  check('operands: on win32 Git Bash /tmp is also read where the temp root really is', JSON.stringify(tmpWord('win32', [FAKE_TEMP])) === JSON.stringify([path.resolve(SCRATCH, '/tmp/fdg-x.txt'), `${canonical(FAKE_TEMP)}/fdg-x.txt`]));
+  check('operands: on any other platform /tmp is a folder of its own, read once', JSON.stringify(tmpWord('linux', [FAKE_TEMP])) === JSON.stringify([path.resolve(SCRATCH, '/tmp/fdg-x.txt')]));
+  check('operands: a temp root that IS /tmp gives no second spelling', tmpWord('win32', [path.resolve('/tmp')]).length === 1);
+  check('targets: every unresolvable entry is kept, each says why', deletionTargets('rm "$X" "$Y"', 'bash', SCRATCH).length === 2);
+  check('targets: one place reached twice is one target', deletionTargets(`rm ${p('provision.mjs')} ${p('provision.mjs')}`, 'bash', SCRATCH).length === 1);
   const names = (entries) => entries.map((entry) => (entry.path === undefined ? '(unresolvable)' : path.basename(entry.path)));
   expect('deny', bash(`cmd //c del ${p('provision.mjs')}`), 'Git Bash spells cmd /c as //c: the script is read and the foreign file refused');
   expect('allow', bash(`cmd //c del ${p('mine.mjs')}`), 'cmd //c del of the agent\'s own file');
@@ -609,7 +680,7 @@ try {
   expect('deny', bash(`cmd //k del ${p('provision.mjs')}`), 'cmd //k');
   expect('deny', bash(`cd "$X" && cmd //c del ${p('provision.mjs')}`), 'cmd //c after a cd that cannot be followed');
   check('targets: cmd //c and //k scripts are read, in any case', ['cmd //c', 'cmd //k', 'CMD //C'].every((launcher) => targetsOf(`${launcher} del ${p('provision.mjs')}`).some((target) => target.path !== undefined && path.basename(target.path) === 'provision.mjs')));
-  check('targets: cmd //c with a backslash reports the reason', targetsOf('cmd //c del C:\\a\\b.txt').some((target) => target.unresolvable === 'backslash'));
+  check('targets: cmd //c with a backslash reports the reason', targetsOf('cmd //c del C:\\a\\b.txt').some((target) => target.unresolvable === 'backslash') && targetsOf('cmd //k del C:\\a\\b.txt').some((target) => target.unresolvable === 'backslash'));
   check('targets: cmd //c that deletes nothing reports nothing', targetsOf('cmd //c echo hi').length === 0);
   check('targets: a move reports its sources, not its destination', safely(() => names(targetsOf(`mv ${p('mine.mjs')} ${p('mine.txt')} ${p('shared')}`)).join()) === 'mine.mjs,mine.txt' && safely(() => names(targetsOf(`Move-Item -Destination ${p('shared')} ${p('mine.mjs')}`, 'powershell')).join()) === 'mine.mjs');
   check('targets: a move with a target folder option', safely(() => names(targetsOf(`mv -t ${p('shared')} ${p('mine.mjs')}`)).join()) === 'mine.mjs');
@@ -769,7 +840,7 @@ try {
   check('identity: id is device:inode, and a birth of zero falls back to the change time', identityOf('x', () => ({ dev: 1n, ino: 2n, birthtimeMs: 0n, ctimeMs: 77n })).born === 77 && identityOf('x', () => ({ dev: 1n, ino: 2n, birthtimeMs: 50n, ctimeMs: 77n })).born === 50 && identityOf('x', () => ({ dev: 1n, ino: 2n, birthtimeMs: 50n, ctimeMs: 77n })).id === '1:2');
 
   const mine = readJournal('abc');
-  const mineOwns = (candidate) => safely(() => ownershipOf(mine, undefined).owns(candidate)) === true;
+  const mineOwns = (candidate) => safely(() => ownershipOf(mine, undefined).ownsCanonical(canonical(candidate))) === true;
   const fakeTree = new Map([['/d', { id: '1:1', born: 1 }], ['/d/f', { id: '2:2', born: 15 }], ['/d/late', { id: '3:3', born: 25 }], ['/d/e', { id: '4:4', born: 2 }], ['/d/e/g', { id: '5:5', born: 16 }]]);
   const journalOfTree = (folderIdentity) => ({ confirmed: new Map([['/d', folderIdentity]]), intervals: [{ start: 10, end: 20 }] });
   const ownsInTree = (folderIdentity, target) => safely(() => ownershipOf(journalOfTree(folderIdentity), undefined, (candidate) => fakeTree.get(candidate)).ownsCanonical(target)) === true;
@@ -787,7 +858,7 @@ try {
   check('ownership: a foreign file is not owned', !mineOwns(at('provision.mjs')));
   check('ownership: the scratchpad root is not owned, a folder the agent made is', !mineOwns(SCRATCH) && mineOwns(at('mydir', 'out.log')));
   check('ownership: writing a file INTO a folder does not make the folder the agent\'s', mineOwns(at('shared', 'y.txt')) && !mineOwns(at('shared', 'x.txt')) && !mineOwns(at('shared')));
-  check('ownership: the tenancy worktree is owned when given', safely(() => ownershipOf(EMPTY, worktree).owns(path.join(worktree, 'a', 'b.ts'))) === true && safely(() => ownershipOf(EMPTY, worktree).owns(path.join(otherWorktree, 'a'))) === false);
+  check('ownership: the tenancy worktree is owned when given', safely(() => ownershipOf(EMPTY, worktree).ownsCanonical(canonical(path.join(worktree, 'a', 'b.ts')))) === true && safely(() => ownershipOf(EMPTY, worktree).ownsCanonical(canonical(path.join(otherWorktree, 'a')))) === false);
 
   check('linkedWorktreeRoot: a linked worktree from a subfolder', linkedWorktreeRoot(path.join(worktree, 'src', 'sub')) === worktree);
   check('linkedWorktreeRoot: the main checkout, a submodule and a stray .git file have none', linkedWorktreeRoot(path.join(mainCheckout, 'src')) === undefined && linkedWorktreeRoot(path.join(submodule, 'src')) === undefined && linkedWorktreeRoot(pointedElsewhere) === undefined);
@@ -834,14 +905,17 @@ try {
   check('declaredPaths: a bare folder name is not a path', declaredPaths('TENANCY: wt-mine').length === 0);
   check('declaredPaths: the colon of a drive letter does not close the marker, whichever slash follows', declaredPaths(`TENANCY ${worktree}`).length === 0 && declaredPaths(`TENANCY ${slashes(worktree)}`).length === 0);
   check('declaredPaths: a qualifier before the colon is allowed, and its colon closes the marker', declaredPaths(`TENANCY note: ${slashes(worktree)}`).includes(canonical(worktree)) && declaredPaths(`TENANCY (a): ${slashes(worktree)}`).includes(canonical(worktree)));
-  check('declaredPaths: only a colon after TWO letters, or after a non-letter, closes the marker', declaredPaths(`TENANCY note:${gitBash(worktree)}`).includes(canonical(worktree)) && declaredPaths(`TENANCY 1:${gitBash(worktree)}`).includes(canonical(worktree)));
+  check('declaredPaths: only a colon after TWO letters, or after a non-letter, closes the marker', declaredPaths('TENANCY note:/fdg-declared/wt').includes(canonical('/fdg-declared/wt')) && declaredPaths('TENANCY 1:/fdg-declared/wt').includes(canonical('/fdg-declared/wt')));
+  check('declaredPaths: a drive colon is skipped before a backslash and before a slash alike', declaredPaths('TENANCY C:\\ /fdg-declared/wt').length === 0 && declaredPaths('TENANCY C:/ /fdg-declared/wt').length === 0);
   check('declaredPaths: a letter and a colon that is not followed by a slash closes the marker', declaredPaths(`TENANCY C: ${slashes(worktree)}`).includes(canonical(worktree)));
   expect('deny', inTree(worktree, rmOld(worktree)), 'a TENANCY line with no colon grants nothing', { records: byBrief(`TENANCY ${slashes(worktree)}`) });
   expect('deny', inTree(worktree, rmOld(worktree)), 'a brief that declares another worktree grants nothing', { records: byBrief(`TENANCY: ${slashes(otherWorktree)}`) });
 
   check('targets: cmd /c is read once, not twice', targetsOf(`cmd /c del ${p('provision.mjs')}`).length === 1);
   check('targets: every mover reads its sources', ['mv', 'move', 'mi', 'move-item'].every((mover) => safely(() => names(targetsOf(`${mover} ${p('mine.mjs')} ${p('shared')}`, 'powershell')).join()) === 'mine.mjs'));
-  check('targets: a cmd //c script is read with bash grammar, whatever the outer dialect', targetsOf(`cmd //c del -WhatIf ${p('provision.mjs')}`).some((target) => target.path !== undefined));
+  check('targets: a cmd script is read in cmd\'s grammar under a PowerShell line, for every script flag (-WhatIf is not cmd\'s)', ['/c', '/k', '//c', '//k', '/C'].every((flag) => targetsOf(`cmd ${flag} del -WhatIf ${p('provision.mjs')}`, 'powershell').some((target) => target.path !== undefined && path.basename(target.path) === 'provision.mjs')));
+  check('targets: a cmd script that deletes nothing under a PowerShell line has no target', targetsOf('cmd /c echo -WhatIf', 'powershell').length === 0);
+  expect('deny', pwsh(`cmd /c del -WhatIf ${p('provision.mjs')}`), 'cmd /c del under PowerShell deletes with cmd\'s del, whose -WhatIf is a file name');
 
   const seenPreviews = [];
 

@@ -21,8 +21,16 @@
  * intervals (what its child processes dropped there). Anything born outside those intervals is foreign, so a shared
  * folder the agent happened to make first never captures what other actors put in it afterwards.
  *
+ * ONE CLOCK. A birth is stamped by the FILE SYSTEM's clock, which is coarser than the process clock and runs behind
+ * it (measured 2026-10-26 on ext4: a file written after `Date.now()` was read was stamped up to 5 ms EARLIER, in 15
+ * of 2000 writes), so an interval taken with `Date.now()` ordered a child's file before the call that made it, and a
+ * file another actor wrote just after a call inside it. Both ends of an interval are therefore stamped on the file
+ * system's clock too (`fileSystemNow`: the modification time of a stamp the call writes beside its journal), and a
+ * birth is only ever compared with times of its own clock.
+ *
  * STATED LIMITS. An actor that writes into such a folder DURING one of the agent's calls is mistaken for the
- * agent's child process: the window is one tool call. A call with a `start` and no `end` (a crash) leaves no
+ * agent's child process: the window is one tool call, and a write in the same tick of the file-system clock as the
+ * call's start or end counts as inside it, because one tick cannot order two events. A call with a `start` and no `end` (a crash) leaves no
  * interval, so what it dropped is foreign. A journal that cannot be written loses evidence, never a decision: the
  * agent then owns less, so the guard refuses more.
  *
@@ -39,13 +47,17 @@
  * identidad, así que un fichero que el agente movió sigue siendo suyo. INTERVALOS: cada llamada completada deja su
  * intervalo `[start, end]`; lo que cuelga de una carpeta que el agente hizo es suyo solo si lo anotó él o NACIÓ
  * dentro de uno de sus intervalos (lo que dejaron sus procesos hijo); lo nacido fuera es ajeno, así que una
- * carpeta compartida que el agente hizo primero nunca captura lo que otros ponen después. LÍMITES: un actor que
- * escribe en esa carpeta DURANTE una llamada del agente se confunde con un proceso hijo (la ventana es una
- * llamada); una llamada con `start` y sin `end` (caída) no deja intervalo; un journal que no se puede escribir
+ * carpeta compartida que el agente hizo primero nunca captura lo que otros ponen después. UN SOLO RELOJ: el
+ * nacimiento lo sella el reloj del SISTEMA DE FICHEROS, más grueso que el del proceso y por detrás de él (medido el
+ * 2026-10-26 en ext4: un fichero escrito después de leer `Date.now()` quedó sellado hasta 5 ms ANTES, en 15 de 2000
+ * escrituras), así que los dos extremos de un intervalo se sellan también con ese reloj (`fileSystemNow`) y un
+ * nacimiento solo se compara con horas de su propio reloj. LÍMITES: un actor que escribe en esa carpeta DURANTE una
+ * llamada del agente se confunde con un proceso hijo (la ventana es una llamada, y una escritura en el mismo tic del
+ * reloj del sistema de ficheros que el inicio o el fin cuenta como dentro, porque un tic no ordena dos sucesos); una llamada con `start` y sin `end` (caída) no deja intervalo; un journal que no se puede escribir
  * pierde evidencia, nunca una decisión: el agente posee menos y se rechaza más.
  */
 
-import { appendFileSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { stateDir } from '../hook-state/locations.mjs';
@@ -57,6 +69,32 @@ const JOURNAL_FOLDER = 'authored';
 const isPlainKey = (key) => typeof key === 'string' && key.length > 0 && [...key].every((character) => 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-'.includes(character));
 
 const journalFile = (agentKey) => path.join(stateDir('foreign-delete-guard'), JOURNAL_FOLDER, `${agentKey}.jsonl`);
+
+/** The stamp whose modification time is an agent's file-system clock. @es El sello cuya hora de modificación es el reloj de sistema de ficheros del agente. */
+const clockFile = (agentKey) => path.join(stateDir('foreign-delete-guard'), JOURNAL_FOLDER, `${agentKey}.clock`);
+
+/**
+ * NOW on the file system's clock, the one that stamps births: the stamp beside the agent's journal is rewritten and
+ * its modification time read back (whole milliseconds, like `identityOf`'s birth). When the stamp cannot be written
+ * the process clock stands in: the journal beside it then cannot be written either, so no interval is kept.
+ * @param {string} agentKey The key from `agentKeyOf`.
+ * @param {{ stat?: Function, fallback?: () => number }} [seams] The status reader and the stand-in clock, injectable.
+ * @es AHORA en el reloj del sistema de ficheros, el que sella los nacimientos: se reescribe el sello junto al journal
+ * del agente y se lee su hora de modificación (milisegundos enteros, como el nacimiento de `identityOf`). Si el sello
+ * no se puede escribir, lo sustituye el reloj del proceso: tampoco se podrá escribir el journal, y no queda intervalo.
+ */
+export function fileSystemNow(agentKey, { stat = lstatSync, fallback = Date.now } = {}) {
+  if (!isPlainKey(agentKey)) return fallback();
+
+  try {
+    mkdirSync(path.dirname(clockFile(agentKey)), { recursive: true });
+    writeFileSync(clockFile(agentKey), `${process.pid}\n`);
+
+    return Number(stat(clockFile(agentKey), { bigint: true }).mtimeMs);
+  } catch {
+    return fallback();
+  }
+}
 
 /**
  * The key of the agent that made a call: its `agent_id`, else the id in its transcript's file name
@@ -136,7 +174,7 @@ function recordsOf(agentKey) {
  * PreToolUse: the call starts. Records `start` and each creation target that does not exist yet.
  * @param {string} agentKey The key from `agentKeyOf`.
  * @param {string} callId The call's `tool_use_id`, or a made-up one.
- * @param {number} at The start time in milliseconds.
+ * @param {number} at The start time in milliseconds, on the file system's clock (`fileSystemNow`).
  * @param {string[]} canonicalTargets The creation targets that did not exist.
  * @es PreToolUse: empieza la llamada. Anota `start` y cada objetivo de creación que aún no existe.
  */
