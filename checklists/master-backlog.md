@@ -520,6 +520,11 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   - fix/t5-angular-refs: 2 commits of 2026-10-19 (Angular hydration, zoneless and reportProgress notes). Their
     patch-ids are not in master although T5 was recorded as landed (10b2993). Check whether that content is on
     master under another patch before integrating or dropping it. Reason (3).
+- Mechanism for lesson tree-written-during-its-full-chain (1x, 2026-10-26). While full-chain-lock holds its lock,
+  refuse a write by the holder's session into the tree the chain measures, or into TEMP/claude. The holder
+  record stores the session (full-chain-lock/chain-runner.mjs:95), which can be 'unknown'
+  (cli-arguments.mjs:59), and it does not store the tree it measures, so the record must first gain the tree
+  path. The selftest must drive the real case: a Write and a git commit into a tree under a running chain. PENDING, reason (3): the owner froze new work until the next batch.
 
 ## ORDER (decided 2026-10-11)
 
