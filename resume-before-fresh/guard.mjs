@@ -43,9 +43,11 @@
  * ha movido bajo el transcript y un agente fresco sí es lo correcto.
  */
 
-import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import { EXHAUSTED_TRANSCRIPT_BYTES, SIZE_RULE_LEDGER_KEY, exhaustionOf, holderOf, takeoverDeclaration } from '../agent-liveness/holder.mjs';
+import { readLifecycle } from '../agent-liveness/lifecycle-log.mjs';
 import { agentRecords } from '../agent-liveness/liveness.mjs';
 import { advise, deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { declaredWorktrees, recordWorktrees, sameErrand } from './worktree-identity.mjs';
@@ -60,20 +62,13 @@ const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 export const RESUMABLE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Size past which a stopped agent's transcript is no longer resumed. SOURCE: the global lessons ledger,
- * key `resumed-giant-transcripts-exhausted-quota` («once a worker's transcript passes ~2 MB, do not resume
- * it: launch a fresh agent with a narrow scope that reads the state from the files»); the ledger writes
- * "~2 MB", read here as 2,000,000 bytes. The one place this number lives: the decision and the printed
- * rule both read it.
- * @es Tamaño a partir del cual el transcript de un agente parado ya no se reanuda. FUENTE: el ledger
- * global de lecciones, clave `resumed-giant-transcripts-exhausted-quota` («pasados ~2 MB no se reanuda:
- * agente fresco con alcance acotado que lee el estado de los ficheros»); "~2 MB" se lee como 2.000.000
- * bytes. Es el único sitio donde vive el número: la decisión y la regla impresa lo leen.
+ * The exhaustion classification (context-length stop, transcript past the ledger size) lives in the shared
+ * holder decision, `../agent-liveness/holder.mjs`, so this guard and `orphan-work` read ONE answer to "can
+ * the agent that holds this worktree continue". Re-exported for the callers that read them from here.
+ * @es La clasificación de agotamiento vive en la decisión compartida de titular, `holder.mjs`, para que este
+ * guard y `orphan-work` lean UNA sola respuesta. Se reexporta para quien la lee desde aquí.
  */
-export const EXHAUSTED_TRANSCRIPT_BYTES = 2_000_000;
-
-/** The ledger key the size rule comes from. @es La clave del ledger de la que sale la regla de tamaño. */
-const SIZE_RULE_LEDGER_KEY = 'resumed-giant-transcripts-exhausted-quota';
+export { CONTEXT_EXHAUSTED_ERROR_CLASS, CONTEXT_EXHAUSTED_TEXT, EXHAUSTED_TRANSCRIPT_BYTES, stoppedOnContextLength } from '../agent-liveness/holder.mjs';
 
 /**
  * Share of the SMALLER errand's identifying words that must appear in the other before this refuses: all
@@ -279,60 +274,6 @@ export function projectSlug(repoPath) {
   return key;
 }
 
-/** How much of a transcript's tail is read to find its last record. @es Cuánto se lee del final del transcript. */
-const TAIL_BYTES = 64 * 1024;
-
-/** The API error text a context-length stop leaves as the transcript's last record (measured). @es El texto que deja una parada por longitud de contexto. */
-export const CONTEXT_EXHAUSTED_TEXT = 'Prompt is too long';
-
-/** The structured `error` class of that record (measured; a rate limit is `rate_limit`). @es La clase `error` estructurada de ese registro. */
-export const CONTEXT_EXHAUSTED_ERROR_CLASS = 'invalid_request';
-
-/**
- * Whether the agent STOPPED because its context ran out — the one terminal state a resume cannot leave.
- *
- * MEASURED 2026-09-30 on `aa3437bf9bf7832a9` (the coordinator, live, then this transcript read): its task
- * notification said `failed`, «Agent terminated early due to an API error: Prompt is too long», and the
- * transcript's LAST record is a synthetic assistant message with `isApiErrorMessage: true` and exactly
- * that text. A resume replays that same oversized transcript, so this guard's own recipe — "resume it by
- * its id" — cannot work there, and refusing a fresh replacement pointed at a door that will not open.
- * Other API errors are NOT this state: agents stopped by a rate limit were resumed by id successfully
- * (the incident behind this guard), so only the context-length text disqualifies.
- * @es Si el agente PARÓ porque se le acabó el contexto: el único estado del que no saca un resume. Medido
- * el 2026-09-30: el último registro del transcript es un mensaje sintético con `isApiErrorMessage` y
- * «Prompt is too long». Otros errores de API NO: los agentes parados por límite de tasa sí se reanudaron.
- */
-export function stoppedOnContextLength(transcript) {
-  let descriptor;
-
-  try {
-    descriptor = openSync(transcript, 'r');
-
-    const size = fstatSync(descriptor).size;
-    const length = Math.min(size, TAIL_BYTES);
-    const tail = Buffer.alloc(length);
-
-    readSync(descriptor, tail, 0, length, size - length);
-
-    const lines = tail.toString('utf8').split('\n').filter((line) => line.trim().length > 0);
-    const last = JSON.parse(lines.at(-1) ?? '{}');
-    const text = Array.isArray(last?.message?.content) ? last.message.content.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('') : '';
-
-    // The structured fields decide the class: a harness-synthesised API error record whose `error` is
-    // `invalid_request`. That class is broader than context length, and the record carries nothing finer
-    // (measured on aa3437bf9bf7832a9 and aad6e241f1cc53532: `diagnostics` and `stop_details` are null), so
-    // the API's own message is compared by EQUALITY — never searched for — to pick context length out of it.
-    // @es Los campos estructurados deciden la clase: un error de API sintetizado con `error`
-    // `invalid_request`. Esa clase es más amplia que la longitud de contexto y el registro no trae nada más
-    // fino, así que el mensaje de la API se compara por IGUALDAD, nunca se busca dentro.
-    return last?.isApiErrorMessage === true && last.error === CONTEXT_EXHAUSTED_ERROR_CLASS && text === CONTEXT_EXHAUSTED_TEXT;
-  } catch {
-    return false; // an unreadable tail is not evidence of this state
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
-  }
-}
-
 /** Whether two labels carry exactly the same significant words. @es Si dos etiquetas llevan exactamente las mismas palabras. */
 function sameLabel(left, right) {
   return left.size > 0 && left.size === right.size && [...left].every((word) => right.has(word));
@@ -428,9 +369,9 @@ function matchingAgents(description, repoPath, records, now, prompt = '') {
     // @es Agotado: o se acabó el contexto (un resume reproduce el transcript ya demasiado largo) o el
     // transcript pasó el tamaño del ledger (un resume paga de nuevo todo ese historial). En ambos casos NO se
     // puede reanudar. Se devuelve marcado, porque al autor hay que decirle dónde está su worktree.
-    const oversized = bytes > EXHAUSTED_TRANSCRIPT_BYTES;
+    const { oversized, exhausted } = exhaustionOf(record.transcript, bytes);
 
-    matches.push({ id: record.id, description: record.description, lastWrite, ratio, worktreePath: recordedWorktree, bytes, oversized, exhausted: stoppedOnContextLength(record.transcript) || oversized });
+    matches.push({ id: record.id, description: record.description, lastWrite, ratio, worktreePath: recordedWorktree, bytes, oversized, exhausted });
   }
 
   return matches.sort((left, right) => right.lastWrite - left.lastWrite);
@@ -590,7 +531,7 @@ function reason(description, matches, now) {
  * `~/.claude/hook-dispatch/dispatch.mjs` la corra en su propio proceso; ejecutada directamente, la
  * misma función corre como hook propio (`main`, abajo). `records` y `now` se inyectan solo en el selftest.
  */
-export function evaluate(raw, { records = undefined, now = Date.now() } = {}) {
+export function evaluate(raw, { records = undefined, now = Date.now(), lifecycle = undefined } = {}) {
   // The port tolerates the UTF-8 BOM a PowerShell writer adds; an unreadable payload fails open.
   // @es El puerto tolera el BOM de UTF-8 que añade PowerShell; un payload ilegible falla abierto.
   const payload = tryParsePayload(raw);
@@ -604,7 +545,7 @@ export function evaluate(raw, { records = undefined, now = Date.now() } = {}) {
     // it fails open, like every other malfunction of this guard.
     // @es Un payload sin `session_id` llega a `decide` como `undefined`, que no tiene candidato por el que
     // rechazar: falla abierto, como cualquier otro fallo de este guard.
-    return decide(payload?.tool_input?.description ?? '', payload?.tool_input?.prompt ?? '', repoPath, records ?? agentRecords(), now, payload?.session_id);
+    return decide(payload?.tool_input?.description ?? '', payload?.tool_input?.prompt ?? '', repoPath, records ?? agentRecords(), now, payload?.session_id, lifecycle ?? readLifecycle());
   } catch {
     return; // fail open
   }
@@ -619,14 +560,14 @@ export function evaluate(raw, { records = undefined, now = Date.now() } = {}) {
  * @es La salida para una delegación, función pura de los registros y el reloj: reanudable -> rechaza;
  * solo agotados -> permite nombrándolos irreanudables; worktree vivo -> aviso; si no, nada.
  */
-export function decide(description, prompt, repoPath, records, now, session = undefined) {
+export function decide(description, prompt, repoPath, records, now, session = undefined, lifecycle = readLifecycle()) {
   const resumable = priorAgents(description, repoPath, records, now, session, prompt);
 
   if (resumable.length > 0) {
     return deny(reason(description, resumable, now));
   }
 
-  const advice = [unresumableNotice(exhaustedAgents(description, repoPath, records, now, prompt)), relatedNotice(relatedLiveAgents(description, prompt, repoPath, records))].filter((text) => text !== undefined);
+  const advice = [unresumableNotice(exhaustedAgents(description, repoPath, records, now, prompt), { records, now, lifecycle }), relatedNotice(relatedLiveAgents(description, prompt, repoPath, records))].filter((text) => text !== undefined);
 
   return advice.length === 0 ? undefined : advise(advice.join('\n\n'));
 }
@@ -646,11 +587,51 @@ function sizeRule(oversized) {
   ];
 }
 
+/**
+ * Whether the replacement of `agent` may be told to take its worktree over: only when the shared holder
+ * decision (`holderOf`) agrees the worktree's holder is unresumable — the very state `orphan-work` accepts a
+ * declared takeover for. A worktree read as `live` counts as long as the live owner IS that same agent (its
+ * last write is still inside the window, or nothing recorded its stop); a worktree another agent is working
+ * in, or whose newer holder can be resumed, is NOT advised for takeover: that advice would be refused.
+ * @es Si al reemplazo de `agent` se le puede decir que tome su worktree: solo cuando la decisión compartida
+ * de titular (`holderOf`) dice que su titular es irreanudable, el mismo estado en que `orphan-work` acepta un
+ * relevo declarado. Un worktree `live` cuenta solo si el dueño vivo ES ese mismo agente; uno en el que
+ * trabaja otro agente, o cuyo titular más reciente se puede reanudar, NO se aconseja: ese consejo se rechazaría.
+ */
+function takeoverOf(agent, holderContext) {
+  if (agent.worktreePath === '') return { advised: false };
+
+  const holder = holderOf(agent.worktreePath, holderContext);
+  const advised = holder.state === 'unresumable' || (holder.state === 'live' && holder.agentId === agent.id);
+
+  return { advised, holder };
+}
+
+/** How one unresumable agent is named, with what its worktree allows. @es Cómo se nombra a un agente irreanudable y qué permite su worktree. */
+function namedAgent(agent, takeover) {
+  const head = `  ${address(agent.id)}  —  "${agent.description}"`;
+
+  if (agent.worktreePath === '') return `${head}  (ran in the main checkout)`;
+  if (takeover.advised) return `${head}\n    worktree: ${agent.worktreePath}`;
+
+  return [
+    `${head}\n    worktree: ${agent.worktreePath}`,
+    `    NOT for takeover: ${takeover.holder.reason}`,
+    '    @es NO se releva: la decisión de titular de ese worktree no es «irreanudable».'
+  ].join('\n');
+}
+
 /** The advice for errand holders whose context ran out, or `undefined`. @es El aviso para quienes agotaron el contexto. */
-function unresumableNotice(exhausted) {
+function unresumableNotice(exhausted, holderContext) {
   if (exhausted.length === 0) return undefined;
 
   const oversized = exhausted.filter((agent) => agent.oversized);
+  const takeovers = exhausted.map((agent) => ({ agent, takeover: takeoverOf(agent, holderContext) }));
+  const advised = [...new Set(takeovers.filter(({ takeover }) => takeover.advised).map(({ agent }) => agent.worktreePath))];
+  // The line is written for each worktree a takeover is advised for, in the one format `orphan-work` accepts;
+  // with none, the template shows its shape. @es La línea se escribe por cada worktree que se aconseja relevar,
+  // en el único formato que acepta `orphan-work`; sin ninguno, la plantilla muestra su forma.
+  const lines = advised.length === 0 ? [takeoverDeclaration('<that worktree folder>')] : advised.map((worktree) => takeoverDeclaration(worktree));
 
   return [
     'RESUME-BEFORE-FRESH — NOT refused: the agent(s) that hold this errand are UNRESUMABLE.',
@@ -658,13 +639,13 @@ function unresumableNotice(exhausted) {
     'size, and a resume replays that same oversized transcript, so a fresh replacement is the right dispatch.',
     '@es Ninguno se puede reanudar: pararon por longitud de contexto o su transcript pasa el tamaño del ledger.',
     '',
-    ...exhausted.map((agent) => `  ${address(agent.id)}  —  "${agent.description}"${agent.worktreePath === '' ? '  (ran in the main checkout)' : `\n    worktree: ${agent.worktreePath}`}`),
+    ...takeovers.map(({ agent, takeover }) => namedAgent(agent, takeover)),
     ...(oversized.length === 0 ? [] : sizeRule(oversized)),
     '',
     'Its worktree may hold uncommitted or unlanded work. Give the replacement a line naming it, e.g.:',
-    '  TENANCY: <that worktree folder> — taking over from an unresumable agent (context failure or oversized transcript); read its diff first.',
+    ...lines.map((line) => `  ${line.en}`),
     '@es Su worktree puede tener trabajo sin commitear o sin aterrizar; dale al reemplazo una línea que lo nombre:',
-    '@es   TENANCY: <esa carpeta de worktree> — relevo de un agente irreanudable (fallo de contexto o transcript demasiado grande); leé primero su diff.'
+    ...lines.map((line) => `@es   ${line.es}`)
   ].join('\n');
 }
 
