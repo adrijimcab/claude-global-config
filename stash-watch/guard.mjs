@@ -51,8 +51,8 @@
 
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
+import { blockStop, hookMain, parseFailureMessage, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { stateDir as stateDirOf } from '../hook-state/locations.mjs';
 import { describeStashes } from './report.mjs';
 import { stashInventory } from './stashes.mjs';
@@ -197,7 +197,7 @@ export function decide(payload, { repoRoot = repositoryOf(payload), stateDir = d
 
   note(stateDir, { event: 'block', session: sessionId, stashes: settled.map((stash) => stash.sha) });
 
-  return { decision: 'block', reason: reason(settled, now) };
+  return blockStop(reason(settled, now));
 }
 
 /**
@@ -207,28 +207,12 @@ export function decide(payload, { repoRoot = repositoryOf(payload), stateDir = d
  */
 export function evaluate(raw) {
   try {
-    // PowerShell 5.1 prepends a BOM when it pipes a string into a native process; `JSON.parse`
-    // rejects it, which would read as a clean stack.
-    // @es PowerShell 5.1 antepone un BOM que `JSON.parse` rechaza.
-    return decide(JSON.parse(raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw), { stateDir: defaultStateDir() });
+    return decide(parsePayload(raw), { stateDir: defaultStateDir() });
   } catch (error) {
-    note(defaultStateDir(), { event: 'malfunction', stage: 'payload', error: error instanceof Error ? error.message : String(error), rawLength: raw.length });
+    note(defaultStateDir(), { event: 'malfunction', stage: 'payload', error: parseFailureMessage(error), rawLength: raw.length });
 
     return undefined;
   }
 }
 
-function run() {
-  let raw = '';
-
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', (chunk) => (raw += chunk));
-  process.stdin.on('end', () => {
-    const output = evaluate(raw);
-
-    if (output !== undefined) process.stdout.write(JSON.stringify(output));
-    process.exit(0);
-  });
-}
-
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) run();
+runWhenMain(import.meta.url, hookMain(evaluate));

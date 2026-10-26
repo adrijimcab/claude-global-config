@@ -19,10 +19,10 @@
  * un fallo propio, lo nombra en stderr y lo anota: no poder verificar no es lo mismo que estar limpio.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { simulateEdit } from '../type-assertion-guard/simulate-edit.mjs';
 import { refusalText } from './refusal.mjs';
@@ -47,22 +47,13 @@ function reportMalfunction(message) {
   }
 }
 
-const withoutBom = (raw) => (raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-
 /**
  * The hook output for a raw `PreToolUse` payload, or `undefined` to allow the call. Exported so the
  * dispatcher can run it in its own process.
  * @es La salida del hook para un payload `PreToolUse` crudo, o `undefined` para permitir.
  */
 export function evaluate(raw) {
-  let payload;
-
-  try {
-    payload = JSON.parse(withoutBom(raw));
-  } catch {
-    return undefined;
-  }
-
+  const payload = tryParsePayload(raw);
   const toolInput = payload?.tool_input;
   const filePathRaw = toolInput?.file_path;
 
@@ -91,22 +82,8 @@ export function evaluate(raw) {
 
   if (findings.length === 0) return undefined;
 
-  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: refusalText(filePath, findings) } };
-}
-
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
+  return deny(refusalText(filePath, findings));
 }
 
 // Runs only as the process entry point, never on import. @es Corre solo como punto de entrada, nunca al importarse.
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+runWhenMain(import.meta.url, hookMain(evaluate));
