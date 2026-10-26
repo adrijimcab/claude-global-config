@@ -121,6 +121,9 @@ const probe = (bytes, lastWrite, session = SESSION) => resumabilityOf({ transcri
 check('the per-record answer: a small fresh own record is resumable', [probe(10, NOW - HOUR).resumable, probe(10, NOW - HOUR).causes], [true, []]);
 check('the per-record answer names every cause, in order', probe(EXHAUSTED_TRANSCRIPT_BYTES + 1, NOW - RESUMABLE_WINDOW_MS - 1, 'another').causes, ['oversized', 'stale', 'other-session']);
 check('exhausted is the context or size half alone', [probe(EXHAUSTED_TRANSCRIPT_BYTES + 1, NOW).exhausted, probe(10, NOW - RESUMABLE_WINDOW_MS - 1).exhausted], [true, false]);
+const contextRecord = store([{ id: 'aCTXPROBE', worktreePath: W, last: CONTEXT_STOP }])[0];
+
+check('a context-length stop alone is exhausted, the context half', resumabilityOf(contextRecord, { now: NOW, session: SESSION, bytes: 10, lastWrite: NOW }).exhausted, true);
 check('exactly the window edge is still inside it', probe(10, NOW - RESUMABLE_WINDOW_MS).resumable, true);
 check('the session is the folder above subagents/', sessionOf({ transcript: join('store', 'C--repo', 'sess-x', 'subagents', 'agent-a.jsonl') }), 'sess-x');
 

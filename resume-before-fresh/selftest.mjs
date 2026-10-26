@@ -398,7 +398,7 @@ for (const [expected, description, label] of cases) {
   const reason = pair?.hookSpecificOutput?.permissionDecisionReason ?? '';
   const checks = [
     [huge?.hookSpecificOutput?.permissionDecision === undefined && context.length > 0, 'the fresh launch beside an oversized match is allowed, with the rule'],
-    [context.includes('aHUGE00000000000') && context.includes('2500'), 'the rule names the old agent and its size'],
+    [context.includes('aHUGE00000000000: 2.50 MB (2500000 bytes) > 2000000 bytes'), 'the rule names the old agent and its size'],
     [context.includes('resumed-giant-transcripts-exhausted-quota') && context.includes('narrow scope') && context.includes('@es') && context.includes('alcance acotado'), 'the ledger rule is printed in English and in Spanish'],
     [!context.includes('SendMessage'), 'the oversized advice never prints a resume recipe'],
     [pair?.hookSpecificOutput?.permissionDecision === 'deny' && reason.includes('aPAIRSMALL000000') && !reason.includes('aPAIRHUGE0000000'), 'beside a small similar match the refusal points at the small one only'],
