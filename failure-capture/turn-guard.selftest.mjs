@@ -15,14 +15,16 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { CLAUDE_HOME_VARIABLE, STATE_ROOT_VARIABLE, isolateState } from '../hook-state/locations.mjs';
+import { importClosure } from '../mutation-proof/import-closure.mjs';
 import { provisionLoop } from './fixture-loop.mjs';
 import { cooldownFile, stampFile, writeJson } from './session-state.mjs';
 
 isolateState('turn-guard');
 
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'turn-guard-selftest-'));
 let passed = 0;
 const failures = [];
@@ -32,10 +34,27 @@ const check = (name, condition, detail = '') => {
   else failures.push(`${name}${detail === '' ? '' : ` — ${detail}`}`);
 };
 
+/**
+ * The loop modules the guard needs, derived from the import closure of `turn-guard.mjs` (never a hand list, which
+ * goes stale the moment a module it reaches gains an import). The closure members outside `failure-capture/` are
+ * the shared folders `provisionLoop` copies on its own. A closure that cannot be followed stops the run, naming why.
+ * @es Los módulos del lazo que necesita la guardia, derivados del cierre de imports de `turn-guard.mjs` (nunca una
+ * lista a mano, que caduca en cuanto un módulo que alcanza gana un import). Los miembros del cierre fuera de
+ * `failure-capture/` son las carpetas compartidas que `provisionLoop` copia por su cuenta. Un cierre que no se puede
+ * seguir detiene la corrida, diciendo por qué.
+ */
+const GUARD_MODULES = (() => {
+  const closure = importClosure({ root: path.join(HERE, '..'), entries: ['failure-capture/turn-guard.mjs'] });
+
+  if (closure.problems.length > 0) throw new Error(`the import closure of turn-guard.mjs cannot be followed: ${closure.problems.join('; ')} @es el cierre de imports de turn-guard.mjs no se puede seguir`);
+
+  return new Set(closure.files.filter((file) => path.posix.dirname(file) === 'failure-capture').map((file) => path.posix.basename(file)));
+})();
+
 /** Una copia nueva de la guardia, en su propio home de Claude, con su propio `state/`. */
 function world(name) {
   const dir = path.join(scratch, name, 'failure-capture');
-  provisionLoop(dir, (file) => ['turn-guard.mjs', 'markers.mjs', 'project.mjs', 'project-areas.mjs', 'ledger-line.mjs', 'session-state.mjs'].includes(file));
+  provisionLoop(dir, (file) => GUARD_MODULES.has(file));
   return dir;
 }
 

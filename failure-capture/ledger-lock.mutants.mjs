@@ -38,8 +38,8 @@ const MUTANTS = [
 
   // --- the fold that takes it
   ['the fold takes some other lock, so a held ledger lock is ignored', COMMAND, 'const outcome = withLock(lockFile(), () => {', "const outcome = withLock(path.join(stateDirectory(), 'other.lock'), () => {"],
-  ['a refused fold reports no waiting entries', COMMAND, ': { folded: [], deferred: pending.length };', ': { folded: [], deferred: 0 };'],
-  ['a refused fold is reported as a fold that found nothing', COMMAND, 'return outcome.held ? { folded: outcome.value, deferred: 0 } : { folded: [], deferred: pending.length };', 'return { folded: outcome.value ?? [], deferred: 0 };'],
+  ['a refused fold reports no waiting entries', COMMAND, ': { folded: [], deferred: pending.length, left: [] };', ': { folded: [], deferred: 0, left: [] };'],
+  ['a refused fold is reported as a fold that found nothing', COMMAND, 'return outcome.held ? { folded: outcome.value.folded, deferred: 0, left: outcome.value.left } : { folded: [], deferred: pending.length, left: [] };', 'return { folded: outcome.value?.folded ?? [], deferred: 0, left: outcome.value?.left ?? [] };'],
   ['the refusal to fold loses its Spanish half', COMMAND, "speaker.say('capture.deferred', { count: deferred });", "console.log('RECORDED (spooled) — the ledger is locked by another writer; ' + String(deferred) + ' entr(y/ies) will fold on the next capture. Nothing is lost.');"],
 ];
 

@@ -33,6 +33,7 @@
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 
+import { areaLedgerHeaderOf, frontmatterOf } from './area-ledger-header.mjs';
 import { GLOBAL_SCOPE } from './project.mjs';
 
 /** The scope of the stubs `promote` leaves for global lessons. @es El alcance de los muñones que `promote` deja de lecciones globales. */
@@ -104,9 +105,6 @@ export function onDemandRulesFiles(home) {
   }
 }
 
-/** The frontmatter the harness reads to scope a rule to paths. @es El frontmatter que lee el harness para dar a una regla alcance de ruta. */
-const frontmatterOf = (paths) => ['---', 'paths:', ...paths.map((glob) => `  - "${glob}"`), '---'].join('\n');
-
 /** The header of a new stubs file; it says it is never loaded and where the rule text is. @es El encabezado de un fichero de muñones nuevo. */
 export const STUBS_HEADER = `# Promoted lesson stubs — NOT loaded\n\nOne line per promoted lesson (a repeat folds into its line and bumps the counter). The harness does NOT load this file:\nnothing imports it and it is not under rules/. The rule text itself is in \`~/.claude/rules/promoted-rules.md\` (or, for an\narea, in its \`promoted-<area>.md\`), which it loads. Machine state: the trailing \`<!--fc:KEY#N-->\` marker belongs to\n\`~/.claude/failure-capture/\`; this file is written only by \`capture.mjs\`, never by hand.\n\n---\n`;
 
@@ -115,8 +113,7 @@ export const STUBS_HEADER = `# Promoted lesson stubs — NOT loaded\n\nOne line 
  * `{ about, paths }`: the home's registry entry by default, or the one a PROJECT declares (`project-areas.mjs`).
  * @es El encabezado de un ledger de área nuevo. `definition` es el `{ about, paths }` del área: el del registro del home por omisión, o el que declara un PROYECTO.
  */
-export const areaLedgerHeader = (area, definition = AREAS[area]) =>
-  `${frontmatterOf(definition.paths)}\n# Lessons Ledger — ${area} (path-scoped)\n\nLessons about ${definition.about}. The harness loads this file ONLY when a file matching the \`paths:\` above is read.\nOne line per RULE (a repeat folds into its line and bumps the counter). Machine state: the trailing \`<!--fc:KEY#N-->\`\nmarker belongs to \`~/.claude/failure-capture/\`; this file is written only by \`capture.mjs\`, never by hand.\n\n---\n`;
+export const areaLedgerHeader = (area, definition = AREAS[area]) => areaLedgerHeaderOf(area, definition);
 
 /** The header of a new area rules file. @es El encabezado de un fichero de reglas de área nuevo. */
 export const areaRulesHeader = (area) =>

@@ -57,8 +57,8 @@ import { GLOBAL_TARGET, PROJECT_TARGET, promotionFiles, promotionTargetOf } from
 import { PROMOTE_MESSAGES } from './promote-messages.mjs';
 import { promotionParity } from './promote-parity.mjs';
 import { facesByFile, staleFiles } from './text-growth.mjs';
-import { HEADER, homeLedgerFiles, ledgerForScope, locateKey, PROJECT_LOADER, projectAreaLedgerFiles, readLedgers, writeLedger } from './ledgers.mjs';
-import { commitHeaderRoute, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, routeOutcome } from './ledger-route.mjs';
+import { HEADER, homeLedgerFiles, ledgerBytes, ledgerForScope, locateKey, PROJECT_LOADER, projectAreaLedgerFiles, readLedgers, replaceFile, restoreLedgerBytes, writeLedger } from './ledgers.mjs';
+import { commitHeaderRoutes, commitRoute, locateLesson, planHeaderRoute, planLessonRoute, planStubRoute, routeOutcome } from './ledger-route.mjs';
 import { placeStub } from './stub-placement.mjs';
 import { PROMOTED_SCOPE, areaRulesFile, areaRulesHeader, areaScopes, isAreaScope, onDemandRulesFiles, stubScopeOf } from './ledger-routes.mjs';
 import { commitBlockRoute, findBlock, planBlockRoute } from './rule-block.mjs';
@@ -219,6 +219,27 @@ function spool(entry) {
 }
 
 /**
+ * Leaves a spooled entry in the spool with the reason it was deferred recorded in it (`deferred: { reason, at }`),
+ * written atomically like a new entry. The record is rewritten only when its reason changes, so an entry that waits
+ * through many reconciles keeps the time it was first deferred for that reason.
+ * @es Deja una entrada en el spool con el motivo por el que se difirió anotado en ella, escrita atómicamente como una
+ * entrada nueva. Se reescribe solo si cambia el motivo, así una entrada que espera muchas reconciliaciones conserva
+ * la hora en que se difirió por primera vez por ese motivo.
+ */
+function deferEntry(full, entry, deferred) {
+  const reason = `no ledger holds the scope "${entry.scope}" any more (the project no longer declares that area), so this capture stays in the spool until the scope is declared again. @es ningún ledger tiene ya el alcance "${entry.scope}" (el proyecto ya no declara esa área), así que esta captura se queda en el spool hasta que el alcance se declare de nuevo.`;
+
+  if (deferred?.reason !== reason) {
+    const temp = path.join(spoolDir(), `.${path.basename(full)}.tmp`);
+
+    writeFileSync(temp, JSON.stringify({ ...entry, deferred: { reason, at: new Date().toISOString() } }), 'utf8');
+    renameSync(temp, full);
+  }
+
+  return reason;
+}
+
+/**
  * The ledgers each spooled entry can see — the home's (the loaded one and the unloaded stubs) and the one of the project it was captured in —
  * read once per file and SHARED between entries, so two entries touching the same file edit one copy.
  * @returns `(entry) => ledgers | undefined`.
@@ -267,23 +288,28 @@ function reconcile() {
 
   const pending = readdirSync(spoolDir()).filter((f) => f.endsWith('.json') && !f.startsWith('.'));
 
-  if (pending.length === 0) return { folded: [], deferred: 0 };
+  if (pending.length === 0) return { folded: [], deferred: 0, left: [] };
 
   const outcome = withLock(lockFile(), () => {
     const folded = [];
+    const left = [];
     const ledgersOf = ledgerCache();
     const touched = new Set();
     const consumed = [];
 
     for (const file of pending.sort()) {
       const full = path.join(spoolDir(), file);
-      let entry;
+      let spooled;
 
       try {
-        entry = JSON.parse(readFileSync(full, 'utf8'));
+        spooled = JSON.parse(readFileSync(full, 'utf8'));
       } catch {
         continue; // a corrupt spool file is left in place for a human, never silently dropped
       }
+
+      // The reason an earlier reconcile recorded for leaving the entry is not part of the capture.
+      // @es El motivo que una reconciliación anterior anotó al dejar la entrada no es parte de la captura.
+      const { deferred, ...entry } = spooled;
 
       const ledgers = ledgersOf(entry);
 
@@ -295,6 +321,17 @@ function reconcile() {
       // A key already present folds in WHERE it is, whatever scope this capture declares.
       // @es Una clave ya presente se suma DONDE está, sea cual sea el alcance de esta captura.
       const found = locateKey(ledgers, entry.key, readMarker);
+
+      // A new lesson whose scope has no ledger any more (a project area dropped from the declaration after the
+      // capture was spooled) is DEFERRED, never a throw: a throw here would fail every later reconcile and wedge the
+      // spool. The entry stays, with the reason recorded in it, until its scope is declared again.
+      // @es Una lección nueva cuyo alcance ya no tiene ledger (un área de proyecto quitada de la declaración después
+      // de entrar la captura en el spool) se DIFIERE, nunca lanza: lanzar aquí haría fallar toda reconciliación
+      // posterior y atascaría el spool. La entrada se queda, con el motivo anotado, hasta que su alcance se declare de nuevo.
+      if (found === undefined && !ledgers.some((ledger) => ledger.scope === entry.scope)) {
+        left.push({ key: entry.key, reason: deferEntry(full, entry, deferred) });
+        continue;
+      }
 
       if (found === undefined) {
         const ledger = ledgerForScope(ledgers, entry.scope);
@@ -337,10 +374,10 @@ function reconcile() {
       unlinkSync(full);
     }
 
-    return folded;
+    return { folded, left };
   });
 
-  return outcome.held ? { folded: outcome.value, deferred: 0 } : { folded: [], deferred: pending.length };
+  return outcome.held ? { folded: outcome.value.folded, deferred: 0, left: outcome.value.left } : { folded: [], deferred: pending.length, left: [] };
 }
 
 /**
@@ -431,9 +468,16 @@ function recordCapture(args) {
 
   spool({ key, scope, actor, lesson, ...(rule === undefined ? {} : { rule }), date: today(), session: session ?? 'unknown', at: new Date().toISOString(), ...(project === undefined ? {} : { project }) });
 
-  const { folded, deferred } = reconcile();
+  const { folded, deferred, left } = reconcile();
 
   stamp(session, 'capture');
+
+  // A spooled capture that could not be folded (its scope has no ledger any more) is said, never kept silent.
+  // @es Una captura del spool que no se pudo plegar (su alcance ya no tiene ledger) se dice, nunca se calla.
+  if (left.length > 0) {
+    speaker.say('capture.left', { count: left.length });
+    for (const one of left) speaker.data(`  ${one.key}: ${one.reason}`);
+  }
 
   if (deferred > 0) {
     speaker.say('capture.deferred', { count: deferred });
@@ -842,6 +886,15 @@ function linesRoute({ source, destination, plan }) {
       const reread = readLedgers(LEDGERS);
 
       return { source: reread.find((ledger) => ledger.scope === source.scope).lines ?? [], destination: reread.find((ledger) => ledger.scope === destination.scope).lines };
+    },
+    // The bytes both files hold before the first write, and their restoration, byte for byte (`commitRoute`).
+    // @es Los bytes de ambos ficheros antes de la primera escritura, y su restauración byte a byte.
+    snapshot: () => ({ source: ledgerBytes(source.file), destination: ledgerBytes(destination.file), lines: { source: source.lines, destination: destination.lines } }),
+    restore: (saved) => {
+      restoreLedgerBytes(destination.file, saved.destination);
+      restoreLedgerBytes(source.file, saved.source);
+      source.lines = saved.lines.source;
+      destination.lines = saved.lines.destination;
     }
   };
 
@@ -868,8 +921,12 @@ function blockRoute(key, area) {
 
   if (!plan.ok) return { problems: plan.problems };
 
+  // Every write is a temporary file renamed over the target (`replaceFile`), and the bytes both files had are kept
+  // and put back byte for byte when the transaction fails (`commitBlockRoute`).
+  // @es Cada escritura es un fichero temporal renombrado encima del destino, y los bytes de ambos ficheros se guardan
+  // y se reponen byte a byte cuando la transacción falla.
   const io = {
-    writeFrom: (text) => writeFileSync(from, text, 'utf8'),
+    writeFrom: (text) => replaceFile(from, text),
     writeTo: (text) => {
       if (text === undefined) {
         rmSync(target, { force: true });
@@ -878,22 +935,31 @@ function blockRoute(key, area) {
       }
 
       mkdirSync(path.dirname(target), { recursive: true });
-      writeFileSync(target, text, 'utf8');
+      replaceFile(target, text);
     },
-    readBack: () => ({ from: readFileOr(from, ''), to: existsSync(target) ? readFileOr(target, '') : undefined })
+    readBack: () => ({ from: readFileOr(from, ''), to: existsSync(target) ? readFileOr(target, '') : undefined }),
+    snapshot: () => ({ from: ledgerBytes(from), to: ledgerBytes(target) }),
+    restore: (saved) => {
+      restoreLedgerBytes(target, saved.to);
+      restoreLedgerBytes(from, saved.from);
+    }
   };
 
   return { count: plan.block.length, file: target, keys: [key], commit: () => commitBlockRoute({ before, plan, io }) };
 }
 
 /**
- * What bringing the header of every home ledger up to its declared one would do (`planHeaderRoute`): the headers
- * are tool-owned text, so when the declared text changes (or a ledger predates the tool) one command refreshes them
- * all, each proved on its own: the lessons are untouched.
- * @es Lo que haría poner al día el encabezado de cada ledger del home con el declarado: los encabezados son texto de la herramienta, así que cuando el texto declarado cambia (o un ledger es anterior a la herramienta) un comando los refresca todos, cada uno probado por su cuenta: las lecciones no se tocan.
+ * What bringing the header of every home ledger, and of every area ledger the project declares, up to its declared
+ * one would do (`planHeaderRoute`): the headers are tool-owned text, so when the declared text changes (a project
+ * area's `paths` or `about` included, or a ledger predates the tool) one command refreshes them all, each proved on
+ * its own: the lessons are untouched.
+ * @es Lo que haría poner al día con el declarado el encabezado de cada ledger del home y de cada ledger de área que
+ * declara el proyecto: los encabezados son texto de la herramienta, así que cuando el texto declarado cambia (también
+ * los `paths` o el `about` de un área de proyecto, o un ledger es anterior a la herramienta) un comando los refresca
+ * todos, cada uno probado por su cuenta: las lecciones no se tocan.
  */
 function headersRoute(ledgers) {
-  const scopes = Object.keys(homeLedgerFiles(homedir()));
+  const scopes = [...Object.keys(homeLedgerFiles(homedir())), ...Object.keys(PROJECT?.areas ?? {})];
   const changing = ledgers
     .filter((ledger) => scopes.includes(ledger.scope) && ledger.lines !== undefined)
     .map((ledger) => ({ ledger, plan: planHeaderRoute({ lines: ledger.lines, header: ledger.header }) }))
@@ -901,22 +967,21 @@ function headersRoute(ledgers) {
 
   if (changing.length === 0) return { nothing: true };
 
-  const commit = () => {
-    for (const { ledger, plan } of changing) {
-      const io = {
-        write: (lines) => {
-          ledger.lines = lines;
-          writeLedger(ledger);
-        },
-        readBack: () => readLedgers(LEDGERS).find((one) => one.scope === ledger.scope).lines
-      };
-      const proof = commitHeaderRoute({ before: [...ledger.lines], plan, header: ledger.header, io });
-
-      if (!proof.ok) return proof;
+  // Each ledger is committed and reported on its own (`commitHeaderRoutes`): one that fails does not stop the others.
+  // @es Cada ledger se escribe y se informa por su cuenta: uno que falla no detiene a los demás.
+  const commit = () => commitHeaderRoutes(changing.map(({ ledger, plan }) => ({
+    name: ledger.file,
+    before: [...ledger.lines],
+    plan,
+    header: ledger.header,
+    io: {
+      write: (lines) => {
+        ledger.lines = lines;
+        writeLedger(ledger);
+      },
+      readBack: () => readLedgers(LEDGERS).find((one) => one.scope === ledger.scope).lines
     }
-
-    return { ok: true };
-  };
+  })));
 
   return { count: changing.length, file: changing.map(({ ledger }) => ledger.file).join(', '), keys: changing.map(({ ledger }) => ledger.scope), commit };
 }
@@ -927,21 +992,23 @@ function headersRoute(ledgers) {
  * an area, or, for a promoted lesson, the text of its rule to the area's rules file (its stub stays). An area is a
  * home area (for a `[global]` lesson) or one the project declares in `.claude/failure-capture.json` (for a lesson
  * of that SAME project, into `.claude/rules/lessons-<area>.md`); a lesson never crosses projects nor goes between a
- * project and the home. Before any write the plan is proved to lose, duplicate and reword nothing. Every line
- * moves byte for byte (a lesson only changes its scope tag). A dry run unless `--write` is given; under `--write`
- * it holds the ledger lock, writes, RE-READS both files from disk and proves nothing was lost or invented
- * (`ledger-route.mjs`, `rule-block.mjs`), restoring what it had when the proof fails. Exit 0 done or nothing to
- * move, 1 refused or failed, 2 the ledger is locked. `--headers` brings the header of every home ledger up to the declared one.
+ * project and the home. Before any write, of every kind of route, the plan is proved to lose, duplicate and reword
+ * nothing. Every line moves byte for byte (a lesson only changes its scope tag). A dry run unless `--write` is given;
+ * under `--write` it holds the ledger lock, writes, RE-READS both files from disk and proves nothing was lost or
+ * invented (`ledger-route.mjs`, `rule-block.mjs`), restoring what it had when the proof fails or a write throws.
+ * Exit 0 done or nothing to move, 1 refused or failed, 2 the ledger is locked. `--headers` brings the header of
+ * every home ledger, and of every area ledger the project declares, up to the declared one.
  * @es Mueve lo que el enrutador mantiene aparte: `--stubs` mueve cada muñón promovido del ledger cargado del
  * home al fichero que el harness no carga; `--key <clave> --to <área>` mueve una lección al fichero con
  * alcance de ruta de un área o, si está promovida, el texto de su regla al fichero de reglas del área (su
  * muñón se queda). Un área es del home (para una lección `[global]`) o una que el proyecto declara en
  * `.claude/failure-capture.json` (para una lección de ESE mismo proyecto, a `.claude/rules/lessons-<área>.md`);
- * una lección nunca cruza proyectos ni va entre un proyecto y el home. Antes de escribir se prueba que el plan no
- * pierde, duplica ni reescribe nada. Toda línea se mueve byte a byte (una lección solo cambia su etiqueta de alcance). Simulacro
- * salvo con `--write`; con `--write` toma el lock del ledger, escribe, RELEE ambos ficheros de disco y prueba
- * que no se perdió ni se inventó nada, y restaura lo que tenía si la prueba falla. Salida 0 hecho o nada que
- * mover, 1 rechazado o fallido, 2 ledger bloqueado.
+ * una lección nunca cruza proyectos ni va entre un proyecto y el home. Antes de escribir, en todo tipo de ruta, se
+ * prueba que el plan no pierde, duplica ni reescribe nada. Toda línea se mueve byte a byte (una lección solo cambia su
+ * etiqueta de alcance). Simulacro salvo con `--write`; con `--write` toma el lock del ledger, escribe, RELEE ambos
+ * ficheros de disco y prueba que no se perdió ni se inventó nada, y restaura lo que tenía si la prueba falla o una
+ * escritura lanza. Salida 0 hecho o nada que mover, 1 rechazado o fallido, 2 ledger bloqueado. `--headers` pone al
+ * día el encabezado de cada ledger del home y de cada ledger de área que declara el proyecto.
  */
 function commandRoute(args) {
   const stubs = args.stubs === true;
@@ -998,11 +1065,15 @@ function commandRoute(args) {
       return 0;
     }
 
-    const outcome = routeOutcome({ proof: wanted.commit(), count: wanted.count });
+    const proof = wanted.commit();
+    const outcome = routeOutcome({ proof, count: wanted.count });
 
     if (outcome.status !== 0) {
       speaker.complain(outcome.complain);
       for (const deficit of outcome.deficits) speaker.dataError(`  - ${deficit}`);
+      // A header route reports each ledger on its own: the ones refreshed before or after a failed one are named.
+      // @es Una ruta de encabezados informa de cada ledger por su cuenta: se nombran los refrescados antes o después de uno fallido.
+      for (const file of proof.refreshed ?? []) speaker.say('route.refreshed', { file });
 
       return outcome.status;
     }

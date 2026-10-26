@@ -115,17 +115,46 @@ export function writeLedger(ledger) {
 
   while (lines.length > 1 && lines[lines.length - 1] === '' && lines[lines.length - 2] === '') lines.pop();
 
-  const temp = `${ledger.file}.${String(process.pid)}.tmp`;
-
   // A project's area ledger sits in `.claude/rules/`, which the project may not have yet.
   // @es El ledger de un área de proyecto está en `.claude/rules/`, que el proyecto puede no tener aún.
   mkdirSync(path.dirname(ledger.file), { recursive: true });
 
+  replaceFile(ledger.file, lines.join('\n'));
+}
+
+/**
+ * Replaces `file` with `data` (text, written as UTF-8, or bytes) through a temporary file beside it renamed over it,
+ * so a failed write leaves the previous file whole and no temporary file behind.
+ * @es Reemplaza `file` por `data` (texto en UTF-8, o bytes) mediante un fichero temporal a su lado renombrado encima,
+ * así una escritura fallida deja el fichero anterior entero y ningún temporal detrás.
+ */
+export function replaceFile(file, data) {
+  const temp = `${file}.${String(process.pid)}.tmp`;
+
   try {
-    writeFileSync(temp, lines.join('\n'), 'utf8');
-    renameSync(temp, ledger.file);
+    writeFileSync(temp, data);
+    renameSync(temp, file);
   } catch (error) {
     rmSync(temp, { force: true });
     throw error;
   }
+}
+
+/** The bytes a ledger file holds, or `undefined` when it does not exist. @es Los bytes de un fichero de ledger, o `undefined` si no existe. */
+export const ledgerBytes = (file) => (existsSync(file) ? readFileSync(file) : undefined);
+
+/**
+ * Puts back the bytes `ledgerBytes` read, exactly (no blank line collapsed), the same atomic way `writeLedger`
+ * writes; `undefined` removes the file, because it did not exist.
+ * @es Repone exactamente los bytes que leyó `ledgerBytes` (sin colapsar líneas en blanco), de la misma forma atómica
+ * en que escribe `writeLedger`; `undefined` borra el fichero, porque no existía.
+ */
+export function restoreLedgerBytes(file, bytes) {
+  if (bytes === undefined) {
+    rmSync(file, { force: true });
+
+    return;
+  }
+
+  replaceFile(file, bytes);
 }
