@@ -135,6 +135,9 @@
 !/worker-stash-guard/
 !/worker-stash-guard/**
 /worker-stash-guard/state/
+!/full-chain-lock/
+!/full-chain-lock/**
+/full-chain-lock/state/
 !/worker-git-guard/
 !/worker-git-guard/**
 /worker-git-guard/state/

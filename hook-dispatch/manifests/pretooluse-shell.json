@@ -17,6 +17,7 @@
     "../../foreign-delete-guard/guard.mjs",
     "../../company-commit-guard/guard.mjs",
     "../../company-push-guard/guard.mjs",
-    "../../shared-resource-guard/guard.mjs"
+    "../../shared-resource-guard/guard.mjs",
+    "../../full-chain-lock/guard.mjs"
   ]
 }
