@@ -27,11 +27,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { isolateState } from '../hook-state/locations.mjs';
 import { createGitSandbox } from '../selftest-fixtures/git-sandbox.mjs';
 import { annotate, locateHomedirUses } from './pollution-candidates.mjs';
 import { MESSAGES } from './pollution-messages.mjs';
 import { compareSnapshots, main, measureRun } from './pollution.mjs';
 import { SnapshotError, snapshotOf, stateDirsOf } from './pollution-snapshot.mjs';
+
+// Every child this selftest spawns resolves its state here, never in the real home. @es Cada hijo resuelve su estado aquí.
+isolateState('pollution');
 
 let passed = 0;
 const failures = [];
