@@ -135,6 +135,9 @@
 !/worker-stash-guard/
 !/worker-stash-guard/**
 /worker-stash-guard/state/
+!/protected-branch-guard/
+!/protected-branch-guard/**
+/protected-branch-guard/state/
 !/full-chain-lock/
 !/full-chain-lock/**
 /full-chain-lock/state/

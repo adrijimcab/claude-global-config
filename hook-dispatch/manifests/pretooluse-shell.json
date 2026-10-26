@@ -13,6 +13,7 @@
     "../../conflict-marker-guard/guard.mjs",
     "../../worker-stash-guard/guard.mjs",
     "../../worker-git-guard/guard.mjs",
+    "../../protected-branch-guard/guard.mjs",
     "../../shared-temp-guard/guard.mjs",
     "../../foreign-delete-guard/guard.mjs",
     "../../company-commit-guard/guard.mjs",
