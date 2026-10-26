@@ -369,7 +369,7 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
   let looks = 0;
   const missing = { tryTake: () => { looks += 1; return looks === 4; }, readHolder: () => undefined, release: () => undefined };
 
-  await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 5000, pollMs: 10 }, { lock: missing, child: { run: () => Promise.resolve(0) }, clock: { now: () => 0, sleep }, say: { ...say, complain: (id) => stillTold.push(id) }, processId: 1 });
+  await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 5000, pollMs: 10 }, { lock: missing, child: { run: () => Promise.resolve(0) }, clock: { now: () => 0, sleep }, say: { ...say, complain: (id) => stillTold.push(id) }, processId: 1 }).catch((error) => stillTold.push(`threw ${error.name}`));
 
   check('a record still missing at the second look is announced once as unreadable', stillTold.join() === 'waiting-unreadable', stillTold.join());
 }
