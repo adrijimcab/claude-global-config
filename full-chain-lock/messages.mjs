@@ -80,6 +80,44 @@ export const MESSAGES = {
     en: 'The full-chain declaration {file} is not valid: {problem}.',
     es: 'La declaración de cadenas completas {file} no es válida: {problem}.'
   },
+  'tree-write-refusal': {
+    en: [
+      'FULL-CHAIN WRITE GUARD REFUSED this call: it writes inside the tree a running full chain measures.',
+      '',
+      '{targets}',
+      '',
+      'THE CHAIN: {holderChain} of project {holderProject}, session {holderSession}, pid {holderPid}, started {holderStartedAt},',
+      'measuring {holderTree}.',
+      '',
+      'WHY. A chain reads its tree while it runs: the selftest runner compares `git status` of the tree before and after',
+      'every selftest, so an edit, a `git add` or a `git commit` made meanwhile is counted as an escape of whichever',
+      'selftest is running. Measured 2026-10-26: an edit and a commit of checklists/master-backlog.md during the',
+      '~/.claude runner turned brief-feasibility, commit-index-guard and foreign-delete-guard red; the re-run with no',
+      'writes showed those three reds were false.',
+      '',
+      'WAIT, DO NOT POLL: queue this write until the chain has finished and its verdict is read (the chain\'s own log or',
+      'its background-task notification). This refusal lifts by itself the moment the chain releases its lock or its',
+      'runner process {holderPid} ends. Work that cannot wait goes in another tree (your own worktree), never this one.'
+    ],
+    es: [
+      'FULL-CHAIN WRITE GUARD RECHAZÓ esta llamada: escribe dentro del árbol que mide una cadena completa en marcha.',
+      '',
+      '{targets}',
+      '',
+      'LA CADENA: {holderChain} del proyecto {holderProject}, sesión {holderSession}, pid {holderPid}, iniciada {holderStartedAt},',
+      'midiendo {holderTree}.',
+      '',
+      'POR QUÉ. Una cadena lee su árbol mientras corre: el runner de selftests compara el `git status` del árbol antes y',
+      'después de cada selftest, así que una edición, un `git add` o un `git commit` hechos entretanto cuentan como fuga',
+      'del selftest que esté corriendo. Medido el 2026-10-26: una edición y un commit de checklists/master-backlog.md',
+      'durante el runner de ~/.claude pusieron en rojo brief-feasibility, commit-index-guard y foreign-delete-guard; la',
+      'nueva corrida sin escrituras mostró que esos tres rojos eran falsos.',
+      '',
+      'ESPERA, SIN SONDEAR: deja esta escritura en cola hasta que la cadena termine y se lea su veredicto (su propio log o',
+      'la notificación de su tarea en segundo plano). Este rechazo se levanta solo en cuanto la cadena suelta su lock o',
+      'termina su proceso runner {holderPid}. El trabajo que no puede esperar va en otro árbol (tu propio worktree), nunca en este.'
+    ]
+  },
   refusal: {
     en: [
       'FULL-CHAIN GUARD REFUSED this command: {command} is a full chain ({chain}, project {project}) and runs only through the machine-wide lock.',
