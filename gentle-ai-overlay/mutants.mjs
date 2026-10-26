@@ -4,19 +4,44 @@
  * its rules (green unmutated baseline, target exactly once, parse check, non-empty campaign) live in
  * `../mutation-proof/run-mutants.mjs`. Each row names the DECISION it removes, not the line it edits.
  * The selftest reaches beyond this directory (the sync guard's shell parser, the hook dispatcher, the
- * settings entry), so the runner copies that whole tree into every sandbox.
+ * settings entry), so the runner copies that whole tree into every sandbox. The selftest also dispatches
+ * through the real `posttooluse-shell.json` manifest, whose guards the dispatcher loads at run time, out of
+ * reach of the runner's static import closure: their folders are derived from the manifest and their own
+ * imports, so a guard added to the manifest is copied without editing this campaign.
  *
- *   node mutants.mjs      exit 0 only when every mutant is killed
+ *   node mutants.mjs      exit 0 only when every mutant is killed; 2 when a guard's imports cannot be followed
  *
  * @es Las decisiones del overlay de gentle-ai, rotas una a una, que `selftest.mjs` debe cazar. El runner y
  * sus reglas (línea base verde sin mutar, texto exactamente una vez, comprobación de sintaxis, campaña no
  * vacía) viven en `../mutation-proof/run-mutants.mjs`. Cada fila nombra la DECISIÓN que elimina, no la línea
  * que edita. El selftest llega más allá de este directorio (el analizador de shell del guard de sync, el
- * dispatcher de hooks, la entrada de settings), así que el runner copia todo ese árbol en cada sandbox.
+ * dispatcher de hooks, la entrada de settings), así que el runner copia todo ese árbol en cada sandbox. El
+ * selftest además despacha por el manifiesto real `posttooluse-shell.json`, cuyas guardias el dispatcher carga
+ * al correr, fuera del cierre estático de imports del runner: sus carpetas se derivan del manifiesto y de sus
+ * propios imports, así una guardia nueva en el manifiesto se copia sin editar esta campaña.
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadManifest } from '../hook-dispatch/manifest.mjs';
+import { copiedPaths, importClosure } from '../mutation-proof/import-closure.mjs';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
+
+const FLEET = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// The manifest the selftest dispatches through. @es El manifiesto por el que despacha el selftest.
+const DISPATCHED_MANIFEST = path.join(FLEET, 'hook-dispatch', 'manifests', 'posttooluse-shell.json');
+
+/** The folders of every guard the manifest loads, with their imports; exits 2 when one cannot be followed. @es Las carpetas de cada guardia del manifiesto, con sus imports; sale con 2 si una no se puede seguir. */
+function dispatchedGuardPaths() {
+  const entries = loadManifest(DISPATCHED_MANIFEST).guards.map((guard) => path.relative(FLEET, guard.file));
+  const { files, problems } = importClosure({ root: FLEET, entries });
+
+  if (problems.length > 0) {
+    console.error(`NOT MEASURED: the imports of the dispatched guards cannot be followed. @es NO MEDIDO: no se pueden seguir los imports de las guardias despachadas.\n  ${problems.join('\n  ')}`);
+    process.exit(2);
+  }
+
+  return copiedPaths(files);
+}
 
 // [decision label, file relative to the home directory, exact text, replacement]
 // @es [etiqueta de la decisión, fichero relativo al directorio home, texto exacto, reemplazo]
@@ -204,8 +229,8 @@ const MUTANTS = [
 ];
 
 const survivors = runMutants({
-  fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['gentle-ai-overlay', 'gentle-ai-sync-guard', 'hook-dispatch', 'hook-state', 'bilingual-output', 'settings.json', 'hook-io'],
+  fleetRoot: FLEET,
+  paths: [...new Set(['gentle-ai-overlay', 'gentle-ai-sync-guard', 'hook-dispatch', 'hook-state', 'bilingual-output', 'settings.json', 'hook-io', ...dispatchedGuardPaths()])],
   selftest: 'gentle-ai-overlay/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',
