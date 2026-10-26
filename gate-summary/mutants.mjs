@@ -47,7 +47,7 @@ const MUTANTS = [
   ['a red run with markers excerpts the whole log, not the markers', RUN, 'markers.length > 0 ? markers : log.split', 'false ? markers : log.split'],
   ['a kill prints nothing about it', RUN, 'if (verdict === VERDICTS.KILLED) return [say(\'killed\')];', 'if (verdict === VERDICTS.KILLED) return [];'],
   ['the log path is not printed', RUN, '\\nLOG=${run.logFile}', ''],
-  ['bad usage exits 0', RUN, '    return 2;', '    return 0;'],
+  ['bad usage exits 0', RUN, "say('usage')}`);\n\n    return 2;", "say('usage')}`);\n\n    return 0;"],
 
   // --- WHERE THE LOG GOES
   ['every run shares one directory', DIRECTORY, 'const runId = idOf();', "const runId = 'fixed';"],
@@ -66,6 +66,8 @@ const MUTANTS = [
   ['a non-numeric excerpt is accepted', OPTIONS, "if (NUMERIC.has(name) && !(Number.isInteger(Number(value)) && Number(value) >= 0)) return { problem: name };", ''],
   ['the command loses its own flags', OPTIONS, 'args.slice(separator + 1)', 'args.slice(separator + 1).filter((word) => !word.startsWith(\'-\'))'],
   ['the default excerpt is empty', OPTIONS, 'excerpt: 20,', 'excerpt: 0,'],
+  ['an unopenable run directory reads as a pass', RUN, "reason: error.code ?? error.message }));\n\n    return 2;", "reason: error.code ?? error.message }));\n\n    return 0;"],
+  ['an unopenable run directory is reported as a command that could not start', RUN, "write(say('noRunDirectory', {", "write(say('notRun', {"],
   ['the default state bypasses the state-location module', DIRECTORY, "export const defaultState = () => stateDir('gate-summary');", "export const defaultState = () => path.join(process.cwd(), '.gate-summary-state');"],
   ['the default state is resolved once, at import, not when asked', OPTIONS, "import { defaultState } from './run-directory.mjs';", "import { defaultState as resolveState } from './run-directory.mjs';\nconst FROZEN_STATE = resolveState();\nconst defaultState = () => FROZEN_STATE;"],
 

@@ -13,6 +13,7 @@ export const MESSAGES = Object.freeze({
   marks: { en: 'exit 0, but the log holds {count} line(s) with error markers; read them before trusting the green.', es: 'salida 0, pero el log contiene {count} línea(s) con marcas de error; léelas antes de fiarte del verde.' },
   killed: { en: 'killed (timeout or signal); this says nothing about the code.', es: 'abatido (límite de tiempo o señal); no dice nada del código.' },
   notRun: { en: 'the command could not be started ({reason}); this says nothing about the code.', es: 'no se pudo iniciar la orden ({reason}); no dice nada del código.' },
+  noRunDirectory: { en: 'the run directory could not be opened under {state} ({reason}); nothing ran, so this says nothing about the code.', es: 'no se pudo abrir el directorio de la corrida en {state} ({reason}); no corrió nada, así que no dice nada del código.' },
   excerpt: { en: 'excerpt: {shown} of {total} line(s)', es: 'extracto: {shown} de {total} línea(s)' }
 });
 

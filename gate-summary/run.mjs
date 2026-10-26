@@ -5,9 +5,11 @@
  *
  *   node ~/.claude/gate-summary/run.mjs [--cwd <dir>] [--excerpt <n>] [--timeout <s>] [--state <dir>] -- <command> [args...]
  *
- * Exit code: the command's own; 124 when it was killed; 127 when it could not start; 2 for bad usage.
+ * Exit code: the command's own; 124 when it was killed; 127 when it could not start; 2 for bad usage, or when
+ * its run directory cannot be opened (nothing ran: not measured).
  * @es Corre cualquier orden e imprime un veredicto corto en lugar de su salida: una palabra de veredicto con
  * el código de salida real, la ruta del log y un extracto acotado del fallo. El log completo queda en disco.
+ * Sale con 2 ante un mal uso o si no puede abrir su directorio de corrida (no corrió nada: no medido).
  */
 
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -43,7 +45,17 @@ export function main(args, write = (line) => process.stdout.write(`${line}\n`)) 
     return 2;
   }
 
-  const run = openRun(path.resolve(options.state));
+  let run;
+
+  try {
+    run = openRun(path.resolve(options.state));
+  } catch (error) {
+    // Nothing ran, so this is "not measured", never a verdict about the command. @es No corrió nada: «no medido», nunca un veredicto.
+    write(say('noRunDirectory', { state: path.resolve(options.state), reason: error.code ?? error.message }));
+
+    return 2;
+  }
+
   const outcome = runCommand({ argv: options.argv, cwd: path.resolve(options.cwd), logFile: run.logFile, timeoutSeconds: options.timeout });
   const log = readFileSync(run.logFile, 'utf8');
   const markers = markerLines(log);

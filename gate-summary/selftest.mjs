@@ -11,7 +11,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,6 +53,12 @@ const unflaggedLog = unflagged.stdout.split('\n').find((line) => line.startsWith
 equal('no --state: the run lands in the state directory the state-location module resolves', path.relative(path.join(stateRoot, 'gate-summary', 'runs'), unflaggedLog).startsWith('..'), false);
 equal('no --state: the option default is that directory', parseOptions(['--', 'x']).state, path.join(stateRoot, 'gate-summary'));
 
+const notADirectory = path.join(state, 'a-file');
+writeFileSync(notADirectory, 'x');
+const unopened = spawnSync(process.execPath, [RUN, '--state', notADirectory, '--', ...fixture('clean')], { encoding: 'utf8' });
+equal('a run directory that cannot be opened: exit 2 (not measured), no crash', [unopened.status, unopened.stderr.includes('at '), unopened.stdout.startsWith('GREEN')], [2, false, false]);
+equal('a run directory that cannot be opened: says so in both languages', unopened.stdout.includes('the run directory could not be opened') && unopened.stdout.includes('@es no se pudo abrir el directorio de la corrida'), true);
+
 const clean = summarize([], fixture('clean'));
 equal('clean: GREEN with the real exit code', clean.head, 'GREEN EXIT=0');
 equal('clean: exits 0', clean.exit, 0);
@@ -91,7 +97,7 @@ equal('stderr: is captured in the log and excerpted', summarize([], fixture('std
 equal('classify: no exit code and no timeout is KILLED, never a pass', classify({ status: null, timedOut: false, error: undefined }, 0), 'KILLED');
 equal('classify: no exit code returns 124', exitCodeOf('KILLED', { status: null }), 124);
 equal('two ids made at the same instant differ', newRunId(new Date(0)) !== newRunId(new Date(0)), true);
-equal('a run id that already has a directory is refused, not reused', ((id) => { openRun(state, () => id); return throws(() => openRun(state, () => id)); })('fixed-id'), true);
+equal('a fresh run id opens its own directory, and the same id again is refused, not reused', ((id) => [throws(() => openRun(state, () => id)), throws(() => openRun(state, () => id))])('fixed-id'), [false, true]);
 
 const huge = summarize(['--excerpt', '5'], fixture('huge'));
 equal('huge: RED', huge.head, 'RED EXIT=1');
