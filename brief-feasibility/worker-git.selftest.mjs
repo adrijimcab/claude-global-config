@@ -88,6 +88,15 @@ function findingsOf(payload, face, options = {}) {
   }
 }
 
+/** The refusal the guard gives a payload, or '' (a throw reads as no refusal, so a check fails instead of the proof crashing). @es La negativa que da el guard, o ''. */
+function reasonOf(payload) {
+  try {
+    return evaluate(JSON.stringify(payload))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+  } catch (error) {
+    return `threw: ${String(error)}`;
+  }
+}
+
 const fenced = (script) => `Do this step:\n\`\`\`\n${script}\n\`\`\``;
 
 // ---------------------------------------------------------------------------------------------------
@@ -166,7 +175,7 @@ check('the decision is asked with the main checkout the brief comes from', (() =
 })());
 
 {
-  const reason = evaluate(JSON.stringify(delegation('Start with `git switch main`.')))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+  const reason = reasonOf(delegation('Start with `git switch main`.'));
 
   check('the guard names the face', reason.includes('WORKER GIT REFUSED — worker-git-guard refuses this git command'));
   check('the guard names the face in Spanish too', reason.includes('@es GIT RECHAZADO AL WORKER'));
@@ -190,7 +199,13 @@ check('a project definition overrides the user one (project reaches Bash)', role
 // The fleet tree is the Claude home of the real definitions: `jd-judge-a` declares Read, Glob, Grep and two memory reads.
 // @es El árbol de la flota es el home de Claude de las definiciones reales.
 {
-  const real = shellLessRoleRefusals(instructedCommands('Run `git diff develop`.'), delegation('x', { subagentType: 'jd-judge-a' }), checkout, FLEET);
+  let real;
+
+  try {
+    real = shellLessRoleRefusals(instructedCommands('Run `git diff develop`.'), delegation('x', { subagentType: 'jd-judge-a' }), checkout, FLEET);
+  } catch (error) {
+    real = [{ detail: `threw: ${String(error)}` }];
+  }
 
   check('REAL: jd-judge-a, as this fleet defines it, is refused git', real.length === 1 && real[0].detail.includes(join(FLEET, 'agents', 'jd-judge-a.md')), JSON.stringify(real));
 }
@@ -200,7 +215,7 @@ check('a project definition overrides the user one (project reaches Bash)', role
 
   process.env[CLAUDE_HOME_VARIABLE] = join(home, '.claude');
 
-  const reason = evaluate(JSON.stringify(delegation('Run `git diff`.', { subagentType: 'reader' })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+  const reason = reasonOf(delegation('Run `git diff`.', { subagentType: 'reader' }));
 
   if (previous === undefined) delete process.env[CLAUDE_HOME_VARIABLE];
   else process.env[CLAUDE_HOME_VARIABLE] = previous;
