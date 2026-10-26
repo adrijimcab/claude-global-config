@@ -84,10 +84,10 @@ const MUTANTS = [
   ['a no-op run does not say the lesson already states the rule', SUPERSEDE, 'already states this rule and this directive; nothing was changed. @es', 'was not changed. @es'],
 
   // --- the command
-  ['the status of the run is not the exit status', COMMAND, 'dataError)(line);\n\n  return outcome.status;', 'dataError)(line);\n\n  return 0;'],
+  ['the status of the run is not the exit status', COMMAND, 'describeSupersede(outcome)) (outcome.status === 0 ? speaker.data : speaker.dataError)(line);\n\n  return outcome.status;', 'describeSupersede(outcome)) (outcome.status === 0 ? speaker.data : speaker.dataError)(line);\n\n  return 0;'],
   ['the state directory the lock lives in is not made', COMMAND, 'function commandSupersede(args) {\n  ensureDirs();\n\n  const outcome', 'function commandSupersede(args) {\n  const outcome'],
   ['the amendment is dated by something other than today', COMMAND, 'by: args.by, date: today(),', "by: args.by, date: '1999-01-01',"],
-  ['the command does not read the project, so it has no ledger', COMMAND, "'condense', 'supersede', 'status', 'route']", "'condense', 'status', 'route']"],
+  ['the command does not read the project, so it has no ledger', COMMAND, "'condense', 'supersede', 'recount',", "'condense', 'recount',"],
   ['the command amends only the home ledger', COMMAND, 'runSupersede({ load: loadLedgers,', 'runSupersede({ load: () => loadLedgers().slice(0, 1),'],
 ];
 
