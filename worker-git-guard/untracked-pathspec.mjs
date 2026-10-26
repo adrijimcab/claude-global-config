@@ -191,7 +191,9 @@ function unstagedPaths(invocation) {
 
   const directory = invocationDirectory(invocation);
 
-  if (typeof directory !== 'string' || invocation.gitOptions.some(holdsExpansion) || positionals.length === 0 || finalValue(events, 'pathspec-from-file') !== undefined) return [undefined];
+  // A pathspec file comes with no path words (git refuses both together), so it unstages everything here too.
+  // @es Un fichero de pathspec llega sin rutas (git rechaza ambos juntos), así que aquí también lo saca todo.
+  if (typeof directory !== 'string' || invocation.gitOptions.some(holdsExpansion) || positionals.length === 0) return [undefined];
 
   return positionals.map((word) => path.resolve(directory, word));
 }

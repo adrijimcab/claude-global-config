@@ -559,7 +559,7 @@ git(REPO, 'worktree', 'add', '-q', '-b', 'linked', WORKTREE);
 const LIVE = path.join(REPO, '.git', 'index').split('\\').join('/');
 const LINKED_LIVE = path.join(REPO, '.git', 'worktrees', 'linked', 'index').split('\\').join('/');
 
-for (const [command, cwd] of [['GIT_INDEX_FILE=.git/index git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, REPO], ['GIT_INDEX_FILE=../.git/index git read-tree HEAD', SUBDIRECTORY], ['git read-tree --index-output=.git/index HEAD', REPO], ['git read-tree --index-output .git/index HEAD', SUBDIRECTORY], [`GIT_INDEX_FILE=${MSYS_ROOT}/.git/index git read-tree HEAD`, REPO], [`git read-tree --index-output=${MSYS_ROOT}/.git/index HEAD`, REPO],['GIT_INDEX_FILE="$(git rev-parse --git-path index)" git read-tree HEAD', REPO], ['GIT_INDEX_FILE=$TMP_INDEX git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LINKED_LIVE} git read-tree HEAD`, WORKTREE], [`GIT_DIR=${REPO_FWD}/.git GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, NOT_A_REPO], ['cd "$X" && GIT_INDEX_FILE=i git read-tree HEAD', REPO]]) {
+for (const [command, cwd] of [['GIT_INDEX_FILE=.git/index git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, REPO], ['GIT_INDEX_FILE=../.git/index git read-tree HEAD', SUBDIRECTORY], ['git read-tree --index-output=.git/index HEAD', REPO], ['git read-tree --index-output .git/index HEAD', SUBDIRECTORY], [`GIT_INDEX_FILE=${MSYS_ROOT}/.git/index git read-tree HEAD`, REPO], [`git read-tree --index-output=${MSYS_ROOT}/.git/index HEAD`, REPO],['GIT_INDEX_FILE="$(git rev-parse --git-path index)" git read-tree HEAD', REPO], ['GIT_INDEX_FILE=$TMP_INDEX git read-tree HEAD', REPO], [`GIT_INDEX_FILE=${LINKED_LIVE} git read-tree HEAD`, WORKTREE], [`GIT_DIR=${REPO_FWD}/.git GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, NOT_A_REPO], [`GIT_DIR=${MSYS_ROOT}/.git GIT_INDEX_FILE=${LIVE} git read-tree HEAD`, NOT_A_REPO], ['cd "$X" && GIT_INDEX_FILE=i git read-tree HEAD', REPO]]) {
   check(`R3: refused: ${command}`, untrackedVerdict(command, cwd) === 'deny');
 }
 
@@ -663,7 +663,7 @@ for (const command of ['GIT_DIR=$G git commit -m x -- clean', 'GIT_INDEX_FILE=$I
 for (const command of ['git commit -m x -- a {b}', '[Environment]::SetEnvironmentVariable($n, $v); git status']) unresolvablePowerShell(command);
 denied('git read-tree --index-output= HEAD');
 denied('git -c "clean.requireForce= 0" clean -d');
-for (const command of ['cat MYGIT_DIR_NOTES.txt && git commit -m x -- clean', 'cat GIT_DIRECTORY.md && git commit -m x -- clean', 'git commit -m "GIT_DIR" -- clean', 'GIT_DIR=x npm test; git commit -m x -- clean', 'env X=1 git commit -m x -- clean']) check(`C: not a touch: ${command}`, !reasonFor(command).includes(UNRESOLVABLE));
+for (const command of ['cat MYGIT_DIR.txt && git commit -m x -- clean','cat GIT_DIRECTORY.md && git commit -m x -- clean', 'git commit -m "GIT_DIR" -- clean', 'GIT_DIR=x npm test; git commit -m x -- clean', 'env X=1 git commit -m x -- clean']) check(`C: not a touch: ${command}`, !reasonFor(command).includes(UNRESOLVABLE));
 allowed('env -u X npm test');
 check('C: a substitution inside a top-level export does not make the export conditional', untrackedVerdict('export GIT_INDEX_FILE=/tmp/i X=$(true); git read-tree HEAD') === undefined);
 check('B: a fused PowerShell assignment of a literal runs no command', untrackedVerdict("$x='a'; git commit -m \"x\" -- clean", REPO, 'PowerShell') === undefined);
@@ -700,8 +700,8 @@ check('H: when the pathspec file cannot be written, the git add names every path
 })());
 
 // --- the runtime strings are bilingual ---------------------------------------------------------------------------
-check('runtime: an unchecked commit is journaled with a bilingual reason', (() => { const start = journalLines().length; untrackedVerdict('cd "$X" && git commit -m x -- mixed'); return journalLines().slice(start).some((entry) => entry.reason.includes('cannot be followed') && entry.reason.includes(' @es ')); })());
-check('runtime: the git adapter errors are bilingual', listWith({ status: 2, stdout: '', stderr: 'x' }).result.error.includes(' @es ') && listWith({ error: Object.assign(new Error('t'), { code: 'ETIMEDOUT' }) }).result.error.includes(' @es '));
+check('runtime: an unchecked commit is journaled with a bilingual reason', (() => { const start = journalLines().length; untrackedVerdict('cd "$X" && git commit -m x -- mixed'); return journalLines().slice(start).some((entry) => entry.reason?.includes('cannot be followed') === true && entry.reason.includes(' @es ')); })());
+check('runtime: the git adapter errors are bilingual', listWith({ status: 2, stdout: '', stderr: 'x' }).result.error?.includes(' @es ') === true && listWith({ error: Object.assign(new Error('t'), { code: 'ETIMEDOUT' }) }).result.error?.includes(' @es ') === true);
 
 // The module on its own, through its two ports (the git runner and the process runner). @es El módulo solo, por sus dos puertos.
 const NO_FILES = () => ({ files: [] });
