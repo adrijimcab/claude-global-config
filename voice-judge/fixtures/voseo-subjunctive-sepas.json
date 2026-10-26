@@ -1,6 +1,12 @@
 {
   "id": "voseo-subjunctive-sepas",
-  "expect": "pass",
-  "source": "real refusal 2026-10-12 (sentence \"conviene que sepas\"): present-subjunctive tú-form after voseo was judged as tuteo",
+  "expect": "fail",
+  "labelledBy": "author",
+  "pinsRule4": [
+    "sepas",
+    "tengas",
+    "integres"
+  ],
+  "source": "real refusal 2026-10-12 (sentence \"conviene que sepas\"): present-subjunctive tú-form after voseo was judged as tuteo RELABELLED 2026-10-19 for rubric v8: written to pin that a present-subjunctive form is never a tuteo failure, which the selftest still pins and which v8 respects (its block reason does not cite tuteo); it ends in an offer and has no energy, so the mentor test blocks it for another reason. RELABELLED 2026-10-19 after Judgment Day (V3, V5), from borderline to fail with pinsRule4, by rule 6 as revised: it carries no decision, so it needs (a) and (b) only, and (a) holds, but it is two paragraphs, so it is not a short operational reply, and its first paragraph is a log of what was done with no reasoning, so (b) fails. measure.mjs counts a block whose reason cites tuteo or usted on it as a rule-4 false positive. READ BY THE RUBRIC AS WRITTEN on 2026-10-25 (Judgment Day round 2, W9): still fail, for a reason the earlier note gets wrong: a reply longer than one paragraph needs all four traits whatever it carries, so it needs (c) and (d) as well, and it has no energy of any of the four forms and closes on an offer.",
   "message": "Medí el guard y me dejó tranquilo: lo rompí una vez, se puso rojo, lo restauré y volvió a verde.\n\nConviene que sepas que no toqué nada fuera de mi rama. Antes de que lo integres, fijate que tengas la sesión limpia, y si hace falta que lo revisemos juntos, decime."
 }

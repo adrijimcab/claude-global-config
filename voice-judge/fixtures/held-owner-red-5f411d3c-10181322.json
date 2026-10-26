@@ -1,6 +1,8 @@
 {
-  "id": "held-green-5f411d3c-10181322",
-  "expect": "pass",
-  "source": "5f411d3c 2026-10-18T13:22:49.469Z (held-out set, never used to tune the rubric; real final reply to the owner; warm Rioplatense voseo, says the why, closes with a line that lands)",
+  "id": "held-owner-red-5f411d3c-10181322",
+  "expect": "fail",
+  "labelledBy": "owner",
+  "labelledOn": "2026-10-19",
+  "source": "5f411d3c 2026-10-18T13:22:49.469Z (held-out set, never used to tune the rubric; real final reply to the owner). LABELLED BY THE OWNER on 2026-10-19 (Judgment Day round 2, W1): in his calibration of the voice judge he rejected this reply (reply A), and said it should be in an Argentine tone. It was first labelled green under the v7 pass floor and then filed as owner-accepted from his silence, which is how its correct block came to be reported as a false positive; renamed from held-green-5f411d3c-10181322.",
   "message": "Ya tomé la decisión que me pidió Discovery, y también es tu regla: **todo cambio de riesgo medio o alto lleva una mirada externa antes de aterrizar, en cualquier proyecto.** Si gentle-ai lo marca como riesgo alto, corren sus lentes de revisión. Si es medio, se hace un `judgment-day`: dos jueces ciegos sobre el rango congelado.\n\nLa razón: con la 4.2.0, gentle-ai dejó de revisar el riesgo medio. Tu estándar pide revisión adversarial donde el riesgo la justifica, y la mayoría de las unidades de Discovery caen justo en medio. Lo dejé escrito en `route-mandate.md`, que cargan todas las sesiones (commit `a9f211f`). Medí el presupuesto de instrucciones siempre cargadas y sigue dentro, con 18.642 caracteres de margen. Que la regla se cumpla lo garantiza la revisión obligatoria de `land.mjs`, que no deja aterrizar un árbol sin un PASS registrado. Esa revisión es lo próximo que aterriza.\n\nAdemás promoví la lección de engram, y quedó escrito por qué no lleva mecanismo: la negativa la decide el binario de engram, que no tiene forma de reabrir una sesión terminada.\n\nEl checkpoint-41 quedó con cinco commits listos:\n- el arreglo del parser;\n- las lecciones del día;\n- la promoción de engram;\n- la regla de riesgo medio;\n- el render del overlay, que viene de base.\n\nLes pedí pausa a las tres sesiones, y en cuanto confirmen, lo aterrizo."
 }

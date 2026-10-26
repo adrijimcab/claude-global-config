@@ -1,6 +1,7 @@
 {
   "id": "control-dry-log",
   "expect": "fail",
+  "labelledBy": "author",
   "source": "synthetic control (no voseo at all)",
   "message": "Done.\n- 1a2b3c4 feat(x): add y\n- 5d6e7f8 fix(x): handle z\n- 9a0b1c2 test(x): cover z\n- selftest 64/64 exit 0\n- mutants 56/56 exit 0\n- pushed to origin/master\n- worktree removed"
 }

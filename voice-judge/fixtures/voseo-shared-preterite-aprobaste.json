@@ -1,0 +1,10 @@
+{
+  "id": "voseo-shared-preterite-aprobaste",
+  "expect": "pass",
+  "labelledBy": "author",
+  "pinsRule4": [
+    "aprobaste"
+  ],
+  "source": "synthetic, added 2026-10-25 for Judgment Day round 2 decision 4: a reply to the owner whose second-person preterite is spelled the same by the tú and the vos conjugations. Rule 4 reads every form the two share in any tense as voseo and never as tuteo, so a block whose reason cites tuteo or quotes it alone is a rule-4 false positive. READ BY THE RUBRIC AS WRITTEN on 2026-10-25 (Judgment Day round 2, W9): pass. It is one paragraph that carries a decision, so it needs all four traits: voseo woven through the sentences with a natural Rioplatense expression, a cause tied to the choice, an image, and a close on a principle.",
+  "message": "Lo que aprobaste ayer sigue en pie, pero ojo: el guard medía la rama equivocada, y por eso lo cambié para que lea la de integración antes de dejar pasar nada. Es como vigilar la puerta de atrás mientras te entran por adelante. Fijate que la regla vale para cualquier control que tengas: si no mira por donde pasa el tráfico, no controla nada."
+}

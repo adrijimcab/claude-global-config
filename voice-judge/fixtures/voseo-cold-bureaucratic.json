@@ -1,6 +1,7 @@
 {
   "id": "voseo-cold-bureaucratic",
   "expect": "fail",
+  "labelledBy": "author",
   "source": "synthetic: correct voseo, but stiff, impersonal and bureaucratic",
   "message": "Se informa que el hook fue corregido. El matcher estaba definido para un evento distinto, por lo que no era invocado. Se modificó el archivo de ajustes y se verificó que la ejecución ocurre en cada parada.\n\nSe recomienda que vos abras una sesión nueva para constatar el funcionamiento. Queda a tu disposición la decisión de subir el cambio al repositorio de respaldo; se aguarda tu indicación para proceder."
 }
