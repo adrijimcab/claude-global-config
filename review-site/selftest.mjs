@@ -26,6 +26,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
+import { importClosure } from '../mutation-proof/import-closure.mjs';
 import { createGitSandbox } from '../selftest-fixtures/git-sandbox.mjs';
 
 isolateState('review-site');
@@ -204,11 +205,28 @@ for (const event of ['Stop', 'SessionStart']) {
 }
 
 // ---- a sibling module that cannot load: the original hook still runs. @es Un módulo hermano que no carga: el hook original corre igual.
+/**
+ * The top-level folders the copied mechanism needs, derived from the import closure of its three modules, never a
+ * hand list, which goes stale the moment a module it reaches gains an import (git-worktree reaching git-port did).
+ * The two dynamically imported modules are entries of their own. A closure that cannot be followed stops the run.
+ * @es Las carpetas de primer nivel que necesita el mecanismo copiado, derivadas del cierre de imports de sus tres
+ * módulos y nunca de una lista a mano, que caduca en cuanto un módulo que alcanza gana un import (como pasó cuando
+ * git-worktree empezó a usar git-port). Los dos módulos importados dinámicamente son entradas propias. Un cierre que
+ * no se puede seguir detiene la corrida.
+ */
+const MECHANISM_FOLDERS = (() => {
+  const closure = importClosure({ root: path.join(HERE, '..'), entries: ['review-site/stop-hook.mjs', 'review-site/decide.mjs', 'review-site/journal.mjs'] });
+
+  if (closure.problems.length > 0) throw new Error(`the import closure of the review-site hook cannot be followed: ${closure.problems.join('; ')} @es el cierre de imports del hook de review-site no se puede seguir`);
+
+  return [...new Set(closure.files.map((file) => file.split('/')[0]))];
+})();
+
 /** A copy of the mechanism whose `broken` file throws when it loads; returns the copy's hook path. @es Una copia del mecanismo cuyo fichero `broken` lanza al cargar. */
 function copyWithBroken(name, broken) {
   const root = path.join(sandbox.root, name);
 
-  for (const directory of ['review-site', 'git-worktree', 'hook-state', 'bilingual-output', 'hook-io']) cpSync(path.join(HERE, '..', directory), path.join(root, directory), { recursive: true });
+  for (const directory of MECHANISM_FOLDERS) cpSync(path.join(HERE, '..', directory), path.join(root, directory), { recursive: true });
 
   writeFileSync(path.join(root, 'review-site', broken), "throw new Error('broken on purpose');\n");
 
