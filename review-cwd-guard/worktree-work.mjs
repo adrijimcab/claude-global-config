@@ -29,9 +29,7 @@ function worktreePaths(directory) {
  * @es Los worktrees enlazados con trabajo, o `[]` si `directory` es un worktree enlazado o ninguno lleva trabajo.
  */
 export function linkedWorktreesCarryingWork(directory) {
-  const [gitDir, commonDir] = git(directory, ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir']).split('\n');
-
-  if (gitDir.trim() !== commonDir.trim()) return [];
+  if (isLinkedWorktree(directory)) return [];
 
   const mainHead = git(directory, ['rev-parse', 'HEAD']);
   const [, ...linked] = worktreePaths(directory);

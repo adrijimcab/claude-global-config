@@ -56,10 +56,7 @@
  * briefs, de donde un worker me lo devolvió como establecido.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import { hookMain, deny, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { commitHooksOf, hooksFolderOf } from './commit-hooks.mjs';
 import { HARNESS_DEFAULT_TIMEOUT_MS, MINIMUM_TIMEOUT_MS, mayBeKilledMidHook } from './harness-kill.mjs';
 import { readsPipelineStatus } from './pipeline-status.mjs';
@@ -205,13 +202,9 @@ function refusalFor(payload) {
  * `~/.claude/hook-dispatch/dispatch.mjs` la corra dentro de su propio proceso. Falla abierta.
  */
 export function evaluate(raw) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   let reason;
 
@@ -223,29 +216,9 @@ export function evaluate(raw) {
 
   if (reason === undefined) return undefined;
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: reason
-    }
-  };
+  return deny(reason);
 }
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-}
-
-// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
-// leería el stdin del importador y lo cortaría con process.exit(0) a mitad de camino.
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
+// Only as the main process: imported by the dispatcher or a selftest, main() must not read the importer's stdin.
+// @es Solo como proceso principal: si la importa el dispatcher o un selftest, main() no debe leer el stdin del importador.
+runWhenMain(import.meta.url, hookMain(evaluate));

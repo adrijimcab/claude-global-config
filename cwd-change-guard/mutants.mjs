@@ -49,11 +49,13 @@ const MUTANTS = [
 
   // --- the shim.
   ['the shim never asks the decision', 'cwd-change-guard/guard.mjs', 'offender = offendingDirectoryChange(payload);', 'offender = undefined;'],
-  ['the shim answers "allow" while journaling a refusal', 'cwd-change-guard/guard.mjs', "permissionDecision: 'deny'", "permissionDecision: 'allow'"],
+  ['the shim answers "allow" while journaling a refusal', 'cwd-change-guard/guard.mjs', 'return deny(refusalText(offender));', "return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } };"],
   ['the refusal no longer names the subshell shape', 'cwd-change-guard/guard.mjs', "'  2. a subshell:          ( cd <dir> && <command> )',", ''],
   ['the refusal no longer names the background shape', 'cwd-change-guard/guard.mjs', "'  3. a background call:   the same command with `run_in_background: true`.',", ''],
-  ['the refusal loses its Spanish mirror', 'cwd-change-guard/guard.mjs', '`@es CWD-CHANGE GUARD RECHAZÓ esta llamada', '`CWD-CHANGE GUARD RECHAZÓ esta llamada'],
-  ['a BOM-prefixed payload is no longer read', 'cwd-change-guard/guard.mjs', 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw']
+  ['the refusal loses its Spanish mirror', 'cwd-change-guard/guard.mjs', '`@es CWD-CHANGE GUARD RECHAZÓ esta llamada', '`CWD-CHANGE GUARD RECHAZÓ esta llamada']
+  // The BOM row is retired: the guard parses through hook-io's `tryParsePayload`, and the hook-io mutants
+  // ("hook-io/hook-io.mutants.mjs", the BOM-stripping row) pin it. @es La fila del BOM se retiró: el guard
+  // parsea con `tryParsePayload` de hook-io y sus mutantes fijan el BOM.
 ];
 
 const survivors = runMutants({

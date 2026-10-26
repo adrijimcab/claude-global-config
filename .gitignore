@@ -108,6 +108,9 @@
 !/company-remote/**
 !/company-config/
 !/company-config/**
+!/commit-index-guard/
+!/commit-index-guard/**
+/commit-index-guard/state/
 !/cwd-change-guard/
 !/cwd-change-guard/**
 /cwd-change-guard/state/
@@ -117,6 +120,9 @@
 !/review-cwd-guard/
 !/review-cwd-guard/**
 /review-cwd-guard/state/
+!/commit-cadence-guard/
+!/commit-cadence-guard/**
+/commit-cadence-guard/state/
 !/stash-watch/
 !/stash-watch/**
 /stash-watch/state/
@@ -141,6 +147,9 @@
 !/shared-resource-guard/
 !/shared-resource-guard/**
 /shared-resource-guard/state/
+!/foreign-delete-guard/
+!/foreign-delete-guard/**
+/foreign-delete-guard/state/
 !/integrated-worktree-guard/
 !/integrated-worktree-guard/**
 /integrated-worktree-guard/state/
@@ -177,6 +186,8 @@
 !/baseline-record/**
 !/hook-state/
 !/hook-state/**
+!/hook-io/
+!/hook-io/**
 !/process-control/
 !/process-control/**
 !/selftest-fixtures/
@@ -354,6 +365,10 @@
 # The one owner of "is this directory a linked worktree" (code and proof). @es El único dueño de «¿este directorio es un worktree enlazado?» (código y prueba).
 !/git-worktree/
 !/git-worktree/**
+
+# The git port: the one way the kit runs git and folds its `-C` options (code, proof and the scripted double). @es El puerto de git: la única forma en que el kit corre git y pliega sus `-C` (código, prueba y doble guionado).
+!/git-port/
+!/git-port/**
 
 # Where a review happens: the review stop hook runs only in a linked worktree (code and proof; its journal stays ignored). @es Dónde ocurre una revisión: el hook de parada de revisión corre solo en un worktree enlazado.
 !/review-site/

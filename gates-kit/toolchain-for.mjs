@@ -20,7 +20,9 @@
  * without Karma has no gate), `unknown-test-runner` (absent), `ambiguous-test-runner` (only from
  * `toolchainForProfile`: the profile lists several real runners and none is chosen for the project), `node-outside-framework` (the host Node is
  * outside the framework major's own `engines.node`), `node-outside-toolchain` (outside the range every
- * package of the locked toolchain accepts), `unreadable-node` (not one exact version).
+ * package of the locked toolchain accepts), `unreadable-node` (not one exact version), `invalid-kit-range`
+ * (a Node range of the kit's own `TOOLCHAINS` table cannot be read: a defect of the kit, with `toolchain`,
+ * `field` and `range`; the host Node is not blamed).
  *
  * `toolchainForProfile(profile, hostNode)` is the adapter for the project profile (`project-profile/profile.mjs`),
  * which reports `testRunners` as an array and the framework version as `frameworkVersion.major`: it maps them to
@@ -51,7 +53,7 @@
  * runners se rechaza como `ambiguous-test-runner`, nunca se adivina.
  */
 
-import { satisfies } from './node-range.mjs';
+import { parseVersion, satisfies } from './node-range.mjs';
 
 /** Karma with Jasmine, the runner pair Angular 19 and 20 generate. @es Karma con Jasmine. */
 const KARMA = 'karma';
@@ -84,6 +86,7 @@ export const REFUSALS = {
   'ambiguous-test-runner': ['the project has several test runners ({detail}), so none is chosen', 'el proyecto tiene varios runners de tests ({detail}), así que no se elige ninguno'],
   'unsupported-test-runner': ['toolchain {toolchain} does not pin the test runner the project uses ({detail})', 'la toolchain {toolchain} no fija el runner de tests que usa el proyecto ({detail})'],
   'unreadable-node': ['the host Node version {detail} is not one exact version', 'la versión de Node anfitriona {detail} no es una versión exacta'],
+  'invalid-kit-range': ['the gates kit table holds a Node range it cannot read ("{detail}", the {field} range of toolchain {toolchain}): a defect of the kit, not of the host Node', 'la tabla del kit de gates trae un rango de Node que no puede leer ("{detail}", el rango {field} de la toolchain {toolchain}): un defecto del kit, no del Node anfitrión'],
   'node-outside-framework': ['host Node {detail} is outside the range the framework major supports ({range})', 'el Node anfitrión {detail} está fuera del rango que soporta la major del framework ({range})'],
   'node-outside-toolchain': ['host Node {detail} is outside the range every package of toolchain {toolchain} accepts ({range})', 'el Node anfitrión {detail} está fuera del rango que aceptan todos los paquetes de la toolchain {toolchain} ({range})'],
 };
@@ -103,12 +106,28 @@ function toolchainIdOf(framework, major) {
   return `angular-${major}`;
 }
 
-/** True when `version` satisfies `range`; `undefined` when `version` cannot be read. @es Verdadero si cumple; `undefined` si es ilegible. */
-function nodeFits(version, range) {
+/** True when the host Node is one exact version. @es Verdadero si el Node anfitrión es una versión exacta. */
+function isExactVersion(version) {
+  try {
+    parseVersion(version);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when the (already exact) `version` satisfies the kit's own `range`; a range of the kit table that cannot
+ * be read is the kit's defect and comes back as its own refusal, never as a fault of the host Node.
+ * @es Verdadero si `version` (ya exacta) cumple el `range` del propio kit; un rango ilegible de la tabla es un
+ * defecto del kit y vuelve como su propio rechazo, nunca como culpa del Node anfitrión.
+ */
+function nodeFits(version, range, where) {
   try {
     return satisfies(version, range);
   } catch {
-    return undefined;
+    return refuse('invalid-kit-range', range, where);
   }
 }
 
@@ -127,10 +146,13 @@ export function toolchainFor(profile, hostNode) {
   if (runner === undefined || runner === null || runner === '') return refuse('unknown-test-runner', '');
   if (!runners.includes(runner)) return refuse('unsupported-test-runner', runner, { toolchain: id });
 
-  const frameworkFit = node.framework === undefined ? true : nodeFits(hostNode, node.framework);
-  const toolchainFit = nodeFits(hostNode, node.toolchain);
+  if (!isExactVersion(hostNode)) return refuse('unreadable-node', hostNode);
 
-  if (frameworkFit === undefined || toolchainFit === undefined) return refuse('unreadable-node', hostNode);
+  const frameworkFit = node.framework === undefined ? true : nodeFits(hostNode, node.framework, { toolchain: id, field: 'framework', range: node.framework });
+  const toolchainFit = nodeFits(hostNode, node.toolchain, { toolchain: id, field: 'toolchain', range: node.toolchain });
+
+  if (typeof frameworkFit === 'object') return frameworkFit;
+  if (typeof toolchainFit === 'object') return toolchainFit;
   if (!frameworkFit) return refuse('node-outside-framework', hostNode, { range: node.framework });
   if (!toolchainFit) return refuse('node-outside-toolchain', hostNode, { toolchain: id, range: node.toolchain });
 

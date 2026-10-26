@@ -39,10 +39,10 @@
  * que estar limpio.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { unmatchedAfterAssertions, raisesAssertionCount } from './assertion-diff.mjs';
 import { collectAssertions } from './collect-assertions.mjs';
@@ -79,25 +79,13 @@ function reportMalfunction(message) {
   }
 }
 
-/** Strips a UTF-8 BOM, which Windows editors and some hook transports prepend. */
-function withoutBom(raw) {
-  return raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-}
-
 /**
  * The hook output for a raw `PreToolUse` payload, or `undefined` to allow the tool call. Exported so
  * `~/.claude/hook-dispatch/dispatch.mjs` can run it inside its own process, and so `guard.mjs` remains a
  * complete standalone hook when run directly.
  */
 export function evaluate(raw) {
-  let payload;
-
-  try {
-    payload = JSON.parse(withoutBom(raw));
-  } catch {
-    return undefined;
-  }
-
+  const payload = tryParsePayload(raw);
   const toolName = payload?.tool_name;
 
   if (!GUARDED_TOOLS.has(toolName)) return undefined;
@@ -142,29 +130,7 @@ export function evaluate(raw) {
 
   const newlyAdded = unmatchedAfterAssertions(beforeAssertions, afterAssertions);
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: refusalText(filePath, newlyAdded, beforeAssertions.length, afterAssertions.length)
-    }
-  };
-}
-
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output === undefined) return;
-
-  console.log(JSON.stringify(output));
+  return deny(refusalText(filePath, newlyAdded, beforeAssertions.length, afterAssertions.length));
 }
 
 // Only when RUN as the hook — a module that EXPORTS runs no work when imported
@@ -173,4 +139,4 @@ function main() {
 // triggering a stdin read.
 // @es Solo al EJECUTARSE como hook: main() corre solo si este archivo es el punto de entrada, nunca al
 // importarse.
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+runWhenMain(import.meta.url, hookMain(evaluate));

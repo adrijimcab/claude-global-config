@@ -398,6 +398,86 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   reproduced): `git commit -- <paths>` with lint-staged left the index out of step with HEAD and the backup
   stash behind. Pairs with lesson commit-pathspec-restaged-a-removed-file. PENDING, reason (4): reproduce
   on constructed state first, then decide whether workers commit with pathspecs or stage-then-commit.
+- process-reaper/reaper.selftest.mjs is flaky (master, 2026-10-25). On the t8-p1-process-port tree, 1 of 6
+  runs exited 1 and 5 exited 0. Its mutant campaign is 51/51 killed. P1u changed only one import line in
+  reaper.mjs, so the flake is most likely pre-existing process-timing sensitivity (HYPOTHESIS). PENDING,
+  reason (3): the owner froze the backlog-1-6 scope to in-flight units and the six points (L13). The fix:
+  reproduce under load, find the timing assumption, and bound it.
+  Same class, 2026-10-26: the T4B worker reports that the fleet-kit/orphan-work selftest baseline went red once
+  (94/95) under 6-way parallel load and passes alone. Its suspected cause is a time-window check
+  (ACTIVE_WINDOW_MS); that is a HYPOTHESIS and is not verified. The locks unit already fixed the same class in
+  hook-state/journal and premise-judge (b8c9530), by moving to a virtual clock. Fix the class the same way.
+  PENDING, reason (3).
+- Anonymous selftest failures (master, 2026-10-25). The locks worker found that some selftests print a failing
+  check's name only on stderr or not in the last stdout line, which is the only line the mutation runner
+  shows. It fixed hook-state/journal and premise-judge (b8c9530). The other selftests have not been audited.
+  PENDING, reason (3): scope frozen by L13. Fix: one shared reporter in the selftest kit, whose last line
+  names every failing check, adopted by every selftest.
+- Writer commit-as-you-go mechanism (master, 2026-10-25). In this batch, 6 writers (T7, T4e, H1, H3, H5, H6, H7)
+  held all their work uncommitted for 40+ minutes, although every brief told them to commit as they go.
+  Lesson worker-work-left-uncommitted-across-a-stop is now at 3x, and promotion requires a mechanism. Proposed
+  mechanism: a PostToolUse or Stop check on a delegated writer's worktree that tells it to commit once
+  uncommitted paths are older than a bounded window. PENDING, reason (3): scope frozen by L13. It is the
+  first item for the next batch.
+- Promotion mechanism for guard-built-on-an-unmeasured-premise (5x, master 2026-10-25). capture.mjs requires a
+  mechanism with a selftest. Proposed: a guard acceptance check that a new guard's selftest drives the
+  original incident payload against the incident's own project tree. PENDING, reason (3): scope frozen by L13.
+- gentle-ai upgrade past 4.2.0 (master, 2026-10-25). main 5ee1ac77 is 306 commits ahead and has no tag. A
+  read-only assessment found no overlay or contract break, but the check "Windows Full Suite (rest)" fails on
+  that commit. PENDING, reason (1): waiting for a tagged release (4.2.1 or 4.3.0). Then install it, run sync
+  through the overlay wrapper, and run check.mjs.
+- Owed judgments for units landed without a final judgment (owner order L18, 2026-10-26). The full list, with
+  each unit's open findings, is engram #1899 (topic backlog-1-6/unjudged-landings).
+  - Security guards, in this order: T4f foreign-delete-guard, T4e conflict-marker-guard, T4d4 commit-index-guard,
+    T4D3 worker-git-guard, T4B orphan-work + eval-guard.
+  - Then LOCKS and T4C (their follow-ups are unjudged).
+  - Then T9A, T4A2, T6C, T7 and T10.
+  - Last, the T8 port migrations.
+  PENDING, reason (2): the owner ordered the landing without these judgments. Run a judgment-day on each fix
+  delta, in that order.
+- Voice judge calibration (T9A, landed 2026-10-26). On the owner's 12 labels, 6 runs each, the live v7 agrees on
+  22 of 72 judgments, v8f on 52 and v8g on 61. v8g was derived from those same labels, so 61 is optimistic.
+  No rubric meets the ship bar (ship-bar.json: v8g, met: false). Master keeps v7 live: promotion needs a met bar,
+  and v8g's 92% block rate on unlabelled replies means promoting it untested would block most replies.
+  Next step: the owner labels the 10-reply v8g packet (scratchpad t9a-owner-packet.md, also reproducible with
+  measure.mjs --packet). That is the first out-of-sample test, and v8g is promoted only if it then meets the bar.
+  The model and the owner hear the register differently; see the worker's three examples in engram #1823 / L16.
+  Open in it: the `third-person-su-possessive` fixture is unstable (it passes 2 of 6 under v8g), and
+  ship-bar.json's measuredOn is a UTC date. PENDING, reason (2): the owner's labels decide.
+- Voice judge and pending judge stay as candidates (backlog-1-6 L16, L17). The voice judge keeps rubric v7 live
+  until a candidate passes its 10-owner-label ship bar. The pending judge stays off the live Stop hook until its
+  ship bar passes, and backlog-guard stays live meanwhile. PENDING, reason (2): promoting either one is the
+  owner's call, once measure.mjs reports the bar passed.
+- C8 launcher unwrap (vendored shell-command). b100's fix has landed at its source and was pushed to its tooling
+  backup (2026-10-26): `fix(shell-command): lex cmd scripts in a cmd dialect and carry runner scripts without a
+  program of their own`. b100 re-ran launchers 167/167 and cmd-dialect 38/38. Its worker reports
+  actions.selftest 125/125 on a copy. Contract: a runner (Start-Process, iex, env -S) behaves like `bash -c`.
+  The written entry stays, with resolveCommand(...).index === -1, and the carried command is a nested script.
+  Next: vendored sync and check in the worktree feat/c8-vendored-launchers (b4d9ee2), then the importer selftests
+  and campaigns, then integration. b100 still has open: 3 stale ungated-landing-guard mutants and the unmodelled
+  cmd `( )` grouping. Master read b100's source on 2026-10-26 (shell-command.mjs:81-130, :584) and passed two
+  more gaps to b100: `cmd //c` (the Git Bash spelling) is not recognised as a nested script, and a `%VAR%` word
+  gives no "unresolvable" signal that consumers can use to fail closed. PENDING, reason (3): the owner froze new work until backlog-1-6 lands (L18). It is the
+  first unit of the next batch.
+- T8 port units still to do after this landing: F2 (re-export company-remote's fold), G2/G3 (git consumers), G4
+  (delete the wrappers), P2u (rotate and file-lock liveness), J1-J4 (journal port), H4 and H8 (remaining guards),
+  Z (census enforcement). Design: engram #1885. PENDING, reason (4): each is its own unit on the landed master.
+- commit-cadence-guard follow-ups (T10 worker, 2026-10-26):
+  - The guard is listed in hook-dispatch/manifests/pretooluse-language.json, the only PreToolUse manifest with no
+    matcher, so the name no longer says what it covers. Renaming it (for example pretooluse-all) needs a
+    settings.json change.
+  - A deletion-only change has no mtime, so the guard does not see it.
+  - `git -C <dir>` and a `cd` into a variable are not followed when locating the worker's worktree.
+  - Measured: the PreToolUse payload `cwd` is the launch directory, never the worker's worktree. Every guard
+    that judges `cwd` alone misses TENANCY-placed writers. Audit the guards that do so.
+  PENDING, reason (3).
+- Mutation campaign paths gap (T6C worker, 2026-10-26): a failure-capture campaign slice that mutates no
+  capture.mjs code never copies config-sync-guard, which fixture-loop.mjs reads with readdirSync rather than an
+  import. Full runs hide the gap. Fix: derive campaign paths from the runtime file reads, or list them in the
+  campaign. PENDING, reason (3).
+- Loaded-set budget: `capture.mjs budget` measured 9,684 OVER the 147,000 global ceiling, counting a worktree's
+  CLAUDE.md as a project (T6C worker, 2026-10-26). Re-measure on master after the landing, and decide whether a
+  linked worktree counts as a project. PENDING, reason (3).
 
 ## ORDER (decided 2026-10-11)
 
@@ -410,6 +490,10 @@ install once b100 finishes FR, dashboard and chart -> always-loaded budget (LAST
 to master with one full run -> full report of done and pending, recorded in engram.
 
 ## DROPPED (with the reason)
+
+- Back-repo write guard requested by the Discovery session, 2026-10-26. The owner's decision, verbatim: «No lo
+  hagas, se deja como memoria de esa prouyecto, ya estoy atengo yo para que no pase». His rule against touching
+  the back is kept as a Discovery project memory in engram, not as a ~/.claude mechanism.
 
 Carried from the engram re-plan of 2026-10-05 (`sdd/hardened-dev-environment/replan`); the 119-task list it
 replaced (`sdd/hardened-dev-environment/tasks`, `tasks-2`) is retired, checkboxes included.

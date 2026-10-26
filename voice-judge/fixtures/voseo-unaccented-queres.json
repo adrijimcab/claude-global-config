@@ -1,0 +1,10 @@
+{
+  "id": "voseo-unaccented-queres",
+  "expect": "pass",
+  "labelledBy": "author",
+  "pinsRule4": [
+    "queres"
+  ],
+  "source": "synthetic, added 2026-10-25 for Judgment Day round 2 decision 4: a reply to the owner whose voseo verb is typed without its written accent. Rule 4 reads a verb whose letters match the vos form once accents are ignored as that vos form, so it is voseo and never tuteo, and a block whose reason cites tuteo or quotes it alone is a rule-4 false positive. READ BY THE RUBRIC AS WRITTEN on 2026-10-25 (Judgment Day round 2, W9): pass. It is one paragraph that carries a decision, so it needs all four traits: voseo woven through the sentences with a natural Rioplatense expression, a cause tied to the choice, one rhetorical question, and a close on a principle.",
+  "message": "Che, si queres que el juez deje de bloquear respuestas buenas, aflojarlo no es el camino: lo que falla es que mide sin etiquetas tuyas, y sin eso cualquier número que te muestre es humo. Por eso armé un paquete con diez respuestas para que las marques vos, cinco que bloquea y cinco que deja pasar. ¿De qué sirve una barra de calidad que nadie calibró? Un juez se afina con los veredictos del dueño, nunca con su silencio."
+}

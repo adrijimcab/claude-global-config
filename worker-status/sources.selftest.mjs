@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 /**
- * Proof of `processes.mjs` (injected process listing) and `worktree-git.mjs` (injected git runner plus a
+ * Proof of `processes.mjs` (matching over an injected listing; the listing itself is proven in
+ * `process-control/process-port.selftest.mjs`) and `worktree-git.mjs` (injected git runner plus a
  * constructed repository with a real origin).
- * @es Prueba de `processes.mjs` (listado inyectado) y `worktree-git.mjs` (ejecutor de git inyectado más un
+ * @es Prueba de `processes.mjs` (coincidencia sobre un listado inyectado; el listado se prueba en
+ * `process-control/process-port.selftest.mjs`) y `worktree-git.mjs` (ejecutor de git inyectado más un
  * repositorio construido con un origin real).
  */
 
-import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { listProcesses as portListProcesses, rowsOfListing as portRowsOfListing } from '../process-control/process-port.mjs';
 import { listProcesses, processesNaming, rowsOfListing } from './processes.mjs';
 import { gitState } from './worktree-git.mjs';
 
@@ -23,15 +26,6 @@ function check(name, actual, expected) {
   results.push(ok);
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`}`);
 }
-
-/** The value of `run`, or 'THROWS' so a crash is a failed check and not an aborted selftest. @es El valor, o 'THROWS'. */
-const attempt = (run) => {
-  try {
-    return run();
-  } catch {
-    return 'THROWS';
-  }
-};
 
 try {
   // ── processes: injected listing ──
@@ -49,48 +43,10 @@ try {
   check('processes: nothing names an unknown worktree', naming('C:/nowhere'), []);
   check('processes: the caller itself is never reported', naming('C:/Users/me/.claude-wt/feat-one').includes(process.pid), false);
 
-  const encoded = (text) => Buffer.from(text, 'utf8').toString('base64');
-
-  check('processes: a line with an empty command line is one row with no text', attempt(() => rowsOfListing('7 \r\n')), [{ pid: 7, commandLine: '' }]);
-  check('processes: a line without the encoded half is one row with no text', attempt(() => rowsOfListing('7')), [{ pid: 7, commandLine: '' }]);
-  check('processes: every line is a row, decoded from UTF-8', attempt(() => rowsOfListing(`1 ${encoded('a ñ')}\r\n2 ${encoded('b')}\r\n`)), [{ pid: 1, commandLine: 'a ñ' }, { pid: 2, commandLine: 'b' }]);
-  check('processes: empty output is no rows', attempt(() => rowsOfListing('')), []);
-  check('processes: a `pid:parent` token is a row with its parent', attempt(() => rowsOfListing(`7:3 ${encoded('x')}`)), [{ pid: 7, parentPid: 3, commandLine: 'x' }]);
-  check('processes: a non-numeric parent is no parent', attempt(() => rowsOfListing(`7:abc ${encoded('x')}`)), [{ pid: 7, commandLine: 'x' }]);
-
-  // The real-OS listing runs with a PRIVATE profile inside this selftest's temp: PowerShell writes its profile
-  // folders there, never into the home of whoever runs the proof. @es El listado real corre con un perfil
-  // PRIVADO dentro del temporal de este selftest.
-  const profile = path.join(scratch, 'profile');
-  const roaming = path.join(profile, 'AppData', 'Roaming');
-  const privateEnv = { ...process.env, USERPROFILE: profile, HOME: profile, APPDATA: roaming, LOCALAPPDATA: path.join(profile, 'AppData', 'Local') };
-
-  mkdirSync(profile);
-
-  const listed = attempt(() => listProcesses(privateEnv));
-  const real = listed === 'THROWS' ? [] : listed;
-
-  check('processes: the real listing does not throw', listed === 'THROWS', false);
-  check('processes: the real listing is non-empty rows with numeric pid', real.length > 0 && real.every((row) => Number.isInteger(row.pid) && typeof row.commandLine === 'string'), true);
-  check('processes: the real listing carries the parent of this very process', real.some((row) => row.pid === process.pid && row.parentPid === process.ppid), true);
-  check('processes: the real listing contains this very process', real.some((row) => row.pid === process.pid), true);
-  // On Windows the System process (pid 4) has no command line; it must still be a row, with empty text.
-  // @es En Windows el proceso System (pid 4) no tiene línea de comandos; igual debe ser una fila, con texto vacío.
-  check('processes: a process without a command line is still listed, with empty text', process.platform !== 'win32' || real.some((row) => row.pid === 4 && row.commandLine === ''), true);
-
-  // A live command line may hold control characters and non-ASCII text; the listing must carry it intact, never
-  // fail to parse nor depend on the console code page. @es Una línea de comandos viva puede tener caracteres de
-  // control y texto no ASCII; el listado debe traerla intacta, sin fallar al parsear ni depender de la página de códigos.
-  const odd = `marker${String.fromCharCode(0x1b)}${String.fromCharCode(0x01)}ñ«»á-end`;
-  const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)', odd], { stdio: 'ignore' });
-
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  const withOdd = attempt(() => listProcesses(privateEnv));
-
-  holder.kill();
-  check('processes: a command line with control and non-ASCII characters is listed intact', withOdd === 'THROWS' ? 'THROWS' : withOdd.some((row) => row.pid === holder.pid && row.commandLine.includes(odd)), true);
-
-  check('processes: the listing tool ran inside the private profile', existsSync(roaming), process.platform === 'win32');
+  // The old import path keeps working: the same functions the port owns, not copies.
+  // @es La ruta de importación antigua sigue funcionando: las mismas funciones del puerto, no copias.
+  check('processes: listProcesses is still importable from here, and is the port one', listProcesses === portListProcesses, true);
+  check('processes: rowsOfListing is still importable from here, and is the port one', rowsOfListing === portRowsOfListing, true);
 
   // ── gitState: injected runner ──
   const scripted = (answers) => (args) => answers[args.join(' ')] ?? { status: 1, stdout: '' };

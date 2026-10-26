@@ -105,6 +105,25 @@ try {
   check('blank and corrupt middle lines are skipped, not counted', attempt(() => lastRecords(fileWith(`${lineOf(rec(1))}\nnot json\n${lineOf(rec(2))}${lineOf(rec(3))}`), 2), []), [rec(2), rec(3)]);
   check('CRLF endings parse', attempt(() => lastRecords(fileWith('{"i":1}\r\n{"i":2}\r\n'), 2), []), [rec(1), rec(2)]);
 
+  // --- the skipped-line count (onSkip): damage a caller can report ---
+  // @es Recuento de líneas omitidas (onSkip): el daño que quien llama puede informar.
+  const skippedBy = (read) => {
+    let skipped = 0;
+
+    attempt(() => read(() => { skipped += 1; }), undefined);
+
+    return skipped;
+  };
+  const damaged = `${lineOf(rec(1))}not json\n\n   \n${lineOf(rec(2))}{"i":3,"ke`;
+
+  check('lastRecords: a torn last line and a corrupt middle line are two skips, blank lines none', skippedBy((onSkip) => lastRecords(fileWith(damaged), 10, { onSkip })), 2);
+  check('lastRecords: the same count at chunk 5', skippedBy((onSkip) => lastRecords(fileWith(damaged), 10, { onSkip, chunkBytes: 5 })), 2);
+  check('lastRecords: a clean file skips nothing', skippedBy((onSkip) => lastRecords(fileWith(range(0, 4).map((i) => lineOf(rec(i))).join('')), 10, { onSkip })), 0);
+  check('lastRecords: only the lines examined count (damage older than the n found is not read)', skippedBy((onSkip) => lastRecords(fileWith(`not json\n${lineOf(rec(1))}${lineOf(rec(2))}`), 2, { onSkip })), 0);
+  check('lastRecords: the records are the same with and without onSkip', attempt(() => lastRecords(fileWith(damaged), 10, { onSkip: () => undefined }), []), attempt(() => lastRecords(fileWith(damaged), 10), ['x']));
+  check('readFrom: a corrupt complete line is one skip; the unterminated tail is neither read nor counted', skippedBy((onSkip) => readFrom(fileWith(damaged), 0, { onSkip })), 1);
+  check('readFrom: the records and offset are the same with and without onSkip', attempt(() => readFrom(fileWith(damaged), 0, { onSkip: () => undefined }), {}), attempt(() => readFrom(fileWith(damaged), 0), { x: 1 }));
+
   // --- multi-byte UTF-8 cut by a chunk boundary: every tiny chunk size, bytes cut, strings never ---
   const wide = [{ s: 'é€😀' }, { s: 'ñandú 😀 日本語' }, { s: '€€€' }];
   const wideFile = fileWith(wide.map(lineOf).join(''));

@@ -24,18 +24,13 @@
  */
 
 import { isLinkedWorktree } from '../git-worktree/linked-worktree.mjs';
+import { tryParsePayload } from '../hook-io/hook-io.mjs';
 
 /** The payload as an object, or `undefined` when it is not a JSON object. @es El payload como objeto, o `undefined` si no es un objeto JSON. */
 function parsePayload(raw) {
-  const text = raw.toString('utf8');
+  const parsed = tryParsePayload(raw.toString('utf8'));
 
-  try {
-    const parsed = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
-
-    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
+  return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined;
 }
 
 /**

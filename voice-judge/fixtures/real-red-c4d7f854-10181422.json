@@ -1,6 +1,6 @@
 {
   "id": "real-red-c4d7f854-10181422",
-  "expect": "fail",
-  "source": "c4d7f854 2026-10-18T14:22:51.590Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
+  "expect": "unadjudicated",
+  "source": "UNADJUDICATED since 2026-10-19 (Judgment Day round 2, W1 and W2): this real reply has no label from the owner, and silence is not a label, so it is printed with its verdict and never scored; the notes that follow are its history. c4d7f854 2026-10-18T14:22:51.590Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
   "message": "La memoria en ficheros de b100 ya está toda en engram. El worker pasó los 189 registros. Cada uno se borró recién después de comprobar que había quedado guardado, y no falló ninguno. Lo verifiqué: en la carpeta solo queda `MEMORY.md`, ahora con una sola línea que apunta a engram, y una búsqueda devuelve, por ejemplo, tus directivas permanentes del 29 de julio (#1740).\n\nEn el camino apareció un defecto en el helper que había pasado master. El CLI de engram interpreta como un flag todo contenido que empieza con `---`, y eso incluye a todos los ficheros de memoria, porque arrancan con su frontmatter. El worker lo resolvió agregando una línea de procedencia al principio de cada registro. Se lo pasé a master para que arregle el helper de raíz y avise al resto de las sesiones, porque cualquiera que mueva su memoria se va a topar con lo mismo.\n\nHay un detalle menor que anoto para el repaso de engram previo al reporte. Unos 50 ficheros tenían tipos de metadata que no estaban en el mapeo, como `decision`, `bugfix` o `architecture`, y quedaron guardados como `discovery`. El contenido está entero; solo cambia la categoría."
 }

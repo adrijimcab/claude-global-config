@@ -67,7 +67,7 @@ const MUTANTS = [
   ['the refusal no longer lists the findings in the Spanish half', GUARD, "    list,\n    '',\n    'POR QUÉ.", "    '',\n    'POR QUÉ."],
   ['the refusal no longer states the Spanish remedy', GUARD, "    'Quita el nombre del mensaje, del fichero en stage o de la línea añadida y vuelve a commitear.'", "    ''"],
   ['a missing list is reported with the commit refusal instead of its own', GUARD, 'verdict.problem === undefined ? refusalText(verdict) : missingListRefusal(GUARD_NAME, verdict.problem)', 'refusalText({ dir: "x", findings: [] })'],
-  ['a BOM is no longer stripped', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
+  ['the payload is parsed without the BOM-tolerant port parser', GUARD, 'judgeCommit(parsePayload(raw))', 'judgeCommit(JSON.parse(raw))'],
   ['the guard denies when it throws instead of failing open', GUARD, '  } catch {\n    return undefined;\n  }\n}', '  } catch {\n    return { hookSpecificOutput: { hookEventName: \'PreToolUse\', permissionDecision: \'deny\', permissionDecisionReason: \'crash\' } };\n  }\n}']
 ];
 

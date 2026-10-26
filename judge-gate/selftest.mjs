@@ -42,7 +42,8 @@ const { readVerdict } = await import('./verdict.mjs');
 const { hookCommand, importJudgeModule, JUDGE_NAMES, loadJudge, loadJudges } = await import('./judges.mjs');
 const JUDGES = await loadJudges();
 const { decide, MAX_BLOCKS_PER_TURN, NESTED_VARIABLE } = await import('./gate.mjs');
-const { askModel, modelArguments } = await import('./model.mjs');
+// A missing spawnAsync is a stub, so its absence fails checks instead of crashing the run. @es Un spawnAsync ausente es un stub.
+const { askModel, modelArguments, spawnAsync = async () => ({}) } = await import('./model.mjs');
 const { blocksThisTurn: readTurnCount, lastBlockTimeThisTurn, outcomesPath, recordOutcome } = await import('./outcome-log.mjs');
 
 // The count as a value even when it throws, so a broken reader fails a check instead of crashing the run. @es El conteo como valor aun si lanza.
@@ -394,6 +395,31 @@ check('model: a missing cost is zero', (await askModel('x', { spawn: fakeSpawn(J
 check('model: the prompt goes in on stdin', firstCall.options.input, 'PROMPT TEXT');
 check('model: the child is marked as nested', firstCall.options.env[NESTED_VARIABLE], '1');
 check('model: the child runs with the timeout', firstCall.options.timeout, 5000);
+
+let cwdAliveDuringRun;
+const asyncSpawn = async (command, argv, options) => {
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  cwdAliveDuringRun = existsSync(options.cwd);
+
+  return { status: 0, stdout: JSON.stringify({ result: '{"ok": true}', total_cost_usd: 0.0002 }), stderr: '' };
+};
+
+check('model: an asynchronous spawn is awaited, and its run directory lives until it ends', [(await askModel('x', { spawn: asyncSpawn, timeoutMs: 5000 }).catch((error) => ({ answer: error.message }))).answer, cwdAliveDuringRun], ['{"ok": true}', true]);
+
+const echoAfter = (ms) => [process.execPath, ['-e', `setTimeout(() => process.stdout.write(require('fs').readFileSync(0, 'utf8')), ${ms})`]];
+const parallelStarted = Date.now();
+const parallelRuns = await Promise.all(['one', 'two', 'three'].map((input) => spawnAsync(...echoAfter(400), { input, encoding: 'utf8', timeout: 10000, env: process.env })));
+const parallelMs = Date.now() - parallelStarted;
+
+check('spawnAsync: children run at the same time, each with its own stdin and stdout', [parallelRuns.map((run) => [run.status, run.stdout, run.error]), parallelMs < 1100], [[[0, 'one', undefined], [0, 'two', undefined], [0, 'three', undefined]], true]);
+
+const timedOut = await spawnAsync(...echoAfter(5000), { input: 'x', encoding: 'utf8', timeout: 200, env: process.env });
+
+check('spawnAsync: a child past its timeout is killed and reported as an error', [timedOut.status === 0, timedOut.error?.message.split(' @es ')[0]], [false, 'The child ran past its timeout of 200 ms.']);
+
+const missing = await spawnAsync(path.join(tmpdir(), 'no-such-binary-judge-gate.exe'), [], { input: '', encoding: 'utf8', env: process.env });
+
+check('spawnAsync: a command that cannot start is reported as an error', [missing.status, missing.error?.code], [null, 'ENOENT']);
 
 const thrownBy = async (stdout, status = 0) => {
   try {

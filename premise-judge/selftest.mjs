@@ -16,7 +16,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,9 +56,13 @@ await new Promise((resolve) => setTimeout(resolve, 100));
 
 let passed = 0;
 const failures = [];
+const failedLabels = [];
 const check = (label, actual, expected) => {
   if (JSON.stringify(actual) === JSON.stringify(expected)) passed++;
-  else failures.push(`${label}: got ${JSON.stringify(actual)?.slice(0, 200)}, expected ${JSON.stringify(expected)?.slice(0, 200)}`);
+  else {
+    failures.push(`${label}: got ${JSON.stringify(actual)?.slice(0, 200)}, expected ${JSON.stringify(expected)?.slice(0, 200)}`);
+    failedLabels.push(label);
+  }
 };
 
 // --- WIRING. @es CABLEADO.
@@ -176,7 +180,7 @@ check('hook: a run is counted', fires(), before + 1);
 check('hook: evaluate journals through the same path', journal().some((record) => record.inputDigest === digestInput(`s6\n${reasonB}`)), true);
 check('hook: a BOM-prefixed payload is read', [await evaluate(`﻿${JSON.stringify(stopPayload(withB, { session_id: 's7' }))}`), journal().some((record) => record.inputDigest === digestInput(`s7\n${reasonB}`))], [undefined, true]);
 check('hook: an unreadable payload is not counted', [await evaluate('{ no json'), fires()], [undefined, before + 2]);
-check('hook: a missing transcript fails open', await evaluate(JSON.stringify(stopPayload(path.join(WORK, 'missing.jsonl')))), undefined);
+check('hook: a missing transcript fails open', await evaluate(JSON.stringify(stopPayload(path.join(WORK, 'missing.jsonl')))).catch((error) => `threw ${error.message}`), undefined);
 
 // EACH JUDGE ON ITS OWN: a broken pending prompt leaves premise and voice journaled.
 // @es CADA JUEZ POR SU CUENTA: un prompt de pendientes roto deja registrados a premise y voice.
@@ -217,10 +221,134 @@ check('hook: a missing transcript fails open', await evaluate(JSON.stringify(sto
   check('lazy: the journal guard imports no other judge\'s prompt when it loads', readFileSync(path.join(HERE, 'journal-guard.mjs'), 'utf8').split('\n').filter((line) => line.startsWith('import ') && line.includes('-judge/')), []);
 }
 
+// --- J-1: each judge is counted and journaled on its own, so one broken judge never costs the other its record.
+// @es J-1: cada juez se cuenta y registra por su cuenta: un juez roto nunca le cuesta el registro al otro.
+{
+  const ISOLATED = mkdtempSync(path.join(tmpdir(), 'premise-judge-j1-'));
+  const saved = process.env.HOOK_STATE_DIR;
+  const voiceReason = 'VOICE-JUDGE: write as the mentor, with the why';
+  const both = transcript([feedback(reasonA), feedback(voiceReason)]);
+  const records = (mechanism) => {
+    try {
+      return readFileSync(journalPath(mechanism), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line));
+    } catch {
+      return [];
+    }
+  };
+  const count = (mechanism) => {
+    try {
+      return JSON.parse(readFileSync(firesPath(mechanism), 'utf8')).count;
+    } catch {
+      return 0;
+    }
+  };
+
+  // A virtual platform clock for one call: `Date.now` and the sleep under the lock's pause (`Atomics.wait`) advance
+  // a counter instead of real time, so the hook's OWN default budget is proved by what it slept, never by how long
+  // a loaded machine took. The counting runs before `evaluate`'s first await, so it all happens inside the call; the
+  // journaling after it is awaited by the caller. @es Un reloj de plataforma virtual para una llamada: `Date.now` y
+  // el sueño bajo la pausa del lock (`Atomics.wait`) avanzan un contador en vez del tiempo real, así que el
+  // presupuesto POR DEFECTO del hook se prueba por lo que durmió, nunca por lo que tardó una máquina cargada. El
+  // conteo corre antes del primer await de `evaluate`, dentro de la llamada; el registro posterior lo espera quien llama.
+  const onVirtualClock = (action) => {
+    const realNow = Date.now;
+    const realWait = Atomics.wait;
+    const slept = [];
+    let virtual = realNow();
+
+    Date.now = () => virtual;
+    Atomics.wait = (_array, _index, _value, ms) => {
+      slept.push(ms);
+      virtual += ms;
+
+      return 'timed-out';
+    };
+
+    try {
+      return { value: action(), slept: slept.reduce((sum, ms) => sum + ms, 0), longest: Math.max(0, ...slept) };
+    } finally {
+      Date.now = realNow;
+      Atomics.wait = realWait;
+    }
+  };
+
+  process.env.HOOK_STATE_DIR = ISOLATED;
+
+  try {
+    // The premise judge's journal is a directory: it can be neither read back nor appended to.
+    // @es El journal del juez de premisas es un directorio: no se puede releer ni ampliar.
+    mkdirSync(journalPath(MECHANISM), { recursive: true });
+    check('J-1: a judge whose journal is broken does not cost the other judge its block', [blocksOf(stopPayload(both, { session_id: 'j1' })), records('voice-judge').map((record) => record.reason)], [1, [voiceReason]]);
+
+    // The premise judge's counter is corrupt: that run is not counted, the voice judge's is, and the blocks are still journaled.
+    // @es El contador del juez de premisas está corrupto: esa corrida no se cuenta, la del de voz sí, y los bloqueos se registran igual.
+    rmSync(journalPath(MECHANISM), { recursive: true, force: true });
+    writeFileSync(firesPath(MECHANISM), '{not json');
+    check('J-1: a judge whose counter cannot count still lets the hook count the other judge and journal both blocks', [await evaluate(JSON.stringify(stopPayload(both, { session_id: 'j2' }))), count('voice-judge'), records(MECHANISM).map((record) => record.reason), records('voice-judge').length], [undefined, 1, [reasonA], 2]);
+
+    // The premise judge's counter is held by another process: the hook neither waits long nor loses the blocks.
+    // @es El contador del juez de premisas lo tiene otro proceso: el hook ni espera mucho ni pierde los bloqueos.
+    rmSync(firesPath(MECHANISM), { force: true });
+    writeFileSync(`${firesPath(MECHANISM)}.lock`, '');
+
+    // Thirteen waits of 15 ms on the busy counter, none on the free one: 195 ms slept. @es Trece esperas de 15 ms.
+    const one = onVirtualClock(() => evaluate(JSON.stringify(stopPayload(both, { session_id: 'j3' }))));
+
+    check('J-1: a busy counter costs the hook at most its 200 ms budget of sleep, and no block', [await one.value, one.slept, one.longest <= 15, count('voice-judge'), records(MECHANISM).length, records('voice-judge').length], [undefined, 195, true, 2, 2, 3]);
+
+    // L5: BOTH counters held by other processes: the two judges share one budget, so the Stop waits about 200 ms
+    // in all, not 200 ms per judge. @es L5: AMBOS contadores ocupados: los dos jueces comparten un presupuesto, así
+    // que el Stop espera unos 200 ms en total, no 200 por juez.
+    writeFileSync(`${firesPath('voice-judge')}.lock`, '');
+
+    // One shared budget: 195 ms for the first judge, the last 5 for the second; a budget per judge would sleep 390.
+    // @es Un presupuesto compartido: 195 ms para el primer juez y los 5 restantes para el segundo; uno por juez, 390.
+    const two = onVirtualClock(() => evaluate(JSON.stringify(stopPayload(both, { session_id: 'j4' }))));
+
+    check('L5: two busy counters cost the Stop 200 ms of sleep in all, not 200 per judge, and no block', [await two.value, two.slept, two.longest <= 15, records(MECHANISM).length, records('voice-judge').length], [undefined, 200, true, 3, 4]);
+  } finally {
+    process.env.HOOK_STATE_DIR = saved;
+    rmSync(ISOLATED, { recursive: true, force: true });
+  }
+}
+
 const alone = spawnSync(process.execPath, [path.join(HERE, 'journal-guard.mjs')], { input: JSON.stringify(stopPayload(withB, { session_id: 's8' })), encoding: 'utf8', env: { ...process.env, HOOK_STATE_DIR: STATE } });
 
 check('hook: as its own process it prints nothing and exits 0', [alone.status, alone.stdout], [0, '']);
 check('hook: as its own process it journals', journal().some((record) => record.inputDigest === digestInput(`s8\n${reasonB}`)), true);
+
+// A lock failure that must not stop the hook (here a stale counter lock whose break cannot be journaled) goes to
+// the judge's own `lock-faults.jsonl`, and the hook still prints nothing, on stdout or stderr.
+// @es Un fallo del lock que no debe parar el hook (aquí, un lock caducado cuya rotura no se puede registrar) va al
+// `lock-faults.jsonl` del juez, y el hook sigue sin imprimir nada, ni en stdout ni en stderr.
+{
+  const FAULTED = mkdtempSync(path.join(tmpdir(), 'premise-judge-faults-'));
+  const judgeMechanisms = [MECHANISM, 'voice-judge'];
+
+  try {
+    for (const mechanism of judgeMechanisms) {
+      const staleLock = path.join(FAULTED, mechanism, 'fires.json.lock');
+
+      mkdirSync(`${staleLock}.breaks.jsonl`, { recursive: true });
+      writeFileSync(staleLock, 'no owner');
+      utimesSync(staleLock, new Date('2000-01-01T00:00:00Z'), new Date('2000-01-01T00:00:00Z'));
+    }
+
+    const faulted = spawnSync(process.execPath, [path.join(HERE, 'journal-guard.mjs')], { input: JSON.stringify(stopPayload(withB, { session_id: 's9' })), encoding: 'utf8', env: { ...process.env, HOOK_STATE_DIR: FAULTED } });
+    const faultsOf = (mechanism) => {
+      try {
+        return readFileSync(path.join(FAULTED, mechanism, 'lock-faults.jsonl'), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line));
+      } catch {
+        return [];
+      }
+    };
+    const described = (mechanism) => faultsOf(mechanism).map((one) => [one.mechanism, /could not be journaled/.test(one.message), / @es /.test(one.message)]);
+
+    check('hook: a lock failure on the Stop path is recorded in EACH judge\'s own lock-faults.jsonl, bilingual, and nothing is printed', [faulted.status, faulted.stdout, faulted.stderr, ...judgeMechanisms.map(described)], [0, '', '', ...judgeMechanisms.map((mechanism) => [[mechanism, true, true]])]);
+  } finally {
+    rmSync(FAULTED, { recursive: true, force: true });
+  }
+}
 
 // --- LATENCY. @es LATENCIA.
 const summary = (infos, timestamp = '2026-10-06T10:00:00.000Z') => ({ type: 'system', subtype: 'stop_hook_summary', timestamp, hookInfos: infos });
@@ -282,7 +410,10 @@ check('cli: --since drops older summaries', [recent.code, recent.report.withJudg
 check('cli: an unknown option is refused', (await run(['--nope'])).code, 2);
 check('cli: a date that is not one is refused', (await run(['--since', 'yesterday'])).code, 2);
 
-for (const failure of failures) console.log(`FAIL ${failure}`);
-console.log(`${passed}/${passed + failures.length} passed`);
+// A red run is never anonymous: the details go to stderr, and the last line of stdout, which every runner shows,
+// names each failing check. @es Una corrida roja nunca es anónima: el detalle va a stderr y la última línea de
+// stdout, la que muestra todo runner, nombra cada check que falló.
+for (const failure of failures) console.error(`FAIL ${failure}`);
+console.log(`${passed}/${passed + failures.length} passed${failedLabels.length === 0 ? '' : ` — FAILED: ${failedLabels.join(' | ')}`}`);
 summarised = true;
 process.exitCode = failures.length === 0 ? 0 : 1;

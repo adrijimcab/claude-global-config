@@ -15,7 +15,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { loadedSet } from './loaded-set.mjs';
+import { loadedSet as walkLoadedSet } from './loaded-set.mjs';
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'loaded-set-selftest-'));
 // Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
@@ -46,7 +46,22 @@ function world(files) {
   return { root, home: path.join(root, 'home') };
 }
 
-const relativeTo = (root, file) => path.relative(root, file).split(path.sep).join('/');
+/**
+ * The walk of `walkLoadedSet`, with a throw turned into a result that no expectation matches: a broken walk
+ * fails the check that asked for it, it does not abort the selftest.
+ * @es El recorrido de `walkLoadedSet`, con un lanzamiento convertido en un resultado que ninguna expectativa
+ * iguala: un recorrido roto hace fallar el check que lo pidió, no aborta el selftest.
+ */
+function loadedSet(request) {
+  try {
+    return walkLoadedSet(request);
+  } catch (error) {
+    return { files: [], missing: [], rawTotal: -1, countedTotal: -1, thrown: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/** A path relative to `root`; an absent path is named, not thrown on. @es Una ruta relativa a `root`; una ruta ausente se nombra, no lanza. */
+const relativeTo = (root, file) => (typeof file === 'string' ? path.relative(root, file).split(path.sep).join('/') : String(file));
 const listing = (root, result) => result.files.map((file) => [relativeTo(root, file.path), file.raw, file.counted]);
 const names = (root, result) => result.files.map((file) => relativeTo(root, file.path));
 

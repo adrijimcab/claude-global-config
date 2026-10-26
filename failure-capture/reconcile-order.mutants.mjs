@@ -26,12 +26,12 @@ const MUTANTS = [
   ['the spool entry is removed and the incident logged while the ledgers are still unwritten', COMMAND, '    for (const ledger of touched) writeLedger(ledger);\n\n    for (const { full, entry } of consumed) {', '    for (const { full, entry } of consumed) {\n      appendFileSync(incidentsFile(), `${JSON.stringify(entry)}\\n`, \'utf8\');\n      unlinkSync(full);\n    }\n\n    for (const ledger of touched) writeLedger(ledger);\n\n    for (const { full, entry } of []) {'],
 
   // --- the ledger is replaced, never overwritten in place
-  ['the ledger is overwritten in place, so a crash mid-write leaves it truncated', LEDGERS, "    writeFileSync(temp, lines.join('\\n'), 'utf8');\n    renameSync(temp, ledger.file);", "    writeFileSync(ledger.file, lines.join('\\n'), 'utf8');"],
+  ['the ledger is overwritten in place, so a crash mid-write leaves it truncated', LEDGERS, '    writeFileSync(temp, data);\n    renameSync(temp, file);', '    writeFileSync(file, data);'],
   ['a failed write leaves its temporary file behind', LEDGERS, "    rmSync(temp, { force: true });\n    throw error;", '    throw error;'],
   ['a failed write is swallowed, so the caller believes the ledger is on disk', LEDGERS, "    rmSync(temp, { force: true });\n    throw error;", "    rmSync(temp, { force: true });\n    return;"]
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const survivors = runMutants({ fleetRoot, paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest: 'failure-capture/reconcile-order.selftest.mjs', mutants: MUTANTS });
+const survivors = runMutants({ fleetRoot, paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest: 'failure-capture/reconcile-order.selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
 
 process.exit(survivors === 0 ? 0 : 1);

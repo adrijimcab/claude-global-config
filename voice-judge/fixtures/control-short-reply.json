@@ -1,6 +1,7 @@
 {
   "id": "control-short-reply",
   "expect": "pass",
-  "source": "synthetic control",
+  "labelledBy": "author",
+  "source": "synthetic control RELABELLED 2026-10-19 for rubric v8: a short status closed by a bolted-on offer, the exact register the owner rejects; it has no why, no energy and no stance, and the v8 pass test applies to short replies too (the v7 label was pass). RE-CHECKED 2026-10-19 against rule 6 as revised after Judgment Day (V1): still fail, on trait (a) alone. Its status content keeps rule 5 from passing it, and as a short operational reply with no decision it needs only (a), but its only address to him is the offer bolted onto its last sentence. READ BY THE RUBRIC AS WRITTEN on 2026-10-25 (Judgment Day round 2, W9): relabelled from fail to pass. It has status content, so rule 5 does not pass it, and it is one paragraph with no decision, no explanation and no correction, so rule 6 asks only for trait (a) and no log. In a reply of one or two sentences a whole sentence of voseo aimed at him is woven, not bolted, and its second sentence is exactly that, so the reason it failed before (an offer bolted onto the last sentence) no longer holds. Its confirming interjection and its voseo imperative carry the Rioplatense register, and two sentences of status are not a log of who did what.",
   "message": "Listo, ya quedó guardado. Avisame si querés que lo suba también."
 }

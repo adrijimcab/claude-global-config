@@ -31,10 +31,10 @@
  * para el backlog maestro cuando no puede leer su revisión actual.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { readRevisionById, readRevisionsByTopicKey } from './current-revision.mjs';
 import { decide, SAVE_TOOLS, UPDATE_TOOLS } from './decide.mjs';
@@ -56,10 +56,6 @@ function journal(entry) {
   }
 }
 
-function withoutBom(raw) {
-  return raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-}
-
 /**
  * The hook output for a raw `PreToolUse` payload, or `undefined` to allow. `options.databasePath` points
  * the store reads at another sqlite file (the selftest's disposable one). Exported so the dispatcher can
@@ -68,13 +64,9 @@ function withoutBom(raw) {
  * redirige la lectura del almacén (la base desechable del selftest).
  */
 export function evaluate(raw, options = {}) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    payload = JSON.parse(withoutBom(raw));
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   const toolName = payload?.tool_name;
 
@@ -97,32 +89,13 @@ export function evaluate(raw, options = {}) {
 
   journal({ at: new Date().toISOString(), session: payload?.session_id, agentId: payload?.agent_id, tool: toolName, kind: refusal.kind, id: refusal.id, topicKey: refusal.topicKey, dropped: refusal.dropped?.length });
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: reason(refusal)
-    }
-  };
+  return deny(reason(refusal));
 }
 
-function main() {
-  let raw;
+const standalone = hookMain(evaluate);
 
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    process.exit(0);
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-  process.exit(0);
-}
-
-// A module that EXPORTS runs no work when imported (`guard-that-cannot-go-red`): main() runs only when
-// this file is the process entry point.
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
-}
+// A module that EXPORTS runs no work when imported (`guard-that-cannot-go-red`): the hook runs only when
+// this file is the process entry point, and the process then ends with status 0 once the decision is printed.
+// @es Un módulo que EXPORTA no corre nada al importarse: el hook corre solo si este fichero es el proceso
+// principal, y el proceso termina con estado 0 una vez impresa la decisión.
+runWhenMain(import.meta.url, () => standalone().then(() => process.exit(0)));

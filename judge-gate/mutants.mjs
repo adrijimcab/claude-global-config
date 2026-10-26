@@ -94,6 +94,12 @@ const MUTANTS = [
   ['a missing result is an answer', MODEL, " || typeof envelope.result !== 'string'", ''],
   ['the cost is always zero', MODEL, 'Number.isFinite(envelope.total_cost_usd) ? envelope.total_cost_usd : 0', '0'],
   ['the latency is zero', MODEL, 'const durationMs = Date.now() - started;', 'const durationMs = 0;'],
+  ['an asynchronous spawn is not awaited', MODEL, 'run = await spawn(', 'run = spawn('],
+  ['spawnAsync never kills a child past its timeout', MODEL, '      child.kill();\n', ''],
+  ['spawnAsync does not report a timeout', MODEL, '      error = new Error(`The child ran past its timeout', '      void new Error(`The child ran past its timeout'],
+  ['spawnAsync does not settle on a command that cannot start', MODEL, '      if (child.pid === undefined) settle(null);\n', ''],
+  ['spawnAsync drops the stdout of the child', MODEL, "child.stdout.setEncoding(encoding).on('data', (chunk) => { stdout += chunk; });", "child.stdout.setEncoding(encoding).on('data', () => {});"],
+  ['spawnAsync sends no stdin', MODEL, 'child.stdin.end(input);', 'child.stdin.end();'],
 
   // --- THE LOG AND THE REGISTRY.
   ['the log forgets the judge', LOG, 'ts: new Date().toISOString(), judge, session', 'ts: new Date().toISOString(), session'],

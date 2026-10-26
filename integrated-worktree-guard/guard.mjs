@@ -38,12 +38,12 @@
  * para un subagente. Como mucho UNA vez por sesión y conjunto. Falla ABIERTO y lo registra.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { activeOwner, agentRecords } from '../agent-liveness/active-owner.mjs';
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
+import { blockStop, hookMain, parseFailureMessage, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { stateDir as stateDirOf } from '../hook-state/locations.mjs';
 import { alreadyShown, markShown } from './noticed-sets.mjs';
 import { noticeText, refusalText } from './report.mjs';
@@ -141,7 +141,7 @@ export function decide(payload, { stateDir = defaultStateDir(), isLive = sharedL
   if (removable.length > 0) {
     note(stateDir, { event: 'block', session: sessionId, worktrees: removable.map((item) => item.path) });
 
-    return { decision: 'block', reason: refusalText(removable, { stranded, skipped }) };
+    return blockStop(refusalText(removable, { stranded, skipped }));
   }
 
   note(stateDir, { event: 'notice', session: sessionId, stranded: stranded.length, skipped: skipped.length });
@@ -156,26 +156,12 @@ export function decide(payload, { stateDir = defaultStateDir(), isLive = sharedL
  */
 export function evaluate(raw) {
   try {
-    return decide(JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw));
+    return decide(parsePayload(raw));
   } catch (error) {
-    note(defaultStateDir(), { event: 'malfunction', stage: 'payload', error: error instanceof Error ? error.message : String(error), rawLength: raw.length });
+    note(defaultStateDir(), { event: 'malfunction', stage: 'payload', error: parseFailureMessage(error), rawLength: raw.length });
 
     return undefined;
   }
 }
 
-function run() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) process.stdout.write(JSON.stringify(output));
-}
-
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) run();
+runWhenMain(import.meta.url, hookMain(evaluate));

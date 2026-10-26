@@ -33,9 +33,9 @@ const isProduct = (file) => !file.includes('selftest') && !file.includes('mutant
 /** The journal of authored writes the loop records into, and what it imports, by name. @es El journal de escrituras con autor en que registra el lazo, y lo que importa. */
 const GUARD_DIRECTORY = 'config-sync-guard';
 const GUARD_MODULES = new Set(['authored-writes.mjs', 'touched-paths.mjs', 'transcript-writes.mjs']);
-/** The state-location module and the message table it imports, by name. @es El módulo de ubicaciones y su tabla. */
+/** The state-location module, the state lock the ledger lock adapts, and the message table both import, by name. @es El módulo de ubicaciones, el lock de estado que adapta el lock del ledger y la tabla que importan. */
 const STATE_DIRECTORY = 'hook-state';
-const STATE_MODULES = new Set(['locations.mjs', 'message-table.mjs']);
+const STATE_MODULES = new Set(['locations.mjs', 'file-lock.mjs', 'message-table.mjs']);
 /** An import statement (a line that starts with `import`), never a string that merely mentions one. @es Una sentencia import (línea que empieza por `import`), nunca una cadena que solo la menciona. */
 const SHARED_IMPORT = /^import [^\n]*from '\.\.\/bilingual-output\/([A-Za-z0-9._-]+\.mjs)'/gm;
 

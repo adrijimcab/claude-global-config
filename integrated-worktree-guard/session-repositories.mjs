@@ -37,6 +37,7 @@
 import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
+import { invocationDirectory } from '../git-port/invocation-directory.mjs';
 import { gitInvocations } from '../shell-command/git-invocations.mjs';
 import { dialectOfTool } from '../shell-command/shell-command.mjs';
 import { addedWorktreePath } from './added-worktree-path.mjs';
@@ -83,15 +84,12 @@ function gitDirectoriesOf(toolName, command, cwd) {
   const directories = [];
 
   for (const invocation of gitInvocations(command, dialect, cwd)) {
-    const { directory, gitOptions } = invocation;
     const added = addedWorktreePath(invocation);
+    const acting = invocationDirectory(invocation);
 
     if (added !== undefined) directories.push(added);
-    if (typeof directory === 'string') directories.push(directory);
-
-    gitOptions.forEach((option, at) => {
-      if (option === '-C' && typeof gitOptions[at + 1] === 'string' && typeof directory === 'string') directories.push(path.resolve(directory, gitOptions[at + 1]));
-    });
+    if (typeof invocation.directory === 'string') directories.push(invocation.directory);
+    if (acting !== undefined && acting !== invocation.directory) directories.push(acting);
   }
 
   return directories;

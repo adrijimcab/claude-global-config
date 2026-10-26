@@ -24,7 +24,10 @@ const MUTANTS = [
   ['a payload that is not JSON is skipped instead of failing open', D, "if (payload === undefined) return { run: true,", "if (payload === undefined) return { run: false,"],
   ['a payload that is a JSON array is read as a payload', D, " && !Array.isArray(parsed)", ''],
   ['a null payload is read as a payload', D, "parsed !== null && typeof parsed === 'object'", "typeof parsed === 'object'"],
-  ['the byte-order mark is not stripped', D, 'text.charCodeAt(0) === 0xfeff ? text.slice(1) : text', 'text'],
+  ['the payload is not read through the port parser', D, "tryParsePayload(raw.toString('utf8'))", "((text) => { try { return JSON.parse(text); } catch { return undefined; } })(raw.toString('utf8'))"],
+  ['the payload bytes are not decoded as UTF-8', D, "raw.toString('utf8')", "raw.toString('latin1')"],
+  ['the hook reads no stdin bytes', H, 'return await readStdinBytes();', 'return Buffer.alloc(0);'],
+  ['the hook never runs as the main process', H, 'runWhenMain(import.meta.url, main);', ''],
   ['a payload without cwd is not asked about the process directory', D, 'const cwd = payload.cwd ?? fallbackCwd;', "const cwd = payload.cwd ?? '/';"],
   ['a cwd that is not a string is used as it is', D, "(typeof payload.cwd !== 'string' || payload.cwd === '')", 'false'],
   ['an empty cwd is used as it is', D, " || payload.cwd === '')", ')'],
@@ -55,7 +58,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['settings.json', 'git-worktree', 'selftest-fixtures', 'hook-state'],
+  paths: ['settings.json', 'git-worktree', 'selftest-fixtures', 'hook-state', 'hook-io'],
   selftest: 'review-site/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

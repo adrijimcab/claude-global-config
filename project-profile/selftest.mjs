@@ -29,7 +29,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { NEAR_EOL_DAYS, supportOf } from './angular-support.mjs';
 import { ancestry, findProjectRoot, frameworkChild, installedVersion, readFacts, readJsonObject } from './facts.mjs';
 import { eslintConfigOf, lowerBoundOf, majorMinorOf, packageManagerOf, PROFILE_PACKAGES, profileOf, readProfile, runProfileCli, standaloneOf, versionOf, zonelessOf } from './profile.mjs';
-import { payloadOf, sessionDirectory, sessionStartOutput } from './session-start.mjs';
+import { sessionDirectory, sessionStartOutput } from './session-start.mjs';
 import { toolchainForProfile } from '../gates-kit/toolchain-for.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 import { docsText, factsText, gatesText, OFFICIAL_RULES_FILE, profileLine, supportText } from './summary-line.mjs';
@@ -447,7 +447,6 @@ check('sessionDirectory: the payload cwd wins', sessionDirectory({ cwd: '/a' }, 
 check('sessionDirectory: then CLAUDE_PROJECT_DIR', sessionDirectory({}, { CLAUDE_PROJECT_DIR: '/b' }, '/c'), '/b');
 check('sessionDirectory: an empty cwd falls through', sessionDirectory({ cwd: '' }, { CLAUDE_PROJECT_DIR: '/b' }, '/c'), '/b');
 check('sessionDirectory: then the process directory', sessionDirectory(undefined, {}, '/c'), '/c');
-check('payloadOf: a BOM is tolerated, junk is undefined', [payloadOf('﻿{"cwd":"/x"}'), payloadOf('nope')], [{ cwd: '/x' }, undefined]);
 
 {
   const app = fresh('hook');
@@ -465,6 +464,7 @@ check('payloadOf: a BOM is tolerated, junk is undefined', [payloadOf('﻿{"cwd":
   check('hook: silent outside a JS/TS project', await sessionStartOutput(JSON.stringify({ cwd: outside }), { env: {}, cwd: outside, home: HOME }), undefined);
   check('hook: a malformed payload falls back to CLAUDE_PROJECT_DIR', (await sessionStartOutput('garbage', { env: { CLAUDE_PROJECT_DIR: app }, cwd: outside, home: HOME, today: '2026-10-06' }))?.hookSpecificOutput?.additionalContext.includes('Angular 22.2'), true);
   check('hook: the payload cwd wins over CLAUDE_PROJECT_DIR', (await sessionStartOutput(JSON.stringify({ cwd: outside }), { env: { CLAUDE_PROJECT_DIR: app }, cwd: app, home: HOME })), undefined);
+  check('hook: a BOM payload is read, so its cwd wins over CLAUDE_PROJECT_DIR', (await sessionStartOutput(`﻿${JSON.stringify({ cwd: outside })}`, { env: { CLAUDE_PROJECT_DIR: app }, cwd: app, home: HOME })), undefined);
 
   const throwing = { get CLAUDE_PROJECT_DIR() { throw new Error('boom'); } };
   const failure = await sessionStartOutput('{}', { env: throwing, cwd: outside, home: HOME });

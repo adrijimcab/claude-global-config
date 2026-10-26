@@ -23,9 +23,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { adviseOnBudget } from './budget-advisory.mjs';
-import { KEYED, SHORT_KEYED } from './condense-fixtures.mjs';
+import { KEYED, PROJECT_LINE, SHORT_KEYED, SHORT_PROJECT } from './condense-fixtures.mjs';
 import { holdsWholeLine } from './conservation.mjs';
-import { HEADER } from './ledgers.mjs';
+import { HEADER, PROJECT_LOADER } from './ledgers.mjs';
 import { provisionLoop, worldEnv } from './fixture-loop.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
@@ -48,7 +48,7 @@ function check(name, actual, expected) {
 const readOr = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
 
 /** A repository holding a copy of the loop, a home with a ledger holding `KEYED` and a 600-character instruction file. @es Un repositorio con copia del loop y un home con un ledger y un fichero de instrucciones de 600 caracteres. */
-function world({ config } = {}) {
+function world({ config, projectLedger } = {}) {
   worlds += 1;
 
   const root = path.join(scratch, `w${worlds}`);
@@ -65,8 +65,9 @@ function world({ config } = {}) {
   writeFileSync(path.join(home, '.claude', 'rules', 'promoted-rules.md'), HAND_WRITTEN);
   writeFileSync(path.join(home, '.claude', 'lessons-ledger.md'), `${HEADER('global', '`x`')}${KEYED}\n`);
   if (config !== undefined) writeFileSync(path.join(repo, '.claude', 'failure-capture.json'), JSON.stringify(config));
+  if (projectLedger !== undefined) writeFileSync(path.join(repo, '.claude', 'lessons-ledger.md'), `${HEADER(config.scope, PROJECT_LOADER)}${projectLedger}\n`);
 
-  return { repo, home, loop, ledger: path.join(home, '.claude', 'lessons-ledger.md'), evidence: (key) => path.join(home, '.claude', 'lessons', 'evidence', `${key}.md`) };
+  return { repo, home, loop, ledger: path.join(home, '.claude', 'lessons-ledger.md'), projectLedger: path.join(repo, '.claude', 'lessons-ledger.md'), evidence: (key) => path.join(home, '.claude', 'lessons', 'evidence', `${key}.md`) };
 }
 
 const HAND_WRITTEN = '# promoted\n';
@@ -124,6 +125,21 @@ try {
   check('...prints the advisory and what it could not do', [failed.out.some((line) => line.startsWith('ADVISORY')), failed.out.some((line) => line.includes('left unchanged'))], [true, true]);
   check('...keeps the line it could not prove byte-identical and the capture recorded', [readOr(broken.ledger).split('\n').includes(KEYED), readOr(broken.ledger).includes('<!--fc:fresh-lesson-key#1-->')], [true, true]);
 
+  // --- a capture into a project scope condenses ONLY that project's ledger; a global capture condenses both
+  const PROJECT_OVER = { scope: 'b100-am-ui', loadedSetCeiling: 500 };
+  const scoped = world({ config: PROJECT_OVER, projectLedger: PROJECT_LINE });
+  const scopedRun = capture(scoped, ['--key', 'fresh-lesson-key', '--scope', 'b100-am-ui', '--actor', 'orchestrator', '--lesson', LESSON]);
+
+  check('scoped: the capture exits 0 over the ceiling and the advisory runs', [scopedRun.status, scopedRun.out.some((line) => line.startsWith('ADVISORY'))], [0, true]);
+  check('scoped: the project ledger is condensed and holds the capture', [readOr(scoped.projectLedger).split('\n').includes(SHORT_PROJECT), readOr(scoped.projectLedger).includes('<!--fc:fresh-lesson-key#1-->')], [true, true]);
+  check('scoped: the GLOBAL ledger is left byte for byte as it was', readOr(scoped.ledger), `${HEADER('global', '`x`')}${KEYED}\n`);
+  check('scoped: the report names the project ledger only', [scopedRun.out.some((line) => line.startsWith('b100-am-ui ledger') && line.includes('shortened')), scopedRun.out.some((line) => line.startsWith('global ledger'))], [true, false]);
+
+  const everywhere = world({ config: PROJECT_OVER, projectLedger: PROJECT_LINE });
+
+  capture(everywhere);
+  check("a GLOBAL capture still condenses every ledger, the project's too", [readOr(everywhere.ledger).split('\n').includes(SHORT_KEYED), readOr(everywhere.projectLedger).split('\n').includes(SHORT_PROJECT)], [true, true]);
+
   // --- a refused capture measures nothing
   const refused = capture(world({ config: OVER }), ['--key', 'x']);
 
@@ -140,9 +156,19 @@ function advise(steps) {
   const printed = [];
   const calls = [];
 
-  adviseOnBudget({ measure: steps.measure, condense: () => { calls.push('condense'); return steps.condense(); }, print: (line) => printed.push(line) });
+  // `escaped` is what got out of the advisory: the proof asserts on it, so a step that is NOT swallowed fails a
+  // check instead of crashing the selftest where no check decides it.
+  // @es `escaped` es lo que salió del aviso: la prueba lo afirma, así que un paso que NO se traga falla un check
+  // en vez de hacer caer el selftest donde ningún check decide.
+  let escaped;
 
-  return { printed, calls };
+  try {
+    adviseOnBudget({ measure: steps.measure, condense: () => { calls.push('condense'); return steps.condense(); }, print: (line) => printed.push(line) });
+  } catch (error) {
+    escaped = error instanceof Error ? error.message : String(error);
+  }
+
+  return { printed, calls, escaped };
 }
 
 const condensed = advise({ measure: () => WITHIN_VERDICT, condense: () => ['never'] });
@@ -160,6 +186,8 @@ check('a throwing condense is printed after the advisory and swallowed', [conden
 const notAnError = advise({ measure: () => { throw 'plain text'; }, condense: () => [] });
 
 check('a thrown value that is not an Error is reported by its text', notAnError.printed, ['budget advisory FAILED (the capture itself is unaffected): plain text. @es el aviso de presupuesto FALLÓ (la captura no se ve afectada): plain text.']);
+
+check('no failing step escapes the advisory: a thrown measure, condense or plain value is swallowed', [measuringFails.escaped, condenseFails.escaped, notAnError.escaped], [undefined, undefined, undefined]);
 
 const five = ['a', 'b', 'c', 'd', 'e'].map((name, index) => ({ path: name, raw: 50 - index, counted: 50 - index }));
 const listed = advise({ measure: () => ({ ...OVER_VERDICT, files: five }), condense: () => ['did it'] });

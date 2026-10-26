@@ -1,6 +1,7 @@
 {
   "event": "PreToolUse",
   "guards": [
-    "../../owner-language-guard/pretool.mjs"
+    "../../owner-language-guard/pretool.mjs",
+    "../../commit-cadence-guard/guard.mjs"
   ]
 }

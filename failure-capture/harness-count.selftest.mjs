@@ -21,6 +21,20 @@ function check(name, actual, expected) {
   else failures.push(`${name} — expected ${String(expected)}, got ${String(actual)}`);
 }
 
+/**
+ * The value of `fn`, or the error it threw as a value: a broken module fails the check that called it, it does
+ * not abort the whole selftest.
+ * @es El valor de `fn`, o el error que lanzó como valor: un módulo roto hace fallar el check que lo llamó, no
+ * aborta todo el selftest.
+ */
+function observe(fn) {
+  try {
+    return fn();
+  } catch (error) {
+    return `threw ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
 const COUNTS = [
   ['empty text counts nothing', '', 0],
   ['text without a comment counts all of it', 'abc\ndef\n', 8],
@@ -70,7 +84,7 @@ const COUNTS = [
   ['CRLF text without a comment keeps its CR', 'a\r\nb\r\n', 6],
 ];
 
-for (const [name, text, expected] of COUNTS) check(name, countedLength(text), expected);
+for (const [name, text, expected] of COUNTS) check(name, observe(() => countedLength(text)), expected);
 
 const FRONTMATTER = [
   ['the removed frontmatter is returned whole', '---\na: 1\n---\nbody\n', '---\na: 1\n---\n'],
@@ -80,7 +94,7 @@ const FRONTMATTER = [
   ['frontmatter that never closes is none', '---\na: 1\n', ''],
 ];
 
-for (const [name, text, expected] of FRONTMATTER) check(name, frontmatterOf(text), expected);
+for (const [name, text, expected] of FRONTMATTER) check(name, observe(() => frontmatterOf(text)), expected);
 
 const LIMITS = [
   ['200k context at 3 chars per token', { contextTokens: 200_000, charsPerToken: 3 }, { perFile: 40_000, total: 120_000 }],

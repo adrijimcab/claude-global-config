@@ -18,8 +18,8 @@
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
+import { blockStop, hookMain, parseFailureMessage, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { evaluate as judgeTurn } from './evaluate.mjs';
 
@@ -45,9 +45,9 @@ export function evaluate(raw) {
   let payload;
 
   try {
-    payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
+    payload = parsePayload(raw);
   } catch (error) {
-    log(`payload ilegible, se deja pasar: ${error?.message ?? error}`);
+    log(`payload ilegible, se deja pasar: ${parseFailureMessage(error)}`);
     return undefined;
   }
 
@@ -63,31 +63,26 @@ export function evaluate(raw) {
       JSON.stringify({ at: new Date().toISOString(), session: payload.session_id, findings: verdict.findings })
     );
 
-    return { decision: 'block', reason: verdict.reason };
+    return blockStop(verdict.reason);
   } catch (error) {
     log(`fallo interno, se deja pasar: ${error?.stack ?? error}`);
     return undefined;
   }
 }
 
-function main() {
-  let raw;
-
+/**
+ * The standard input as text; an unreadable one is logged and ends the hook (the port lets the turn pass).
+ * @es La entrada estándar como texto; si no se puede leer se registra y el hook termina (el puerto deja pasar el turno).
+ */
+function readInput() {
   try {
-    raw = readFileSync(0, 'utf8');
+    return readFileSync(0, 'utf8');
   } catch (error) {
     log(`stdin ilegible, se deja pasar: ${error?.message ?? error}`);
-    return;
+    throw error;
   }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) process.stdout.write(JSON.stringify(output));
 }
 
 // Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
 // leería el stdin del importador.
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  main();
-  process.exitCode = 0;
-}
+runWhenMain(import.meta.url, hookMain(evaluate, readInput));

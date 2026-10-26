@@ -53,6 +53,14 @@ const MUTANTS = [
   ['a corrupt or torn line throws instead of being skipped', J, 'catch {\n    return undefined;', 'catch (error) {\n    throw error;'],
   ['a falsy record is dropped from the last records', J, 'if (parsed !== undefined) found.push(parsed.value);', 'if (parsed !== undefined && parsed.value) found.push(parsed.value);'],
 
+  // --- the skipped-line count ---
+  ['lastRecords does not count a corrupt line', J, '        else if (!isBlank(lines[at])) io.onSkip();\n', ''],
+  ['readFrom does not count a corrupt line', J, '          else if (!isBlank(line)) io.onSkip();\n', ''],
+  ['a blank line is counted as damage', J, "bytes.toString('utf8').trim() === ''", "bytes.toString('utf8') === 'never'"],
+  ['every parsed record is counted as a skip too (lastRecords)', J, 'if (parsed !== undefined) found.push(parsed.value);\n        else if', 'if (parsed !== undefined) { found.push(parsed.value); io.onSkip(); }\n        else if'],
+  ['lastRecords ignores the onSkip of its caller', J, "const io = { onRead, readBytes, onSkip };\n  const fd = openSync(file, 'r');\n  try {\n    const found", "const io = { onRead, readBytes, onSkip: NOTHING };\n  const fd = openSync(file, 'r');\n  try {\n    const found"],
+  ['readFrom ignores the onSkip of its caller', J, "const io = { onRead, readBytes, onSkip };\n  const fd = openSync(file, 'r');\n  try {\n    const size", "const io = { onRead, readBytes, onSkip: NOTHING };\n  const fd = openSync(file, 'r');\n  try {\n    const size"],
+
   // --- readFrom: the alignment ---
   ['an offset past the end is not read from the start', J, 'const from = offset > size ? 0 : offset;', 'const from = offset;'],
   ['an offset at the end is read from the start', J, 'const from = offset > size ? 0 : offset;', 'const from = offset >= size ? 0 : offset;'],

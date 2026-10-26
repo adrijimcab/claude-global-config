@@ -1,6 +1,6 @@
 {
   "id": "real-red-664a8a26-10181301",
-  "expect": "fail",
-  "source": "664a8a26 2026-10-18T13:01:12.304Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
+  "expect": "unadjudicated",
+  "source": "UNADJUDICATED since 2026-10-19 (Judgment Day round 2, W1 and W2): this real reply has no label from the owner, and silence is not a label, so it is printed with its verdict and never scored; the notes that follow are its history. 664a8a26 2026-10-18T13:01:12.304Z (real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
   "message": "Ya está identificada la causa de los dos rechazos en los worktrees de la otra sesión, y el disparador vino de un brief mío. La master midió que el parser de `TENANCY` del fleet-kit busca coincidencias de texto en toda la línea. Mi brief ponía en esa misma línea la lista de worktrees prohibidos (chain, frame, icons, net, pdt), así que el guard la leyó como si mi writer los reclamara. El arreglo de raíz va al parser, y lo coordinan la master y b100.\n\nDe mi lado ya corregí la plantilla del brief: ahora la línea `TENANCY` lleva solo la ruta y la prohibición va en una línea aparte. El writer que está corriendo no necesita cambios, porque su reclamo se termina cuando termine él. El incidente lo registro con `capture.mjs` y en el backlog #1562 en cuanto la master libere `~/.claude` y vuelva engram después de tu reinicio."
 }

@@ -25,6 +25,7 @@
 import path from 'node:path';
 
 import { nativeSpelling } from '../../cherry-pick-guard/working-directory.mjs';
+import { invocationDirectory } from '../../git-port/invocation-directory.mjs';
 import { commandWordIndex, simpleCommands } from '../../shell-command/shell-command.mjs';
 
 const GIT_DIR_OPTION = '--git-dir';
@@ -52,17 +53,6 @@ function optionGitDir(options) {
   return found;
 }
 
-/** The directory in force when option `until` is applied: the line's directory with the `-C`s before it. @es El directorio vigente. */
-function directoryAt(invocation, until) {
-  let directory = invocation.directory;
-
-  for (let index = 0; index < until && directory !== undefined; index += 1) {
-    if (invocation.gitOptions[index] === '-C') directory = path.resolve(directory, invocation.gitOptions[index + 1] ?? '.');
-  }
-
-  return directory;
-}
-
 /**
  * `['--git-dir=<absolute path>']` when the invocation names its repository, `[]` when it acts on the
  * repository its directory belongs to.
@@ -76,7 +66,7 @@ export function repositoryOptions(invocation, dialect, platform = process.platfo
 
   if (named === undefined) return [];
 
-  const base = directoryAt(invocation, option === undefined ? invocation.gitOptions.length : option.at);
+  const base = invocationDirectory(invocation, option === undefined ? invocation.gitOptions.length : option.at);
 
   return [`${GIT_DIR_OPTION}=${base === undefined ? named : path.resolve(base, named)}`];
 }

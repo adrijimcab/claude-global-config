@@ -43,11 +43,11 @@
  * ha movido bajo el transcript y un agente fresco sí es lo correcto.
  */
 
-import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { agentRecords } from '../agent-liveness/liveness.mjs';
+import { advise, deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { declaredWorktrees, recordWorktrees, sameErrand } from './worktree-identity.mjs';
 
 const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
@@ -591,14 +591,9 @@ function reason(description, matches, now) {
  * misma función corre como hook propio (`main`, abajo). `records` y `now` se inyectan solo en el selftest.
  */
 export function evaluate(raw, { records = undefined, now = Date.now() } = {}) {
-  let payload;
-
-  try {
-    // A PowerShell-written payload can carry a UTF-8 BOM, which makes JSON.parse throw.
-    payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-  } catch {
-    return;
-  }
+  // The port tolerates the UTF-8 BOM a PowerShell writer adds; an unreadable payload fails open.
+  // @es El puerto tolera el BOM de UTF-8 que añade PowerShell; un payload ilegible falla abierto.
+  const payload = tryParsePayload(raw);
 
   if (!DELEGATION_TOOLS.has(payload?.tool_name)) return;
 
@@ -628,12 +623,12 @@ export function decide(description, prompt, repoPath, records, now, session = un
   const resumable = priorAgents(description, repoPath, records, now, session, prompt);
 
   if (resumable.length > 0) {
-    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason(description, resumable, now) } };
+    return deny(reason(description, resumable, now));
   }
 
   const advice = [unresumableNotice(exhaustedAgents(description, repoPath, records, now, prompt)), relatedNotice(relatedLiveAgents(description, prompt, repoPath, records))].filter((text) => text !== undefined);
 
-  return advice.length === 0 ? undefined : { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: advice.join('\n\n') } };
+  return advice.length === 0 ? undefined : advise(advice.join('\n\n'));
 }
 
 /**
@@ -676,26 +671,6 @@ function unresumableNotice(exhausted) {
 /** The advice for live worktrees whose errand is in the brief, or `undefined`. @es El aviso de worktrees vivos, o `undefined`. */
 const relatedNotice = (related) => (related.length === 0 ? undefined : advisory(related));
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    process.exit(0);
-  }
-
-  Promise.resolve()
-    .then(() => evaluate(raw))
-    .then((output) => {
-      if (output !== undefined) console.log(JSON.stringify(output));
-    })
-    .catch(() => {
-      /* un fallo propio de la guardia deja pasar la llamada */
-    })
-    .finally(() => process.exit(0));
-}
-
-// Solo como proceso principal. Si otro módulo la importa (el dispatcher, un selftest), main() no corre:
-// leería el stdin del importador y lo cortaría con process.exit(0) a mitad de camino.
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
+// Only as the main process: when the dispatcher or a selftest imports this module, `main` must not read their stdin.
+// @es Solo como proceso principal: si el dispatcher o un selftest importan este módulo, `main` no debe leer su stdin.
+runWhenMain(import.meta.url, hookMain(evaluate));

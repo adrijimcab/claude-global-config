@@ -8,6 +8,15 @@ so a budget cannot be deleted, left warning-only or loosened without going red.
 declarar un presupuesto de error para `initial`, `anyComponentStyle` y `anyScript`, y ninguno puede superar
 su tope. `ng build` aplica el presupuesto al compilar; este gate vigila la declaración que `ng build` lee.
 
+Exit codes: 0 every budget present and within its cap; 1 a problem (a missing, invalid or over-cap budget);
+2 nothing could be measured: no readable `angular.json` with a buildable project, or an unreadable `config.json`
+or a cap in it that is not a size (a kit defect, never a pass). Every budget of a type is compared with its cap,
+not only the first one.
+@es Códigos de salida: 0 todo presupuesto presente y dentro de su tope; 1 un problema (presupuesto ausente,
+inválido o sobre su tope); 2 no se pudo medir nada: sin `angular.json` legible con un proyecto compilable, o un
+`config.json` ilegible o con un tope que no es un tamaño (un defecto del kit, nunca un aprobado). Se compara CADA
+presupuesto de un tipo con su tope, no solo el primero.
+
 ## Chosen caps and why
 
 `initial` 2mb, `anyComponentStyle` 8kb, `anyScript` 1mb: the `maximumError` values MEASURED in

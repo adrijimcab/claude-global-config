@@ -44,7 +44,10 @@ const MUTANTS = [
   ['the advisory runs even when the capture was refused', C, 'if (status === 0) {\n    adviseOnBudget', 'if (true) {\n    adviseOnBudget'],
   ['the advisory never runs', C, 'if (status === 0) {\n    adviseOnBudget', 'if (false) {\n    adviseOnBudget'],
   ['the budget decides the capture\'s exit status', C, '  return status;\n}\n\nfunction recordCapture', '  return 1;\n}\n\nfunction recordCapture'],
-  ['the condense runs as a dry run', C, 'keyMap: [], write: true })', 'keyMap: [], write: false })'],
+  ['the condense runs as a dry run', C, 'keyMap: [], write: true, scope:', 'keyMap: [], write: false, scope:'],
+  ['a capture into a project scope condenses every ledger, the global one too', C, 'scope: args.scope === GLOBAL_SCOPE ? undefined : args.scope', 'scope: undefined'],
+  ['a global capture condenses the global ledger only', C, 'scope: args.scope === GLOBAL_SCOPE ? undefined : args.scope', 'scope: args.scope'],
+  ['the scope of the condense is ignored by the ledger filter', C, 'scope === undefined || ledger.scope === scope', 'true'],
   ['the condense is given a key map it was never handed', C, 'keyMap: [], write: true', 'keyMap: undefined, write: true'],
   ['the project ceiling is ignored by the advisory', C, 'measureLoadedSet({ project: PROJECT, directory: process.cwd(), ceiling: args.ceiling }).verdict', 'measureLoadedSet({ project: undefined, directory: process.cwd(), ceiling: args.ceiling }).verdict'],
   ['the advisory walks past the ceiling', C, 'directory: process.cwd(), ceiling: args.ceiling }).verdict', 'directory: process.cwd(), ceiling: undefined }).verdict'],
@@ -56,7 +59,8 @@ const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
   paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'],
   selftest: 'failure-capture/budget-advisory.selftest.mjs',
-  mutants: MUTANTS
+  mutants: MUTANTS,
+  crashKills: 'fail'
 });
 
 process.exit(survivors === 0 ? 0 : 1);

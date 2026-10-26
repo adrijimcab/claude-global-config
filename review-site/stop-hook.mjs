@@ -21,8 +21,8 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+
+import { readStdinBytes, runWhenMain } from '../hook-io/hook-io.mjs';
 
 /** The arguments gentle-ai's own hook is registered with. @es Los argumentos con que gentle-ai registra su hook. */
 const GENTLE_AI_HOOK = ['review', 'stop-hook', '--agent', 'claude-code'];
@@ -37,10 +37,10 @@ function gentleAiLaunch(environment) {
   return injected === undefined ? ['gentle-ai'] : JSON.parse(injected);
 }
 
-/** The stdin of the hook, empty when it cannot be read. @es El stdin del hook, vacío si no se puede leer. */
-function readInput() {
+/** The stdin bytes of the hook, empty when they cannot be read. @es Los bytes de stdin del hook, vacíos si no se pueden leer. */
+async function readInput() {
   try {
-    return readFileSync(0);
+    return await readStdinBytes();
   } catch {
     return Buffer.alloc(0);
   }
@@ -101,7 +101,7 @@ async function journal(decision) {
 }
 
 async function main() {
-  const input = readInput();
+  const input = await readInput();
   const decision = await decisionFor(input);
 
   await journal(decision);
@@ -109,4 +109,4 @@ async function main() {
   process.exitCode = decision.run ? runGentleAi(input, process.env) : 0;
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+runWhenMain(import.meta.url, main);

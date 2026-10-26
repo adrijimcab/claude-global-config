@@ -21,10 +21,7 @@
  * y entrega dentro del worker. POR QUÉ UN PUNTERO: ver `pointer-text.mjs`. NUNCA BLOQUEA.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import { context, hookMain, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { workerPointer } from './worker-pointer.mjs';
 
 /**
@@ -33,29 +30,13 @@ import { workerPointer } from './worker-pointer.mjs';
  */
 export function envelopeFor(raw, env = process.env) {
   try {
-    const payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
+    const payload = parsePayload(raw);
 
-    return { hookSpecificOutput: { hookEventName: 'SubagentStart', additionalContext: workerPointer(payload, env) } };
+    return context('SubagentStart', workerPointer(payload, env));
   } catch {
     return undefined;
   }
 }
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    process.exit(0);
-  }
-
-  const envelope = envelopeFor(raw);
-
-  if (envelope !== undefined) process.stdout.write(JSON.stringify(envelope));
-
-  process.exit(0);
-}
-
-// Only as the main process: imported by the selftest, main() must not read its stdin.
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
+// Only as the main process: imported by the selftest, the hook must not read its stdin.
+runWhenMain(import.meta.url, hookMain(envelopeFor));
