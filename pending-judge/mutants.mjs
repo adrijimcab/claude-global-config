@@ -21,9 +21,11 @@ const MEASURE = 'pending-judge/measure.mjs';
 
 const MUTANTS = [
   // --- THE RUBRIC.
+  ['the rubric v3 lets work in flight excuse a record put off', PROMPT, ' This holds even when the record waits on work in flight: "el checkpoint lo anoto en el backlog junto con el resultado del PDF" is pending.', ''],
+  ['the rubric v3 reads blocked work as queued', PROMPT, "  '- Blocked work is not queued work: a launch a guard refused, or work waiting on a precondition that is not itself under way, is deferred, so it is pending unless its record is cited (\"preparé E7, pero el guard bloquea writers nuevos hasta integrar E5/E6\").',\n", ''],
   ['the rubric v3 stops passing work queued into the current run', PROMPT, ' So is work queued into the current run or landing (the next free worker slot, the next checkpoint or batch: "en cuanto se libere un lugar entra el juez de voz", "lo sumo al checkpoint-42"),', ' So is'],
   ['the rubric v3 stops passing the listed remaining steps of the change', PROMPT, 'and the remaining steps of the change the message reports on, when it lists them as its plan ("lo que queda antes del reporte: 1. validar, 2. mover develop", "queda archivar el SDD" at the end of a finished change).', 'and nothing else.'],
-  ['the rubric v3 stops blocking a record put off', PROMPT, "  '- Putting off the RECORD of an item is pending, because the item stays unrecorded: \"cuando llegue el veredicto de CI actualizo el backlog\", \"después lo anoto en el backlog\".',\n", ''],
+  ['the rubric v3 stops blocking a record put off', PROMPT, '- Putting off the RECORD of an item is pending, because the item stays unrecorded:', '- Putting off the RECORD of an item is fine:'],
   ['the rubric v3 stops blocking a claim check put off', PROMPT, "  '- Putting off the check of a claim the message states now without measuring it is pending: \"lo estimó a mano en 138 mil; lo mido de verdad cuando aterrice\".',\n", ''],
   ['the rubric v3 stops passing an item put to the owner', PROMPT, ', or it names an item and asks the owner, in this message, what to do with it ("¿lo sumo ahora o lo dejo en la fila?")', ''],
   ['the rubric stops naming the durable stores', PROMPT, 'A durable store is engram, a backlog record, a feature document or a commit.', 'A durable store is a place.'],
