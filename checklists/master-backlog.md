@@ -457,7 +457,11 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   and campaigns, then integration. b100 still has open: 3 stale ungated-landing-guard mutants and the unmodelled
   cmd `( )` grouping. Master read b100's source on 2026-10-26 (shell-command.mjs:81-130, :584) and passed two
   more gaps to b100: `cmd //c` (the Git Bash spelling) is not recognised as a nested script, and a `%VAR%` word
-  gives no "unresolvable" signal that consumers can use to fail closed. PENDING, reason (3): the owner froze new work until backlog-1-6 lands (L18). It is the
+  gives no "unresolvable" signal that consumers can use to fail closed.
+  b100 fixed all three (//c and //k, %VAR% unresolvable, cmd `( )` groups) in its tooling backup commit c7480f4,
+  on top of ef09b44. b100 re-ran launchers 167/167, cmd-dialect 67/67 and includeNested 6/6. Mutation was not
+  re-run, by the owner's «sin mutantes». A new export, `isUnresolvableWord(word)`, lets the guards here fail
+  closed on `$`/`%` words. Sync C8 from c7480f4. PENDING, reason (3): the owner froze new work until backlog-1-6 lands (L18). It is the
   first unit of the next batch.
 - T8 port units still to do after this landing: F2 (re-export company-remote's fold), G2/G3 (git consumers), G4
   (delete the wrappers), P2u (rotate and file-lock liveness), J1-J4 (journal port), H4 and H8 (remaining guards),
