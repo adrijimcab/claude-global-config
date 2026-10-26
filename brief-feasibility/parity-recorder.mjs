@@ -20,7 +20,7 @@ export const DECISION_LOG_VARIABLE = 'WORKER_GIT_DECISION_LOG';
 
 /** The decision module this hook wraps, and the query that reaches the real one. @es El módulo de decisión que envuelve y la query que llega al real. */
 const DECISION_MODULE = '/worker-git-guard/forbidden-invocations.mjs';
-const REAL = '?decision-recorder=real';
+const REAL = '?parity-recorder=real';
 
 /** Where the replay of a refused command as a brief lives. @es Dónde vive la repetición de un comando rechazado como brief. */
 const REPLAY = new URL('./parity-replay.mjs', import.meta.url).href;
@@ -68,6 +68,6 @@ export async function load(url, context, nextLoad) {
 // it under that URL, and that import must not register a second time.
 // @es Como entrada de `--import`, registra este mismo fichero como módulo de hooks, marcado con una query: el hilo del
 // cargador lo importa con esa URL, y esa importación no debe registrarse otra vez.
-const AS_HOOKS = '?decision-recorder=hooks';
+const AS_HOOKS = '?parity-recorder=hooks';
 
 if (!import.meta.url.endsWith(AS_HOOKS)) register(`${import.meta.url}${AS_HOOKS}`);

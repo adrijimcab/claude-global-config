@@ -4,7 +4,7 @@
  * `shell-less-role` (`shell-less-role.mjs`). It runs on any platform: no real settings file is read.
  *
  * PARITY, the claim the first face rests on: every command worker-git-guard's own selftest REFUSES, written into a
- * brief, is refused here. The commands are not copied: the guard's selftest is RUN with `decision-recorder.mjs`
+ * brief, is refused here. The commands are not copied: the guard's selftest is RUN with `parity-recorder.mjs`
  * loaded, which records every call to the guard's decision with its answer, and each refused one is replayed as a
  * brief. A recorder run that fails, or records nothing, is a failed measurement and fails this proof, never a pass.
  *
@@ -14,7 +14,7 @@
  *
  * @es Auto-test de las dos caras de worker de brief-feasibility. PARIDAD: cada comando que RECHAZA el selftest del
  * propio worker-git-guard, escrito en un brief, se rechaza aquí; los comandos no se copian, se graban corriendo ese
- * selftest con `decision-recorder.mjs`. Una grabación que falla o no graba nada es una medición fallida y hace fallar
+ * selftest con `parity-recorder.mjs`. Una grabación que falla o no graba nada es una medición fallida y hace fallar
  * esta prueba. Después, el espacio de estados de cada cara, sus casos reales y sus casi-aciertos.
  */
 
@@ -28,7 +28,7 @@ import { briefOf } from '../brief-provenance/provenance.mjs';
 import { payloadFor } from '../hook-payloads/payloads.mjs';
 import { CLAUDE_HOME_VARIABLE, isolateState } from '../hook-state/locations.mjs';
 import { forbiddenInvocations } from '../worker-git-guard/forbidden-invocations.mjs';
-import { DECISION_LOG_VARIABLE } from './decision-recorder.mjs';
+import { DECISION_LOG_VARIABLE } from './parity-recorder.mjs';
 import { FACES, inspectFeasibility } from './feasibility.mjs';
 import { evaluate } from './guard.mjs';
 import { instructedCommands } from './instructions.mjs';
@@ -101,7 +101,7 @@ const fenced = (script) => `Do this step:\n\`\`\`\n${script}\n\`\`\``;
 
   const run = spawnSync(process.execPath, [join(FLEET, 'worker-git-guard', 'selftest.mjs')], {
     encoding: 'utf8',
-    env: { ...process.env, [DECISION_LOG_VARIABLE]: log, NODE_OPTIONS: `--import=${pathToFileURL(join(HERE, 'decision-recorder.mjs')).href}` },
+    env: { ...process.env, [DECISION_LOG_VARIABLE]: log, NODE_OPTIONS: `--import=${pathToFileURL(join(HERE, 'parity-recorder.mjs')).href}` },
     maxBuffer: 64 * 1024 * 1024
   });
   const recorded = readFileSync(log, 'utf8').split('\n').filter((line) => line.length > 0).map((line) => JSON.parse(line));

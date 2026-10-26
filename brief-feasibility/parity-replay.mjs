@@ -1,6 +1,6 @@
 /**
  * A command worker-git-guard refused, written into a delegation brief and judged by brief-feasibility, for the
- * parity proof (`worker-git.selftest.mjs`, through `decision-recorder.mjs`). Two placements: a fenced block (any
+ * parity proof (`worker-git.selftest.mjs`, through `parity-recorder.mjs`). Two placements: a fenced block (any
  * one-line command) and an inline code span (a command with no backtick, which a span cannot hold).
  *
  * The user home it reads is one that does not exist, so no settings file adds a deny rule: the answer is the
