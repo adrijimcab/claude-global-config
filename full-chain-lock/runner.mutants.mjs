@@ -27,6 +27,7 @@ const C = 'full-chain-lock/child-process-adapter.mjs';
 const X = 'full-chain-lock/cli-arguments.mjs';
 const M = 'full-chain-lock/messages.mjs';
 const N = 'full-chain-lock/run.mjs';
+const T = 'full-chain-lock/measured-tree.mjs';
 
 const MUTANTS = [
   // --- the domain: the lock is taken before the command, and given back on every path
@@ -51,6 +52,7 @@ const MUTANTS = [
   ['the record does not carry the session', R, 'session: request.session,', "session: 'unknown',"],
   ['the record does not carry the project', R, 'project: request.project,', "project: 'unknown',"],
   ['the record does not carry the chain', R, 'chain: request.chain,', "chain: 'unknown',"],
+  ['the record does not carry the measured tree', R, 'tree: request.tree,', 'tree: undefined,'],
   ['the wait is announced in milliseconds', R, 'const waitSeconds = request.waitMs / 1000;', 'const waitSeconds = request.waitMs;'],
   ['the documented usage code changes', R, 'usage: 2,', 'usage: 3,'],
   ['the documented wait-expired code changes', R, 'waitExpired: 75,', 'waitExpired: 76,'],
@@ -65,6 +67,10 @@ const MUTANTS = [
   ['a release leaves its own record behind', A, 'if (this.readHolder()?.pid === pid) rmSync(holderFile, { force: true });', 'void pid;'],
   ['the lock file is never released once the record is removed', A, '      } finally {\n        releaseLock(lockFile);\n      }', '      } finally {\n        void lockFile;\n      }'],
   ['a record that is not an object is returned as the holder', A, "return holder !== null && typeof holder === 'object' ? holder : undefined;", 'return holder;'],
+  ['a running holder ignores the lock owner, so a dead chain still counts', A, 'const holder = owner === undefined ? undefined : this.readHolder();', 'const holder = this.readHolder();'],
+  ['a running holder ignores whose record it is', A, 'return holder?.pid === owner ? holder : undefined;', 'return holder;'],
+  ['a running holder uses the port\'s default ceiling', A, 'liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS, ...lockOptions })', 'liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ...lockOptions })'],
+  ['a running holder ignores the injected lock options', A, 'liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS, ...lockOptions })', 'liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS })'],
   ['an unreadable record throws instead of reading as none', A, '      } catch {\n        return undefined;\n      }\n    },\n\n    release', '      } catch (error) {\n        throw error;\n      }\n    },\n\n    release'],
 
   // --- how a command is started
@@ -104,15 +110,26 @@ const MUTANTS = [
   ['an empty command is accepted', X, "command.length === 0 || command[0] === ''", 'false'],
   ['the session of the environment is ignored', X, "flags['--session'] ?? sessionFromEnvironment ?? 'unknown'", "flags['--session'] ?? 'unknown'"],
   ['the project defaults to a constant', X, "project: flags['--project'] ?? cwdName,", "project: flags['--project'] ?? 'unknown',"],
+  ['the measured tree ignores --tree', X, "tree: flags['--tree'] ?? cwd,", 'tree: cwd,'],
+  ['the measured tree has no default', X, "tree: flags['--tree'] ?? cwd,", "tree: flags['--tree'],"],
+  ['--tree is not a known flag', X, "'--session', '--tree']);", "'--session']);"],
   ['the poll interval flag is ignored', X, "pollMs: flags['--poll-ms'] ?? DEFAULT_POLL_MS", 'pollMs: DEFAULT_POLL_MS'],
 
   // --- the composition root
   ['the state is kept under another mechanism', N, "stateDir('full-chain-lock')", "stateDir('other-mechanism')"],
   ['the project defaults to a constant directory name', N, 'cwdName: path.basename(process.cwd())', "cwdName: 'cwd'"],
-  ['the environment session is not read', N, 'sessionFromEnvironment: process.env.CLAUDE_SESSION_ID', 'sessionFromEnvironment: undefined'],
+  ['the environment session is not read', N, 'sessionFromEnvironment: process.env.CLAUDE_CODE_SESSION_ID', 'sessionFromEnvironment: undefined'],
+  ['the session is read from a variable the harness does not export', N, 'sessionFromEnvironment: process.env.CLAUDE_CODE_SESSION_ID', 'sessionFromEnvironment: process.env.CLAUDE_SESSION_ID'],
+  ['the measured tree is not resolved to its top level', N, 'tree: measuredTree(parsed.request.tree)', 'tree: parsed.request.tree'],
+  ['the cwd is not handed to the arguments', N, '{ cwd: process.cwd(), cwdName:', '{ cwd: undefined, cwdName:'],
   ['a usage problem does not exit with the usage code', N, '    return EXIT.usage;', '    return 1;'],
   ['a usage problem does not print the synopsis', N, "    say.complain('usage');", '    void say;'],
   ['a defect of a port exits 0', N, '  return EXIT.lockFault;\n}', '  return 0;\n}'],
+
+  // --- the measured tree
+  ['the top level is never asked', T, 'return topLevelOf(absolute) ?? absolute;', 'return absolute;'],
+  ['the directory is not made absolute', T, 'const absolute = path.resolve(directory);', 'const absolute = directory;'],
+  ['outside git, the git error output is taken as the tree', T, "const top = run.status === 0 ? run.stdout.trim() : '';", "const top = run.stdout.trim() || run.stderr.trim();"],
 
   // --- the words
   ['the expiry message stops saying the command did not run', M, 'Your command did NOT run (a full chain never runs unlocked). Retry when that chain ends', 'Retry when that chain ends'],

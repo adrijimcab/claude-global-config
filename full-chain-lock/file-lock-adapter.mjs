@@ -27,7 +27,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { STALE_AFTER_MS, releaseLock, takeLock } from '../hook-state/file-lock.mjs';
+import { STALE_AFTER_MS, liveOwnerOf, releaseLock, takeLock } from '../hook-state/file-lock.mjs';
 
 /** The lock file inside the state directory. @es El fichero de lock dentro del directorio de estado. */
 export const LOCK_NAME = 'chain.lock';
@@ -44,7 +44,7 @@ const NO_PAUSE = () => undefined;
 /**
  * @param {string} directory The shared state directory (created on the first take).
  * @param {object} [lockOptions] Overrides handed to the port (`staleAfterMs`, `isAlive`, `now`, `report`...).
- * @returns {{ tryTake: (record: object) => boolean, readHolder: () => (object|undefined), release: () => void }}
+ * @returns {{ tryTake: (record: object) => boolean, readHolder: () => (object|undefined), liveHolder: () => (object|undefined), release: () => void }}
  * @es El puerto `lock` sobre un directorio de estado compartido; `lockOptions` se pasan tal cual al puerto.
  */
 export function fileLockAdapter(directory, lockOptions = {}) {
@@ -79,6 +79,23 @@ export function fileLockAdapter(directory, lockOptions = {}) {
       } catch {
         return undefined;
       }
+    },
+
+    /**
+     * The holder record of a chain that is RUNNING now, or `undefined`: the lock's own reader rule says a live
+     * process holds it (`liveOwnerOf`, with this adapter's ceiling), and the record is that process's (its pid is the
+     * lock's owner). A dead holder, a lock past the ceiling, or a record left by another process is no running chain,
+     * so nothing that waits on a running chain ever waits on it.
+     * @es El registro del dueño de una cadena que CORRE ahora, o `undefined`: la regla de lector del propio lock dice
+     * que un proceso vivo lo tiene (`liveOwnerOf`, con el techo de este adaptador) y el registro es de ese proceso (su
+     * pid es el dueño del lock). Un dueño muerto, un lock pasado el techo o un registro de otro proceso no son una
+     * cadena que corre, así que nada que espere a una cadena viva la espera nunca.
+     */
+    liveHolder() {
+      const owner = liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS, ...lockOptions });
+      const holder = owner === undefined ? undefined : this.readHolder();
+
+      return holder?.pid === owner ? holder : undefined;
     },
 
     release() {

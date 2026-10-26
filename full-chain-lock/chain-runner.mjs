@@ -82,7 +82,7 @@ function giveBack(lock, say) {
 /**
  * Runs `request.command` under the lock.
  *
- * @param {{ chain: string, project: string, session: string, command: string, args: string[], waitMs: number, pollMs: number }} request
+ * @param {{ chain: string, project: string, session: string, tree: string, command: string, args: string[], waitMs: number, pollMs: number }} request
  * @param {{ lock: object, child: object, clock: object, say: object, processId: number }} ports
  * @returns {Promise<number>} the exit code of the whole run: the command's own, or one of `EXIT`.
  * @throws whatever the child port throws, after the lock was released.
@@ -92,7 +92,7 @@ export async function runChain(request, ports) {
   const { lock, child, clock, say, processId } = ports;
   const waitSeconds = request.waitMs / 1000;
   const startedAt = new Date(clock.now()).toISOString();
-  const record = { session: request.session, project: request.project, chain: request.chain, pid: processId, startedAt, command: [request.command, ...request.args].join(' ') };
+  const record = { session: request.session, project: request.project, chain: request.chain, tree: request.tree, pid: processId, startedAt, command: [request.command, ...request.args].join(' ') };
   const deadline = clock.now() + request.waitMs;
   let announced;
   let looked = false;

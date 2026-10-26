@@ -49,8 +49,8 @@ export const MESSAGES = {
     es: 'LOCK DE CADENAS COMPLETAS: el argumento {argument} lleva comillas dobles o un signo de porcentaje, que un lanzador .cmd de Windows no puede transportar con seguridad. Ejecuta el comando con un argumento simple o llama al programa directamente.'
   },
   usage: {
-    en: 'FULL-CHAIN LOCK usage: node run.mjs --chain <name> [--project <name>] [--session <id>] [--wait-seconds <n>] [--poll-ms <n>] -- <command> [args...]',
-    es: 'USO DEL LOCK DE CADENAS COMPLETAS: node run.mjs --chain <nombre> [--project <nombre>] [--session <id>] [--wait-seconds <n>] [--poll-ms <n>] -- <comando> [args...]'
+    en: 'FULL-CHAIN LOCK usage: node run.mjs --chain <name> [--project <name>] [--session <id>] [--tree <dir>] [--wait-seconds <n>] [--poll-ms <n>] -- <command> [args...]',
+    es: 'USO DEL LOCK DE CADENAS COMPLETAS: node run.mjs --chain <nombre> [--project <nombre>] [--session <id>] [--tree <dir>] [--wait-seconds <n>] [--poll-ms <n>] -- <comando> [args...]'
   },
   'usage-no-separator': {
     en: 'FULL-CHAIN LOCK: the command must follow a "--" separator.',

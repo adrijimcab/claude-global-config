@@ -14,7 +14,8 @@
  *   - STALE: a dead holder with an old lock is broken through the port; a dead holder with a FRESH lock is not;
  *     a LIVE holder with a lock older than the port's default ceiling is not broken (the adapter's ceiling).
  *   - NEVER UNLOCKED: a fault of the lock exits 70 and the command does not run.
- *   - THE HOLDER RECORD: session, project, chain, pid, start time, command, readable while the chain runs.
+ *   - THE HOLDER RECORD: session, project, chain, measured tree, pid, start time, command, readable while the chain
+ *     runs; the session defaults to the harness's CLAUDE_CODE_SESSION_ID and the tree to the git top level of the cwd.
  *   - ARGUMENTS and LAUNCH: every usage problem; a Windows `.cmd` launcher is started through `cmd.exe` with
  *     quoted arguments, and an argument it cannot carry is refused; on Windows a real `.cmd` shim runs.
  *
@@ -26,9 +27,9 @@
  * LOCK (un fallo sale con 70), REGISTRO DEL DUEÑO, ARGUMENTOS y ARRANQUE.
  */
 
-import { spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +42,7 @@ import { childProcessAdapter } from './child-process-adapter.mjs';
 import { parseArguments } from './cli-arguments.mjs';
 import { fileLockAdapter } from './file-lock-adapter.mjs';
 import { launchPlan } from './launch-plan.mjs';
+import { measuredTree } from './measured-tree.mjs';
 import { MESSAGES, speak } from './messages.mjs';
 import { failureCode } from './run.mjs';
 
@@ -53,7 +55,7 @@ isolateState('full-chain-lock');
 const STATE = stateDir('full-chain-lock');
 const LOCK = path.join(STATE, 'chain.lock');
 const HOLDER = path.join(STATE, 'holder.json');
-const SCRATCH = mkdtempSync(path.join(os.tmpdir(), 'fcl-selftest-'));
+const SCRATCH = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'fcl-selftest-')));
 
 process.on('exit', () => rmSync(SCRATCH, { recursive: true, force: true }));
 
@@ -291,9 +293,13 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
   clearState();
 
   const lock = fileLockAdapter(STATE);
-  const request = { chain: 'domain', project: 'p', session: 's', command: 'c', args: ['a'], waitMs: 200, pollMs: 50 };
+  const request = { chain: 'domain', project: 'p', session: 's', tree: '/measured/tree', command: 'c', args: ['a'], waitMs: 200, pollMs: 50 };
   const ports = (child) => ({ lock, child, clock: { now: () => Date.now(), sleep }, say: silent, processId: process.pid });
   let thrown;
+  let recorded;
+
+  await runChain(request, ports({ run: () => { recorded = lock.readHolder(); return Promise.resolve(0); } }));
+  check('the holder record carries the measured tree of the request', recorded?.tree === '/measured/tree', JSON.stringify(recorded));
 
   try {
     await runChain(request, ports({ run: () => Promise.reject(new Error('boom')) }));
@@ -390,13 +396,15 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
 
 // ── Arguments ───────────────────────────────────────────────────────────────────────────────────────────────
 {
-  const defaults = { cwdName: 'cwd-name', sessionFromEnvironment: undefined };
+  const defaults = { cwd: '/the/cwd', cwdName: 'cwd-name', sessionFromEnvironment: undefined };
   const problemOf = (argv) => parseArguments(argv, defaults).problem?.id;
   const ok = parseArguments(['--chain', 'c', '--', 'npm', 'run', 'x'], defaults).request;
 
   check('the command after -- is split into program and arguments', ok.command === 'npm' && ok.args.join(' ') === 'run x');
   check('the defaults are the cwd name, an unknown session and the bounded wait', ok.project === 'cwd-name' && ok.session === 'unknown' && ok.waitMs === DEFAULT_WAIT_SECONDS * 1000 && ok.pollMs === DEFAULT_POLL_MS);
-  check('the session falls back to the environment', parseArguments(['--chain', 'c', '--', 'x'], { cwdName: 'n', sessionFromEnvironment: 'env-session' }).request.session === 'env-session');
+  check('the session falls back to the environment', parseArguments(['--chain', 'c', '--', 'x'], { cwd: '/c', cwdName: 'n', sessionFromEnvironment: 'env-session' }).request.session === 'env-session');
+  check('the measured tree defaults to the cwd', ok.tree === '/the/cwd', String(ok.tree));
+  check('--tree names the measured tree', parseArguments(['--chain', 'c', '--tree', '/other/tree', '--', 'x'], defaults).request?.tree === '/other/tree');
 
   const flags = parseArguments(['--chain', 'c', '--project', 'p', '--session', 's', '--wait-seconds', '2.5', '--poll-ms', '40', '--', 'x', '--chain', 'inner'], defaults).request;
 
@@ -465,6 +473,13 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   check('a thrown value that is not an Error is still told', (() => { const more = []; failureCode('plain text', { complain: (id, params) => more.push(params.detail) }); return more[0] === 'plain text'; })());
 }
 
+// ── The measured tree ──────────────────────────────────────────────────────────────────────────────────────────
+{
+  check('a directory in no git tree is its own measured tree, made absolute', measuredTree('rel/dir', { topLevelOf: () => undefined }) === path.resolve('rel/dir'));
+  check('a directory in a git tree is measured as the top level of that tree', measuredTree('/x/y', { topLevelOf: () => '/x' }) === '/x');
+  check('the git question is asked of the absolute directory', (() => { let asked; measuredTree('rel', { topLevelOf: (dir) => { asked = dir; return undefined; } }); return asked === path.resolve('rel'); })());
+}
+
 // ── The default project and session of the holder record ────────────────────────────────────────────────────
 {
   clearState();
@@ -473,7 +488,7 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
 
   mkdirSync(cwd, { recursive: true });
 
-  const child = spawn(process.execPath, [RUN, '--chain', 'defaults', '--', process.execPath, CHILD, 'hold', path.join(SCRATCH, 'defaults.log'), 'D', '700'], { cwd, env: { ...process.env, CLAUDE_SESSION_ID: 'env-session-7' }, stdio: 'ignore', windowsHide: true });
+  const child = spawn(process.execPath, [RUN, '--chain', 'defaults', '--', process.execPath, CHILD, 'hold', path.join(SCRATCH, 'defaults.log'), 'D', '700'], { cwd, env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'env-session-7', CLAUDE_SESSION_ID: 'not-the-harness-variable' }, stdio: 'ignore', windowsHide: true });
   const ended = new Promise((resolve) => child.once('close', resolve));
 
   await until(() => existsSync(HOLDER));
@@ -483,7 +498,32 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   await ended;
 
   check('with no --project the record names the directory the chain runs in', holder.project === 'some-project', JSON.stringify(holder));
-  check('with no --session the record names the session of the environment', holder.session === 'env-session-7', JSON.stringify(holder));
+  check('with no --session the record names the session the harness exports (CLAUDE_CODE_SESSION_ID)', holder.session === 'env-session-7', JSON.stringify(holder));
+  check('with no --tree, outside any git tree, the record names the absolute directory the chain runs in', holder.tree === cwd, JSON.stringify(holder));
+}
+
+// ── The measured tree of a chain started in a subdirectory of a git tree ────────────────────────────────────
+{
+  clearState();
+
+  const repo = path.join(SCRATCH, 'measured-repo');
+  const sub = path.join(repo, 'deep', 'sub');
+  const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+
+  mkdirSync(sub, { recursive: true });
+  execFileSync('git', ['init', '--quiet', repo], { env: cleanEnv, stdio: 'ignore', windowsHide: true });
+
+  const child = spawn(process.execPath, [RUN, '--chain', 'tree', '--session', 'tree-session', '--', process.execPath, CHILD, 'hold', path.join(SCRATCH, 'tree.log'), 'T', '700'], { cwd: sub, env: cleanEnv, stdio: 'ignore', windowsHide: true });
+  const ended = new Promise((resolve) => child.once('close', resolve));
+
+  await until(() => existsSync(HOLDER));
+
+  const holder = readJson(HOLDER);
+
+  await ended;
+
+  check('a chain started in a subdirectory of a git tree records the top level of that tree', holder.tree === repo, JSON.stringify(holder));
+  check('an explicit --session wins over the environment', holder.session === 'tree-session', JSON.stringify(holder));
 }
 
 // ── The lock adapter: whose record is removed, what a garbage record reads as ───────────────────────────────
@@ -515,6 +555,26 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   clearState();
   check('with no record file there is no holder', (() => { try { return lock.readHolder() === undefined; } catch { return false; } })());
   check('a release with nothing taken does nothing', (() => { lock.release(); return lockFree(); })());
+}
+
+// ── The lock adapter: which holder is a RUNNING chain ───────────────────────────────────────────────────────────
+{
+  clearState();
+
+  const record = { session: 's', project: 'p', chain: 'c', tree: '/t', pid: process.pid, startedAt: 't', command: 'c' };
+  const live = fileLockAdapter(STATE);
+
+  check('with no lock there is no running holder', live.liveHolder() === undefined);
+  live.tryTake(record);
+  check('a lock this live process holds names its record as the running holder', live.liveHolder()?.tree === '/t', JSON.stringify(live.liveHolder()));
+  check('a holder whose pid the probe calls dead is no running chain', fileLockAdapter(STATE, { isAlive: () => false }).liveHolder() === undefined);
+  check('a lock past this adapter\'s twelve-hour ceiling is no running chain', fileLockAdapter(STATE, { now: () => Date.now() + 12 * 60 * 60 * 1000 + 60_000 }).liveHolder() === undefined);
+  check('a lock past the port\'s ten-minute default ceiling but under twelve hours is still a running chain', fileLockAdapter(STATE, { now: () => Date.now() + 30 * 60 * 1000 }).liveHolder()?.pid === process.pid);
+  writeFileSync(HOLDER, JSON.stringify({ ...record, pid: process.pid + 1 }));
+  check('a record of another process than the lock\'s owner is no running chain', live.liveHolder() === undefined);
+  writeFileSync(HOLDER, JSON.stringify(record));
+  live.release();
+  check('after the release there is no running holder', live.liveHolder() === undefined);
 }
 
 // ── Signals reach the child while it runs, and only while it runs ───────────────────────────────────────────
