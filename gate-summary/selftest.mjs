@@ -17,6 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { messageProblems } from '../bilingual-output/message.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
 import { MESSAGES } from './messages.mjs';
 import { isMarker, tail } from './markers.mjs';
 import { parseOptions } from './options.mjs';
@@ -28,6 +29,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RUN = path.join(HERE, 'run.mjs');
 const FIXTURE = path.join(HERE, 'fixture-command.mjs');
 const state = mkdtempSync(path.join(os.tmpdir(), 'gate-summary-selftest-'));
+// Every child this selftest spawns resolves its state here, never in the real home. @es Cada hijo resuelve su estado aquí.
+const stateRoot = isolateState('gate-summary');
 
 let passed = 0;
 const failures = [];
@@ -44,6 +47,11 @@ function summarize(options, command) {
 
 const throws = (fn) => { try { fn(); return false; } catch { return true; } };
 const fixture = (mode) => [process.execPath, FIXTURE, mode];
+
+const unflagged = spawnSync(process.execPath, [RUN, '--', ...fixture('clean')], { encoding: 'utf8' });
+const unflaggedLog = unflagged.stdout.split('\n').find((line) => line.startsWith('LOG='))?.slice(4) ?? '';
+equal('no --state: the run lands in the state directory the state-location module resolves', path.relative(path.join(stateRoot, 'gate-summary', 'runs'), unflaggedLog).startsWith('..'), false);
+equal('no --state: the option default is that directory', parseOptions(['--', 'x']).state, path.join(stateRoot, 'gate-summary'));
 
 const clean = summarize([], fixture('clean'));
 equal('clean: GREEN with the real exit code', clean.head, 'GREEN EXIT=0');

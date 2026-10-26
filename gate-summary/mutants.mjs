@@ -66,6 +66,8 @@ const MUTANTS = [
   ['a non-numeric excerpt is accepted', OPTIONS, "if (NUMERIC.has(name) && !(Number.isInteger(Number(value)) && Number(value) >= 0)) return { problem: name };", ''],
   ['the command loses its own flags', OPTIONS, 'args.slice(separator + 1)', 'args.slice(separator + 1).filter((word) => !word.startsWith(\'-\'))'],
   ['the default excerpt is empty', OPTIONS, 'excerpt: 20,', 'excerpt: 0,'],
+  ['the default state bypasses the state-location module', DIRECTORY, "export const defaultState = () => stateDir('gate-summary');", "export const defaultState = () => path.join(process.cwd(), '.gate-summary-state');"],
+  ['the default state is resolved once, at import, not when asked', OPTIONS, "import { defaultState } from './run-directory.mjs';", "import { defaultState as resolveState } from './run-directory.mjs';\nconst FROZEN_STATE = resolveState();\nconst defaultState = () => FROZEN_STATE;"],
 
   // --- BILINGUAL
   ['the notRun message loses its Spanish half', MESSAGES, "es: 'no se pudo iniciar la orden ({reason}); no dice nada del código.'", "es: 'no se pudo iniciar la orden; no dice nada del código.'"]
@@ -73,7 +75,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['gate-summary', 'bilingual-output', 'mutation-proof'],
+  paths: ['gate-summary', 'bilingual-output', 'mutation-proof', 'hook-state'],
   selftest: 'gate-summary/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

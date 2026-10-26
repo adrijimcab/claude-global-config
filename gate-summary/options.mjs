@@ -3,7 +3,7 @@
  * @es Lee la línea de órdenes: las opciones antes de `--` y la orden después, como array argv.
  */
 
-import { DEFAULT_STATE } from './run-directory.mjs';
+import { defaultState } from './run-directory.mjs';
 
 const NUMERIC = new Set(['--excerpt', '--timeout']);
 const TEXT = new Set(['--cwd', '--state']);
@@ -13,7 +13,7 @@ const TEXT = new Set(['--cwd', '--state']);
  * @es Devuelve las opciones, o `{ problem }` con la opción culpable.
  */
 export function parseOptions(args, cwd = process.cwd()) {
-  const options = { cwd, state: DEFAULT_STATE, excerpt: 20, timeout: 0, argv: [] };
+  const options = { cwd, state: defaultState(), excerpt: 20, timeout: 0, argv: [] };
   const separator = args.indexOf('--');
 
   if (separator === -1 || separator === args.length - 1) return { problem: '--' };
