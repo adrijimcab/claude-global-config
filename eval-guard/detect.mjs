@@ -139,6 +139,60 @@ function substitutionAt(command, index) {
   return { next: command.length, inner: command.slice(index + 2) };
 }
 
+/** Whether a substitution (`$(`, `${` or a backtick outside PowerShell) opens at `index`. @es Si una sustitución abre en `index`. */
+const opensSubstitution = (command, index, powershell) =>
+  (command[index] === '$' && (command[index + 1] === '(' || command[index + 1] === '{')) || (command[index] === '`' && !powershell);
+
+/**
+ * The Bash arithmetic `(( … ))` that opens at `index`, or `undefined` when the text is not ONE expression closed by
+ * `))` on the same line. Quotes and nested parentheses are honoured, so a `))` inside a string or after `(a)` never
+ * closes it, and every substitution inside is returned to be judged, because it runs. `undefined` means plain
+ * parentheses: `((echo a); (python3 - …))` is two nested subshells, read as commands.
+ * @es La aritmética de Bash `(( … ))` que abre en `index`, o `undefined` si el texto no es UNA expresión cerrada por
+ * `))` en la misma línea. Se respetan comillas y paréntesis anidados, y cada sustitución de dentro se devuelve para
+ * juzgarla, porque corre. `undefined` son paréntesis normales: `((echo a); (python3 - …))` son dos subshells.
+ */
+function arithmeticAt(command, index) {
+  const substitutions = [];
+  let depth = 0;
+  let inDouble = false;
+
+  for (let at = index + ARITHMETIC_OPEN.length; at < command.length; at += 1) {
+    const character = command[at];
+
+    if (character === '\n') return undefined;
+
+    if (character === BACKSLASH) {
+      at += 1;
+      continue;
+    }
+
+    if (opensSubstitution(command, at, false)) {
+      const substitution = substitutionAt(command, at);
+
+      substitutions.push(substitution.inner);
+      at = substitution.next - 1;
+      continue;
+    }
+
+    if (character === '"') inDouble = !inDouble;
+    else if (inDouble) continue;
+    else if (character === "'") {
+      const end = command.indexOf("'", at + 1);
+
+      if (end === -1 || command.slice(at, end).includes('\n')) return undefined;
+
+      at = end;
+    } else if (character === '(') depth += 1;
+    else if (character === ')') {
+      if (depth > 0) depth -= 1;
+      else return command[at + 1] === ')' ? { next: at + ARITHMETIC_CLOSE.length, substitutions } : undefined;
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * The redirection operator that starts at `index` (`>`, `>>`, `>|`, `>&`, `<`, `<&`, `<>`, `&>`, `&>>`), or
  * `undefined`. The caller has already ruled out `<<` and `<<<`.
@@ -357,18 +411,22 @@ export function tokenize(command, { powershell = false } = {}) {
       continue;
     }
 
-    // `(( … ))` is Bash arithmetic, whose `>` compares, ONLY at command position and closed on its own line; anywhere
-    // else, and always in PowerShell (`((Get-Content f) | Measure-Object).Count`), the parentheses are plain ones.
-    // @es `(( … ))` es aritmética de Bash, cuyo `>` compara, SOLO en posición de orden y cerrada en su línea; en otro
-    // sitio, y siempre en PowerShell, los paréntesis son normales.
-    if (!powershell && current === undefined && command.startsWith(ARITHMETIC_OPEN, index) && atCommandPosition(items)) {
-      const lineBreak = command.indexOf('\n', index);
-      const close = command.indexOf(ARITHMETIC_CLOSE, index + ARITHMETIC_OPEN.length);
+    // `(( … ))` is Bash arithmetic, whose `>` compares, ONLY at command position and as one expression closed on its
+    // own line (`arithmeticAt`); anywhere else, and always in PowerShell (`((Get-Content f) | Measure-Object).Count`),
+    // the parentheses are plain ones. The arithmetic is one word, so the substitutions inside it are still judged.
+    // @es `(( … ))` es aritmética de Bash, cuyo `>` compara, SOLO en posición de orden y como una expresión cerrada en
+    // su línea; en otro sitio, y siempre en PowerShell, los paréntesis son normales. La aritmética es una palabra, así
+    // que las sustituciones de dentro se siguen juzgando.
+    const arithmetic = !powershell && current === undefined && command.startsWith(ARITHMETIC_OPEN, index) && atCommandPosition(items) ? arithmeticAt(command, index) : undefined;
 
-      if (close !== -1 && (lineBreak === -1 || close < lineBreak)) {
-        index = close + ARITHMETIC_CLOSE.length;
-        continue;
-      }
+    if (arithmetic !== undefined) {
+      open(index);
+      current.bare = true;
+      current.raw = command.slice(index, arithmetic.next);
+      current.substitutions.push(...arithmetic.substitutions);
+      flush();
+      index = arithmetic.next;
+      continue;
     }
 
     // `$( … )`, `${ … }` and `` ` … ` `` are PART of the word they sit in, never a separator, so `python3 - $(pwd)/x
@@ -376,7 +434,7 @@ export function tokenize(command, { powershell = false } = {}) {
     // PowerShell's backtick is its escape character, so there it stays what it was.
     // @es `$( … )`, `${ … }` y las comillas invertidas son PARTE de su palabra, nunca un separador, así el heredoc no se
     // separa de su orden. El texto de dentro se guarda para juzgarlo aparte como línea de órdenes.
-    if ((character === '$' && (command[index + 1] === '(' || command[index + 1] === '{')) || (character === '`' && !powershell)) {
+    if (opensSubstitution(command, index, powershell)) {
       const substitution = substitutionAt(command, index);
 
       open(index);
@@ -449,6 +507,19 @@ export function tokenize(command, { powershell = false } = {}) {
         if (closer === '"' && command[index] === BACKSLASH && index + 1 < command.length) {
           current.raw += command[index] + command[index + 1];
           index += 2;
+          continue;
+        }
+
+        // Inside double quotes a substitution still runs, so it is recorded exactly as in a bare word, and its own
+        // quotes never close the word (`"$(echo ")")"`).
+        // @es Dentro de comillas dobles una sustitución sigue corriendo: se guarda igual que en una palabra desnuda, y
+        // sus propias comillas nunca cierran la palabra.
+        if (closer === '"' && opensSubstitution(command, index, powershell)) {
+          const substitution = substitutionAt(command, index);
+
+          current.raw += command.slice(index, substitution.next);
+          current.substitutions.push(substitution.inner);
+          index = substitution.next;
           continue;
         }
 
@@ -998,7 +1069,7 @@ function shellScriptWrites(text, family) {
     if (FILE_MOVERS.has(name)) return `calls ${name}`;
     if (name === 'tee' && words.some((word) => !isOptionWord(word) && !NON_FILE_SINKS.has(word.raw.toLowerCase()))) return 'calls tee with a file';
     if (name === 'sed' && words.some(editsInPlace)) return 'calls sed -i';
-    if (name === 'dd' && words.some((word) => word.raw.startsWith(DD_OUTPUT))) return 'calls dd of=';
+    if (name === 'dd' && words.some((word) => word.raw.startsWith(DD_OUTPUT) && !NON_FILE_SINKS.has(word.raw.slice(DD_OUTPUT.length).toLowerCase()))) return 'calls dd of=';
   }
 
   return undefined;

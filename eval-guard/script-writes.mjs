@@ -13,9 +13,11 @@
  * a word inside a message (`console.log('use writeFile')`) or a longer name (`myWriteFile(`) is not a write. A
  * PowerShell cmdlet counts only as a command word (any case). A python `open(` is read with balanced brackets
  * and quotes, so `open(os.path.join(a, 'b'), 'w')` finds its mode, and the mode is read by position or by
- * name: the second argument of `open(…)` and of a module function (`gzip`, `bz2`, `lzma`, `tarfile`, `io`,
- * `codecs`, `fs`, `fs.promises`), the first of a pathlib Path (`Path(p).open('w')`, or a name assigned a Path on
- * an earlier line); any other `.open(` method (`Image.open`) is no file-mode open and is not judged.
+ * name: the second argument of `open(…)` and of a known module function (`gzip`, `bz2`, `lzma`, `tarfile`, `io`,
+ * `codecs`, `fs`, `fs.promises`); for any other receiver (a Path chain, an alias) the first and the second, so a
+ * receiver that cannot be read fails closed. A mode counts by its access part (before `:` or `|`) and only when it
+ * is made of mode characters. A script that references a filesystem module (`fs`, `node:fs`, `os`, `shutil`,
+ * `pathlib`) is also judged by method names (`rename`, `cp`, `copyFile`, `writeFile`, …) on any receiver.
  *
  * @es Si un texto de script LLAMA a algo que escribe un fichero: las llamadas de escritura de node, python y
  * .NET, un `open(…)` de python con modo de escritura y un cmdlet de PowerShell que escribe. La sintaxis de shell
@@ -24,9 +26,11 @@
  * pegado delante, así una palabra dentro de un mensaje o un nombre más largo no es una escritura. Un cmdlet de
  * PowerShell cuenta solo como palabra de orden. Un `open(` de python se lee con paréntesis y comillas
  * equilibrados, y el modo por posición o por nombre: el segundo argumento de `open(…)` y de una función de módulo
- * (`gzip`, `bz2`, `lzma`, `tarfile`, `io`, `codecs`, `fs`, `fs.promises`), el primero de un Path de pathlib
- * (`Path(p).open('w')`, o un nombre al que se asignó un Path en una línea anterior); cualquier otro método
- * `.open(` (`Image.open`) no es un `open` con modo de fichero y no se juzga.
+ * conocida (`gzip`, `bz2`, `lzma`, `tarfile`, `io`, `codecs`, `fs`, `fs.promises`); para cualquier otro receptor
+ * (una cadena de Path, un alias) el primero y el segundo, así un receptor ilegible falla cerrado. Un modo cuenta por
+ * su parte de acceso (antes de `:` o `|`) y solo si está hecho de caracteres de modo. Un script que hace referencia a
+ * un módulo de ficheros (`fs`, `node:fs`, `os`, `shutil`, `pathlib`) se juzga además por nombres de método
+ * (`rename`, `cp`, `copyFile`, `writeFile`, …) sobre cualquier receptor.
  */
 
 /**
@@ -46,11 +50,32 @@ export const CMDLET_MARKERS = ['Set-Content', 'Add-Content', 'Out-File', 'Copy-I
 /** Python `open` modes that write, append or create. @es Modos de `open` de python que escriben, añaden o crean. */
 const WRITING_MODE_LETTERS = 'wax+';
 
+/** The characters a mode or `fs` flags literal is made of. @es Los caracteres de un literal de modo o de flags de `fs`. */
+const MODE_CHARACTERS = 'rwaxbts+';
+
+/** Where tarfile and the compression modules start the compression part of a mode. @es Donde empieza la parte de compresión de un modo. */
+const COMPRESSION_SEPARATORS = ':|';
+
 /** Modules whose `open` takes the path first and the mode (or `fs` flags) second. @es Módulos cuyo `open` toma la ruta primero y el modo segundo. */
 const PATH_FIRST_MODULES = new Set(['gzip', 'bz2', 'lzma', 'tarfile', 'io', 'codecs', 'fs', 'fs.promises']);
 
-/** The pathlib classes whose `open` takes the mode first. @es Las clases de pathlib cuyo `open` toma el modo primero. */
-const PATH_CLASSES = new Set(['Path', 'pathlib.Path']);
+/** JS module specifiers of the file system. @es Especificadores JS del sistema de ficheros. */
+const JS_FILESYSTEM_MODULES = ['fs', 'fs/promises', 'node:fs', 'node:fs/promises'];
+
+/** The quotes a JS specifier is written in. @es Las comillas de un especificador JS. */
+const SPECIFIER_QUOTES = ["'", '"', '`'];
+
+/** Python modules of the file system. @es Módulos de python del sistema de ficheros. */
+const PYTHON_FILESYSTEM_MODULES = new Set(['os', 'shutil', 'pathlib']);
+
+/**
+ * Methods that write a file, judged on any receiver once a filesystem module is referenced. Only the names that are
+ * no bare call marker already: `copyFile`, `writeFile`, `appendFile`, `write_text`, `write_bytes` and the sync forms
+ * are judged on any receiver in every script.
+ * @es Métodos que escriben un fichero, juzgados sobre cualquier receptor una vez referenciado un módulo de ficheros.
+ * Solo los nombres que no son ya un marcador de llamada desnudo: los demás se juzgan sobre cualquier receptor siempre.
+ */
+export const FILESYSTEM_METHODS = ['rename', 'cp'];
 
 /** Characters that may sit before a cmdlet word. @es Caracteres que pueden ir delante de una palabra de cmdlet. */
 const BEFORE_A_COMMAND_WORD = ' \t\r\n|;({=&';
@@ -219,73 +244,85 @@ function nameStart(text, end) {
 }
 
 /**
- * The receiver of the method `open(` at `site`: `{ name, call }`, the dotted name before `.open`, or, when the
- * receiver is a call (`Path(p).open`), the dotted name of the callee with `call` set.
- * @es El receptor del método `open(` en `site`: el nombre con puntos antes de `.open` o, si el receptor es una
- * llamada (`Path(p).open`), el nombre del llamado con `call` activo.
+ * The mode literals that decide the `open(` call at `site`: the `mode=` argument, else by position:
+ *   - a plain `open(` and a known module function (`gzip`, `bz2`, `lzma`, `tarfile`, `io`, `codecs`, `fs`,
+ *     `fs.promises`): the second positional argument (the mode, or `fs`'s flags);
+ *   - any other receiver (`Path(x).resolve().open('w')`, `(base / 'f').open('w')`, an alias `fsp.open(p, 'w')`):
+ *     the first AND the second, because the receiver cannot be read, so a writing mode in either fails closed.
+ * @es Los literales de modo que deciden la llamada `open(` en `site`: el argumento `mode=`, si no por posición: el
+ * segundo para `open(` y para una función de módulo conocida; para cualquier otro receptor, el primero Y el segundo,
+ * porque el receptor no se puede leer, así que un modo de escritura en cualquiera de los dos falla cerrado.
  */
-function receiverOf(text, site) {
+function modesOf(text, site) {
+  const parts = callArguments(text, site.open);
+  const named = parts.find((part) => keywordOf(part) === 'mode');
+
+  if (named !== undefined) return [literalOf(named.slice(named.indexOf('=') + 1).trim())];
+
+  const positional = parts.filter((part) => keywordOf(part) === undefined);
   const dot = site.at - 1;
+  const known = text[dot] !== '.' || PATH_FIRST_MODULES.has(text.slice(nameStart(text, dot), dot));
 
-  if (text[dot - 1] !== ')') return { name: text.slice(nameStart(text, dot), dot), call: false };
-
-  let depth = 0;
-  let open = dot - 1;
-
-  for (; open >= 0; open -= 1) {
-    if (text[open] === ')') depth += 1;
-    if (text[open] === '(') depth -= 1;
-    if (depth === 0) break;
-  }
-
-  return { name: text.slice(nameStart(text, open), open), call: true };
-}
-
-/** Whether `name` was assigned a pathlib Path on a line before `before` (`p = Path('x')`). @es Si a `name` se le asignó un Path en una línea anterior. */
-function assignedPath(text, name, before) {
-  const lineStart = text.lastIndexOf('\n', before) + 1;
-
-  return text.slice(0, lineStart).split('\n').some((line) => {
-    const trimmed = line.trim();
-    const rest = trimmed.slice(name.length).trimStart();
-
-    return trimmed.startsWith(name) && rest.startsWith('=') && [...PATH_CLASSES].some((path) => rest.slice(1).trimStart().startsWith(`${path}(`));
-  });
+  return (known ? [positional[1]] : [positional[0], positional[1]]).map(literalOf);
 }
 
 /**
- * The mode of the `open(` call at `site`, by `mode=` or by position, or `undefined` when it is not judged:
- *   - a plain `open(` and a module function (`gzip`, `bz2`, `lzma`, `tarfile`, `io`, `codecs`, `fs`,
- *     `fs.promises`): the second positional argument (the mode, or `fs`'s flags);
- *   - a pathlib Path (`Path(…).open`, `pathlib.Path(…).open`, a name assigned a Path on an earlier line): the first;
- *   - any other method (`Image.open`, `obj.open`): not judged, it is no file-mode open we know.
- * @es El modo de la llamada `open(` en `site`, por `mode=` o por posición, o `undefined` si no se juzga: el segundo
- * argumento para `open(` y las funciones de módulo; el primero para un Path de pathlib; cualquier otro método no se juzga.
+ * Whether a literal is a mode that writes. Only its access part counts: tarfile and the compression modules put a
+ * compression after `:` or `|` (`'r:xz'` reads, `'w|gz'` writes). The access part must be made of mode characters
+ * only, so a path such as `'cache'` or `'x.png'` is no mode.
+ * @es Si un literal es un modo que escribe. Solo cuenta su parte de acceso: tarfile y los módulos de compresión ponen
+ * la compresión tras `:` o `|`. La parte de acceso debe ser solo caracteres de modo, así una ruta no es un modo.
  */
-function modeOf(text, site) {
-  const parts = callArguments(text, site.open);
-  const named = parts.find((part) => keywordOf(part) === 'mode');
-  const positional = parts.filter((part) => keywordOf(part) === undefined);
-  let index = 1;
+function writesWith(mode) {
+  const cut = [...mode].findIndex((character) => COMPRESSION_SEPARATORS.includes(character));
+  const access = cut === -1 ? mode : mode.slice(0, cut);
 
-  if (text[site.at - 1] === '.') {
-    const receiver = receiverOf(text, site);
-    const path = receiver.call ? PATH_CLASSES.has(receiver.name) : assignedPath(text, receiver.name, site.at);
-
-    if (path) index = 0;
-    else if (receiver.call || !PATH_FIRST_MODULES.has(receiver.name)) return undefined;
-  }
-
-  return named !== undefined ? literalOf(named.slice(named.indexOf('=') + 1).trim()) : literalOf(positional[index]);
+  return [...access].every((character) => MODE_CHARACTERS.includes(character)) && [...access].some((character) => WRITING_MODE_LETTERS.includes(character));
 }
 
-/** Whether the script calls python's `open` in a mode that writes. @es Si el script llama al `open` de python con un modo que escribe. */
+/** Whether the script calls an `open` in a mode that writes. @es Si el script llama a un `open` con un modo que escribe. */
 function opensForWriting(text) {
-  return callSites(text, OPEN_NAME, false).some((site) => {
-    const mode = modeOf(text, site);
+  return callSites(text, OPEN_NAME, false).some((site) => modesOf(text, site).some((mode) => mode !== undefined && writesWith(mode)));
+}
 
-    return mode !== undefined && [...mode].some((letter) => WRITING_MODE_LETTERS.includes(letter));
-  });
+/** The first word of `text`, up to a blank. @es La primera palabra de `text`, hasta un blanco. */
+function firstWord(text) {
+  const end = [...text].findIndex((character) => character === ' ' || character === '\t');
+
+  return end === -1 ? text : text.slice(0, end);
+}
+
+/** The top-level modules a python `import` or `from` line names (`import os.path, sys` is `os`, `sys`). @es Los módulos que nombra una línea `import` o `from`. */
+function importedModules(line) {
+  const keyword = firstWord(line);
+  const rest = line.slice(keyword.length).trim();
+
+  if (keyword === 'from') return [firstWord(rest).split('.')[0]];
+  if (keyword === 'import') return rest.split(',').map((part) => firstWord(part.trim()).split('.')[0]);
+
+  return [];
+}
+
+/**
+ * Whether the script references a filesystem module: a JS specifier (`'fs'`, `'fs/promises'`, `'node:fs'`,
+ * `'node:fs/promises'`, in any quote) or a python import of `os`, `shutil` or `pathlib`.
+ * @es Si el script hace referencia a un módulo del sistema de ficheros: un especificador JS o un import de python.
+ */
+function referencesFilesystemModule(text) {
+  if (JS_FILESYSTEM_MODULES.some((name) => SPECIFIER_QUOTES.some((quote) => text.includes(`${quote}${name}${quote}`)))) return true;
+
+  return text.split('\n').some((line) => importedModules(line.trim()).some((name) => PYTHON_FILESYSTEM_MODULES.has(name)));
+}
+
+/**
+ * The first filesystem method called in a script that references a filesystem module, on ANY receiver or none, so
+ * `fsp.rename(`, `promises.cp(` and a destructured `rename(` all count; `undefined` when the script references no
+ * such module or calls none of the methods.
+ * @es El primer método de ficheros llamado en un script que hace referencia a un módulo de ficheros, sobre CUALQUIER
+ * receptor o ninguno, así cuentan un alias y un `rename(` desestructurado.
+ */
+function calledFilesystemMethod(text) {
+  return referencesFilesystemModule(text) ? FILESYSTEM_METHODS.find((name) => callSites(text, name, false).length > 0) : undefined;
 }
 
 /**
@@ -296,6 +333,10 @@ export function writeEvidence(text) {
   const marker = calledMarker(text);
 
   if (marker !== undefined) return `calls ${marker}`;
+
+  const method = calledFilesystemMethod(text);
+
+  if (method !== undefined) return `calls ${method} of a filesystem module`;
 
   const cmdlet = usedCmdlet(text);
 

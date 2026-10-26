@@ -207,10 +207,11 @@ const roundTwoCases = [
   ['deny', delegated(lines("$code = @'", WRITE, "'@; $Code | node -"), 'PowerShell'), 'X5: a PowerShell variable name in any case', 'writes a file'],
   ['deny', delegated(lines("$code=@'", PS_WRITE, "'@", '$code | pwsh -Command -'), 'PowerShell'), 'X5: an assignment with no blanks', 'writes a file'],
   ['allow', delegated(lines("$code = @'", WRITE, "'@", '$other | node -'), 'PowerShell'), 'X5: another variable carries no here-string'],
-  // X6: the mode of a method open is read only where the receiver says where it is.
+  // X6: a known module's open reads its mode second; any other receiver fails closed on its first two arguments.
   ['allow', delegated(lines("python3 - <<'EOF'", "gzip.open('data.gz')", "tarfile.open('a.tar')", "Image.open('x.png')", 'EOF')), 'X6: module and library opens that only read'],
   ['allow', delegated(lines("node - <<'EOF'", "fs.open('index.txt', 'r')", 'EOF')), 'X6: fs.open with a read flag'],
-  ['allow', delegated(lines("python3 - <<'EOF'", "obj.open('w')", "Path('w.txt').open()", 'EOF')), 'X6: an unknown method open is not judged, and a Path open with no mode reads'],
+  ['allow', delegated(lines("python3 - <<'EOF'", "obj.open('r')", "Path('w.txt').open()", "db.open('cache')", 'EOF')), 'X6: method opens with a reading mode, no mode, or a path that is no mode literal'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "obj.open('w')", 'EOF')), 'X6: an unreadable receiver with a writing mode first fails closed', 'writes a file'],
   ['deny', delegated(lines("python3 - <<'EOF'", "gzip.open(p, 'wt')", 'EOF')), 'X6: gzip.open with a writing mode', 'writes a file'],
   ['deny', delegated(lines("node - <<'EOF'", "fs.promises.open('out', 'w')", 'EOF')), 'X6: fs.promises.open with a writing flag', 'writes a file'],
   ['deny', delegated(lines("python3 - <<'EOF'", "bz2.open(p, mode='w')", 'EOF')), 'X6: bz2.open with mode=', 'writes a file'],
@@ -218,7 +219,8 @@ const roundTwoCases = [
   ['deny', delegated(lines("python3 - <<'EOF'", "lzma.open(p, 'ab')", 'EOF')), 'X6: lzma.open with an appending mode', 'writes a file'],
   ['deny', delegated(lines("python3 - <<'EOF'", "p = Path('x')", "p.open('w')", 'EOF')), 'X6: a name assigned a Path on an earlier line', 'writes a file'],
   ['deny', delegated(lines("python3 - <<'EOF'", "pathlib.Path('x').open('a')", 'EOF')), 'X6: pathlib.Path(…).open', 'writes a file'],
-  ['allow', delegated(lines("python3 - <<'EOF'", "p.open('w')", "p = Path('x')", 'EOF')), 'X6: a Path assigned only on a later line does not count'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "Path(x).resolve().open('w')", 'EOF')), 'X6: a Path chain needs no receiver tracking', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "(base / 'f').open('w')", 'EOF')), 'X6: a parenthesised path expression opened for writing', 'writes a file'],
   // X7: more launchers, a literal piped from echo or printf, more write calls.
   ...['nohup', 'sudo -u bob', 'xargs -n 1', 'stdbuf -o0', 'uv run', 'uv run --with requests', 'poetry run', "env -S 'nice -n 5'"].map((launcher) => ['deny', delegated(lines(`${launcher} node - <<'EOF'`, WRITE, 'EOF')), `X7: the launcher "${launcher}" is unwrapped`, 'writes a file']),
   ['deny', delegated(lines("env -S 'node -' <<'EOF'", WRITE, 'EOF')), 'X7: env -S splits its string into the program', 'writes a file'],
@@ -253,12 +255,54 @@ const roundTwoCases = [
   ['allow', delegated(lines("code = @'", WRITE, "'@", 'code | node -'), 'PowerShell'), 'X5: a name with no $ is no variable'],
   ['deny', delegated(lines("$Code = @'", WRITE, "'@", '$code | node -'), 'PowerShell'), 'X5: a variable assigned in another case', 'writes a file'],
   ['deny', delegated(lines("$CODE=@'", WRITE, "'@", '$code | node -'), 'PowerShell'), 'X5: a variable assigned with no blanks in another case', 'writes a file'],
-  ['allow', delegated(lines("python3 - <<'EOF'", "db.open('cache', 'w')", "p == Path('x')", "p.open('w')", 'EOF')), 'X6: another method open with a w argument, and a comparison with a Path, are no writes'],
+  ['deny', delegated(lines("node - <<'EOF'", "fsp.open('out', 'w')", 'EOF')), 'X6: an aliased module open with a writing mode second fails closed', 'writes a file'],
+  ['allow', delegated(lines("python3 - <<'EOF'", "tarfile.open('a.tar.xz', 'r:xz')", "tarfile.open('a.tgz', 'r|gz')", "gzip.open(p, 'rb')", 'EOF')), 'X6: reading modes, the compression after : or | ignored'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "tarfile.open('a.tgz', 'w|gz')", 'EOF')), 'X6: a tarfile stream mode that writes', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "tarfile.open('a.tar', 'x:bz2')", 'EOF')), 'X6: a tarfile exclusive-create mode', 'writes a file'],
+  ['deny', delegated(lines("node - <<'EOF'", "fs.open(p, 'rs+')", 'EOF')), 'X6: an fs read-write flag writes', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", "open(p, 'r+')", 'EOF')), 'X6: an r+ mode writes', 'writes a file'],
+  ['allow', delegated(lines("python3 - <<'EOF'", ...['gzip', 'bz2', 'lzma', 'tarfile', 'io', 'codecs', 'fs', 'fs.promises'].map((module) => `${module}.open('a', 'r')`), 'EOF')), 'X6: a known module reads its mode second, never its path'],
+  ['deny', delegated(lines("python3 - <<'EOF'", 'import os.path', "x.rename('a')", 'EOF')), 'C7: a dotted import of os', 'writes a file'],
   ['deny', delegated(lines("node - <<'EOF'", "fs.open('out', 'w')", 'EOF')), 'X6: fs.open with a writing flag', 'writes a file'],
   ['deny', delegated(lines("python3 - <<'EOF'", "codecs.open(p, 'w')", 'EOF')), 'X6: codecs.open with a writing mode', 'writes a file'],
   ['deny', delegated(lines("stdbuf -o L node - <<'EOF'", WRITE, 'EOF')), 'X7: stdbuf -o takes a value', 'writes a file'],
   ...["env --split-string='node -'", "env -S 'node\t-'", "env -S '  node  -'"].map((launcher) => ['deny', delegated(lines(`${launcher} <<'EOF'`, WRITE, 'EOF')), `X7: "${launcher}" splits its string into the program`, 'writes a file']),
-  ['allow', delegated(lines("uv venv node - <<'EOF'", WRITE, 'EOF')), 'X7: uv with another subcommand runs no program']
+  ['allow', delegated(lines("uv venv node - <<'EOF'", WRITE, 'EOF')), 'X7: uv with another subcommand runs no program'],
+  // Final re-judgment, by class. @es Re-juicio final, por clase.
+  // Class 1: arithmetic is one expression closed by `))`, read with quotes, and its substitutions are judged.
+  ['deny', payload(String.raw`(( $(node -e "console.log('\\b')") > 1 ))`), 'C1: a $(…) inside (( … )) is judged'],
+  ['deny', payload('(( `' + String.raw`node -e "console.log('\\b')"` + '` > 1 ))'), 'C1: a backtick inside (( … )) is judged'],
+  ['deny', payload('(( "$(' + String.raw`node -e "console.log('\\b')"` + ')" > 1 ))'), 'C1: a $(…) inside double quotes inside (( … )) is judged'],
+  ['deny', delegated(lines("((echo a); (python3 - <<'EOF'", "open('o', 'w')", 'EOF', '))')), 'C1: ((cmd); (cmd)) is nested subshells, read as commands', 'writes a file'],
+  ['deny', payload(String.raw`(( a == "))" )) && node -e "console.log('\\b')"`), 'C1: a )) inside double quotes does not close the arithmetic'],
+  ['deny', payload(String.raw`(( a == '))' )) && node -e "console.log('\\b')"`), 'C1: a )) inside single quotes does not close the arithmetic'],
+  ['deny', payload(String.raw`(( (a) )) && node -e "console.log('\\b')"`), 'C1: a nested ( … ) inside the arithmetic is no close'],
+  ['deny', payload(lines("(( a == 'x", String.raw`y' )) && node -e "console.log('\\b')"`)), 'C1: a single-quoted run that crosses the line ends no arithmetic, so what follows is read'],
+  ['deny', payload(String.raw`(( a \)) )) && node -e "console.log('\\b')"`), 'C1: an escaped ) is no close'],
+  ['allow', delegated(lines("bash <<'EOF'", '(( n > $(printf 3) ))', '(( "$n" > 2 ))', '(( (n) > 2 ))', 'EOF')), 'C1: arithmetic with a harmless substitution, a quoted operand and nested parentheses'],
+  ['deny', delegated(lines("bash <<'EOF'", '((a)>out.txt)', 'EOF')), 'C1: ((a)>f) is nested subshells whose > writes', 'redirects output'],
+  ['allow', payload(String.raw`echo '$(node -e "console.log(\\b)")'`), 'C2: single quotes run no substitution'],
+  // Class 2: double-quoted words record their substitutions like bare ones.
+  ['deny', payload(String.raw`echo "$(node -e "console.log('\\b')")"`), 'C2: a $(…) inside double quotes is judged'],
+  ['deny', delegated(lines('echo "$(python3 - <<' + "'EOF'", "open('o', 'w')", 'EOF', ')"')), 'C2: a $(…) inside double quotes feeding a heredoc script is judged', 'writes a file'],
+  ['deny', delegated(lines('echo "`python3 - <<' + "'EOF'", "open('o', 'w')", 'EOF', '`"')), 'C2: a backtick inside double quotes is judged', 'writes a file'],
+  ['deny', delegated(lines("$code = @'", WRITE, "'@", 'Write-Host "a`tb"; $code | node -'), 'PowerShell'), 'C2: a PowerShell backtick inside double quotes stays an escape', 'writes a file'],
+  ['allow', payload('echo "$(pwd)" "`date`"'), 'C2: harmless substitutions inside double quotes'],
+  // Class 5: dd of= honours the non-file sinks.
+  ['allow', delegated(lines("bash <<'EOF'", 'dd if=a of=/dev/null', 'dd if=a of=/dev/STDOUT', 'EOF')), 'C5: dd into a sink writes no file'],
+  // Class 6: env -S with its string attached.
+  ['deny', delegated(lines("env -S'node -' <<'EOF'", WRITE, 'EOF')), 'C6: env -S with its string attached splits it', 'writes a file'],
+  // Class 7: once a script references a filesystem module, a write method on any receiver writes.
+  ['deny', delegated(lines("node - <<'EOF'", "const fsp = require('fs/promises');", "await fsp.rename('a', 'b');", 'EOF')), 'C7: an aliased fs/promises rename', 'writes a file'],
+  ['deny', delegated(lines("node - <<'EOF'", 'const { rename } = require("node:fs");', "rename('a', 'b', () => {});", 'EOF')), 'C7: a destructured node:fs rename', 'writes a file'],
+  ['deny', delegated(lines("node - <<'EOF'", "import { cp } from 'fs';", "await cp('a', 'b');", 'EOF')), 'C7: an imported fs cp', 'writes a file'],
+  ['deny', delegated(lines("node - <<'EOF'", 'const fs = await import(`node:fs/promises`);', "await fs.promises.rename('a', 'b');", 'EOF')), 'C7: fs.promises.rename on a template specifier', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", 'from os import rename', "rename('a', 'b')", 'EOF')), 'C7: a rename imported from os', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", 'import sys, shutil as s', "target.rename('b')", 'EOF')), 'C7: shutil named second in an import', 'writes a file'],
+  ['deny', delegated(lines("python3 - <<'EOF'", 'from\tpathlib.x import Path', "p.rename('b')", 'EOF')), 'C7: a from-import of a pathlib submodule, tab-separated', 'writes a file'],
+  ['allow', delegated(lines("node - <<'EOF'", "obj.rename('a', 'b');", 'EOF')), 'C7: a rename method without a filesystem module'],
+  ['allow', delegated(lines("node - <<'EOF'", "const fs = require('fs');", "console.log(fs.readFileSync('a', 'utf8'));", 'EOF')), 'C7: a filesystem module that is only read'],
+  ['allow', delegated(lines("python3 - <<'EOF'", 'import osmosis', "osmosis.rename('a')", 'EOF')), 'C7: a module whose name only starts with os']
 ];
 
 // Boundaries: each case pins one decision of the readers above (launchers, families, options, redirections).

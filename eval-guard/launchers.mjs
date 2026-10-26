@@ -136,6 +136,16 @@ export function programWords(words, position) {
       // `--` is skipped like any flag, so `timeout -- 5 node` still counts its duration.
       // @es `--` se salta como cualquier flag, así `timeout -- 5 node` sigue contando su duración.
       if (isOption(word)) {
+        // A short split option with its string attached (`-S'node -'`, read as `-Snode -`) is the split form too.
+        // @es Una opción de partición corta con la cadena pegada también es la forma de partición.
+        const attached = [...spec.split].find((flag) => flag.length === 2 && word.raw.length > flag.length && word.raw.startsWith(flag));
+
+        if (attached !== undefined) {
+          split = word.raw.slice(attached.length);
+          at += 1;
+          continue;
+        }
+
         const inline = word.raw.includes('=');
         const option = inline ? word.raw.slice(0, word.raw.indexOf('=')) : word.raw;
 
