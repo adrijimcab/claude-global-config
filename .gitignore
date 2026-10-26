@@ -196,6 +196,9 @@
 !/hook-io/**
 !/process-control/
 !/process-control/**
+!/transcript-index/
+!/transcript-index/**
+/transcript-index/state/
 !/selftest-fixtures/
 !/selftest-fixtures/**
 !/hook-caller/
