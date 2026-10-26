@@ -56,6 +56,10 @@ const PROVENANCE_FILE = path.join(HERE, RECORD_FILE_NAME);
 export const VENDORED = Object.freeze([
   'shell-command/shell-command.mjs',
   'shell-command/git-invocations.mjs',
+  'shell-command/launchers.mjs',
+  'shell-command/powershell-runners.mjs',
+  'shell-command/launchers.selftest.mjs',
+  'shell-command/launchers.mutants.mjs',
   'cherry-pick-guard/working-directory.mjs',
   'agent-liveness/liveness.mjs',
   'toolchain-guard/tree-tenancy.mjs',

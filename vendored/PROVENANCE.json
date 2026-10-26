@@ -1,14 +1,30 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-18T13:43:44.875Z",
+  "syncedAt": "2026-10-25T19:17:40.461Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
-      "sha256": "901d6a7ef9b7c424ac1362f2004dffe28a66089af1ac03cb10e013723dbe2888"
+      "sha256": "9599900b05d174657a7a8256601da25931333537e1a6ffc81e16f09a0bae5422"
     },
     {
       "path": "shell-command/git-invocations.mjs",
       "sha256": "e97425a0bbd8cf910354450aea2313982b79a6e57582d2210a84033db3c48c3e"
+    },
+    {
+      "path": "shell-command/launchers.mjs",
+      "sha256": "0345951e6bed561b7af211c40abfd23a44b66399669070af9555ae0702737304"
+    },
+    {
+      "path": "shell-command/powershell-runners.mjs",
+      "sha256": "9283c3c46f24215ea60330faabb0ece775558b2997ad9716b8e3d5ab488e6a12"
+    },
+    {
+      "path": "shell-command/launchers.selftest.mjs",
+      "sha256": "da93c25538b5b537bc0141858ddef30e30c1f500aba0629adfd85179fab058d3"
+    },
+    {
+      "path": "shell-command/launchers.mutants.mjs",
+      "sha256": "3608441289ab85cb330c08cafd5a8b2ce5e9d87392a1979b2504a17afe2124c8"
     },
     {
       "path": "cherry-pick-guard/working-directory.mjs",
@@ -24,7 +40,7 @@
     },
     {
       "path": "toolchain-guard/package-manager-mutations.mjs",
-      "sha256": "f56ded1c0a3227012d138414cf57e6020916093a389126d0e4abdcbca293fe71"
+      "sha256": "23853f351481c0009bec355b6f1432998c16c3e2c7494b67f9ea720a72524f7b"
     },
     {
       "path": "brief-tenancy/tenancy-declaration.mjs",
