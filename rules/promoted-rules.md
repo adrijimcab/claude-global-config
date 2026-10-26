@@ -39,6 +39,7 @@ Las claves de «On-demand», al final, conservan sus frases en el fichero de `~/
   RULE: before relaying a worker's activation, deploy or rollout plan, measure the environment premises it rests on (default branch, branches in use, roles and permissions, schedules) in the same turn, or mark them unverified.
   RULE: a state claim taken from any durable record (engram, backlog, report) is re-measured in the same turn before it reaches the owner, or goes out naming the record and its date in the same sentence; and before relaying it, check newer records on the same subject for a contradiction.
   RULE: before reporting a worker's write as done, read each artefact it claims to have changed, at its current revision, and check the claimed change is there; a status flag proves the process ran, never what it wrote.
+  RULE (face of 2026-10-26, reported by the Discovery session): a sentence that says a unit is in an integration branch (develop, master) is checked against `git log <branch>` in the same turn, and again after every rewrite of the reply, because a rewrite for the voice judge can harden a status line into a past-tense claim.
 
 - **`shell-one-liner-corrupted-data`**
   RULE: text edits with escapes, backslashes or template literals go through the Edit tool or a `.mjs` file, and after any scripted edit the expected marker is counted before anything relies on it.

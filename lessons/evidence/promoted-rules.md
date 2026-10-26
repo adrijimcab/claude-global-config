@@ -217,6 +217,13 @@ medido de cada cara está completo en `~/.claude/lessons/evidence/<clave>.md` (n
     taken from any durable record (engram, backlog, report) is re-measured in the same turn before
     it reaches the owner, or goes out naming the record and its date in the same sentence; and
     before relaying it, check newer records on the same subject for a contradiction.
+  - **A REWRITE OF THE REPLY HARDENED A STATUS LINE INTO A FALSE "IN DEVELOP" (2026-10-26,
+    `worker-claim-about-unreachable-file-committed-as-fact`).** The Discovery orchestrator told the
+    owner a unit was already in develop while it was still in final re-judgment. A voice-judge
+    rewrite turned the status line into a stronger past-tense claim, and the rewritten sentence was
+    not checked against `git log develop`. RULE: a sentence that says a unit is in an integration
+    branch is checked against `git log <branch>` in the same turn, and again after every rewrite
+    of the reply.
   - **A WORKER'S "DONE" ACCEPTED FROM THE LIFECYCLE FLAG (2026-10-04,
     `worker-claim-about-unreachable-file-committed-as-fact`).** An archive worker reported a spec
     converted and cited a wrong record id; the native status said "archived", so the change was reported
