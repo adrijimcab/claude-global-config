@@ -1,0 +1,7 @@
+{
+  "id": "refused-5f411d3c-10111222",
+  "expect": "pass",
+  "provenance": "author",
+  "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading || LABEL (T4a2, 2026-10-19): read: the refusal was never dismissed, but the reply reports work in flight, a plan, a measurement, or cites its record; it parks no unrecorded item",
+  "message": "El backlog mezclado ya está escrito y commiteado en su rama. Ahora corre el intento de integración, que tarda unos minutos porque `land.mjs` ejecuta el runner completo. Cuando termine guardo el puntero en engram y te presento el backlog final."
+}

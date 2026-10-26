@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-c4d7f854-10111414",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Writes to #972 are paused by the coordinated cutover of di-1700002-discovery-fe-f4 (shared-resource rule); the two pending entries are held verbatim in scratchp)",
+  "message": "Dejé de escribir en el backlog maestro #972, porque la sesión dueña de `.claude` está haciendo el corte para mudarlo al documento versionado. Le respondí «paused» con el dato que pidió: mi último cambio fue anotar tu decisión de la mudanza, y coincide con la hora de la última modificación que ella midió en engram.\n\nLo que surja mientras dure el corte lo junto en un borrador en el scratchpad (`backlog-pending-during-cutover.md`). Ya tiene dos entradas:\n- la verificación del guard de aterrizaje, 377 de 377;\n- el incidente 12.\n\nCuando ella mande «resume» con el procedimiento de escritura, lo vuelco al documento nuevo.\n\nSiguen corriendo el diseño de FR y F2.1 parte 2 del plugin."
+}

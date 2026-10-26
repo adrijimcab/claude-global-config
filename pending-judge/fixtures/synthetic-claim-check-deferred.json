@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-claim-check-deferred",
+  "expect": "fail",
+  "provenance": "author",
+  "source": "synthetic: the check of a claim stated unmeasured is put off (T4A2 rubric v3)",
+  "message": "El texto cargado sube unos 2850 caracteres; lo estimé a mano. Lo mido de verdad cuando aterrice."
+}

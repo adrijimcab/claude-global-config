@@ -1,0 +1,14 @@
+{
+  "id": "dismissed-5f411d3c-09301427",
+  "expect": "pass",
+  "provenance": "owner-delegated",
+  "labelledOn": "2026-10-25",
+  "ownerWords": [
+    "Lo que haría un seior architect",
+    "Lo que haría u decidiria un cto/tech lead /senior architect"
+  ],
+  "labelReason": "It cites backlog item 6f.",
+  "labelRecord": "odd/tasks/backlog-1-6.md L17",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The turn only explained an existing item to the owner and pointed at where it is already recorded: the repo-wide test runner is item 6f of the master backlog, s)",
+  "message": "No, no hace falta hacerlo ahora. Te lo explico simple.\n\n**Qué significa**\n\n- **Strict TDD** es el modo en que el agente que implementa escribe primero el test, lo ve fallar y recién después escribe el código.\n- Para activarlo, el `sdd-init` exige que el repo tenga **un solo comando** que corra todos sus tests.\n- Tu repo de config (`~/.claude`) no lo tiene: cada guard trae su propio `selftest.mjs` y se corre por separado. Por eso el init, siguiendo su regla, dejó anotado `strict_tdd: false` en vez de inventar un `true`.\n\nEs una anotación en la ficha del proyecto en engram. No rompió nada ni apagó tu regla global.\n\n**Por qué no afecta a este cambio**\n\nEste SDD solo toca `failure-capture/`, y esa carpeta sí tiene su test (`selftest.mjs`, 64 casos en verde) y sus mutantes. Cuando llegue la fase de implementación le paso al agente ese comando concreto y le exijo test primero igual. El trabajo se hace con TDD aunque la ficha diga `false`.\n\n**Lo que queda pendiente, sin apuro**\n\nUn runner que corra los ~25 selftests de una. Sería útil para cualquier cambio futuro que toque varios guards a la vez, y permitiría dejar `strict_tdd: true` en la ficha. Es un cambio aparte y ya está en el backlog (ítem 6f).\n\nMientras tanto la exploración sigue corriendo; en cuanto llegue su informe continúo con la propuesta."
+}

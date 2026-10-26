@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-784bb328-10041753",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Item 96 and decision 140/#1179 (lib mutation waits for plugin 3.0.0) are already open in master #972; this worker's state is engram #1212, folded into the maste)",
+  "message": "Terminó el worker de componentes m–z. Dejó **13 componentes con suelo de mutación al 100**, entre ellos tabs, slider, rating, sidenav y time-picker, en 4 commits, con la rama limpia. Por el camino arregló un defecto que había metido el autofix de eslint: dejó un fichero de statistic que no compilaba.\n\nQuedan sin cerrar:\n- toolbar, menu, popover y stepper, entre el 73% y el 85%;\n- splitter, transfer, select, table y tree, sin medir.\n\nSegún el worker, lo que falta ya no se resuelve con más specs: necesita trabajo de diseño.\n\nHay algo que vas a tener que decidir al aterrizar. Esta rama pertenece a la familia de mutación de la lib, y una decisión anterior (#1179) dice que esa familia no entra en develop hasta adoptar el plugin 3.0.0. Eso choca con tu «mergeá todo». Cuando termine el último worker te lo planteo junto con el backlog.\n\nGuardado en engram (#1212). Quedan 4 de mutación en vuelo: componentes a–l, resto de la lib, harness y presentation, y release-and-checks."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-784bb328-10060904",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Status after the owner's interruption; landing state saved as engram #1267; the final master rewrite is the pending step itself, held for the owner's go.)",
+  "message": "Me frenaste mientras armaba el backlog final. Así está todo ahora:\n\n- **develop en origin:** 11b86727. Lleva la tanda 3 completa, con el suelo de aterrizaje en verde: 26.759 tests y cobertura al 100%.\n- **Limpieza:** no queda ningún worktree. En local y en `origin` solo quedan `main`, `develop` y `feature/angular21`. Las 34 ramas borradas siguen recuperables como refs locales en `refs/backup/batch3-close/*`.\n- **Sesión de `claude-global-config`:** mi aviso de que terminé quedó retenido hasta que su usuario lo apruebe.\n\nLo que falta es escribir el backlog final en engram y presentártelo."
+}

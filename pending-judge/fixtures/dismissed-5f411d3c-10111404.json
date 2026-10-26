@@ -1,0 +1,14 @@
+{
+  "id": "dismissed-5f411d3c-10111404",
+  "expect": "pass",
+  "provenance": "owner-delegated",
+  "labelledOn": "2026-10-25",
+  "ownerWords": [
+    "Lo que haría un seior architect",
+    "Lo que haría u decidiria un cto/tech lead /senior architect"
+  ],
+  "labelReason": "Not pending; L17 states no further reason for this case.",
+  "labelRecord": "odd/tasks/backlog-1-6.md L17",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The word quotes the owner's new rule (resolve rather than queue); the turn's pending work is recorded in engram #1383 and in backlog/main-4-master items 39-43, )",
+  "message": "Tu regla de resolver en el momento antes que encolar ya está en master (`96f34a3`). Un hallazgo se arregla en el turno en que aparece y va al backlog como pendiente solo en cuatro casos:\n- está bloqueado por algo externo;\n- necesita una decisión que solo tenés vos;\n- pisaría trabajo que está en curso;\n- es lo bastante grande para ser un cambio propio.\n\nLo que se resuelve en el momento queda registrado igual, pero como hecho y con su comprobante.\n\nLa apliqué enseguida al aviso que el selfcheck de b100 imprimía en cada prompt. **Es un falso positivo, y lo medí.** El guard está registrado en dos manifiestos cuyos matchers, sumados, cubren exactamente lo que declara; el selfcheck los comparaba uno por uno. Un worker lo está arreglando de raíz para que calcule la unión.\n\nHay tres workers trabajando:\n- **El cierre de R1 a R3.**\n- **El ensayo de la migración a ODD.**\n- **El arreglo del selfcheck de b100.**\n\nAdemás corren seis campañas de mutantes de b100. Las dejé terminar; después leo sus resultados y corro solo la tajada que falta.\n\nTodo quedó en engram (#1383)."
+}

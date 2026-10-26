@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-be82f4de-10111238",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The word cites existing backlog items C-001/C-002 (#1292); no new finding. The only open item is a question to the owner awaiting an answer this turn; D-082 (#1)",
+  "message": "Paré Karma antes de que terminara. No se subió nada: el remoto sigue en `aca061d` y `4c04bdb` está solo en local (`ahead 1`).\n\nHay una contradicción que necesito que resuelvas. Si subo sin `--no-verify`, el hook `.husky/pre-push` corre `npm run test:lib`, que es Karma. La única forma de subir sin `--no-verify` y sin correr Karma es la variable `SKIP_PREPUSH_TESTS=1`, que el propio hook ofrece.\n\nTené en cuenta que eso también salta el gate. Y que Karma vaya a fallar es una predicción, no algo medido: no llegó a terminar. Si falla, es deuda que conviene registrar en el backlog con su salida, no esconder; C-002 y C-001 ya apuntan en esa dirección.\n\n¿Subo con `SKIP_PREPUSH_TESTS=1 git push origin feature/meet`, o dejo que Karma termine y vemos qué falla?"
+}

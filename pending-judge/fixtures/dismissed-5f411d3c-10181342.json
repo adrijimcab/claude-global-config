@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-5f411d3c-10181342",
+  "expect": "unknowable",
+  "provenance": "author",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (saved as item 36 in file memory project_master-items-awaiting-engram.md, the fallback for engram #1543 while engram refuses this resumed session (promoted key e) || LABEL (T4a2, 2026-10-19): dismissed because the item is recorded in a store this reply does not cite; the message alone parks it, so the judge cannot know",
+  "message": "El stash `b41844e1` quedó resuelto sin hacer nada. Según Discovery, ya no está en la lista de stashes, y aplicarlo al revés sobre `73cd9224` sale limpio, o sea que su contenido ya estaba commiteado. Lo más probable, y no lo verifiqué, es que lint-staged lo creara y lo borrara solo durante el commit del writer. El guard lo vio justo en ese intervalo.\n\nEso deja una mejora para más adelante, que sumo al backlog: que el guard de stashes no avise por el respaldo que lint-staged arma durante un commit en curso. Con un respaldo que dura segundos, el aviso solo genera ruido. No es urgente, porque esta vez no costó nada.\n\nSigo esperando el commit de b100 para aterrizar el checkpoint-41, y que entreguen los tres workers de los guards."
+}

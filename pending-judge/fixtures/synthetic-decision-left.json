@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-decision-left",
+  "expect": "fail",
+  "provenance": "author",
+  "source": "synthetic: a decision left for later",
+  "message": "Hay una decisión abierta sobre si el prefiltro debe incluir la palabra bug. La tomamos más adelante, no la apunté en ninguna parte."
+}

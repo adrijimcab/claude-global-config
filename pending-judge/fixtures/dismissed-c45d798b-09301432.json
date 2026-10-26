@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-c45d798b-09301432",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The word names the backlog-owner-guard agent, not a finding; the integrator's config-editor migration is part of batch 2 already tracked in revision 55 and is r)",
+  "message": "No hubo cambios de estado. El integrador y el agente del guard del backlog están vivos: escribieron en su transcript en el último minuto. develop sigue en `badfdead`.\n\nUn detalle: la última punta del integrador, `71b1f769`, migra el spec de `config-editor` a un harness. Eso excede lo que le pedí, que era solo arreglar el desvío de `date-range`, y no sé por qué lo hizo; puede ser que algún gate le haya fallado en ese archivo. Se lo pregunto cuando reporte."
+}

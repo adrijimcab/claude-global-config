@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-be82f4de-10181212",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (the pending items were saved to the project file memory project_backlog-1499-awaiting-engram.md, because engram refuses writes from this resumed session (hook: )",
+  "message": "El writer de cadenas entregó E1 a E3 en tres commits, hasta `9f0f2892`. Ahí frenó a propósito, porque lo que queda son unas 1800 líneas y prefirió partirlo en unidades más chicas. Me parece bien, así que adopté su partición.\n\nLo más valioso de E1 salió de leer el código del servidor de PROD, sin llamar a ningún endpoint. En PROD, seleccionar y borrar ejecuciones es código muerto: la función que llaman los botones no está definida en esa pantalla. Por eso no se porta. También encontró que las fechas y la búsqueda por cadena devuelven `{count, docs}` y no una lista suelta, así que los tipos viejos estaban mal. Lo corrigió en E2, con validación zod.\n\nTiene dos fallas que no dejo pasar. En E2 y E3 escribió los specs antes que el código, pero no pegó la salida en rojo que lo demuestra. Y dio por pendientes las pruebas con login, como si el proxy de mismo origen no estuviera en su base, cuando está desde `b122497`. Lo reanudé solo para E4 más la tabla (E5a), con la orden de mostrar el rojo de verdad y probar la tabla en el navegador. Después siguen el diálogo de búsqueda y el gráfico, y más adelante chain-info.\n\nLos otros tres writers siguen con lo suyo."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-c4d7f854-10111524",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (No new pending work: the turn reported a measured sync state of the tooling repo and repeated an already-recorded owner question (Angular 21, saved in commit 1d)",
+  "message": "La otra sesión me avisó que `1d3f44f` estaba sin subir, pero esa medición es de antes de mi push. Lo volví a medir recién: master y origin/master están en `0 0`, sin commits de diferencia para ningún lado.\n\nTambién cambió el procedimiento del backlog, y es justo lo que ya venía haciendo:\n- cada vez que commiteo el documento del backlog, lo subo yo en el mismo turno;\n- después leo el tip remoto para comprobar que quedó igual.\n\nLa pausa de `~/.claude` sigue hasta que esa sesión mande «resume».\n\nY sigue en pie mi pregunta: ¿migramos a Angular 21 antes de la 1.0.0?"
+}

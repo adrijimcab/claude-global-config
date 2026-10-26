@@ -1,25 +1,28 @@
 #!/usr/bin/env node
 /**
- * Records a dismissal of a backlog-guard block, with a stated reason — the escape hatch named in
- * `guard.mjs`'s own block message.
+ * Records a dismissal of a pending-judge block, with a stated reason — option B of the instructions that follow
+ * every block of that judge (`../pending-judge/appendix.mjs`, which prints this command with the session and the
+ * marker that fired). A dismissal recorded after the turn's block ends the question for that turn
+ * (`../pending-judge/prefilter.mjs` reads it back through `dismissals.mjs`).
  *
- * NEVER A SILENT ESCAPE, same discipline as `failure-capture/capture.mjs dismiss`: a false positive
- * from a heuristic marker set is expected and tolerated (see `markers.mjs`'s own docblock on why
- * "pendiente"/"todo" widen past their bare word), but tolerating it costs a WRITTEN reason, because the
- * dismissal log is the only evidence that could ever justify narrowing the marker set later.
+ * NEVER A SILENT ESCAPE, same discipline as `failure-capture/capture.mjs dismiss`: a wrong block is expected
+ * and tolerated, but tolerating it costs a WRITTEN reason, because the dismissal log is the only evidence of
+ * where the judge or its broad prefilter (`markers.mjs`) is wrong.
  *
- * @es Registra el descarte de un bloqueo de backlog-guard, con un motivo. NUNCA un escape silencioso: un
- * falso positivo se tolera, pero cuesta un motivo ESCRITO — el registro de descartes es la única
- * evidencia que podría justificar más adelante estrechar el conjunto de marcadores.
+ * @es Registra el descarte de un bloqueo del juez de pendientes, con un motivo: la opción B de las instrucciones
+ * que siguen a cada bloqueo de ese juez (`../pending-judge/appendix.mjs`, que imprime este comando con la sesión
+ * y el marcador que saltó). Un descarte registrado después del bloqueo del turno cierra la pregunta de ese turno
+ * (lo relee `../pending-judge/prefilter.mjs`). NUNCA un escape silencioso: un bloqueo equivocado se tolera, pero
+ * cuesta un motivo ESCRITO, porque el registro de descartes es la única evidencia de dónde se equivocan el juez o
+ * su prefiltro amplio.
  */
 
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { dismissalsFile } from './dismissals.mjs';
 import { stateDirectory } from './state.mjs';
-
-const dismissalsFile = () => path.join(stateDirectory(), 'dismissals.jsonl');
 
 /** The shortest reason accepted, the same floor `failure-capture`/`handback` dismiss commands apply. @es El motivo más corto aceptado. */
 export const MINIMUM_REASON_LENGTH = 25;
@@ -58,10 +61,10 @@ export function commandDismiss(args, { append = appendFileSync, mkdir = mkdirSyn
   const problems = [];
 
   if (typeof reason !== 'string' || reason.trim().length < MINIMUM_REASON_LENGTH) {
-    problems.push(`--reason must say WHY this is not real pending work (${String(MINIMUM_REASON_LENGTH)}+ chars)`);
+    problems.push(`--reason must say WHY this is not real pending work (${String(MINIMUM_REASON_LENGTH)}+ chars) @es --reason debe decir POR QUÉ esto no es trabajo pendiente real (${String(MINIMUM_REASON_LENGTH)}+ caracteres)`);
   }
   if (typeof reason === 'string' && (reason.includes('\n') || reason.includes('\r'))) {
-    problems.push('--reason must be one line: it is written verbatim into a one-line JSONL entry');
+    problems.push('--reason must be one line: it is written verbatim into a one-line JSONL entry @es --reason debe ser una sola línea: se escribe tal cual en una entrada JSONL de una línea');
   }
 
   if (problems.length > 0) return { ok: false, problems };
@@ -74,7 +77,9 @@ export function commandDismiss(args, { append = appendFileSync, mkdir = mkdirSyn
       'utf8'
     );
   } catch (error) {
-    return { ok: false, problems: [`could not write the dismissal log: ${error instanceof Error ? error.message : String(error)}`] };
+    const cause = error instanceof Error ? error.message : String(error);
+
+    return { ok: false, problems: [`could not write the dismissal log: ${cause} @es no se pudo escribir el registro de descartes: ${cause}`] };
   }
 
   return { ok: true };
@@ -85,12 +90,12 @@ function main() {
   const { ok, problems } = commandDismiss(args);
 
   if (!ok) {
-    console.error('backlog-guard dismiss REFUSED:');
+    console.error('backlog-guard dismiss REFUSED: @es backlog-guard dismiss RECHAZADO:');
     for (const problem of problems) console.error(`  - ${problem}`);
     process.exit(1);
   }
 
-  console.log('DISMISSED and recorded. The turn may end.');
+  console.log('DISMISSED and recorded. The turn may end. @es DESCARTADO y registrado. El turno puede terminar.');
   process.exit(0);
 }
 

@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-record-of-other-work",
+  "expect": "fail",
+  "provenance": "author",
+  "source": "synthetic: a hash that records other work, not the pending item (T4A2 P10)",
+  "message": "Queda pendiente el bug del retry; el arreglo del parser está en a1b2c3d."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-record-deferred",
+  "expect": "fail",
+  "provenance": "author",
+  "source": "synthetic: the record itself is put off (T4A2 rubric v3)",
+  "message": "El worker sigue corriendo. Cuando llegue el veredicto de CI actualizo el backlog con el bug del retry."
+}

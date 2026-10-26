@@ -1,0 +1,7 @@
+{
+  "id": "refused-5f411d3c-10041559",
+  "expect": "pass",
+  "provenance": "author",
+  "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading || LABEL (T4a2, 2026-10-19): read: the refusal was never dismissed, but the reply reports work in flight, a plan, a measurement, or cites its record; it parks no unrecorded item",
+  "message": "Las specs y el cruce del backlog quedaron alineados al diseño:\n\n- **Las specs:** 76 requisitos y 220 escenarios, repartidos en dos registros enlazados.\n- **El cruce:** 82 ítems por abordar y 7 descartados. Esos 7 son los imposibles y los que quedan fuera del alcance que vos fijaste, salvo uno que resuelvo ahora:\n  - **Renombrar el hito «main»:** no lo renombro, porque cambiar la clave rompería la cadena de las tres partes del backlog. En cambio lo cierro con una decisión: «main» deja de ser un nombre provisional y queda como el nombre definitivo del hito continuo de la config, que no tiene versiones. Así se cierra con un motivo en lugar de quedar como deuda.\n\nSigue pendiente el agente de diseño con los cinco arreglos. Después vienen la validación final y las tareas."
+}

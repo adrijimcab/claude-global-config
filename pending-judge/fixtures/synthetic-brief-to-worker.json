@@ -1,0 +1,8 @@
+{
+  "id": "synthetic-brief-to-worker",
+  "expect": "pass",
+  "provenance": "author",
+  "source": "synthetic: a brief addressed to a worker",
+  "message": "MEASURED: el matcher lee solo minúsculas.\nHYPOTHESIS: ninguna.\nROUTE: tracked-odd backlog-1-6\nTarea: queda por revisar el matcher; leé el documento hasta Log y reportá.",
+  "labelReason": "Judged by what it says, like any message: it hands the matcher review to the worker in this very message, so the item is in flight, not parked; nothing is deferred, so no record is owed."
+}

@@ -55,9 +55,14 @@ const sha256 = (text) => createHash('sha256').update(text ?? '').digest('hex');
 
 /** The sha256 of the v7 rubric text live on master on 2026-10-25. @es El sha256 del texto v7 vivo en master. */
 const V7_LIVE_SHA256 = 'edceb1c60fc251c65fefcab0b5361aea7ae2b41ebac829a735f54752cbe34ba4';
-const { JUDGES: GATE_JUDGES, hookCommand } = await import('../judge-gate/judges.mjs');
+const { hookCommand, loadJudge } = await import('../judge-gate/judges.mjs');
+// Only this judge is loaded, as its own hook process does. @es Solo se carga este juez, como su propio proceso.
+const GATE_JUDGE = await loadJudge('voice');
 const { MARKER: PREMISE_MARKER } = await import('../premise-judge/prompt.mjs');
-const { JUDGES, VOICE_MECHANISM, evaluate, journalJudgeBlocks } = await import('../premise-judge/journal-guard.mjs');
+const { MARKER: PENDING_MARKER } = await import('../pending-judge/prompt.mjs');
+const { VOICE_MECHANISM, evaluate, journalJudgeBlocks, loadJournaledJudges } = await import('../premise-judge/journal-guard.mjs');
+const JUDGES = await loadJournaledJudges();
+const journalBlocks = (payload) => journalJudgeBlocks(payload, JUDGES);
 const { digestInput, firesPath, journalPath } = await import('../hook-state/journal.mjs');
 
 await new Promise((resolve) => setTimeout(resolve, 100));
@@ -75,7 +80,7 @@ const commandHooks = (settings.hooks?.Stop ?? []).flatMap((group) => group.hooks
 
 check('settings: exactly one command Stop hook runs the voice judge through the gate', commandHooks.length, 1);
 check('settings: its timeout is the pinned one', commandHooks[0]?.timeout, TIMEOUT_SECONDS);
-check('rubric: the gate runs the live rubric of prompt.mjs, the single source', GATE_JUDGES.voice.prompt === LIVE_PROMPT, true);
+check('rubric: the gate runs the live rubric of prompt.mjs, the single source', GATE_JUDGE.prompt === LIVE_PROMPT, true);
 check('rubrics: v7 is byte for byte the text live on master, and the candidate is another text', [sha256(V7.PROMPT), V7.PROMPT_SIGNATURE, PROMPT_SIGNATURE, PROMPT !== V7.PROMPT], [V7_LIVE_SHA256, 'voice-judge rubric v7.', 'voice-judge rubric v8f.', true]);
 check('rubric: starts with its signature', PROMPT.startsWith(`${PROMPT_SIGNATURE}\n`), true);
 check('rubric: the signature is not the premise judge\'s', PROMPT_SIGNATURE.includes('premise-judge'), false);
@@ -385,7 +390,7 @@ const sidecar = JSON.parse(readFileSync(path.join(HERE, '..', 'premise-judge', '
 
 check('sidecar: the shared journal guard stays registered on Stop', sidecar.registrations, [{ event: 'Stop' }]);
 check('mechanism: the folder name', VOICE_MECHANISM, path.basename(HERE));
-check('judges: premise and voice, each with its marker', JUDGES.map((judge) => [judge.mechanism, judge.marker]), [['premise-judge', PREMISE_MARKER], ['voice-judge', MARKER]]);
+check('judges: premise, voice and pending, each with its marker', JUDGES.map((judge) => [judge.mechanism, judge.marker]), [['premise-judge', PREMISE_MARKER], ['voice-judge', MARKER], ['pending-judge', PENDING_MARKER]]);
 
 // --- JOURNAL. @es JOURNAL.
 let transcriptCount = 0;
@@ -419,7 +424,7 @@ const fires = (mechanism) => {
 const voiceReason = `${MARKER} rewrite the status as a mentor would: say why each commit was made and close with the next step`;
 const premiseReason = `${PREMISE_MARKER} (a) "the docs say" - cite them`;
 
-check('journal: a voice block is journaled', journalJudgeBlocks(stopPayload(transcript([feedback(voiceReason)]))), 1);
+check('journal: a voice block is journaled', journalBlocks(stopPayload(transcript([feedback(voiceReason)]))), 1);
 
 const [voiceRecord] = voiceJournal();
 
@@ -428,16 +433,16 @@ check('journal: the voice reason starts at the marker', voiceRecord?.reason, voi
 check('journal: the voice digest is of session and reason', voiceRecord?.inputDigest, digestInput(`v1\n${voiceReason}`));
 check('journal: a voice block is not a premise block', premiseJournal().length, 0);
 
-check('journal: a premise block is journaled', journalJudgeBlocks(stopPayload(transcript([feedback(premiseReason)]), { session_id: 'v2' })), 1);
+check('journal: a premise block is journaled', journalBlocks(stopPayload(transcript([feedback(premiseReason)]), { session_id: 'v2' })), 1);
 check('journal: a premise block is not a voice block', [voiceJournal().length, premiseJournal().length], [1, 1]);
-check('journal: a voice block seen again is journaled once', journalJudgeBlocks(stopPayload(transcript([feedback(voiceReason)]))), 0);
-check('journal: both judges blocking in one stop are two records', journalJudgeBlocks(stopPayload(transcript([feedback(voiceReason), feedback(premiseReason)]), { session_id: 'v3' })), 2);
-check('journal: the assistant quoting the voice marker is not a block', journalJudgeBlocks(stopPayload(transcript([{ type: 'assistant', message: { content: [{ type: 'text', text: voiceReason }] } }]), { session_id: 'v4' })), 0);
-check('journal: a first stop is never read for voice blocks', journalJudgeBlocks(stopPayload(transcript([feedback(voiceReason)]), { session_id: 'v5', stop_hook_active: false })), 0);
+check('journal: a voice block seen again is journaled once', journalBlocks(stopPayload(transcript([feedback(voiceReason)]))), 0);
+check('journal: both judges blocking in one stop are two records', journalBlocks(stopPayload(transcript([feedback(voiceReason), feedback(premiseReason)]), { session_id: 'v3' })), 2);
+check('journal: the assistant quoting the voice marker is not a block', journalBlocks(stopPayload(transcript([{ type: 'assistant', message: { content: [{ type: 'text', text: voiceReason }] } }]), { session_id: 'v4' })), 0);
+check('journal: a first stop is never read for voice blocks', journalBlocks(stopPayload(transcript([feedback(voiceReason)]), { session_id: 'v5', stop_hook_active: false })), 0);
 
 const runsBefore = [fires('premise-judge'), fires(VOICE_MECHANISM)];
 
-check('hook: evaluate never returns a verdict', evaluate(JSON.stringify(stopPayload(transcript([]), { session_id: 'v6' }))), undefined);
+check('hook: evaluate never returns a verdict', await evaluate(JSON.stringify(stopPayload(transcript([]), { session_id: 'v6' }))), undefined);
 check('hook: a Stop counts one run of each judge', [fires('premise-judge') - runsBefore[0], fires(VOICE_MECHANISM) - runsBefore[1]], [1, 1]);
 
 for (const failure of failures) console.log(`FAIL ${failure}`);

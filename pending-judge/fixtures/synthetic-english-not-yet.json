@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-english-not-yet",
+  "expect": "fail",
+  "provenance": "author",
+  "source": "synthetic: English not-yet",
+  "message": "The batch is landed. Not yet recorded: the retry bug in the parser."
+}

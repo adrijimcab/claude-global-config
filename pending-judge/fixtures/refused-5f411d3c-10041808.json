@@ -1,0 +1,7 @@
+{
+  "id": "refused-5f411d3c-10041808",
+  "expect": "fail",
+  "provenance": "unadjudicated",
+  "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading",
+  "message": "La promoción ya está en master (`639e0ef`), con verificación 79 de 79 en verde. El registro de lecciones dejó la línea de esta regla reducida a un muñón, y el detalle completo pasó a su archivo de evidencia. Eso se está integrando ahora.\n\nEncontré un detalle de `capture.mjs`: cuando registra un motivo «sin mecanismo», la mitad `@es` repite el texto que le paso, y si se lo paso en inglés queda en inglés. Lo anoto en el backlog.\n\nApenas aterrice esto, reaplico la 1.2 y la 1.3 sobre master y las integro."
+}

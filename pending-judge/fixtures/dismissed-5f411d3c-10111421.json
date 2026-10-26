@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-5f411d3c-10111421",
+  "expect": "unknowable",
+  "provenance": "author",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The word named b100-f8's backlog commits being pushed; nothing new is pending — the push is already recorded in #1386 and the fix was committed this turn (cc3a5) || LABEL (T4a2, 2026-10-19): dismissed because the item is recorded in a store this reply does not cite; the message alone parks it, so the judge cannot know",
+  "message": "Todavía no aterricé R1 a R3: falta que confirme la pausa la sesión feature/meet. Las otras tres ya están pausadas.\n\nMientras tanto resolví el aviso de b100-f8. Había dejado sin commitear en `~/.claude` un contador de lección: es su tercer `cd` rechazado por el guard. Lo pasé a la rama de aterrizaje como commit `cc3a517` y el checkout principal de `~/.claude` quedó limpio, así que no bloquea el aterrizaje.\n\nEn el repo de tooling de b100 hay 4 commits sin subir: dos son míos (F0.3 parcial y el traspaso del backlog) y dos son de b100-f8 (sus escrituras del backlog). Van a subir juntos cuando terminen las campañas de F0.3, como quedamos."
+}

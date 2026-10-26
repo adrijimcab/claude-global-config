@@ -1,28 +1,36 @@
 #!/usr/bin/env node
 /**
- * Stop command hook: `node run.mjs <premise|voice>`. Reads the hook input on stdin, lets `gate.mjs` decide,
- * records the outcome, and prints `{"decision":"block","reason":...}` only for a valid block. It never holds a
- * turn by its own fault: an unknown judge, an unreadable input, a failed model call or a log that cannot be
- * written all exit 0 and print nothing.
+ * Stop command hook: `node run.mjs <premise|voice|pending>`. Reads the hook input on stdin, loads only the named
+ * judge (`judges.mjs`), lets `gate.mjs` decide, records the outcome, and prints `{"decision":"block","reason":...}`
+ * only for a block. It never holds a turn by its own fault: an unknown judge, a judge whose modules cannot load, an
+ * unreadable input or a log that cannot be written all exit 0 and print nothing for that fault.
+ *
+ * THE CAP NEEDS THE LOG. The per-turn cap (`MAX_BLOCKS_PER_TURN`) counts the blocks the outcome log holds. When the
+ * log cannot be read, a continued stop is a malfunction that passes (`gate.mjs`); when the outcome of a continued
+ * stop cannot be written, its block is not printed, because an unrecorded block would leave the next count short
+ * and the turn could be blocked without end. So with a broken log a continued stop never blocks again.
  *
  * WHY A COMMAND HOOK. code.claude.com/docs/en/hooks (read 2026-10-12): `if` is evaluated only on tool events, and
  * on any other event a hook with `if` set never runs; a `prompt` hook has no other condition field. So the only
  * way to decide `stop_hook_active` in code is a `command` hook, which reads it from stdin and asks the model
  * itself only when it must.
  *
- * @es Hook de comando de Stop: `node run.mjs <premise|voice>`. Lee la entrada del hook por stdin, deja que
- * `gate.mjs` decida, registra el desenlace e imprime `{"decision":"block","reason":...}` solo ante un bloqueo
- * válido. Nunca retiene un turno por culpa propia: un juez desconocido, una entrada ilegible, una llamada
- * fallida o un registro que no se puede escribir salen con 0 sin imprimir. POR QUÉ UN HOOK DE COMANDO: según
- * las docs, `if` solo se evalúa en eventos de herramienta y un hook `prompt` no tiene otra condición; la única
- * forma de decidir `stop_hook_active` en código es un hook `command`.
+ * @es Hook de comando de Stop: `node run.mjs <premise|voice|pending>`. Lee la entrada del hook por stdin, carga solo
+ * el juez nombrado, deja que `gate.mjs` decida, registra el desenlace e imprime `{"decision":"block","reason":...}`
+ * solo ante un bloqueo. Nunca retiene un turno por culpa propia: un juez desconocido, un juez cuyos módulos no
+ * cargan, una entrada ilegible o un registro que no se puede escribir salen con 0 sin imprimir por ese fallo. EL
+ * TOPE NECESITA EL REGISTRO: si no se puede leer, una parada continuada es un fallo que pasa; si no se puede
+ * escribir el desenlace de una continuada, su bloqueo no se imprime, porque un bloqueo sin registrar dejaría corta
+ * la cuenta siguiente y el turno podría bloquearse sin fin. POR QUÉ UN HOOK DE COMANDO: según las docs, `if` solo se
+ * evalúa en eventos de herramienta y un hook `prompt` no tiene otra condición; la única forma de decidir
+ * `stop_hook_active` en código es un hook `command`.
  */
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { decide } from './gate.mjs';
-import { JUDGES } from './judges.mjs';
+import { importJudgeModule, JUDGE_NAMES, loadJudge } from './judges.mjs';
 import { askModel } from './model.mjs';
 import { isNested } from './nesting.mjs';
 import { blocksThisTurn, recordOutcome } from './outcome-log.mjs';
@@ -38,28 +46,51 @@ function sessionOf(raw) {
   }
 }
 
-/**
- * Runs the gate for `judgeName` over `raw`; returns the text to print ('' for none). `model` is the model call (a test seam).
- * @es Corre la compuerta; devuelve el texto a imprimir. `model` es la llamada al modelo (punto de inyección de pruebas).
- */
-export async function run(judgeName, raw, { model = askModel } = {}) {
-  const judge = JUDGES[judgeName];
+/** The outcome of a judge that could not be loaded. @es El desenlace de un juez que no se pudo cargar. */
+const notLoaded = (judgeName, error) => ({ outcome: 'malfunction', costUsd: 0, durationMs: 0, why: `the ${judgeName} judge could not be loaded: ${error.message} @es no se pudo cargar el juez ${judgeName}: ${error.message}` });
 
-  if (judge === undefined) {
-    console.error(`Unknown judge "${judgeName}"; the gate passes. @es Juez desconocido "${judgeName}"; la compuerta deja pasar.`);
+/**
+ * Runs the gate for `judgeName` over `raw`; returns the text to print ('' for none). `model`, `importModule`, `record`
+ * and `countBlocks` are the model call, the judge module import, the outcome writer and the turn count (test seams).
+ * @es Corre la compuerta; devuelve el texto a imprimir. `model`, `importModule`, `record` y `countBlocks` son la
+ * llamada al modelo, la importación de los módulos del juez, el escritor de desenlaces y la cuenta del turno.
+ */
+export async function run(judgeName, raw, { model = askModel, importModule = importJudgeModule, record = recordOutcome, countBlocks = blocksThisTurn } = {}) {
+  if (!JUDGE_NAMES.includes(judgeName)) {
+    console.error(`Unknown judge "${judgeName}" (known: ${JUDGE_NAMES.join(', ')}); the gate passes. @es Juez desconocido "${judgeName}" (conocidos: ${JUDGE_NAMES.join(', ')}); la compuerta deja pasar.`);
 
     return '';
   }
 
-  const outcome = await decide({ judge, raw, nested: isNested(), blocksThisTurn: () => blocksThisTurn(judgeName, sessionOf(raw)), ask: (prompt) => model(prompt, { timeoutMs: judge.askTimeoutMs }) });
+  let judge;
+  let outcome;
 
   try {
-    recordOutcome(judgeName, sessionOf(raw), outcome);
+    judge = await loadJudge(judgeName, { importModule });
   } catch (error) {
+    outcome = notLoaded(judgeName, error);
+  }
+
+  if (outcome === undefined) outcome = await decide({ judge, raw, nested: isNested(), blocksThisTurn: () => countBlocks(judgeName, sessionOf(raw)), ask: (prompt) => model(prompt, { timeoutMs: judge.askTimeoutMs }) });
+
+  let recorded = true;
+
+  try {
+    record(judgeName, sessionOf(raw), outcome);
+  } catch (error) {
+    recorded = false;
     console.error(`The outcome could not be recorded: ${error.message} @es No se pudo registrar el desenlace: ${error.message}`);
   }
 
-  return outcome.outcome === 'block' ? JSON.stringify({ decision: 'block', reason: outcome.reason }) : '';
+  if (outcome.outcome !== 'block') return '';
+
+  if (!recorded && outcome.continued === true) {
+    console.error('A continued stop is not blocked when its block cannot be recorded: the per-turn cap could not hold. @es Una parada continuada no se bloquea si su bloqueo no se puede registrar: el tope por turno no se sostendría.');
+
+    return '';
+  }
+
+  return JSON.stringify({ decision: 'block', reason: outcome.reason });
 }
 
 async function main() {

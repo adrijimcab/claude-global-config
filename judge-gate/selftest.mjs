@@ -39,11 +39,12 @@ process.on('exit', () => {
 });
 
 const { readVerdict } = await import('./verdict.mjs');
-const { JUDGES, hookCommand } = await import('./judges.mjs');
+const { hookCommand, importJudgeModule, JUDGE_NAMES, loadJudge, loadJudges } = await import('./judges.mjs');
+const JUDGES = await loadJudges();
 const { decide, MAX_BLOCKS_PER_TURN, NESTED_VARIABLE } = await import('./gate.mjs');
 // A missing spawnAsync is a stub, so its absence fails checks instead of crashing the run. @es Un spawnAsync ausente es un stub.
 const { askModel, modelArguments, spawnAsync = async () => ({}) } = await import('./model.mjs');
-const { blocksThisTurn: readTurnCount, outcomesPath, recordOutcome } = await import('./outcome-log.mjs');
+const { blocksThisTurn: readTurnCount, lastBlockTimeThisTurn, outcomesPath, recordOutcome } = await import('./outcome-log.mjs');
 
 // The count as a value even when it throws, so a broken reader fails a check instead of crashing the run. @es El conteo como valor aun si lanza.
 const blocksThisTurn = (judge, session) => {
@@ -136,6 +137,91 @@ check('gate: a capped stop costs nothing, has no reason and is marked continued'
 check('gate: more than 2 blocks stay capped', (await afterBlocks(5)).outcome, 'pass-continued-capped');
 check('gate: the premise judge is capped the same way', (await afterBlocks(2, premise)).outcome, 'pass-continued-capped');
 check('gate: the premise judge is judged after 1 block', (await gate(payload({ stop_hook_active: true }), answering(JSON.stringify({ ok: false, reason: `${premise.marker} x` })), premise, false, () => 1)).outcome, 'block');
+
+// --- PREFILTER AND APPENDIX: a judge may carry a cheap code test that decides whether the model is asked at
+// all, and a fixed text the gate adds to its block. @es PREFILTRO Y APÉNDICE.
+const seenByPrefilter = [];
+const withPrefilter = (answer, extra = {}) => ({ ...voice, prefilter: (parsed) => { seenByPrefilter.push(parsed); return answer; }, ...extra });
+
+asked.length = 0;
+seenByPrefilter.length = 0;
+const filteredOut = await gate(payload(), blockingAnswer, withPrefilter(false));
+
+check('prefilter: a message the prefilter rejects passes as pass-prefilter with no model call', [filteredOut.outcome, filteredOut.costUsd, filteredOut.durationMs, asked.length], ['pass-prefilter', 0, 0, 0]);
+check('prefilter: it receives the parsed hook input', [seenByPrefilter.length, seenByPrefilter[0]?.last_assistant_message], [1, message]);
+check('prefilter: a rejected continued stop is marked continued', (await gate(payload({ stop_hook_active: true }), blockingAnswer, withPrefilter(false), false, () => 0)).continued, true);
+
+asked.length = 0;
+check('prefilter: a message the prefilter accepts is judged', [(await gate(payload(), blockingAnswer, withPrefilter(true))).outcome, asked.length], ['block', 1]);
+asked.length = 0;
+
+const prefilterThrew = await gate(payload(), blockingAnswer, withPrefilter(false, { prefilter: () => { throw new Error('store down'); } }));
+
+check('prefilter: a prefilter that throws is a malfunction that passes, with no model call', [prefilterThrew.outcome, prefilterThrew.why, asked.length], ['malfunction', 'store down', 0]);
+
+seenByPrefilter.length = 0;
+await gate(payload({ last_assistant_message: '   ' }), blockingAnswer, withPrefilter(true));
+await gate(payload(), blockingAnswer, withPrefilter(true), true);
+await gate(payload({ stop_hook_active: true }), blockingAnswer, withPrefilter(true), false, () => 2);
+check('prefilter: it is never asked for a nested run, an empty message or a capped stop', seenByPrefilter.length, 0);
+
+const appended = await gate(payload({ session_id: 'sess-9' }), blockingAnswer, withPrefilter(true, { appendix: (parsed) => `DISMISS ${parsed.session_id}` }));
+
+check('appendix: a block carries the judge reason and then the fixed text built from the input', appended.reason, `${goodBlock}\n\nDISMISS sess-9`);
+check('appendix: a pass carries no reason', (await gate(payload(), answering('{"ok": true}'), withPrefilter(true, { appendix: () => 'X' }))).reason, undefined);
+
+const appendixThrew = await gate(payload(), blockingAnswer, withPrefilter(true, { appendix: () => { throw new Error('boom'); } }));
+
+check('appendix: an appendix that throws is a malfunction that passes', [appendixThrew.outcome, appendixThrew.why, appendixThrew.reason], ['malfunction', 'boom', undefined]);
+
+// --- OBSERVE: a judge may carry a step run on EVERY readable stop, before any early return (the pending judge's
+// turn window). @es OBSERVAR: un paso que corre en TODA parada legible, antes de cualquier salida temprana.
+const observed = [];
+const observing = (extra = {}) => ({ ...voice, observe: (parsed) => observed.push(parsed.session_id), ...extra });
+// A gate that throws is a failed check, never a crashed run. @es Una compuerta que lanza es un check fallido.
+const settledGate = (...args) => gate(...args).catch((error) => ({ outcome: 'threw', why: error.message }));
+
+observed.length = 0;
+await settledGate(payload({ session_id: 'o1' }), blockingAnswer, observing(), true);
+await settledGate(payload({ session_id: 'o2', stop_hook_active: true }), blockingAnswer, observing(), false, () => MAX_BLOCKS_PER_TURN);
+await settledGate(payload({ session_id: 'o3', last_assistant_message: '' }), blockingAnswer, observing());
+await settledGate(payload({ session_id: 'o4', stop_hook_active: true }), blockingAnswer, observing(), false, () => { throw new Error('log unreadable'); });
+await settledGate(payload({ session_id: 'o5' }), blockingAnswer, observing({ prefilter: () => false }));
+await settledGate(payload({ session_id: 'o6' }), failing, observing());
+await settledGate(payload({ session_id: 'o7' }), blockingAnswer, observing());
+await settledGate('not json', blockingAnswer, observing());
+check('observe: a nested, capped, empty, uncounted, prefiltered, failed and judged stop are each observed once; an unreadable one never', observed, ['o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7']);
+
+const order = [];
+
+await gate(payload(), blockingAnswer, observing({ observe: () => order.push('observe'), prefilter: () => (order.push('prefilter'), true) }));
+check('observe: it runs before the prefilter', order, ['observe', 'prefilter']);
+
+asked.length = 0;
+const observeThrew = await settledGate(payload({ stop_hook_active: true }), blockingAnswer, observing({ observe: () => { throw new Error('window down'); } }), false, () => 0);
+
+check('observe: a throw there is a malfunction that passes, marked continued, with no model call', [observeThrew.outcome, observeThrew.why, observeThrew.continued, observeThrew.reason, asked.length], ['malfunction', 'window down', true, undefined, 0]);
+
+// --- FALLBACK: a judge may carry a block for when it cannot answer. @es RESPALDO: un bloqueo para cuando no responde.
+const withFallback = (extra = {}) => ({ ...voice, fallback: (parsed, why) => `FALLBACK ${String(parsed.session_id)} ${why}`, ...extra });
+const fellBack = await gate(payload({ session_id: 'f1' }), failing, withFallback());
+
+check('fallback: a failed model call blocks with the fallback text and keeps why', [fellBack.outcome, fellBack.reason, fellBack.why, fellBack.costUsd, fellBack.durationMs], ['block', 'FALLBACK f1 model unavailable', 'model unavailable', 0, 0]);
+
+const fellBackProse = await gate(payload({ session_id: 'f2' }), answering('Sorry, I cannot.'), withFallback());
+
+check('fallback: an answer that is no verdict blocks with the fallback, keeping its cost and latency', [fellBackProse.outcome, fellBackProse.reason?.startsWith('FALLBACK f2 '), typeof fellBackProse.why, fellBackProse.costUsd, fellBackProse.durationMs], ['block', true, 'string', 0.0002, 900]);
+check('fallback: a continued stop that falls back is marked continued', (await gate(payload({ stop_hook_active: true }), failing, withFallback(), false, () => 0)).continued, true);
+
+const fallbackThrew = await gate(payload(), failing, withFallback({ fallback: () => { throw new Error('no text'); } }));
+
+check('fallback: a fallback that throws is a malfunction that passes, saying both whys', [fallbackThrew.outcome, fallbackThrew.why, fallbackThrew.reason], ['malfunction', 'model unavailable; no text', undefined]);
+check('fallback: a judged pass never falls back', (await gate(payload(), answering('{"ok": true}'), withFallback())).outcome, 'pass');
+check('fallback: a judged block keeps the judge reason', (await gate(payload(), blockingAnswer, withFallback())).reason, goodBlock);
+check('fallback: a count that cannot be read never falls back', (await settledGate(payload({ stop_hook_active: true }), failing, withFallback(), false, () => { throw new Error('log unreadable'); })).outcome, 'malfunction');
+check('fallback: a prefilter that throws never falls back', (await gate(payload(), failing, withFallback({ prefilter: () => { throw new Error('p'); } }))).outcome, 'malfunction');
+check('fallback: an appendix that throws never falls back', (await gate(payload(), blockingAnswer, withFallback({ appendix: () => { throw new Error('a'); } }))).outcome, 'malfunction');
+check('fallback: an unreadable input never falls back', (await gate('not json', failing, withFallback())).outcome, 'malfunction');
 
 const countFailed = await gate(payload({ stop_hook_active: true }), blockingAnswer, voice, false, () => { throw new Error('log unreadable'); }).catch((error) => ({ outcome: 'threw', why: error.message }));
 
@@ -232,6 +318,33 @@ check('turn: another judge\'s blocks are not counted', blocksThisTurn('voice', '
 log('voice', 'turn-c', 'block');
 check('turn: another session\'s blocks are not counted', blocksThisTurn('voice', 'turn-none'), 0);
 check('turn: a session that only has continued records counts all its blocks', (log('voice', 'turn-d', 'block', true), blocksThisTurn('voice', 'turn-d')), 1);
+
+// --- WHEN THE TURN WAS LAST BLOCKED: the time of the newest block of the current turn, for the pending judge's
+// --- dismissal lookup. @es CUÁNDO SE BLOQUEÓ POR ÚLTIMA VEZ EL TURNO.
+const lastTime = (judge, session) => {
+  try {
+    return lastBlockTimeThisTurn(judge, session);
+  } catch (error) {
+    return `threw: ${error.message}`;
+  }
+};
+const threw = (value) => typeof value === 'string' && value.startsWith('threw:');
+const at = (seconds) => new Date(Date.UTC(2026, 9, 19, 12, 0, seconds)).toISOString();
+const raw = (judge, session, ts, outcome, continued) => appendFileSync(outcomesPath(), `${JSON.stringify({ ts, judge, session, outcome, costUsd: 0, durationMs: 1, ...(continued ? { continued: true } : {}) })}\n`);
+
+check('last block: a session with no records has none', lastTime('voice', 'time-none'), undefined);
+raw('voice', 'time-a', at(1), 'block');
+raw('voice', 'time-a', at(2), 'block', true);
+raw('voice', 'time-a', at(3), 'pass', true);
+check('last block: it is the newest block of the turn, not the newest record', lastTime('voice', 'time-a'), Date.parse(at(2)));
+raw('voice', 'time-a', at(4), 'pass');
+check('last block: a new first stop that passed leaves none', lastTime('voice', 'time-a'), undefined);
+raw('voice', 'time-a', at(5), 'block');
+raw('premise', 'time-a', at(6), 'block');
+raw('voice', 'time-other', at(7), 'block');
+check('last block: another judge\'s or session\'s block is not this one\'s', lastTime('voice', 'time-a'), Date.parse(at(5)));
+check('last block: the count and the time agree', [blocksThisTurn('voice', 'time-a'), lastTime('voice', 'time-a') === Date.parse(at(5))], [1, true]);
+check('last block: no session id is a failed read, never a time', threw(lastTime('voice', '')), true);
 
 const thrownMessage = (action) => {
   try {
@@ -364,6 +477,70 @@ seen.length = 0;
 check('run: a nested process prints nothing and never asks the model', [await run('voice', payload(), { model: blockingModel }), seen.length], ['', 0]);
 delete process.env[NESTED_VARIABLE];
 
+// THE CAP NEEDS THE LOG: with a log that cannot be written or read, a continued stop never blocks again.
+// @es EL TOPE NECESITA EL REGISTRO: si no se puede escribir ni leer, una parada continuada no vuelve a bloquear.
+const throwingRecord = () => {
+  throw new Error('log full');
+};
+const decisionOf = (text) => {
+  try {
+    return JSON.parse(text).decision;
+  } catch {
+    return text;
+  }
+};
+
+seen.length = 0;
+check('run: a first stop whose block cannot be recorded still prints its block', decisionOf(await run('voice', payload({ session_id: 'rec-1' }), { model: blockingModel, record: throwingRecord })), 'block');
+check('run: a continued stop whose block cannot be recorded prints nothing, though the model was asked', [await run('voice', payload({ session_id: 'rec-1', stop_hook_active: true }), { model: blockingModel, record: throwingRecord, countBlocks: () => 0 }), seen.length], ['', 2]);
+check('run: a continued stop whose block is recorded prints it', decisionOf(await run('voice', payload({ session_id: 'rec-2', stop_hook_active: true }), { model: blockingModel, countBlocks: () => 0 })), 'block');
+seen.length = 0;
+check('run: a continued stop whose count cannot be read prints nothing and never asks the model', [await run('voice', payload({ session_id: 'rec-3', stop_hook_active: true }), { model: blockingModel, countBlocks: () => { throw new Error('log unreadable'); } }).catch((error) => `threw: ${error.message}`), seen.length], ['', 0]);
+check('run: the count is read for this judge and session', await (async () => {
+  const counted = [];
+
+  await run('voice', payload({ session_id: 'rec-4', stop_hook_active: true }), { model: blockingModel, countBlocks: (judgeName, session) => (counted.push([judgeName, session]), 0) });
+
+  return counted;
+})(), [['voice', 'rec-4']]);
+check('run: the outcome is recorded for this judge and session', await (async () => {
+  const recorded = [];
+
+  await run('voice', payload({ session_id: 'rec-5' }), { model: blockingModel, record: (judgeName, session, outcome) => recorded.push([judgeName, session, outcome.outcome]) });
+
+  return recorded;
+})(), [['voice', 'rec-5', 'block']]);
+
+// LOADED BY NAME: a pending judge whose module chain is broken is its own malfunction; premise and voice still run.
+// @es CARGADOS POR NOMBRE: un juez de pendientes con su cadena rota es un fallo propio; premise y voice siguen.
+const brokenPending = (specifier) => (specifier.startsWith('../pending-judge/') || specifier.startsWith('../backlog-guard/') ? Promise.reject(new SyntaxError('broken pending chain')) : importJudgeModule(specifier));
+
+check('lazy: a broken pending chain fails only the pending judge load', [await loadJudge('pending', { importModule: brokenPending }).then(() => 'loaded', (error) => error.message), (await loadJudge('premise', { importModule: brokenPending }))?.name, (await loadJudge('voice', { importModule: brokenPending }))?.name], ['broken pending chain', 'premise', 'voice']);
+seen.length = 0;
+check('lazy: the pending judge with a broken chain prints nothing and asks no model', [await run('pending', payload({ session_id: 'lazy-1' }), { model: blockingModel, importModule: brokenPending }).catch((error) => `threw: ${error.message}`), seen.length], ['', 0]);
+check('lazy: that load failure is logged as the pending judge\'s malfunction, in both languages', readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'lazy-1' && line.judge === 'pending' && line.outcome === 'malfunction' && String(line.why).includes('the pending judge could not be loaded: broken pending chain') && String(line.why).includes('@es no se pudo cargar el juez pending')), true);
+seen.length = 0;
+
+const voiceDespite = await run('voice', payload({ session_id: 'lazy-2' }), { model: blockingModel, importModule: brokenPending });
+const premiseDespite = await run('premise', payload({ session_id: 'lazy-3' }), { model: async (prompt, options) => (seen.push(options), { answer: JSON.stringify({ ok: false, reason: `${premise.marker} x` }), costUsd: 0, durationMs: 1 }), importModule: brokenPending });
+
+check('lazy: voice and premise still run and block past a broken pending chain', [voiceDespite.includes(goodBlock), premiseDespite.includes(`${premise.marker} x`), seen.length], [true, true, 2]);
+check('lazy: a name that is no judge loads nothing, inherited names included', [await loadJudge('tone'), await loadJudge('constructor'), await loadJudge('toString')], [undefined, undefined, undefined]);
+check('lazy: every judge loads under its own name', Object.entries(JUDGES).map(([name, loaded]) => [name, loaded.name]), JUDGE_NAMES.map((name) => [name, name]));
+check('lazy: judges.mjs imports no judge module when it loads', readFileSync(path.join(HERE, 'judges.mjs'), 'utf8').split('\n').filter((line) => line.startsWith('import ')), []);
+check('lazy: run.mjs reaches no judge module but through the loader', readFileSync(path.join(HERE, 'run.mjs'), 'utf8').split('\n').filter((line) => line.startsWith('import ') && (line.includes('-judge/') || line.includes('backlog-guard'))), []);
+
+// THE BILINGUAL MIRRORS of this folder name every judge. @es LOS ESPEJOS BILINGÜES nombran a cada juez.
+{
+  const source = (file) => readFileSync(path.join(HERE, file), 'utf8');
+  const spanishHalf = (file) => source(file).slice(source(file).indexOf('@es'));
+
+  check('mirror: run.mjs gives the three judges in its usage, in both halves', [source('run.mjs').includes('Stop command hook: `node run.mjs <premise|voice|pending>`'), source('run.mjs').includes('@es Hook de comando de Stop: `node run.mjs <premise|voice|pending>`')], [true, true]);
+  check('mirror: the gate\'s Spanish half names every step the English half does', ['`observe`', '`prefilter`', '`appendix`', '`fallback`', 'corrida anidada', 'MAX_BLOCKS_PER_TURN'].map((word) => spanishHalf('gate.mjs').includes(word)), [true, true, true, true, true, true]);
+  check('mirror: judges.mjs counts three judges in both halves', [source('judges.mjs').includes('The three Stop judges'), source('judges.mjs').includes('Los tres jueces de Stop'), source('judges.mjs').includes('Los dos jueces')], [true, true, false]);
+  check('mirror: the hook registration names the three judges, in both languages', [JSON.parse(source('run.mjs.hook-registration.json')).why.includes('the three Stop judges (premise, voice and pending)'), JSON.parse(source('run.mjs.hook-registration.json')).why.includes('@es los tres jueces de Stop (premise, voice y pending)')], [true, true]);
+}
+
 // --- CLI. @es CLI.
 const RUN = path.join(HERE, 'run.mjs');
 const runCli = (cliArgs, input, env = {}) => spawnSync(process.execPath, [RUN, ...cliArgs], { input, encoding: 'utf8', env: { ...process.env, ...env, HOOK_STATE_DIR: process.env.HOOK_STATE_DIR } });
@@ -386,6 +563,7 @@ check('cli: a nested run exits 0 and prints nothing', [nestedRun.status, nestedR
 const unknownRun = runCli(['tone'], payload());
 
 check('cli: an unknown judge exits 0 (a hook never holds a turn by its own fault) and says so in both languages', [unknownRun.status, unknownRun.stdout, unknownRun.stderr.includes('@es')], [0, '', true]);
+check('cli: an unknown judge is told the known ones, in both languages', [unknownRun.stderr.includes('(known: premise, voice, pending)'), unknownRun.stderr.includes('(conocidos: premise, voice, pending)')], [true, true]);
 
 const garbageRun = runCli(['voice'], 'garbage');
 
@@ -405,7 +583,9 @@ for (const judge of Object.values(JUDGES)) {
   check(`settings: no native prompt hook still carries the ${judge.name} rubric`, stopHooks.some((hook) => hook.type === 'prompt' && hook.prompt.startsWith(judge.prompt.split('\n')[0])), false);
   check(`settings: the ${judge.name} model call leaves room inside the hook timeout`, judge.askTimeoutMs < judge.timeoutSeconds * 1000, true);
 }
-check('settings: the two judges are two hooks', new Set(stopHooks.filter((hook) => hook.command?.includes('judge-gate/run.mjs')).map((hook) => hook.command)).size, 2);
+check('settings: the judges are one hook each', new Set(stopHooks.filter((hook) => hook.command?.includes('judge-gate/run.mjs')).map((hook) => hook.command)).size, Object.keys(JUDGES).length);
+check('settings: the three judges are premise, voice and pending', Object.keys(JUDGES), ['premise', 'voice', 'pending']);
+check('settings: only the pending judge carries a prefilter, an appendix, a fallback and an observe step', Object.values(JUDGES).map((judge) => [typeof judge.prefilter, typeof judge.appendix, typeof judge.fallback, typeof judge.observe]), [Array(4).fill('undefined'), Array(4).fill('undefined'), Array(4).fill('function')]);
 check('settings: no prompt-type hook is left on Stop', stopHooks.filter((hook) => hook.type === 'prompt').length, 0);
 
 const sidecarPath = `${RUN}.hook-registration.json`;

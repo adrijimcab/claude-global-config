@@ -46,7 +46,22 @@ const wasContinued = (record) => record.continued === true || (typeof record.out
  * parada no continuada (esa parada abre el turno y se cuenta). Las líneas ilegibles se saltan; sin registro es
  * cero; cualquier otro fallo de lectura, o una llamada sin sesión, lanza para que quien llama deje pasar.
  */
-export function blocksThisTurn(judge, session) {
+export const blocksThisTurn = (judge, session) => blockRecordsOfTurn(judge, session).length;
+
+/**
+ * When `judge` last blocked `session` in its current turn, as epoch milliseconds, or `undefined` when it has not.
+ * Same reading and failure rules as `blocksThisTurn`.
+ * @es Cuándo bloqueó `judge` a `session` por última vez en su turno actual, en milisegundos, o `undefined` si no
+ * lo hizo. Misma lectura y mismas reglas de fallo que `blocksThisTurn`.
+ */
+export function lastBlockTimeThisTurn(judge, session) {
+  const last = blockRecordsOfTurn(judge, session).at(-1);
+
+  return last === undefined ? undefined : Date.parse(last.ts);
+}
+
+/** The block records of `judge` for `session` in its current turn, oldest first. @es Los registros de bloqueo del turno actual, del más antiguo al más nuevo. */
+function blockRecordsOfTurn(judge, session) {
   if (typeof session !== 'string' || session === '') throw new Error('no session id to count the turn by @es no hay id de sesión para contar el turno');
 
   let text;
@@ -54,7 +69,7 @@ export function blocksThisTurn(judge, session) {
   try {
     text = readFileSync(outcomesPath(), 'utf8');
   } catch (error) {
-    if (error.code === 'ENOENT') return 0;
+    if (error.code === 'ENOENT') return [];
     throw error;
   }
 
@@ -72,5 +87,5 @@ export function blocksThisTurn(judge, session) {
 
   const turnStart = records.findLastIndex((record) => !wasContinued(record));
 
-  return records.slice(Math.max(turnStart, 0)).filter((record) => record.outcome === 'block').length;
+  return records.slice(Math.max(turnStart, 0)).filter((record) => record.outcome === 'block');
 }

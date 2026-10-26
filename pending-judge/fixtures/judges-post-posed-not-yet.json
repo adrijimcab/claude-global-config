@@ -1,0 +1,7 @@
+{
+  "id": "judges-post-posed-not-yet",
+  "expect": "fail",
+  "provenance": "author",
+  "source": "synthetic: built from the sentences the two final judges of T4a confirmed on 2026-10-19",
+  "message": "Listo, el worker entregó. Encontré un detalle en el matcher del hook de voz: no distingue mayúsculas. No lo anoto todavía en el backlog."
+}

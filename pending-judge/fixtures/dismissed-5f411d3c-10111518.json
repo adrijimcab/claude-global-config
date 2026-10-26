@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-5f411d3c-10111518",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The reply described the landing of the backlog-guard fix itself (land/batch-2); the word names the guard, no pending item. The fix being landed removes this exa)",
+  "message": "Ya armé la rama de aterrizaje: 10 commits limpios sobre el `origin/master` actual (`cc3a517`), con el arreglo del guard del backlog y las reglas de hoy (concurrencia por recurso, la voz Gentleman y «todo se verifica»).\n\nLes pedí la pausa a las cuatro sesiones. Apenas confirmen todas, lanzo `land.mjs`: vuelve a correr el runner completo, avanza `master` y lee de vuelta lo que quedó en el remoto. Después les aviso que retomen y que prueben un cierre de turno que nombre el backlog sin anunciar nada; ahí vamos a ver con los ojos que el aviso ya no salta.\n\nOjo con la espera: el runner completo tarda varios minutos, así que el guard nuevo no queda activo al instante. Calculo que en unos 15 o 20 minutos, si las sesiones confirman rápido."
+}

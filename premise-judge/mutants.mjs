@@ -58,18 +58,24 @@ const MUTANTS = [
   ['the mechanism is not the folder', GUARD, "MECHANISM = 'premise-judge'", "MECHANISM = 'premise-judgeX'"],
 
   // --- THE HOOK.
-  ['a run is not counted', GUARD, '  for (const { mechanism } of JUDGES) incrementFires(mechanism, { lock: { ...budget, report: lockFaultsOf(mechanism) } });\n', ''],
+  ['a run is not counted', GUARD, '  for (const { mechanism } of JOURNALED_JUDGES) incrementFires(mechanism, { lock: { ...budget, report: lockFaultsOf(mechanism) } });\n', ''],
   ['L5: each judge waits its own budget, so a busy Stop waits 400 ms', GUARD, 'incrementFires(mechanism, { lock: { ...budget, report: lockFaultsOf(mechanism) } });', 'incrementFires(mechanism, { lock: { report: lockFaultsOf(mechanism) } });'],
   ['the Stop path prints its lock failures on stderr', GUARD, '{ lock: { ...budget, report: lockFaultsOf(mechanism) } }', '{ lock: budget }'],
   ['every judge\'s lock failures go to the premise judge', GUARD, 'report: lockFaultsOf(mechanism) }', 'report: lockFaultsOf(MECHANISM) }'],
-  ['the hook journals nothing', GUARD, '    journalJudgeBlocks(payload);\n', ''],
   ['J-1: an unreadable payload is counted as a run', GUARD, '    return undefined;\n  }\n\n  const budget', '  }\n\n  const budget'],
   ['J-1: a judge whose journal fails costs the other judge its records', GUARD, "    } catch {\n      // This judge's journal is unusable", "    } catch (error) {\n      throw error; // This judge's journal is unusable"],
   ['J-1: a journaling failure escapes the hook', GUARD, '  } catch {\n    // Journaling is evidence', '  } catch (error) {\n    throw error; // Journaling is evidence'],
-  ['J-1: only the first judge is counted', GUARD, '  for (const { mechanism } of JUDGES) incrementFires(mechanism, { lock: { ...budget, report: lockFaultsOf(mechanism) } });', '  incrementFires(JUDGES[0].mechanism, { lock: { ...budget, report: lockFaultsOf(JUDGES[0].mechanism) } });'],
+  ['J-1: only the first judge is counted', GUARD, '  for (const { mechanism } of JOURNALED_JUDGES) incrementFires(mechanism, { lock: { ...budget, report: lockFaultsOf(mechanism) } });', '  incrementFires(JOURNALED_JUDGES[0].mechanism, { lock: { ...budget, report: lockFaultsOf(JOURNALED_JUDGES[0].mechanism) } });'],
+  ['the hook journals nothing', GUARD, '    journalJudgeBlocks(payload, await loadJournaledJudges({ importModule }));\n', ''],
+  ['the hook ignores its import seam', GUARD, 'await loadJournaledJudges({ importModule })', 'await loadJournaledJudges()'],
+  ['one broken prompt drops every judge', GUARD, '      return undefined;\n    }\n  }));', '      throw new Error(\'x\');\n    }\n  }));'],
+  ['a marker that is not text is kept', GUARD, "typeof marker === 'string' && marker !== '' ? { mechanism, marker } : undefined", "marker !== '' ? { mechanism, marker } : undefined"],
+  ['an empty marker is kept', GUARD, " && marker !== ''", ''],
+  ['the pending judge is not journaled', GUARD, "  { mechanism: PENDING_MECHANISM, module: '../pending-judge/prompt.mjs' },\n", ''],
+  ['the default import is not the real one', GUARD, 'importModule = importPromptModule } = {}) {\n  const loaded', "importModule = () => Promise.reject(new Error('x')) } = {}) {\n  const loaded"],
   ['a BOM-prefixed payload is not decoded', GUARD, "raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw", 'raw'],
   ['the hook returns something', GUARD, '  return undefined;\n}\n\nconst main', '  return {};\n}\n\nconst main'],
-  ['the process journals nothing', GUARD, "    evaluate(Buffer.concat(chunks).toString('utf8'));\n", ''],
+  ['the process journals nothing', GUARD, "    await evaluate(Buffer.concat(chunks).toString('utf8'));\n", ''],
   ['importing the guard runs it as a process', GUARD, 'path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))', 'true'],
 
   // --- THE LATENCY ARITHMETIC.
@@ -93,7 +99,9 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['premise-judge', 'judge-gate', 'voice-judge', 'hook-state', 'hook-dispatch', 'bilingual-output', 'settings.json'],
+  // `pending-judge/prompt.mjs` is imported by the journal guard at run time, which the import walk cannot follow.
+  // @es El journal lo importa en tiempo de ejecución, y el recorrido de imports no lo sigue.
+  paths: ['premise-judge', 'judge-gate', 'voice-judge', 'pending-judge/prompt.mjs', 'hook-state', 'hook-dispatch', 'bilingual-output', 'settings.json'],
   selftest: 'premise-judge/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

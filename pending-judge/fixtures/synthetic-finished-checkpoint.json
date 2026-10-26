@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-finished-checkpoint",
+  "expect": "pass",
+  "provenance": "author",
+  "source": "synthetic: finished work",
+  "message": "Lo sumo al checkpoint-37 que ya cerró; el commit es 7007946 y está verificado."
+}

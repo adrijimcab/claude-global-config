@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-5f411d3c-10121811",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Not a new pending item: adding an in-flight worker's result to the checkpoint-40 landing recorded in engram #1543; same false-positive class as 'lo sumo' (pendi)",
+  "message": "El worker del runner todavía no reportó: está esperando una corrida propia, probablemente la batería en el sandbox. Cuando entregue, lo verifico y lo agrego al checkpoint-40 para aterrizarlo."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-5f411d3c-10121706",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Third false positive in this session: 'lo sumo al checkpoint-37' adds an in-flight worker's result to a recorded landing (engram #1543), not a new pending item;)",
+  "message": "El worker del perfil de clean code todavía no reportó: está esperando una corrida propia en segundo plano, probablemente la batería en el sandbox o sus mutantes. Cuando termine, lo verifico y lo sumo al checkpoint-37."
+}

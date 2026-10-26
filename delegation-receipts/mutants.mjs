@@ -34,7 +34,7 @@ const MUTANTS = [
   ['every result is read as a refusal, so a clean turn is refused', 'delegation-receipts/turn-delegations.mjs', "attempt.outcome = block.is_error === true ? 'refused' : 'launched';", "attempt.outcome = 'refused';"],
   ['a success with no is_error field is read as a refusal', 'delegation-receipts/turn-delegations.mjs', 'attempt.outcome = block.is_error === true ? ', 'attempt.outcome = block.is_error !== false ? '],
   ['SendMessage stops counting, so the retry resume-before-fresh demands is invisible', 'delegation-receipts/turn-delegations.mjs', "new Set(['Agent', 'Task', 'SendMessage'])", "new Set(['Agent', 'Task'])"],
-  ['a result is paired to an attempt by position instead of by id', 'delegation-receipts/turn-delegations.mjs', 'const attempt = byId.get(block.tool_use_id);', 'const attempt = attempts[attempts.length - 1];'],
+  ['a result is paired to an attempt by position instead of by id', 'delegation-receipts/turn-delegations.mjs', 'const attempt = isId(block.tool_use_id) ? byId.get(block.tool_use_id) : unanswered.shift();', 'const attempt = attempts[attempts.length - 1];'],
 
   // --- THE TURN'S SCOPE: which receipts belong to the turn that is ending.
   ['the turn boundary is never recognised', 'delegation-receipts/turn-delegations.mjs', 'if (opensTurn(entry)) {', 'if (false) {'],
@@ -57,9 +57,28 @@ const MUTANTS = [
   // selftest would have gone red without ever exercising the decision.
   // @es Sustituyen la SENTENCIA en vez de borrarla: borrar una rama deja un `else` colgando, y un
   // mutante matado por un error de sintaxis es rojo por el motivo equivocado.
+  // --- THE b100 INCIDENT (2026-10-18): request-blob copies of the conversation, and calls repeated by id.
+  // @es EL INCIDENTE DE b100: copias de la conversación en los request-blob y llamadas repetidas por id.
+  ['request-blob copies of the conversation are read as the conversation', 'delegation-receipts/turn-delegations.mjs', "if (entry?.type !== 'assistant' && entry?.type !== 'user') continue;", ''],
+  ['only assistant records are read, so every tool result is lost', 'delegation-receipts/turn-delegations.mjs', "if (entry?.type !== 'assistant' && entry?.type !== 'user') continue;", "if (entry?.type !== 'assistant') continue;"],
+  ['a call repeated in two records is counted as two attempts', 'delegation-receipts/turn-delegations.mjs', 'if (identified && byId.has(block.id)) continue;', ''],
+  ['calls with no id are folded into one attempt', 'delegation-receipts/turn-delegations.mjs', 'const identified = isId(block.id);', 'const identified = true;'],
+  ['the empty string counts as an id', 'delegation-receipts/turn-delegations.mjs', "return typeof value === 'string' && value !== '';", "return typeof value === 'string';"],
+  ['an id-less result answers the NEWEST unanswered call', 'delegation-receipts/turn-delegations.mjs', 'unanswered.shift()', 'unanswered.pop()'],
+  ['id-less calls are never queued, so their results are lost', 'delegation-receipts/turn-delegations.mjs', 'else unanswered.push(attempt);', ''],
+  ['an id-less call of another tool is never queued, so its result answers a delegation', 'delegation-receipts/turn-delegations.mjs', 'if (!isId(block.id)) unanswered.push(null);', ''],
+  ['an id-less call of another tool is queued even when it has an id', 'delegation-receipts/turn-delegations.mjs', 'if (!isId(block.id)) unanswered.push(null);', 'unanswered.push(null);'],
+  ['an id-less result paired to another tool call still classifies a delegation', 'delegation-receipts/turn-delegations.mjs', 'if (attempt === undefined || attempt === null) continue;', 'if (attempt === undefined) continue;'],
+  ['an id-less result is looked up by its missing id', 'delegation-receipts/turn-delegations.mjs', 'isId(block.tool_use_id) ? byId.get(block.tool_use_id) : unanswered.shift()', 'byId.get(block.tool_use_id)'],
   ['a refusal never opens a debt', 'delegation-receipts/unlaunched.mjs', 'owed.push(attempt);', 'undefined;'],
-  ['a launch no longer pays a debt, so every retried turn is refused', 'delegation-receipts/unlaunched.mjs', "else if (attempt.outcome === 'launched') owed.pop();", 'else undefined;'],
-  ['an attempt with no result PAYS a debt', 'delegation-receipts/unlaunched.mjs', "if (attempt.outcome === 'launched') owed.pop();", "if (attempt.outcome !== 'refused') owed.pop();"],
+  ['a launch no longer pays a debt, so every retried turn is refused', 'delegation-receipts/unlaunched.mjs', "else if (attempt.outcome === 'launched') payNewestFromEarlierBatch(owed, attempt);", 'else undefined;'],
+  ['an attempt with no result PAYS a debt', 'delegation-receipts/unlaunched.mjs', "if (attempt.outcome === 'launched') payNewestFromEarlierBatch(", "if (attempt.outcome !== 'refused') payNewestFromEarlierBatch("],
+  // --- ONE BATCH: calls of one model message cannot be each other's retry. @es UN LOTE: las llamadas de un mismo mensaje no son reintento entre sí.
+  ['a launch pays a refusal from its OWN batch', 'delegation-receipts/unlaunched.mjs', 'refused.batch === undefined || refused.batch !== launch.batch', 'true'],
+  ['a refusal with no batch is never paid', 'delegation-receipts/unlaunched.mjs', 'refused.batch === undefined || ', ''],
+  ['a launch with nothing it may pay removes the newest debt anyway', 'delegation-receipts/unlaunched.mjs', 'if (debt !== -1) owed.splice(debt, 1);', 'owed.splice(debt, 1);'],
+  ['a launch pays the OLDEST payable debt instead of the newest', 'delegation-receipts/unlaunched.mjs', 'const debt = owed.findLastIndex(', 'const debt = owed.findIndex('],
+  ['the model message of a call is no longer recorded, so every batch looks alike', 'delegation-receipts/turn-delegations.mjs', 'batch: entry.message?.id,', 'batch: undefined,'],
 
 
   // --- THE RECORDED ESCAPE, whose whole value is that it is narrow and written down.

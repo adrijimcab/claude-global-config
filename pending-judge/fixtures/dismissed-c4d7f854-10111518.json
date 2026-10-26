@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-c4d7f854-10111518",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (No pending work announced: the turn only acknowledged a coordination pause and described the incoming guard fix; nothing new to record, and the backlog document)",
+  "message": "Le confirmé la pausa a la otra sesión: hasta que mande «resume» no lanzo agentes nuevos ni commiteo en `~/.claude`. Los cinco que ya corrían siguen, porque ninguno toca `~/.claude`.\n\nVale la pena esperar, porque lo que aterriza arregla de raíz el aviso que te vengo mostrando en cada turno:\n\n- **Qué cambia.** El guard del backlog va a juzgar la intención de la frase, no la palabra suelta. Mencionar «backlog» o «sigue pendiente» deja de frenar el turno, y un commit del documento del backlog cuenta como guardado.\n- **Qué pruebas trae, según esa sesión.** Selftest de 109 casos, 45 de 45 mutantes muertos, y una repetición de turnos reales donde 58 de 60 pasan y los 4 que debían frenarse se frenaron. Todavía no lo verifiqué yo.\n\nCuando aterrice, pruebo un cierre de turno que nombre el backlog sin anunciar nada, para comprobar que el arreglo funciona."
+}

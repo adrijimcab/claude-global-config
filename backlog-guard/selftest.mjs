@@ -1,21 +1,26 @@
 #!/usr/bin/env node
 /**
- * DISCRIMINATION PROOF for backlog-guard — the `Stop` mechanism enforcing the owner directive
+ * DISCRIMINATION PROOF for the PREFILTER half of the backlog obligation — the `decide()` that tells the pending
+ * judge (`../pending-judge/`) whether a stop is worth a model call, under the owner directive
  * "Backlog maestro — todo hallazgo entra en el momento" (`~/.claude/rules/00-owner-mandates.md`).
  *
  * Exercises `decide()`'s whole state space with constructed, real-shaped payloads and injected
  * dependencies — never a live session, per this fleet's own `guard-that-cannot-go-red` rule (a guard is
- * not trusted until proven to discriminate across the state space its decision ranges over). Then runs
- * the real `guard.mjs` process end to end over one small, real, constructed transcript file, to prove
- * the WIRING (stdin -> decide -> stdout) and not just the injected decision.
+ * not trusted until proven to discriminate across the state space its decision ranges over). Then runs the
+ * real `decide()` over one small, real, constructed transcript file and a real engram store, to prove the
+ * persisted offset and the store lookups, not just the injected decision. The intent question (does the
+ * message really leave something for later?) is the judge's, so no test here pins a sentence's meaning: the
+ * marker list is only proved BROAD, and the sentences it must reach are the judge's fixtures.
  *
- * @es PRUEBA DE DISCRIMINACIÓN de backlog-guard. Ejercita todo el espacio de estados de `decide()` con
- * payloads construidos y dependencias inyectadas — nunca una sesión viva. Luego corre `guard.mjs` de
- * verdad, de punta a punta, sobre un transcript pequeño y real construido, para probar el CABLEADO.
+ * @es PRUEBA DE DISCRIMINACIÓN de la mitad PREFILTRO de la obligación de backlog: el `decide()` que dice al
+ * juez de pendientes si una parada merece una llamada al modelo. Ejercita todo el espacio de estados con
+ * payloads construidos y dependencias inyectadas; luego corre el `decide()` real sobre un transcript y un
+ * almacén de engram reales construidos. La pregunta de intención es del juez: aquí solo se prueba que la
+ * lista de marcadores es AMPLIA.
  */
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -23,14 +28,16 @@ import { fileURLToPath } from 'node:url';
 
 import { commandDismiss, MINIMUM_REASON_LENGTH, parseArgs } from './dismiss.mjs';
 import { decide } from './decide.mjs';
-import { evaluate } from './guard.mjs';
-import { findAnnouncement } from './announcement.mjs';
+import { advanceTurnWindow } from './turn-window.mjs';
+import { DEGRADED_KIND, journalDegraded, refusalsFile } from './degradation-journal.mjs';
+import { dismissalsFile, dismissedSince } from './dismissals.mjs';
+import { findCandidate } from './announcement.mjs';
 import { findPendingMarker, PENDING_MARKERS } from './markers.mjs';
 import { proseOutsideQuotes } from './prose.mjs';
 import { hasMasterDocumentCommit } from './backlog-document-save.mjs';
-import { replay } from './replay.mjs';
+import { describeReplay, replay } from './replay.mjs';
 import { hasMasterBacklogSave, isMasterBacklogTopicKey, topicKeyValuesIn } from './master-save.mjs';
-import { isolateState, stateDir } from '../hook-state/locations.mjs';
+import { isolateState, STATE_ROOT_VARIABLE } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
 // session reads, and never a line a previous run left behind.
@@ -39,7 +46,6 @@ import { isolateState, stateDir } from '../hook-state/locations.mjs';
 isolateState('backlog-guard');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const GUARD_CLI = path.join(HERE, 'guard.mjs');
 
 let passed = 0;
 const failures = [];
@@ -89,15 +95,17 @@ function settle(fn) {
   }
 }
 
-function verdict(payload, { offset = 0, tail = '', size = undefined, store = {}, storeErrors = {} } = {}) {
-  const writes = [];
+function verdict(payload, { offset = 0, tail = '', store = {}, storeErrors = {} } = {}) {
+  const reads = [];
   const lookups = [];
   const degraded = [];
   const decision = settle(() => decide(payload, {
-    readState: () => (offset === undefined ? undefined : { offset }),
-    writeState: (sessionId, state) => writes.push({ sessionId, state }),
-    readTail: () => tail,
-    sizeOf: () => size,
+    readState: () => (offset === undefined ? undefined : { turnStart: offset, offset: offset + 1000 }),
+    readTail: (transcriptPath, from) => {
+      reads.push(from);
+
+      return tail;
+    },
     resolveTopicKey: (id) => {
       lookups.push(id);
 
@@ -108,7 +116,7 @@ function verdict(payload, { offset = 0, tail = '', size = undefined, store = {},
     reportDegraded: (info) => degraded.push(info)
   }));
 
-  return { result: decision === 'threw' ? 'threw' : decision === undefined ? 'allow' : 'deny', writes, lookups, degraded };
+  return { result: decision === 'threw' ? 'threw' : decision === undefined ? 'allow' : 'deny', reads, lookups, degraded };
 }
 
 /** One transcript line holding an engram tool call, in the real nested shape. @es Una línea de transcript con una llamada de herramienta de engram, con la forma anidada real. */
@@ -280,28 +288,83 @@ check('empty message -> allow', verdict(stopPayload('')).result, 'allow');
 }
 
 // ---------------------------------------------------------------------------------------------
-// STATE 6: stop_hook_active -> allow (already raised once this turn, never raise it twice)
+// STATE 6: stop_hook_active. The prefilter no longer stands aside on a continued stop (the judge gate caps
+// the blocks per turn): it judges the rewrite over the whole current turn, from the turn start.
 // ---------------------------------------------------------------------------------------------
-check('stop_hook_active -> allow, even with a pending phrase and no save', verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '' }).result, 'allow');
+check('a continued stop with a pending phrase and no save still owes the judge', verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '' }).result, 'deny');
+check('a continued stop with a save after the block passes', verdict(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { tail: '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master"}}' }).result, 'allow');
+check('a continued stop with no pending phrase passes', verdict(stopPayload(CLEAN_MESSAGE, { stopHookActive: true }), { tail: '' }).result, 'allow');
 
 // ---------------------------------------------------------------------------------------------
-// STATE 7: malformed payload -> allow + exit 0 (via the real `evaluate()`, not the injected decide())
+// STATE 7: a payload that is not an object, or carries no message -> allow, never a throw
 // ---------------------------------------------------------------------------------------------
-check('malformed JSON -> evaluate() allows (undefined)', settle(() => evaluate('NOT JSON AT ALL')), undefined);
-check('empty stdin -> evaluate() allows (undefined)', settle(() => evaluate('')), undefined);
-check('BOM + valid JSON is still parsed (PowerShell 5.1 shape)', settle(() => evaluate(`\ufeff${JSON.stringify(stopPayload(CLEAN_MESSAGE))}`)), undefined);
+check('an undefined payload passes', verdict(undefined).result, 'allow');
+check('a payload with no message passes', verdict({ session_id: 's-1' }).result, 'allow');
+check('a non-string message passes', verdict({ session_id: 's-1', last_assistant_message: 42 }).result, 'allow');
 
 // ---------------------------------------------------------------------------------------------
-// DIAGNOSTICS: the offset always advances, on every non-bypassed path, so the NEXT turn's window
-// starts fresh — proven by inspecting the `writes` the injected `writeState` captured.
+// THE TURN WINDOW (`turn-window.mjs`). Every stop moves `offset` to the transcript's end; a first stop also opens
+// the turn at the previous stop's end (`turnStart`), and a continued stop keeps it. So the window of a stop is
+// the whole current turn, a save made after a block counts for that turn only, and the next turn starts after
+// it. `decide()` only READS the window: it writes nothing.
+// @es LA VENTANA DEL TURNO: cada parada lleva `offset` al final del transcript; una primera parada además abre el
+// turno en el final de la parada anterior (`turnStart`) y una continuada lo conserva. La ventana es el turno
+// entero, un guardado posterior a un bloqueo cuenta solo para ese turno y el siguiente empieza después.
 // ---------------------------------------------------------------------------------------------
 {
-  const { writes } = verdict(stopPayload(CLEAN_MESSAGE), { size: 4242 });
-  check('the offset advances to the current transcript size even when nothing was pending', writes[0]?.state?.offset, 4242);
+  const advanced = (payload, state, size) => {
+    const writes = [];
+    const read = [];
+
+    settle(() => advanceTurnWindow(payload, { readState: (sessionId) => (read.push(sessionId), state), writeState: (sessionId, next) => writes.push([sessionId, next]), sizeOf: () => size }));
+
+    return { writes, read };
+  };
+
+  check('a first stop opens the turn where the previous stop ended and moves the offset to the end', advanced(stopPayload(CLEAN_MESSAGE), { turnStart: 5, offset: 10 }, 30).writes, [['s-1', { turnStart: 10, offset: 30 }]]);
+  check('a continued stop keeps the turn start and moves the offset to the end', advanced(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { turnStart: 10, offset: 30 }, 50).writes, [['s-1', { turnStart: 10, offset: 50 }]]);
+  check('a continued stop over a state with no turn start opens it at the stored offset', advanced(stopPayload(PENDING_MESSAGE, { stopHookActive: true }), { offset: 30 }, 50).writes, [['s-1', { turnStart: 30, offset: 50 }]]);
+  check('a first sighting opens the turn at zero', advanced(stopPayload(CLEAN_MESSAGE), undefined, 7).writes, [['s-1', { turnStart: 0, offset: 7 }]]);
+  check('an unmeasurable transcript keeps the offset where it was', advanced(stopPayload(CLEAN_MESSAGE), { turnStart: 5, offset: 10 }, undefined).writes, [['s-1', { turnStart: 10, offset: 10 }]]);
+  check('a payload with no session is kept under unknown', advanced({ last_assistant_message: 'x' }, undefined, 3).writes, [['unknown', { turnStart: 0, offset: 3 }]]);
+  check('the state is read for the session of the payload', advanced(stopPayload(CLEAN_MESSAGE, { sessionId: 's-9' }), undefined, 1).read, ['s-9']);
+  check('a state whose fields are not numbers is a first sighting', advanced(stopPayload(CLEAN_MESSAGE, { stopHookActive: true }), { turnStart: 'x', offset: 'y' }, 4).writes, [['s-1', { turnStart: 0, offset: 4 }]]);
+  check('decide reads the transcript from the turn start, not from the offset', verdict(stopPayload(PENDING_MESSAGE), { offset: 3 }).reads, [3]);
+  check('decide over a state with no turn start reads the whole transcript', settle(() => {
+    const reads = [];
+
+    decide(stopPayload(PENDING_MESSAGE), { readState: () => ({ offset: 9 }), readTail: (transcriptPath, from) => (reads.push(from), ''), resolveTopicKey: () => ({ error: 'not-found' }) });
+
+    return reads;
+  }), [0]);
 }
+
+// ---------------------------------------------------------------------------------------------
+// THE DEGRADATION JOURNAL (`degradation-journal.mjs`): a fail-open over an unreadable store leaves one line in the
+// refusal journal, with the session, the store errors and the transcript; a line that cannot be written costs the
+// evidence, never the decision. @es EL JOURNAL DE DEGRADACIONES: un fallo abierto deja una línea; si no se puede
+// escribir, se pierde la evidencia, nunca la decisión.
+// ---------------------------------------------------------------------------------------------
 {
-  const { writes } = verdict(stopPayload(PENDING_MESSAGE), { tail: '', size: 9999 });
-  check('the offset advances even when the turn is blocked (the retry bypasses via stop_hook_active)', writes[0]?.state?.offset, 9999);
+  const parsedOrTorn = (line) => {
+    try {
+      return JSON.parse(line);
+    } catch {
+      return 'torn';
+    }
+  };
+  const readJournal = () => (existsSync(refusalsFile()) ? readFileSync(refusalsFile(), 'utf8').split('\n').filter((line) => line !== '').map(parsedOrTorn) : []);
+  const before = readJournal().length;
+
+  journalDegraded(stopPayload(PENDING_MESSAGE, { sessionId: 's-degraded', transcriptPath: 't.jsonl' }), { errors: ['store-unreadable'] }, { now: () => new Date(Date.UTC(2026, 9, 19, 12)) });
+
+  const lines = readJournal();
+
+  check('a fail-open is journaled once, with its kind, session, errors, transcript and time', [lines.length - before, lines.at(-1)], [1, { at: '2026-10-19T12:00:00.000Z', session: 's-degraded', kind: 'store-unreadable-fail-open', errors: ['store-unreadable'], transcript: 't.jsonl' }]);
+  check('the journal is the backlog-guard refusal journal, which rotation archives', [path.basename(refusalsFile()), path.basename(path.dirname(refusalsFile())), DEGRADED_KIND], ['refusals.jsonl', 'backlog-guard', 'store-unreadable-fail-open']);
+  check('a line that cannot be written never throws', settle(() => journalDegraded(stopPayload(PENDING_MESSAGE), { errors: [1n] })), undefined);
+  check('a line that cannot be written leaves no line', readJournal().length, lines.length);
+  check('the journal time defaults to now', (journalDegraded(stopPayload(PENDING_MESSAGE), { errors: ['query-failed'] }), Math.abs(Date.parse(readJournal().at(-1)?.at) - Date.now()) < 60000), true);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -309,14 +372,14 @@ check('BOM + valid JSON is still parsed (PowerShell 5.1 shape)', settle(() => ev
 // ---------------------------------------------------------------------------------------------
 check(
   'an unreadable transcript (tail undefined) fails OPEN, never a false block',
-  settle(() => decide(stopPayload(PENDING_MESSAGE), { readState: () => undefined, writeState: () => {}, readTail: () => undefined, sizeOf: () => undefined })) === undefined,
+  settle(() => decide(stopPayload(PENDING_MESSAGE), { readState: () => undefined, readTail: () => undefined })) === undefined,
   true
 );
 
 // ---------------------------------------------------------------------------------------------
 // DIAGNOSTICS: the marker/topic_key primitives, in isolation.
 // ---------------------------------------------------------------------------------------------
-check('findPendingMarker finds a real owner-named root', findPendingMarker('This is left pending and worth flagging.'), 'left pending');
+check('findPendingMarker finds a real owner-named root', findPendingMarker('This is left pending and worth flagging.'), 'pending');
 check('findPendingMarker does not fire on the bare Spanish word "todo" alone', findPendingMarker('Corrí todo el árbol y todo salió verde.'), undefined);
 check('findPendingMarker fires on the list/comment shape "TODO:"', findPendingMarker('TODO: reconciliar node_modules'), 'TODO:');
 check('findPendingMarker does not fire on the Spanish "todo:" (everything:)', findPendingMarker('Lo cerré todo: seis worktrees.'), undefined);
@@ -354,6 +417,26 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
   const result = commandDismiss({ session: 's-1', reason: 'one line only, but\nthis has a newline in it' }, { append: () => {}, mkdir: () => {} });
 
   check('a multi-line reason is REFUSED (it must fit one JSONL line)', result.ok, false);
+  check('every refusal problem is bilingual', [...result.problems, ...commandDismiss({ reason: 'x' }, { append: () => {}, mkdir: () => {} }).problems].every((problem) => problem.includes(' @es ')), true);
+}
+{
+  const failed = commandDismiss({ session: 's-1', reason: 'a long enough reason to be accepted here' }, { append: () => { throw new Error('disk full'); }, mkdir: () => {} });
+
+  check('a log that cannot be written is a bilingual problem naming the cause', [failed.ok, failed.problems.length, failed.problems[0]], [false, 1, 'could not write the dismissal log: disk full @es no se pudo escribir el registro de descartes: disk full']);
+}
+{
+  // The CLI as a person runs it: both its refusal and its acceptance speak both languages.
+  // @es La CLI tal como la corre una persona: su rechazo y su aceptación hablan ambos idiomas.
+  // Its own state root, so its dismissal never reaches the later checks of this run. @es Su propia raíz de estado.
+  const cliState = mkdtempSync(path.join(tmpdir(), 'backlog-guard-dismiss-cli-'));
+
+  process.once('exit', () => rmSync(cliState, { recursive: true, force: true }));
+  const cli = (args) => spawnSync(process.execPath, [path.join(HERE, 'dismiss.mjs'), ...args], { encoding: 'utf8', env: { ...process.env, [STATE_ROOT_VARIABLE]: cliState } });
+  const refused = cli(['--session', 's-cli', '--reason', 'short']);
+  const accepted = cli(['--session', 's-cli', '--marker', 'pendiente', '--reason', 'a written reason of more than twenty-five characters']);
+
+  check('cli: a refusal exits 1 with a bilingual header and bilingual problems', [refused.status, refused.stderr.includes('dismiss REFUSED: @es'), refused.stderr.split('\n').filter((line) => line.startsWith('  - ')).every((line) => line.includes(' @es '))], [1, true, true]);
+  check('cli: an accepted dismissal exits 0 with a bilingual line', [accepted.status, accepted.stdout.includes('DISMISSED and recorded. The turn may end. @es DESCARTADO y registrado. El turno puede terminar.')], [0, true]);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -382,58 +465,69 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
     seed.close();
   }
 
-  function runGuard(message, { dataDir = scratch } = {}) {
-    const input = JSON.stringify(stopPayload(message, { sessionId, transcriptPath }));
-    const env = { ...process.env, ENGRAM_DATA_DIR: dataDir };
+  // The REAL decision over the REAL state files, transcript and engram store, with no injected dependency.
+  // @es La decisión REAL sobre los ficheros de estado, el transcript y el almacén de engram REALES.
+  const degradedReports = [];
+
+  function runGuard(message, { dataDir = scratch, stopHookActive = false } = {}) {
+    const previous = process.env.ENGRAM_DATA_DIR;
+
+    process.env.ENGRAM_DATA_DIR = dataDir;
 
     try {
-      const out = execFileSync(process.execPath, [GUARD_CLI], { input, encoding: 'utf8', env, stdio: ['pipe', 'pipe', 'pipe'] });
-      return { code: 0, out };
-    } catch (error) {
-      return { code: typeof error?.status === 'number' ? error.status : 'did-not-run', out: `${error?.stdout ?? ''}` };
+      const payload = stopPayload(message, { sessionId, transcriptPath, stopHookActive });
+
+      // The gate's order: the window moves on every stop, then the prefilter decides. @es El orden de la compuerta.
+      advanceTurnWindow(payload);
+
+      return { code: 0, finding: decide(payload, { reportDegraded: (info) => degradedReports.push(info) }) };
+    } catch {
+      return { code: 'threw', finding: undefined };
+    } finally {
+      if (previous === undefined) delete process.env.ENGRAM_DATA_DIR;
+      else process.env.ENGRAM_DATA_DIR = previous;
     }
   }
 
-  const verdictOf = (run) => `${String(run.code)}/${run.out.includes('"decision":"block"') ? 'deny' : 'allow'}`;
-  const degradedJournalledFor = () => {
-    const journalFile = path.join(stateDir('backlog-guard'), 'refusals.jsonl');
-
-    return existsSync(journalFile) ? readFileSync(journalFile, 'utf8').split('\n').filter((line) => line.includes(sessionId) && line.includes('"store-unreadable"')).length : 0;
-  };
+  const verdictOf = (run) => `${String(run.code)}/${run.finding === undefined ? 'allow' : 'deny'}`;
+  const degradedJournalledFor = () => degradedReports.length;
 
   // Turn 1: nothing saved yet, no pending phrase -> allow, and the offset gets recorded.
   writeFileSync(transcriptPath, '{"type":"assistant","text":"turn 1, exploring, nothing pending yet"}\n', 'utf8');
   const turn1 = runGuard(CLEAN_MESSAGE);
-  check('END TO END turn 1 (no pending phrase): allowed, exit 0', `${String(turn1.code)}/${turn1.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+  check('END TO END turn 1 (no pending phrase): allowed, exit 0', verdictOf(turn1), '0/allow');
 
   // An intervening, non-pending turn is where the master-backlog save actually happens (a routine
   // housekeeping save, unrelated to any pending announcement) — running the guard here is what
   // advances its offset PAST the save, the same way it would after any real turn.
   appendToFile(transcriptPath, '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master"}}\n');
   const housekeepingTurn = runGuard(CLEAN_MESSAGE);
-  check('END TO END housekeeping turn (save happens, no pending phrase): allowed', `${String(housekeepingTurn.code)}/${housekeepingTurn.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+  check('END TO END housekeeping turn (save happens, no pending phrase): allowed', verdictOf(housekeepingTurn), '0/allow');
 
   // Turn 2: a pending phrase NOW, but the only save in the whole file sits BEFORE the offset the
-  // housekeeping turn just recorded — this turn's own window never sees it -> block.
-  const journalPath = path.join(stateDir('backlog-guard'), 'refusals.jsonl');
-  const journalledFor = () => (existsSync(journalPath) ? readFileSync(journalPath, 'utf8').split('\n').filter((line) => line.includes(sessionId)).length : 0);
-  const journalBefore = journalledFor();
-
+  // housekeeping turn just recorded — this turn's own window never sees it -> the judge is asked.
   appendToFile(transcriptPath, '{"type":"assistant","text":"turn 2, found a real bug, still open for the owner"}\n');
   const turn2 = runGuard(PENDING_MESSAGE);
-  check('END TO END turn 2 (pending phrase, save was in the ALREADY-COVERED earlier window): blocked', `${String(turn2.code)}/${turn2.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/deny');
-  check('END TO END turn 2: the refusal names the guard', turn2.out.includes('BACKLOG-GUARD TRIPPED'), true);
-  check('END TO END turn 2: the refusal carries the Spanish half', turn2.out.includes('@es BACKLOG-GUARD SALTÓ'), true);
-  check('END TO END turn 2: the refusal names the phrase that tripped it, in both languages', turn2.out.includes('worth flagging') && turn2.out.includes('nuevo («worth flagging») y este turno'), true);
-  check('END TO END turn 2: the refusal offers committing the versioned document', turn2.out.includes('or commit the versioned document') && turn2.out.includes('o commiteá el documento versionado'), true);
-  check('END TO END turn 2: the refusal names the dismiss escape hatch', turn2.out.includes('dismiss.mjs'), true);
-  check('END TO END turn 2: the refusal is journaled as evidence', journalledFor() - journalBefore, 1);
+  check('END TO END turn 2 (pending phrase, save was in the ALREADY-COVERED earlier window): owes the judge', verdictOf(turn2), '0/deny');
+  check('END TO END turn 2: the finding names the marker that fired', turn2.finding?.marker, 'still open');
+
+  // Turn 2 continued: the rewrite after a block reads the window from the offset turn 2 left, and moves nothing.
+  // @es Turno 2 continuado: el reescrito tras un bloqueo lee desde el offset que dejó el turno 2 y no lo mueve.
+  check('END TO END turn 2 continued (nothing saved after the block): still owes the judge', verdictOf(runGuard(PENDING_MESSAGE, { stopHookActive: true })), '0/deny');
 
   // Turn 3: a master-backlog save appended DURING this turn's own window (after turn 2's offset) ->
   // the SAME pending phrase now passes, because this time the save genuinely sits in this turn.
   appendToFile(transcriptPath, '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"updated with the finding"}}\n');
+  check('END TO END turn 2 continued (saved after the block): the continued stop passes', verdictOf(runGuard(PENDING_MESSAGE, { stopHookActive: true })), '0/allow');
+  // Turn 3: the save made after turn 2's block belongs to turn 2. A new pending announcement in turn 3 owes again.
+  // @es Turno 3: el guardado posterior al bloqueo del turno 2 es del turno 2; un anuncio nuevo del turno 3 vuelve a deber.
+  appendToFile(transcriptPath, '{"type":"assistant","text":"turn 3, a different finding"}\n');
+  check('END TO END turn 3 (pending phrase, the only save was made after turn 2\'s block): owes the judge', verdictOf(runGuard(PENDING_MESSAGE)), '0/deny');
+  appendToFile(transcriptPath, '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"turn 3 finding"}}\n');
+  check('END TO END turn 3 continued (saved after its own block): passes', verdictOf(runGuard(PENDING_MESSAGE, { stopHookActive: true })), '0/allow');
+  appendToFile(transcriptPath, '{"name":"mem_save","input":{"topic_key":"backlog/1.0.0-master","content":"turn 3b, saved before its stop"}}\n');
   const turn3 = runGuard(PENDING_MESSAGE);
-  check('END TO END turn 3 (pending phrase, save genuinely IN this turn): allowed', `${String(turn3.code)}/${turn3.out.includes('"decision":"block"') ? 'deny' : 'allow'}`, '0/allow');
+  check('END TO END turn 3b (pending phrase, save genuinely IN this turn): allowed', verdictOf(turn3), '0/allow');
 
   // Turns 4-7: the mem_update face against a REAL (constructed, disposable) engram sqlite store reached
   // through `ENGRAM_DATA_DIR`, in REAL separate processes. No earlier read of the master id exists
@@ -462,14 +556,6 @@ check('parseArgs reads --flag value pairs', parseArgs(['--session', 's-1', '--re
   appendToFile(transcriptPath, `${toolUseLine(UPDATE, { id: 1129, content: 'revised again' })}\n`);
   const turn7 = runGuard(PENDING_MESSAGE);
   check('END TO END turn 7 (store readable again, master id): allowed, and no new degradation journaled', `${verdictOf(turn7)}/${String(degradedJournalledFor() - degradedBefore)}`, '0/allow/1');
-
-  // stop_hook_active always allows, real process included.
-  const bypassed = settle(() => execFileSync(process.execPath, [GUARD_CLI], {
-    input: JSON.stringify(stopPayload(PENDING_MESSAGE, { sessionId, transcriptPath, stopHookActive: true })),
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe']
-  }));
-  check('END TO END stop_hook_active: allowed even with a pending phrase', bypassed === 'threw' ? 'threw' : bypassed.includes('"decision":"block"'), false);
 
   function appendToFile(file, text) {
     writeFileSync(file, readFileSync(file, 'utf8') + text, 'utf8');
@@ -505,27 +591,121 @@ check('a fenced block is not the author words', proseOutsideQuotes('a\n```\nlo a
 check('a quote line is not the author words', proseOutsideQuotes('> lo anoto\nok').includes('lo anoto'), false);
 check('guillemets are a quotation', proseOutsideQuotes('la regla «lo anoto» dice').includes('lo anoto'), false);
 check('an opener with no closer stays visible', proseOutsideQuotes('dijo "lo anoto').includes('lo anoto'), true);
-check('a new announced item still blocks', findAnnouncement('Encontré un defecto. Lo anoto en el backlog cuando cierre la tanda.'), 'lo anoto');
-check('the bare word backlog does not block', findAnnouncement('Revisé el backlog y no cambió nada.'), undefined);
-check('a quoted announcement does not block', findAnnouncement('La regla dice "lo anoto" y la cumplí.'), undefined);
-check('an item already recorded in the same sentence does not block', findAnnouncement('Lo anoto: ya está en el backlog.'), undefined);
-check('an observation cited in the next sentence does not block', findAnnouncement('Va al backlog final.\nLo guardé en engram (#1209).'), undefined);
-check('an observation reference alone records the sentence', findAnnouncement('Lo anoto como #1209.'), undefined);
-check('"sigue pendiente" (continues) is not new', findAnnouncement('Sigue pendiente tu decisión.'), undefined);
-check('the infinitive "encolar" mentions the rule, it does not announce', findAnnouncement('Resolver en el momento en vez de encolar.'), undefined);
-check('an uppercase TODO: still blocks', findAnnouncement('Quedó un TODO: reconciliar.'), 'TODO:');
-check('decide lets a turn that merely names the backlog end', verdict(stopPayload('Revisé el backlog, sin cambios.'), { tail: '' }).result, 'allow');
-check('findAnnouncement of a non-string is undefined', findAnnouncement(undefined), undefined);
+check('a candidate is found in the author words', findCandidate('Encontré un defecto. Lo anoto en el backlog cuando cierre la tanda.'), 'backlog');
+
+// --- THE PREFILTER IS BROAD. Every sentence below is one the judges of 2026-10-19 or the lexical rounds got
+// --- wrong, plus the phrase forms the old narrow list dropped: each MUST reach the pending judge, because the
+// --- judge, not the list, decides whether it is pending. WHEN UNSURE, THE PREFILTER FIRES.
+// @es EL PREFILTRO ES AMPLIO. Cada frase llegó mal por las rondas léxicas o por los jueces del 2026-10-19; todas
+// @es DEBEN llegar al juez, que decide si hay pendiente. EN LA DUDA, EL PREFILTRO DISPARA.
+const MUST_REACH_THE_JUDGE = [
+  ['a post-posed not-yet (judges, 2026-10-19)', 'No lo anoto todavía en el backlog.'],
+  ['a pre-posed not-yet', 'Todavía no lo anoto en el backlog.'],
+  ['a not-yet without the accent', 'Aun no paso al backlog el defecto del parser.'],
+  ['an English not-yet', 'Not yet recorded: the retry bug.'],
+  ['a short enclitic after the frame (verlo)', 'Queda por verlo con el dueño.'],
+  ['a short enclitic after the frame (darle)', 'Queda por darle una vuelta al matcher.'],
+  ['a short enclitic after the frame (irse)', 'Queda por irse la rama vieja.'],
+  ['a short enclitic after the frame (avisarme)', 'Queda por avisarme del resultado.'],
+  ['a short enclitic after the frame (pasarte)', 'Queda por pasarte el informe.'],
+  ['an infinitive after a line break', 'Queda por\nresolver la migración.'],
+  ['a negation before the frame, which only the judge may read', 'No queda por hacer nada en la tanda.'],
+  ['a bare backlog mention', 'Revisé el backlog y no cambió nada.'],
+  ['an item that stays pending', 'Queda pendiente el cambio del hook.'],
+  ['an item left for later', 'Lo apunto para después.'],
+  ['a defect named', 'Encontré un defecto en el parser.'],
+  ['a decision left to the owner', 'Falta la decisión del dueño sobre el matcher.'],
+  ['a deferral in English', 'I will fix the parser later on.'],
+  ['an English pending', 'Left pending: the retry bug.'],
+  ['a capitalised marker alone', 'Pendiente.'],
+  ['a deferral that matches only one marker', 'I will fix the parser later on.'],
+  ['an infinitive frame that matches only one marker', 'Eso queda por resolver.'],
+  ['a not-yet that matches only one marker', 'Aun no.']
+];
+
+for (const [label, text] of MUST_REACH_THE_JUDGE) check(`prefilter reaches the judge: ${label}`, findCandidate(text) !== undefined, true);
+
+// A message with no marker costs no model call: the others are not asked.
+// @es Un mensaje sin marcador no cuesta llamada: los demás no se consultan.
+const NEEDS_NO_JUDGE = [
+  ['a plain status', 'Listo, el selftest pasa y los mutantes mueren todos.'],
+  ['the Spanish word everything', 'Corrí todo el árbol y todo salió verde.'],
+  ['a quoted marker is a mention', 'La regla dice "lo anoto en el backlog" y la cumplí.'],
+  ['a marker inside a code span', 'Corré `grep backlog` y mirá la salida.'],
+  ['a marker inside a fenced block', 'Mirá:\n```\nbacklog pendiente\n```\nListo.']
+];
+
+for (const [label, text] of NEEDS_NO_JUDGE) check(`prefilter stays silent: ${label}`, findCandidate(text), undefined);
+
+// THE PREFILTER IS A SUPERSET of the deleted lexical guard: every phrase that guard caught at the base commit,
+// read from that commit's own text (`fixtures/deleted-markers-0aeeb88.json`), still reaches the pending judge,
+// alone and inside a sentence. @es EL PREFILTRO ES UN SUPERCONJUNTO de la guardia léxica eliminada: cada frase
+// que atrapaba en el commit base, leída del texto de ese commit, sigue llegando al juez, sola y dentro de una frase.
+{
+  const deleted = JSON.parse(readFileSync(path.join(HERE, 'fixtures', 'deleted-markers-0aeeb88.json'), 'utf8'));
+
+  check('the deleted list is the base commit one, whole', [deleted.commit, deleted.path, deleted.markers.length, deleted.markers.includes('worth your attention'), deleted.markers.includes('flagging this for')], ['0aeeb88', 'backlog-guard/markers.mjs', 55, true, true]);
+  check('every phrase the deleted guard caught still reaches the judge, alone', deleted.markers.filter((phrase) => findCandidate(phrase) === undefined), []);
+  check('every phrase the deleted guard caught still reaches the judge, inside a sentence', deleted.markers.filter((phrase) => findCandidate(`Nota: ${phrase} acá.`) === undefined), []);
+  check('every phrase the deleted guard caught still owes the judge when nothing was saved', deleted.markers.filter((phrase) => verdict(stopPayload(`Nota: ${phrase} acá.`), { tail: '' }).result !== 'deny'), []);
+}
+
+// MARKERS MATCH WHOLE WORDS: a marker inside a longer word costs no model call («bug» in «debug», «to do» in «to
+// document»); a stem marker (written with a trailing `*`) takes its endings. @es LOS MARCADORES SON PALABRAS ENTERAS.
+check('a marker inside a longer word is not a marker: bug in debug', findCandidate('Corrí el debug del parser y quedó verde.'), undefined);
+check('a marker that runs into a longer word is not a marker: to do in to document', findCandidate('I went on to document the parser.'), undefined);
+check('a whole-word marker still fires: to do', findCandidate('Things to do: the parser.'), 'to do');
+// DEFERRAL UNTIL AN EVENT reaches the judge: the case the pending rubric calls an item put off past a wait
+// (L17 case 3: «Lo mido de verdad cuando aterrice»). @es EL APLAZAMIENTO HASTA UN EVENTO llega al juez.
+check('a deferral until an event reaches the judge, in both languages', ['Lo mido de verdad cuando aterrice.', 'Lo reviso cuando termine el worker.', 'Lo integro cuando llegue el veredicto.', 'I will measure it when it lands.', 'I will check it once it lands.', 'I will look at it after the landing.'].map((text) => findCandidate(text) !== undefined), Array(6).fill(true));
+check('a stem marker takes its endings: bugs, hallazgos, pendientes, queued', [findCandidate('Two bugs.'), findCandidate('Dos hallazgos.'), findCandidate('Quedan pendientes.'), findCandidate('A queued commit.')], ['bug', 'hallazgo', 'pendiente', 'queue']);
+check('a marker at the very start and the very end of the text fires', [findCandidate('bug'), findCandidate('see the backlog')], ['bug', 'backlog']);
+check('a digit glued to a marker is part of the word', findCandidate('the 2bug3 token'), undefined);
+check('a later whole-word occurrence fires after an earlier one inside a word', findCandidate('The debug run found a bug.'), 'bug');
+check('no stem marker is written without its root', PENDING_MARKERS.filter((marker) => marker === '*' || marker.includes('**')), []);
+
+// No lexical intent logic may return: the finder is the same function for a negated and a plain sentence.
+// @es La lógica léxica de intención no debe volver: el buscador trata igual una frase negada y una afirmada.
+check('a negated sentence reaches the judge exactly as the plain one does', findCandidate('No hay hallazgo nuevo.') !== undefined && findCandidate('Hay un hallazgo nuevo.') !== undefined, true);
+check('the finder has no record cue: a cited record still reaches the judge', findCandidate('Lo anoto: ya está en el backlog (#1209).') !== undefined, true);
+
+check('an uppercase TODO: reaches the judge', findCandidate('Quedó un TODO: reconciliar.'), 'TODO:');
+check('the prefilter owes the judge for a bare backlog mention with no save', verdict(stopPayload('Revisé el backlog, sin cambios.'), { tail: '' }).result, 'deny');
+check('findCandidate of a non-string is undefined', findCandidate(undefined), undefined);
 
 {
   const counts = replay();
-  check('every labelled false positive of the live journals is judged, 60 of them', counts.allow.total, 60);
-  check('at least 58 of the 60 dismissed refusals are now allowed', counts.allow.allowed >= 58, true);
-  check('all 4 genuine announcements still block', counts.block, { total: 4, blocked: 4 });
+  check('the labelled live turns are 60 dismissed and 4 genuine', [counts.allow.total, counts.block.total], [60, 4]);
+  // The prefilter's RECALL is the point of making it broad: no genuine announcement may miss the judge. The
+  // dismissed turns that reach it too are the model calls the judge resolves (cost, not error).
+  // @es El RECALL del prefiltro es el sentido de hacerlo amplio: ningún anuncio genuino puede no llegar al juez.
+  check('all 4 genuine announcements reach the judge', counts.block, { total: 4, reachJudge: 4 });
+  // The cost side, pinned: how many dismissed turns still cost a model call. @es El lado del costo, fijado.
+  check('the dismissed turns that reach the judge are pinned', counts.allow, { total: 60, reachJudge: 56 });
+  check('replay reports the reach rate of both labels, bilingual', describeReplay(counts), [
+    'dismissed turns that reach the judge: 56/60 (93.3%) @es turnos descartados que llegan al juez: 56/60 (93.3%)',
+    'genuine announcements that reach the judge: 4/4 (100.0%) @es anuncios genuinos que llegan al juez: 4/4 (100.0%)',
+  ]);
+  check('replay describes an empty label without dividing by zero', describeReplay({ allow: { total: 0, reachJudge: 0 }, block: { total: 0, reachJudge: 0 } })[0], 'dismissed turns that reach the judge: 0/0 (n/a) @es turnos descartados que llegan al juez: 0/0 (n/a)');
 }
 
+// --- THE DISMISSAL LOG, read back: a dismissal of THIS session after a moment ends the question; another
+// --- session's, an earlier one, a torn line and a missing log do not. @es EL REGISTRO DE DESCARTES, releído.
+{
+  const dismissals = dismissalsFile();
+  const at = (ms) => new Date(ms).toISOString();
 
-// THE WIRING: the guard is registered for Stop, and the REAL global manifest lists it. Read from
+  check('a missing log is no dismissal', settle(() => dismissedSince('s-d', 0)), false);
+  mkdirSync(path.dirname(dismissals), { recursive: true });
+  writeFileSync(dismissals, `${JSON.stringify({ at: at(2000), session: 's-d', marker: 'x', reason: 'r' })}\nnot json\n${JSON.stringify({ at: at(3000), session: 'other', marker: 'x', reason: 'r' })}\n`, 'utf8');
+  check('a dismissal of this session after the moment counts', dismissedSince('s-d', 1000), true);
+  check('a dismissal at or before the moment does not', [dismissedSince('s-d', 2000), dismissedSince('s-d', 5000)], [false, false]);
+  check('another session\'s dismissal does not count', dismissedSince('s-d', 2500), false);
+  check('a session with no dismissal does not count', dismissedSince('s-none', 0), false);
+}
+
+// THE WIRING: the lexical guard is GONE from Stop (the pending judge of `judge-gate/` decides, wired in
+// `settings.json` and pinned by the judge-gate selftest), and the REAL global manifest no longer lists it. Read from
 // `homedir()`, deliberately NOT from a path relative to this file's own location: there is exactly
 // ONE real `~/.claude/hook-dispatch/manifests/stop.json` on the machine, and a mutation-proof sandbox
 // copies this selftest into a throwaway directory that has no sibling `hook-dispatch/` at all — a
@@ -537,13 +717,16 @@ check('findAnnouncement of a non-string is undefined', findAnnouncement(undefine
 // `hook-dispatch/` hermano, y una ruta relativa a `HERE` leería nada ahí en silencio. Bajo el runner
 // de selftests el home es un sandbox, así que el árbol bajo prueba se lee de `SELFTEST_TREE`.
 {
-  const declaration = JSON.parse(readFileSync(path.join(HERE, 'guard.mjs.hook-registration.json'), 'utf8'));
-  check('the declaration registers Stop', declaration.registrations?.[0]?.event, 'Stop');
+  check('the lexical Stop guard and its registration sidecar are gone', [existsSync(path.join(HERE, 'guard.mjs')), existsSync(path.join(HERE, 'guard.mjs.hook-registration.json'))], [false, false]);
+
+  const dismissHeader = readFileSync(path.join(HERE, 'dismiss.mjs'), 'utf8').split('*/')[0];
+
+  check('the dismiss command\'s header names the pending judge that prints it, in both languages, and no deleted guard', [dismissHeader.includes('Records a dismissal of a pending-judge block'), dismissHeader.includes('@es Registra el descarte de un bloqueo del juez de pendientes'), dismissHeader.includes('`../pending-judge/appendix.mjs`'), dismissHeader.includes('guard.mjs')], [true, true, true, false]);
 
   const tree = process.env.SELFTEST_TREE || path.join(homedir(), '.claude');
   const manifestPath = path.join(tree, 'hook-dispatch', 'manifests', 'stop.json');
   const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { guards: [] };
-  check('the REAL global Stop manifest lists backlog-guard', manifest.guards.some((entry) => entry.includes('backlog-guard/guard.mjs')), true);
+  check('the REAL global Stop manifest does not list the lexical backlog guard', manifest.guards.some((entry) => entry.includes('backlog-guard/guard.mjs')), false);
 }
 
 process.stdout.write(`backlog-guard.selftest: ${String(passed)} passed, ${String(failures.length)} failed\n`);

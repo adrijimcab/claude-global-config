@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-negation-nothing-pending",
+  "expect": "pass",
+  "provenance": "author",
+  "source": "synthetic: a plain negation",
+  "message": "No queda nada pendiente. Todo quedó commiteado en 0aeeb88 y verificado con los selftests."
+}

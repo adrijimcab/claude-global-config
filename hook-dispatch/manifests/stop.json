@@ -4,7 +4,6 @@
     "../../stop-input-recorder/guard.mjs",
     "../../hooks/claim-guard.mjs",
     "../../owner-language-guard/guard.mjs",
-    "../../backlog-guard/guard.mjs",
     "../../config-sync-guard/guard.mjs",
     "../../failure-capture/turn-guard.mjs",
     "../../engram-persistence/guard.mjs",

@@ -97,6 +97,37 @@ const say = (text) => ({ type: 'assistant', timestamp: tick(), message: { role: 
 const call = (id, name, input) => ({ type: 'assistant', timestamp: tick(), message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } });
 const result = (id, content, isError) => ({ type: 'user', timestamp: tick(), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content, is_error: isError }] } });
 
+/**
+ * A tool call that belongs to one parallel batch: the harness records every content block of one model
+ * message as its own entry, all sharing `message.id`.
+ * @es Una llamada de un lote paralelo: cada bloque de un mismo mensaje del modelo es una entrada propia con el mismo `message.id`.
+ */
+const batchCall = (messageId, id, name, input) => ({ type: 'assistant', timestamp: tick(), message: { id: messageId, role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } });
+
+/**
+ * The `api-request-blob` record the harness writes next to a message: no timestamp, and a `message` that
+ * is a COPY of the original. MEASURED on the b100 transcript of 2026-10-18.
+ * @es El registro `api-request-blob` que el harness graba junto a un mensaje: sin marca de tiempo y con una COPIA del mensaje. MEDIDO en el transcript de b100.
+ */
+const blobOf = (entry) => ({ type: 'api-request-blob', sessionId: 's-blob', hash: 'h', message: entry.message });
+
+const FIVE_AGENTS = ['a7f2e0e740354f361', 'a099205e01bf97a30', 'ad74ccc974f8bc2fb', 'ac52391c0e9350702', 'ac70475eff6aa710a'];
+
+/**
+ * One parallel batch of resumes: every call first (one message), then every result, each followed by its
+ * request-blob copy when asked.
+ * @es Un lote paralelo de reanudaciones: primero todas las llamadas, luego todos los resultados.
+ */
+function parallelResumes(messageId, ids, agents, outcome, { blobs = false } = {}) {
+  const calls = ids.map((id, index) => batchCall(messageId, id, 'SendMessage', { to: agents[index], message: 'continue' }));
+  const results = ids.map((id) => result(id, outcome === 'refused' ? 'BRIEF-PROVENANCE REFUSED this message (SendMessage): the brief has nowhere to tell a measured fact from a guess.' : '{"success":true,"message":"Resuming agent"}', outcome === 'refused' ? true : undefined));
+  const entries = [...calls, ...results];
+
+  // The copies land AFTER the batch and its results, as on the b100 transcript (lines 28196-28197 against 28179-28181).
+  // @es Las copias llegan DESPUÉS del lote y de sus resultados, como en el transcript de b100.
+  return blobs ? [...entries, ...entries.map(blobOf)] : entries;
+}
+
 const REFUSAL = 'ORPHAN-WORK GUARD REFUSED this delegation: a dead agent left unlanded work in it.\nRun the reaper first.';
 const LAUNCHED = 'Async agent launched successfully. (This tool result is informational.)';
 
@@ -231,6 +262,143 @@ const cases = [
     'a refusal on SendMessage counts exactly like one on Agent',
     1,
     [...PROLOGUE, prompt('reanuda'), resumeCall('t1', 'a42240d'), result('t1', 'BRIEF-PROVENANCE REFUSED this message (SendMessage): the brief has nowhere to tell a measured fact from a guess.', true)],
+  ],
+
+  // --- THE b100 INCIDENT, 2026-10-18 (session c4d7f854): five SendMessage resumes refused by the brief
+  // --- guard, then re-sent and accepted as one parallel batch, and the Stop guard still listed all five.
+  // --- ROOT CAUSE, measured on that transcript: the file also holds `api-request-blob` records that carry
+  // --- a COPY of every request message, so each refused call and each refusal appeared twice and each
+  // --- success once; the reader counted the copies. The pairing itself was sound.
+  // @es EL INCIDENTE DE b100: el transcript trae además registros `api-request-blob` con una COPIA de cada
+  // mensaje, así que cada rechazo aparecía dos veces y cada éxito una; el emparejamiento era correcto.
+  [
+    'FIVE resumes refused, re-sent as one parallel batch, the transcript also holding request-blob copies of every message (the b100 shape)',
+    0,
+    [
+      ...PROLOGUE,
+      prompt('reanuda a los cinco'),
+      ...parallelResumes('m1', ['r1', 'r2', 'r3', 'r4', 'r5'], FIVE_AGENTS, 'refused', { blobs: true }),
+      // The retry's own copies are not written yet when the turn ends: the next request writes them.
+      // @es Las copias del reintento aún no existen al terminar el turno: las escribe la siguiente petición.
+      ...parallelResumes('m2', ['s1', 's2', 's3', 's4', 's5'], FIVE_AGENTS, 'launched'),
+      say('los cinco reanudados'),
+    ],
+  ],
+  [
+    'FIVE resumes refused, re-sent as one parallel batch, no copies in the transcript',
+    0,
+    [...PROLOGUE, prompt('reanuda a los cinco'), ...parallelResumes('m1', ['r1', 'r2', 'r3', 'r4', 'r5'], FIVE_AGENTS, 'refused'), ...parallelResumes('m2', ['s1', 's2', 's3', 's4', 's5'], FIVE_AGENTS, 'launched'), say('los cinco reanudados')],
+  ],
+  [
+    'FIVE resumes refused and never re-sent, with request-blob copies: five owed, not ten',
+    5,
+    [...PROLOGUE, prompt('reanuda a los cinco'), ...parallelResumes('m1', ['r1', 'r2', 'r3', 'r4', 'r5'], FIVE_AGENTS, 'refused', { blobs: true }), say('los cinco reanudados')],
+  ],
+  [
+    'FIVE resumes refused, only FOUR re-sent: exactly one is still owed',
+    1,
+    [...PROLOGUE, prompt('reanuda a los cinco'), ...parallelResumes('m1', ['r1', 'r2', 'r3', 'r4', 'r5'], FIVE_AGENTS, 'refused', { blobs: true }), ...parallelResumes('m2', ['s1', 's2', 's3', 's4'], FIVE_AGENTS.slice(0, 4), 'launched')],
+  ],
+  [
+    // Each record of the call is answered by its own refusal copy: counted twice, it would owe two.
+    // @es Cada registro de la llamada recibe su copia del rechazo: contada dos veces, debería dos.
+    'one call recorded in two assistant entries, each answered by a refusal, is ONE debt',
+    1,
+    [...PROLOGUE, prompt('reanuda'), resumeCall('t1', 'a42240d'), result('t1', REFUSAL, true), resumeCall('t1', 'a42240d'), result('t1', REFUSAL, true)],
+  ],
+  [
+    // Without an id nothing says two blocks are the same call, so each is its own attempt.
+    // @es Sin id nada dice que dos bloques sean la misma llamada: cada uno es un intento propio.
+    'two refused calls that carry NO id are two attempts, not one',
+    2,
+    [...PROLOGUE, prompt('delega dos'), agentCall(undefined, 'First errand'), result(undefined, REFUSAL, true), agentCall(undefined, 'Second errand'), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'two refused calls whose id is the EMPTY string are two attempts, not one',
+    2,
+    [...PROLOGUE, prompt('delega dos'), agentCall('', 'First errand'), result('', REFUSAL, true), agentCall('', 'Second errand'), result('', REFUSAL, true)],
+  ],
+  [
+    // An id-less result answers the OLDEST unanswered id-less call. @es Un resultado sin id responde a la llamada sin id MÁS ANTIGUA sin responder.
+    'two PARALLEL refused calls with no id are two attempts, each answered by its own result',
+    2,
+    [...PROLOGUE, prompt('delega dos'), batchCall('m1', undefined, 'Agent', { description: 'First errand', prompt: 'x' }), batchCall('m1', undefined, 'Agent', { description: 'Second errand', prompt: 'x' }), result(undefined, REFUSAL, true), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'two PARALLEL calls with no id and no batch: the first result answers the first call, so the later launch pays it',
+    0,
+    [...PROLOGUE, prompt('delega dos'), agentCall(undefined, 'First errand'), agentCall(undefined, 'Second errand'), result(undefined, REFUSAL, true), result(undefined, LAUNCHED, false)],
+  ],
+  [
+    // The queue holds EVERY id-less call, of any tool, and results pair to it in the same order. An id-less
+    // result names no tool, so the order is the only evidence: the first result answers the Agent call, which
+    // is never owed. @es La cola guarda TODA llamada sin id, de cualquier herramienta, y los resultados se
+    // emparejan en el mismo orden: un resultado sin id no nombra herramienta, solo el orden es evidencia.
+    'an id-less Agent call then an id-less Bash call: the first result is the Agent call\'s, so nothing is owed',
+    0,
+    [...PROLOGUE, prompt('delega y corre'), agentCall(undefined, 'First errand'), call(undefined, 'Bash', { command: 'ls' }), result(undefined, 'ok', false), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'an id-less Agent call then an id-less Bash call, the Bash result refused: the Bash call took the refusal, nothing is owed',
+    0,
+    [...PROLOGUE, prompt('delega y corre'), agentCall(undefined, 'First errand'), call(undefined, 'Bash', { command: 'ls' }), result(undefined, LAUNCHED, false), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'an id-less Bash call before an id-less Agent call: the first result is the Bash one, the refusal is the Agent one',
+    1,
+    [...PROLOGUE, prompt('corre y delega'), call(undefined, 'Bash', { command: 'ls' }), agentCall(undefined, 'First errand'), result(undefined, 'ok', false), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'a Bash call WITH an id takes no place in the id-less queue, so the id-less refusal is the Agent call\'s',
+    1,
+    [...PROLOGUE, prompt('corre y delega'), call('b1', 'Bash', { command: 'ls' }), agentCall(undefined, 'First errand'), result('b1', 'ok', false), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'an id-less Bash call answered ok never launches the id-less Agent call that follows it',
+    1,
+    [...PROLOGUE, prompt('corre y delega'), call(undefined, 'Bash', { command: 'ls' }), result(undefined, 'ok', false), agentCall(undefined, 'First errand'), result(undefined, REFUSAL, true)],
+  ],
+  [
+    'an empty-string result id answers the oldest unanswered id-less call',
+    2,
+    [...PROLOGUE, prompt('delega dos'), batchCall('m1', '', 'Agent', { description: 'First errand', prompt: 'x' }), batchCall('m1', '', 'Agent', { description: 'Second errand', prompt: 'x' }), result('', REFUSAL, true), result('', REFUSAL, true)],
+  ],
+
+  [
+    'a call and its result repeated later in the turn are ONE attempt, and one retry pays it',
+    0,
+    [...PROLOGUE, prompt('reanuda'), resumeCall('t1', 'a42240d'), result('t1', REFUSAL, true), resumeCall('t1', 'a42240d'), result('t1', REFUSAL, true), resumeCall('t2', 'a42240d'), result('t2', LAUNCHED, false)],
+  ],
+  [
+    // A request blob carries the WHOLE history, so it can hold a call of an earlier turn whose original is
+    // not in this turn at all. @es Un blob lleva TODA la historia: puede traer una llamada de un turno previo.
+    'a request-blob copy of an EARLIER turn\'s refused call is not this turn\'s attempt',
+    0,
+    (() => {
+      const earlier = [resumeCall('e1', 'a42240d'), result('e1', REFUSAL, true)];
+
+      return [...PROLOGUE, prompt('primer turno'), ...earlier, say('no pude'), prompt('segundo turno'), ...earlier.map(blobOf), say('nada que delegar')];
+    })(),
+  ],
+
+  // --- Calls that share one model message were all issued before any result came back, so none of them
+  // --- can be a retry of another: a launch pays only a refusal from an EARLIER batch, in either order.
+  // @es Las llamadas de un mismo mensaje del modelo salieron todas antes de cualquier resultado: ninguna
+  // puede ser el reintento de otra, y un lanzamiento solo paga un rechazo de un lote ANTERIOR.
+  [
+    'one parallel batch: a success to agent X listed BEFORE the refusal to X still leaves that refusal owed',
+    1,
+    [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), batchCall('m1', 'p2', 'SendMessage', { to: 'aX', message: 'go' }), result('p1', LAUNCHED, false), result('p2', REFUSAL, true)],
+  ],
+  [
+    'one parallel batch: a refusal to agent X listed BEFORE a success to X is still owed',
+    1,
+    [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), batchCall('m1', 'p2', 'SendMessage', { to: 'aX', message: 'go' }), result('p1', REFUSAL, true), result('p2', LAUNCHED, false)],
+  ],
+  [
+    'a refusal in batch m1 is paid by a success in the LATER batch m2',
+    0,
+    [...PROLOGUE, prompt('reanuda'), batchCall('m1', 'p1', 'SendMessage', { to: 'aX', message: 'go' }), result('p1', REFUSAL, true), batchCall('m2', 'p2', 'SendMessage', { to: 'aX', message: 'go' }), result('p2', LAUNCHED, false)],
   ],
 ];
 

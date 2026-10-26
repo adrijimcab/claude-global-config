@@ -1,0 +1,7 @@
+{
+  "id": "refused-8b594f0d-10051254",
+  "expect": "fail",
+  "provenance": "unadjudicated",
+  "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"hallazgo\"); to be confirmed by reading",
+  "message": "**El paso 20 (Versiones) está terminado** con el commit `df9ee6b`. Su copia de trabajo quedó limpia, lo comprobé yo. Según el agente:\n- **Lista** con las columnas de PROD, su contador y las más recientes primero.\n- **Al pulsar una versión,** los objetos que modificó aparecen a la derecha, en dos columnas como en PROD, con «Objects: N/M», orden de servidor y el nombre enlazado al fuente.\n- **Edición** de la descripción programada, pero no se guardó nunca.\n- **Los tres defectos de PROD no se copiaron;** quedaron como `TODO`.\n- **Todo con datos simulados:** volvió a medir con PROD arriba y ninguno de los dos proyectos tiene versiones.\n- **Un hallazgo curioso:** en PROD, guardar la edición de una versión no cambia nada. El cliente manda `versionLabel` y el servidor lee `description`.\n\n**Los dos stash** que te comenté ya no están: lint-staged los borró solo al salir bien los commits. La lista de stash está vacía, así que no hubo que tocarlos.\n\n**Siguen trabajando:**\n- **Paso 19, Código duplicado:** ya commiteó su primera unidad (`25f278c`, las ayudas de totales, orden y visor de fuente).\n- **Paso 18, filtros y menús de la red:** todavía sin commits. Lo vigilo en el próximo aviso.\n\nCuando terminen los dos, hago el cierre de la tanda."
+}

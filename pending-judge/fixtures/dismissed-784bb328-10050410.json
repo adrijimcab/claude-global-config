@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-784bb328-10050410",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (The directive was already saved to master #972 rev 98 earlier this turn sequence; this turn only copied it into the global mandates file (claude-global-config b)",
+  "message": "Listo. Agregué la directiva a la config global, en `~/.claude/rules/00-owner-mandates.md`, como sección propia: **«DECIDE AS A SENIOR FRONTEND ARCHITECT / TECH LEAD, ALWAYS»**. Ese archivo se carga en todo proyecto y en todo agente. Incluye tu texto literal y estas tres reglas:\n\n- **Decido yo las bifurcaciones técnicas** y te digo la decisión con su porqué. A vos solo te llega lo que únicamente vos tenés: credenciales, permisos, prioridades de negocio, o revertir algo que ya decidiste.\n- **Todo brief se lo exige al worker**, y antes de integrar reviso sus diffs contra ese estándar, porque pasar el gate no alcanza. Quedó anotado el caso del `any` del form-wizard.\n- **Si hay arreglo de raíz y control que lo garantice, se hacen los dos** y se dice cuál es cuál. El ejemplo es el de hoy: la directiva tipada y la regla de lint.\n\nQuedó commiteado y subido al repo de respaldo, `claude-global-config` (bcf351c), y también está en el backlog maestro (REV98)."
+}

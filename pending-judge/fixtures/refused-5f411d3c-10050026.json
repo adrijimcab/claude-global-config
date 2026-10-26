@@ -1,0 +1,7 @@
+{
+  "id": "refused-5f411d3c-10050026",
+  "expect": "fail",
+  "provenance": "author",
+  "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"siguen pendientes\"); to be confirmed by reading || LABEL (T4a2, 2026-10-19): read: \"Siguen pendientes la 1.9 y la 1.6 ... la 6.2c ... la 0.2\" parks four tasks and cites no record",
+  "message": "La 1.5, el informe de precisión de guards, quedó en master (`85da97e`). `land.mjs` dio verificación 87 de 87 en verde, y antes volví a correr yo su selftest (29 checks) y su campaña (81 de 81 mutantes eliminados por aserción). Ya cerré su worktree y sus ramas.\n\nUna nota sobre la 1.5: en tus registros reales todavía no hay ningún bloqueo en el formato nuevo, así que hoy todos los guards dan «sin datos». Va a cambiar cuando cada guard adopte el estado compartido, que es la tarea 1.10.\n\nQuedo frenado y no lanzo nada nuevo. Siguen pendientes la 1.9 y la 1.6, que detuviste, la 6.2c, que no llegó a arrancar, y la 0.2, que espera a b100.\n\n¿Retomo desde acá?"
+}

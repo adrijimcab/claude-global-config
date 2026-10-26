@@ -1,0 +1,8 @@
+{
+  "id": "refused-784bb328-09301908",
+  "expect": "fail",
+  "provenance": "author",
+  "source": "real: a reply whose backlog-guard refusal was NOT dismissed (marker \"backlog\"); to be confirmed by reading || LABEL (T4a2, 2026-10-19): read: the refusal was never dismissed, but the reply reports work in flight, a plan, a measurement, or cites its record; it parks no unrecorded item || RELABEL (T4A2, 2026-10-26, rubric v3 and odd/tasks/backlog-1-6.md L17): fail",
+  "message": "El worker de `script-docs` terminó con dos commits en su rama. Lo integro en la próxima tanda, detrás del arreglo de CI, cuyo `ci:test` sigue corriendo.\n\nLancé también el worker de los tres defectos de tooling (`close.mjs`, eval-guard y el guard de pathspec). Los que siguen corriendo son spec-typecheck, los pendientes de formularios y ese de tooling.\n\nCuando llegue el veredicto de CI actualizo el backlog con las dos cosas juntas.",
+  "labelReason": "\"Cuando llegue el veredicto de CI actualizo el backlog con las dos cosas juntas.\" puts off the record of two items, so both stay unrecorded; the same rule as L17 case 6 (\"lo anoto en el backlog\")."
+}

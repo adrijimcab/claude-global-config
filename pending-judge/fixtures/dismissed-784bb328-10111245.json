@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-784bb328-10111245",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Acknowledgement of a peer coordination message only; no new finding. The final backlog is already saved as REV102 in master 972 this session.)",
+  "message": "La otra sesión avisa que está cambiando el tooling de mutación de `.claude/mutation-proof/` en su propio worktree del repo de respaldo. Me pide que no toque esa carpeta hasta que me pase el commit con el que lo integra.\n\nNo me afecta: no estoy tocando esa carpeta, y ningún paso del backlog la necesita antes de que termine. No hace falta responderle; ya le dije que siguiera.\n\nSigo esperando tu respuesta: ¿arranco por F0, la corrida completa para medir y el arreglo del gate rojo?"
+}

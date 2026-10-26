@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-784bb328-10111419",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (Turn only acknowledges a shared-resource pause; no new finding. Master 972 is a frozen pointer since the cutover; the guard's -master save path is obsolete (rep)",
+  "message": "La sesión de la config global va a integrar en `~/.claude` un lote de 22 commits y me pidió que frenara en un punto seguro. Ya le contesté «paused»: no lanzo agentes ni hago commits en `~/.claude` hasta su «resume». Esta sesión no tiene workers vivos ni escrituras en curso, así que la pausa no corta nada.\n\n**Qué trae el lote, según esa sesión:**\n- **Efecto en el uso normal:** dos cosas. Una es el texto de las reglas. La otra es el guard `brief-tenancy`, que ahora rechaza los briefs cuando antes los dejaba pasar en un `home` vacío.\n- **El resto:** cambios en selftests y campañas de mutación, más el documento del backlog.\n- **Mis dos incidentes:** quedaron registrados para el ajuste de guards, y confirmó que hice bien en no subir sus dos commits.\n\nCuando mande «resume», hago la prueba que me pidió (una delegación y un cierre de turno) y le reporto el resultado.\n\n**Para tu sesión de la 1.0.0:** esta pausa la toca solo si en ese momento lanza un agente o commitea en `~/.claude`. Las escrituras del backlog en el repo del tooling de b100 pueden seguir."
+}

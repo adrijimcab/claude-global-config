@@ -1,0 +1,7 @@
+{
+  "id": "dismissed-c45d798b-09300256",
+  "expect": "pass",
+  "provenance": "unadjudicated",
+  "source": "real: a reply of the owner's sessions whose backlog-guard refusal was DISMISSED (False positive, second live occurrence after fix 45888ec: this very turn called mem_get_observation(972) and then mem_update(972) with revision 29, yet the guar)",
+  "message": "El gate `check:bilingual` ya está en la rama de integración. El agente lo rearmó encima del rework de supresiones y juntó los dos cambios sin perder nada. Corrí sus specs ahí: 274 tests en verde. Queda en el árbol sin script npm hasta que llegue a 0, así que no crece ninguna lista de excepciones.\n\nSobre ese árbol, los textos que no son bilingües bajaron de 2716 a 2483, porque los mensajes de ejecución ya se habían corregido. Por carpeta: `scripts` 1456, `src` 896 y el resto 131. Esa es la campaña que lanzo cuando bajen los agentes que están corriendo.\n\nDevelop sigue esperando lo mismo: la corrección del `b100-input`. Ya está anotado en el backlog maestro, revisión 29."
+}
