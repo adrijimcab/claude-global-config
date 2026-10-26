@@ -122,12 +122,15 @@ const LAZY_SECTIONS = [
       en: 'Blocking-prompt contracts (lossless relay of a prompt, menu or choice envelope for the user; Gentle AI provider-defect handoff): `{stash}`. READ IT IN FULL, and follow it as if written here, as soon as a sub-agent or tool returns a blocking prompt, menu or choice envelope, or a `gentle-ai` invocation exits non-zero or refuses.',
     },
   },
-  // Owner decision 2026-10-01: the review execution contract is loaded only while gentle-ai reviews may
-  // run, until gentle-ai offers that upstream. Its first pointer was bilingual; it is English only now, like
-  // the others, and a CLAUDE.md already moved is repointed by the next apply. @es Decisión del dueño
-  // 2026-10-01: el contrato de ejecución de revisiones se carga solo mientras las revisiones de gentle-ai
-  // pueden correr, hasta que gentle-ai lo ofrezca upstream. Su primer puntero era bilingüe; ahora es solo en
-  // inglés, como los demás, y un CLAUDE.md ya movido se re-apunta con el siguiente apply.
+  // The review execution contract is lazy whatever the review mode. Owner decision 2026-10-01 loaded it only
+  // while gentle-ai reviews may run; with the switch on that kept ~14.7 KB inline and pushed CLAUDE.md over the
+  // 40,000-byte harness per-file limit (43,446 measured 2026-10-18), so it is now read on its triggers, which
+  // the pointer names, exactly like the sections above. A CLAUDE.md already moved is repointed by the next
+  // apply. @es El contrato de ejecución de revisiones es diferido sea cual sea el modo de revisión. La decisión
+  // del dueño del 2026-10-01 lo cargaba solo mientras las revisiones de gentle-ai pueden correr; con el
+  // interruptor encendido eso dejaba ~14,7 KB en línea y CLAUDE.md pasaba el límite por fichero del harness de
+  // 40.000 bytes (43.446 medidos el 2026-10-18), así que ahora se lee ante sus disparadores, que el puntero
+  // nombra, igual que las secciones de arriba. Un CLAUDE.md ya movido se re-apunta con el siguiente apply.
   {
     name: 'review-contract',
     label: 'review contract',
@@ -135,10 +138,9 @@ const LAZY_SECTIONS = [
     end: '#### Cost and Context Balance',
     regions: ORCHESTRATOR_REGIONS,
     witness: '# Native Compact Review Orchestration',
-    loadedWhile: 'reviews-may-run',
     stash: `${LAZY_DIR}/review-execution-contract.md`,
     pointer: {
-      en: 'Receipt-driven development is off globally, so this contract is not loaded: `{stash}`. READ IT IN FULL, and follow it as if written here, before any `gentle-ai review` command other than `gentle-ai review mode status`, before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as `gentle-ai review mode status` reports `effective: on`.',
+      en: 'Review Execution Contract (native review lifecycle, lenses, consent, capture, correction, acknowledgement): `{stash}`. READ IT IN FULL, and follow it as if written here, before running any `gentle-ai review` command other than `gentle-ai review mode status`, whenever the review switch is on (`gentle-ai review mode status` reports `effective: on`), before relaying a `gentle-ai.review-integration.consent/v3` envelope, and as soon as a capture or STATUS returns a review transition.',
     },
   },
   // gentle-ai v4 (ODD) only: the spans below exist in the `orchestrator` and `agent-routing` regions that v4
