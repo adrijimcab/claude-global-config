@@ -91,7 +91,9 @@ function safely(read) {
 }
 
 // --- the fixture: a session-tree-shaped folder under <tmp>/claude/ ----------------------------------
-mkdirSync(path.join(os.tmpdir(), 'claude'), { recursive: true });
+// The folder this run created, if any: the cleanup removes it only when it made it and it is empty again.
+// @es La carpeta que creó esta corrida, si la hay: la limpieza la quita solo si la hizo ella y vuelve a estar vacía.
+const CREATED_CLAUDE_TMP = mkdirSync(path.join(os.tmpdir(), 'claude'), { recursive: true });
 
 const ROOT = mkdtempSync(path.join(os.tmpdir(), 'claude', 'fdg-selftest-'));
 const SCRATCH = path.join(ROOT, 'scratchpad');
@@ -916,6 +918,9 @@ try {
 
   rmSync(TMP_FILE, { force: true });
   rmSync(ROOT, { recursive: true, force: true });
+
+  // Never what another process put there: a folder that is not empty is left as it is. @es Nunca lo que puso otro proceso: una carpeta no vacía se deja como está.
+  if (CREATED_CLAUDE_TMP !== undefined && readdirSync(CREATED_CLAUDE_TMP).length === 0) rmdirSync(CREATED_CLAUDE_TMP);
 }
 
 process.stdout.write(`\n${passed}/${passed + failed} passed\n`);
