@@ -50,12 +50,14 @@ function sessionOf(raw) {
 const notLoaded = (judgeName, error) => ({ outcome: 'malfunction', costUsd: 0, durationMs: 0, why: `the ${judgeName} judge could not be loaded: ${error.message} @es no se pudo cargar el juez ${judgeName}: ${error.message}` });
 
 /**
- * Runs the gate for `judgeName` over `raw`; returns the text to print ('' for none). `model`, `importModule`, `record`
- * and `countBlocks` are the model call, the judge module import, the outcome writer and the turn count (test seams).
- * @es Corre la compuerta; devuelve el texto a imprimir. `model`, `importModule`, `record` y `countBlocks` son la
- * llamada al modelo, la importación de los módulos del juez, el escritor de desenlaces y la cuenta del turno.
+ * Runs the gate for `judgeName` over `raw`; returns the text to print ('' for none: a pass, and a shadow block too).
+ * `model`, `importModule`, `modes`, `record` and `countBlocks` are the model call, the judge module import, the modes
+ * record, the outcome writer and the turn count (test seams).
+ * @es Corre la compuerta; devuelve el texto a imprimir ('' si nada: un pase, y también un bloqueo en sombra).
+ * `model`, `importModule`, `modes`, `record` y `countBlocks` son la llamada al modelo, la importación de los módulos
+ * del juez, el registro de modos, el escritor de desenlaces y la cuenta del turno.
  */
-export async function run(judgeName, raw, { model = askModel, importModule = importJudgeModule, record = recordOutcome, countBlocks = blocksThisTurn } = {}) {
+export async function run(judgeName, raw, { model = askModel, importModule = importJudgeModule, modes, record = recordOutcome, countBlocks = blocksThisTurn } = {}) {
   if (!JUDGE_NAMES.includes(judgeName)) {
     console.error(`Unknown judge "${judgeName}" (known: ${JUDGE_NAMES.join(', ')}); the gate passes. @es Juez desconocido "${judgeName}" (conocidos: ${JUDGE_NAMES.join(', ')}); la compuerta deja pasar.`);
 
@@ -66,7 +68,7 @@ export async function run(judgeName, raw, { model = askModel, importModule = imp
   let outcome;
 
   try {
-    judge = await loadJudge(judgeName, { importModule });
+    judge = await loadJudge(judgeName, { importModule, modes });
   } catch (error) {
     outcome = notLoaded(judgeName, error);
   }
