@@ -84,7 +84,7 @@ function findingsOf(payload, face, options = {}) {
   } catch (error) {
     // A throw is a wrong answer, read as one: never a crash that would hide which check it broke.
     // @es Una excepción es una respuesta equivocada y se lee como tal, nunca un fallo que oculte qué comprobación rompió.
-    return [{ face, threw: String(error) }];
+    return [{ face, threw: String(error), lineNumber: -1, line: '', detail: '', alternative: '' }];
   }
 }
 
@@ -150,7 +150,13 @@ check('NEAR MISS: `git switch` stated as denied in its own clause passes', gitFi
 check('NEAR MISS: a quoted order is data', gitFindings('The old brief said "Run `git switch main`." and it was wrong.').length === 0);
 check('NEAR MISS: allowed git commands pass', gitFindings('Run `git status` and `git restore --staged -- a.txt`, then `git commit -m x -- a.txt`.').length === 0);
 check('one finding per instruction, not one per dialect', gitFindings('Start with `git reset --hard`.').length === 1);
-check('a decision that throws is read as no refusal (fail open)', workerGitRefusals([{ lineNumber: 1, line: 'x', script: 'git reset' }], checkout, () => { throw new Error('boom'); }).length === 0);
+check('a decision that throws is read as no refusal (fail open)', (() => {
+  try {
+    return workerGitRefusals([{ lineNumber: 1, line: 'x', script: 'git reset' }], checkout, () => { throw new Error('boom'); }).length === 0;
+  } catch {
+    return false;
+  }
+})());
 check('the decision is asked with the main checkout the brief comes from', (() => {
   const asked = [];
 
@@ -211,7 +217,7 @@ check('NEAR MISS: a role with no definition file (a built-in type) is left alone
 check('NEAR MISS: a role name that could leave the agents folder is not read', roleFindings('Run `git diff`.', '../agents/reader').length === 0);
 check('NEAR MISS: a prohibition passes', roleFindings('Do not run `git diff`; read the files.', 'reader').length === 0);
 check('NEAR MISS: a command that is neither git nor npm passes', roleFindings('Read `src/a.ts` and `node x.mjs` output.', 'reader').length === 0);
-check('NEAR MISS: a resume names no role', findingsOf(delegation('Run `git diff`.', { tool: 'SendMessage' }), FACES.SHELL_LESS_ROLE).length === 0);
+check('NEAR MISS: a resume is no delegation, even when it carries a role name', findingsOf({ ...delegation('Run `git diff`.', { tool: 'SendMessage' }), tool_input: { ...delegation('Run `git diff`.', { tool: 'SendMessage' }).tool_input, subagent_type: 'reader' } }, FACES.SHELL_LESS_ROLE).length === 0);
 
 console.log(`\n${passed}/${passed + failed} passed`);
 process.exit(failed === 0 ? 0 : 1);
