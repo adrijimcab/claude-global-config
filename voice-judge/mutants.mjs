@@ -37,6 +37,9 @@ const MUTANTS = [
   ['the record lives somewhere else', MEASURE, "path.join(HERE, 'ship-bar.json')", "path.join(HERE, 'ship-bar-other.json')"],
   ['the record names the rubric by its absolute path', MEASURE, "rubric: path.relative(HERE, rubric.path).split(path.sep).join('/'), ", 'rubric: rubric.path, '],
   ['the record does not hash the rubric text', MEASURE, 'promptSha256: sha256(rubric.prompt)', "promptSha256: ''"],
+  ['the record dates by the UTC day again', MEASURE, 'isoWithOffset(new Date())));', 'new Date().toISOString().slice(0, 10)));'],
+  ['the offset has the wrong sign', MEASURE, 'const minutes = -date.getTimezoneOffset();', 'const minutes = date.getTimezoneOffset();'],
+  ['the timestamp hour is UTC while the offset is local', MEASURE, 'T${two(date.getHours())}', 'T${two(date.getUTCHours())}'],
   ['--rates never writes the record', MEASURE, 'if (record !== undefined) record(', 'if (false) record('],
   ['--rates writes the record without --record', MEASURE, "argv.includes('--record') ? writeRecord : undefined", 'writeRecord'],
 
