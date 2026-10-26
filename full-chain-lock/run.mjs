@@ -32,9 +32,6 @@ import { EXIT, runChain } from './chain-runner.mjs';
 import { fileLockAdapter } from './file-lock-adapter.mjs';
 import { speak } from './messages.mjs';
 
-/** The shared state mechanism of the lock. @es El mecanismo de estado compartido del lock. */
-export const MECHANISM = 'full-chain-lock';
-
 /** The real clock. @es El reloj real. */
 const realClock = { now: () => Date.now(), sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) };
 
@@ -53,7 +50,9 @@ export async function main(argv) {
     return EXIT.usage;
   }
 
-  const lock = fileLockAdapter(stateDir(MECHANISM));
+  // The shared state mechanism of the lock, named as a literal so the state census can see it.
+  // @es El mecanismo de estado compartido del lock, con su nombre literal para que el censo de estado lo vea.
+  const lock = fileLockAdapter(stateDir('full-chain-lock'));
 
   // Last resort: a process that exits without passing its `finally` still gives the lock back.
   // @es Último recurso: un proceso que sale sin pasar por su `finally` devuelve igualmente el lock.

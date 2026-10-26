@@ -107,7 +107,7 @@ const MUTANTS = [
   ['the poll interval flag is ignored', X, "pollMs: flags['--poll-ms'] ?? DEFAULT_POLL_MS", 'pollMs: DEFAULT_POLL_MS'],
 
   // --- the composition root
-  ['the state is kept under another mechanism', N, "export const MECHANISM = 'full-chain-lock';", "export const MECHANISM = 'other-mechanism';"],
+  ['the state is kept under another mechanism', N, "stateDir('full-chain-lock')", "stateDir('other-mechanism')"],
   ['the project defaults to a constant directory name', N, 'cwdName: path.basename(process.cwd())', "cwdName: 'cwd'"],
   ['the environment session is not read', N, 'sessionFromEnvironment: process.env.CLAUDE_SESSION_ID', 'sessionFromEnvironment: undefined'],
   ['a usage problem does not exit with the usage code', N, '    return EXIT.usage;', '    return 1;'],
