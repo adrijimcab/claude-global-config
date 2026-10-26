@@ -73,9 +73,6 @@ const POWERSHELL_PATH_PARAMETERS = new Set(['-path', '-literalpath']);
 /** The parameters that make Remove-Item delete nothing. @es Los parámetros con los que Remove-Item no borra nada. */
 const POWERSHELL_DRY_PARAMETERS = new Set(['-whatif', '-wi']);
 
-/** `xargs` options that take the next word as their value. @es Opciones de `xargs` que toman la palabra siguiente como valor. */
-const XARGS_VALUE_OPTIONS = new Set(['-n', '-I', '-L', '-P', '-d', '-E', '-s', '-a']);
-
 /** The `find` options that may precede its start paths. @es Las opciones de `find` que pueden preceder a sus rutas de inicio. */
 const FIND_LEADING_OPTIONS = new Set(['-H', '-L', '-P']);
 
@@ -248,15 +245,19 @@ function moveTargets(name, args, directory, dialect, platform) {
   return sources.flatMap((raw) => resolveOperand(raw, directory, name, grammar, platform));
 }
 
-/** The entry of one `xargs` command that runs a remover: its operands are on standard input. @es La entrada de un `xargs` que ejecuta un borrador. */
-function xargsTargets(args, dialect) {
-  let index = 0;
+/**
+ * Whether `xargs` launches the program at `at`: the shared parser unwraps launchers (`launchers.mjs`), so `xargs`
+ * and its options sit BEFORE the program word, never at it. A word named `xargs` before the program that is an
+ * option value (`sudo -u xargs rm`) also counts: that only ever costs a refusal of a deletion, never a missed one.
+ * @es Si `xargs` lanza el programa de `at`: el parser compartido desenvuelve los lanzadores, así que `xargs` y sus
+ * opciones quedan ANTES de la palabra del programa. Una palabra `xargs` que sea valor de opción también cuenta: solo
+ * cuesta un rechazo, nunca un borrado que se escape.
+ */
+const launchedByXargs = (words, at) => words.slice(0, at).some((word) => executableName(word) === 'xargs');
 
-  while (index < args.length && isOption(args[index])) index += XARGS_VALUE_OPTIONS.has(args[index]) ? 2 : 1;
-
-  const rest = args.slice(index);
-
-  return runsRemover(rest.join(' '), dialect) ? [{ path: undefined, unresolvable: 'stdin', via: `xargs ${executableName(rest[0])}` }] : [];
+/** The entry of a program `xargs` launches that removes: its operands are on standard input. @es La entrada de un programa que lanza `xargs` y borra: sus operandos llegan por stdin. */
+function xargsTargets(launched, dialect) {
+  return runsRemover(launched.join(' '), dialect) ? [{ path: undefined, unresolvable: 'stdin', via: `xargs ${executableName(launched[0])}` }] : [];
 }
 
 /** Whether `git clean` is a dry run: `-n`, `--dry-run`, or a short cluster of the clean letters holding `n`. @es Si `git clean` es una prueba en seco. */
@@ -371,12 +372,17 @@ export function deletionTargets(script, dialect, cwd, { platform = process.platf
 
     if (at === -1) continue;
 
+    // What xargs launches gets its operands on stdin, whatever its own words say. @es Lo que lanza xargs recibe sus operandos por stdin.
+    if (launchedByXargs(command.words, at)) {
+      found.push(...xargsTargets(command.words.slice(at), dialect));
+      continue;
+    }
+
     const name = executableName(command.words[at]);
     const args = command.words.slice(at + 1);
 
     if (REMOVERS.has(name)) found.push(...removerTargets(name, args, directory, dialect, platform));
     if (name === 'find') found.push(...findTargets(args, directory, dialect, platform));
-    if (name === 'xargs') found.push(...xargsTargets(args, dialect));
     if (name === 'cmd') found.push(...cmdTargets(args, command.text, dialect, directory, { platform, cleanPreview }));
     if (MOVERS.has(name)) found.push(...moveTargets(name, args, directory, dialect, platform));
   }

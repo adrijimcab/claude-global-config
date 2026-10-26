@@ -619,6 +619,7 @@ try {
   check('targets: a variable is reported as unresolvable with its reason', targetsOf('rm "$X"')[0]?.unresolvable === 'variable');
   check('targets: an unknowable directory is reported', safely(() => deletionTargets('cd "$X" && rm a', 'bash', SCRATCH)[0]?.unresolvable) === 'directory');
   check('targets: xargs reports stdin', targetsOf('ls | xargs rm')[0]?.unresolvable === 'stdin');
+  check('targets: what xargs launches is only stdin, never a plain remover of its own words', JSON.stringify(targetsOf('ls | xargs rm -f extra.txt').map((target) => target.unresolvable ?? 'path')) === JSON.stringify(['stdin']));
   check('targets: Remove-Item with no operand reports the pipeline', targetsOf('Get-ChildItem | Remove-Item', 'powershell')[0]?.unresolvable === 'pipeline');
   check('targets: bash rm with no operand deletes nothing', targetsOf('rm -f').length === 0);
   check('targets: every target names the command', targetsOf(`rm ${p('mine.mjs')}`)[0]?.via === 'rm' && targetsOf(`find ${p('')} -delete`)[0]?.via === 'find -delete');
