@@ -27,7 +27,7 @@
  * git tras ellas se rechaza por sí mismo.
  */
 
-import { commandWordIndex, executableName } from '../shell-command/shell-command.mjs';
+import { commandWordIndex, executableName, isUnresolvableWord, resolveCommand } from '../shell-command/shell-command.mjs';
 
 /** The selector variables read by exact name. @es Las selectoras leídas por nombre exacto. */
 const SELECTOR_NAMES = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'];
@@ -143,21 +143,40 @@ function namesSelector(word, extraNames) {
  */
 export const isTopLevel = (command) => command.depth === 0 && (command.previous === undefined || UNCONDITIONAL_BEFORE.has(command.previous)) && UNCONDITIONAL_AFTER.has(command.separator);
 
-/** Whether a command runs text as commands, so it can set any variable without naming it. @es Si un comando ejecuta texto como comandos. */
-const runsText = (words, at) => at !== -1 && RUNS_TEXT.has(executableName(words[at]));
+/**
+ * Whether a command runs text as commands, so it can set any variable without naming it: a program that runs text
+ * (`source`, `eval`, `iex`), or a launcher that carries a script the lexer cannot read (`Invoke-Expression $setup`,
+ * which the shared parser reports with no program of its own and the carried text as its script). A carried script
+ * the lexer can read is listed as nested commands and scanned there.
+ * @es Si un comando ejecuta texto como comandos: un programa que ejecuta texto, o un lanzador que lleva un script que
+ * el lexer no puede leer (sin programa propio y con el texto como script). Un script legible se lista como comandos
+ * anidados y se examina ahí.
+ */
+function runsText(words, at) {
+  if (at !== -1) return RUNS_TEXT.has(executableName(words[at]));
+
+  const { script } = resolveCommand(words);
+
+  return script !== undefined && isUnresolvableWord(script);
+}
 
 /**
- * The text of the first command that runs git behind wrapper options (`env -u GIT_DIR git ...`, `env -i git ...`).
- * MEASURED 2026-10-25: the shared parser takes the first option after a wrapper as the command word, so such a git
- * command is no git invocation for any rule, and `env` options change the environment git sees; it is unresolvable.
- * @es El texto del primer comando que ejecuta git tras opciones de un envoltorio; el parser compartido toma la
- * primera opción como palabra de comando, así que ese git no es una invocación para ninguna regla.
+ * The text of the first git command an `env` with OPTIONS launches (`env -u GIT_DIR git ...`, `env -i git ...`):
+ * those options change the environment git sees in ways no rule models, so it is unresolvable. An `env NAME=value`
+ * assignment is a modelled form the selector rules read, so it is not counted here. The shared parser unwraps
+ * `env` to the git word, so the `env` and its words sit before it.
+ * @es El texto del primer comando git que lanza un `env` con OPCIONES: cambian el entorno que ve git de formas que
+ * ninguna regla modela, así que es no resoluble. Una asignación `env NOMBRE=valor` es una forma modelada.
  */
 export function gitBehindWrapperOptions(commands) {
   return commands.find(({ words }) => {
     const at = commandWordIndex(words);
 
-    return at !== -1 && words[at].startsWith('-') && words.slice(at).some((word) => executableName(word) === 'git');
+    if (at === -1 || executableName(words[at]) !== 'git') return false;
+
+    const env = words.findIndex((word, index) => index < at && executableName(word) === 'env');
+
+    return env !== -1 && words.slice(env + 1, at).some((word) => word.startsWith('-'));
   })?.text;
 }
 
