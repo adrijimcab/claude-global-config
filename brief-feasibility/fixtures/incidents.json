@@ -146,9 +146,11 @@
       }
     },
     {
-      "label": "REAL NEAR MISS: isolation worker told \"`git rebase` is denied to workers by permissions\"",
-      "expected": "allow",
-      "faces": [],
+      "label": "REAL NEAR MISS: isolation worker told \"`git rebase` is denied to workers by permissions\" — since 2026-10-26 REFUSED on the worker-git face: its lines DESCRIBE `git update-ref` and `git reset` in code spans with no prohibition word, which instructions.mjs reads as orders (its stated limit, a measured false refusal kept as a named state)",
+      "expected": "deny",
+      "faces": [
+        "worker-git-refused"
+      ],
       "source": {
         "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
         "toolUseId": "toolu_0124FvFAXMfLPLn1TSAwaGnV"
@@ -163,9 +165,11 @@
       "recipientMeta": null
     },
     {
-      "label": "REAL NEAR MISS: the brief that commissioned this guard DESCRIBES all three faces to a main-checkout worker",
-      "expected": "allow",
-      "faces": [],
+      "label": "REAL NEAR MISS: the brief that commissioned this guard DESCRIBES all three faces to a main-checkout worker — since 2026-10-26 REFUSED on the worker-git face: it ORDERS `git commit -m` with no `-- <paths>`, which worker-git-guard refuses to every worker (a true refusal)",
+      "expected": "deny",
+      "faces": [
+        "worker-git-refused"
+      ],
       "source": {
         "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
         "toolUseId": "toolu_01432WRS7wusgwqY1tS8egqh"
