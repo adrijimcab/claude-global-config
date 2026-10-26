@@ -9,16 +9,7 @@
 import { mkdirSync, openSync, closeSync, readFileSync, rmSync, writeSync } from 'node:fs';
 import path from 'node:path';
 
-/** Whether a process with `pid` exists. @es Si existe un proceso con `pid`. */
-export function processExists(pid) {
-  try {
-    process.kill(pid, 0);
-
-    return true;
-  } catch (error) {
-    return error?.code === 'EPERM';
-  }
-}
+import { isAlive } from '../../process-control/process-port.mjs';
 
 function holderOf(lockFile) {
   try {
@@ -33,7 +24,7 @@ function holderOf(lockFile) {
  * @returns `{ taken: true }` or `{ taken: false, holder }` when a live process holds it.
  * @es Toma el candado, o devuelve quién lo tiene si su proceso sigue vivo.
  */
-export function takeLock(lockFile, runId, { alive = processExists } = {}) {
+export function takeLock(lockFile, runId, { alive = isAlive } = {}) {
   mkdirSync(path.dirname(lockFile), { recursive: true });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {

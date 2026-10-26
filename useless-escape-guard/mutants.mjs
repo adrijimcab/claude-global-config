@@ -74,8 +74,9 @@ const RAW_MUTANTS = [
   ['`.ts` joins the judged extensions', GUARD, "new Set(['.mjs', '.js', '.cjs'])", "new Set(['.mjs', '.js', '.cjs', '.ts'])"],
   ['`Write` leaves the guarded tools', GUARD, "new Set(['Write', 'Edit'])", "new Set(['Edit'])"],
   ['`Edit` leaves the guarded tools', GUARD, "new Set(['Write', 'Edit'])", "new Set(['Write'])"],
-  ['a BOM is no longer stripped from the payload', GUARD, 'JSON.parse(withoutBom(raw))', 'JSON.parse(raw)'],
-  ['a malformed payload is refused instead of allowed', GUARD, "  } catch {\n    return undefined;\n  }\n\n  const toolInput", "  } catch {\n    return { hookSpecificOutput: { permissionDecision: 'deny' } };\n  }\n\n  const toolInput"],
+  // The BOM strip lives in `hook-io`, pinned there by its mutant 'the BOM is not stripped'.
+  // @es El BOM lo quita `hook-io`, que lo fija con su mutante 'the BOM is not stripped'.
+  ['a malformed payload is refused instead of allowed', GUARD, 'const payload = tryParsePayload(raw);', "const payload = tryParsePayload(raw);\n\n  if (payload === undefined) return { hookSpecificOutput: { permissionDecision: 'deny' } };\n"],
   ['an edit that cannot be simulated is refused instead of failing open', GUARD, 'reportMalfunction(simulated.error);\n\n    return undefined;', "reportMalfunction(simulated.error);\n\n    return { hookSpecificOutput: { permissionDecision: 'deny' } };"],
   ['the Spanish half of a malfunction report is dropped from stderr', GUARD, '  process.stderr.write(`[useless-escape-guard] @es ${message} — fallando ABIERTO: no poder verificar no es lo mismo que estar limpio.§n`);', ''],
   ['a malfunction is no longer journaled', GUARD, '    appendFileSync(errorsFile(), ', '    void (errorsFile(), '],

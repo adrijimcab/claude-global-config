@@ -27,6 +27,6 @@ const MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const survivors = runMutants({ fleetRoot, paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest: 'failure-capture/stub-placement.selftest.mjs', mutants: MUTANTS });
+const survivors = runMutants({ fleetRoot, paths: ['failure-capture', 'agent-contract-parity', 'bilingual-output', 'mutation-proof', 'hook-state'], selftest: 'failure-capture/stub-placement.selftest.mjs', mutants: MUTANTS, crashKills: 'fail' });
 
 process.exit(survivors === 0 ? 0 : 1);

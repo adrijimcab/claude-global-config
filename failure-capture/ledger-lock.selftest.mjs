@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 /**
- * Proof of the ledger lock (`ledger-lock.mjs`): the exclusive right to write a ledger. A held lock must make a
- * writer stand aside WITHOUT writing and without touching the holder's lock; a lock left by a dead process
- * (older than the stale limit) must not block; a lock the caller took must be gone afterwards, on success and
- * on failure. The units run on lock files in a temporary directory; the end-to-end cases run `capture.mjs`
- * in a constructed repository and home (HOME and USERPROFILE overridden), never the real ledger.
- * Nothing here can hang: every wait is an injected no-op or a bounded retry loop.
+ * Proof of the ledger lock (`ledger-lock.mjs`), the adapter of the one state lock (`../hook-state/file-lock.mjs`)
+ * for the ledger writers. Every rule of the lock itself (owner token, breaker re-check, identity check, ceiling,
+ * contention codes, real-process races) is proven by `../hook-state/file-lock.selftest.mjs`; this proves what is
+ * the adapter's: its public API takes, holds and releases the same lock with the ledger's defaults (a minute,
+ * forty attempts), and a fault of the lock is said, in both languages, as the ledger lock's while a failure of the
+ * work reaches the caller unchanged. The end-to-end cases run `capture.mjs` in a constructed repository and home
+ * (HOME and USERPROFILE overridden), never the real ledger. Nothing here can hang: every wait is an injected no-op
+ * or a bounded retry loop.
  *
- * @es Prueba del lock del ledger: el derecho exclusivo a escribirlo. Un lock ocupado hace que quien escribe se
- * aparte SIN escribir y sin tocar el lock del dueño; un lock de un proceso muerto (más viejo que el límite)
- * no bloquea; un lock tomado ya no existe después, con éxito o con fallo. Las unidades corren sobre ficheros
- * de lock en un directorio temporal; los casos de extremo a extremo corren `capture.mjs` en un repositorio y
- * un home construidos, nunca el ledger real. Nada puede colgarse: toda espera es un no-op inyectado o un
- * bucle de reintentos acotado.
+ * @es Prueba del lock del ledger, el adaptador del único lock de estado para los escritores de ledgers. Las reglas
+ * del lock mismo las prueba `../hook-state/file-lock.selftest.mjs`; aquí se prueba lo del adaptador: su API pública
+ * toma, mantiene y suelta el mismo lock con los valores del ledger (un minuto, cuarenta intentos), y un fallo del
+ * lock se dice, en ambos idiomas, como del lock del ledger, mientras que un fallo del trabajo llega sin cambios.
+ * Los casos de extremo a extremo corren `capture.mjs` en un repositorio y un home construidos, nunca el ledger real.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -20,7 +21,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import os from 'node:os';
 import path from 'node:path';
 
-import { releaseLock, takeLock, withLock } from './ledger-lock.mjs';
+import { STALE_AFTER_MS, releaseLock, takeLock, withLock } from './ledger-lock.mjs';
 import { provisionLoop, worldEnv } from './fixture-loop.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
@@ -31,8 +32,7 @@ import { isolateState } from '../hook-state/locations.mjs';
 isolateState('failure-capture');
 
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'ledger-lock-selftest-'));
-// Removed on every exit, a throw included: a selftest leaves nothing behind it. @es Se elimina en toda salida,
-// también ante una excepción: un selftest no deja nada tras de sí.
+// Removed on every exit, a throw included. @es Se elimina en toda salida, también ante una excepción.
 process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 let passed = 0;
 const failures = [];
@@ -42,21 +42,28 @@ function check(name, condition, detail) {
   else failures.push(`${name}${detail === undefined ? '' : ` — ${String(detail).slice(0, 300)}`}`);
 }
 
-/** `takeLock`, answering `'threw'` instead of throwing, so a fault fails the check that expects true or false rather than crashing the run. @es `takeLock`, que responde `'threw'` en vez de lanzar, para que un fallo haga fallar la comprobación que espera true o false en vez de tumbar la corrida. */
-function taken(...input) {
+/** The value of `work`, or the error it threw: a throw fails a check, never crashes the run. @es El valor, o el error lanzado. */
+const attempt = (work) => {
   try {
-    return takeLock(...input);
-  } catch {
-    return 'threw';
+    return work();
+  } catch (error) {
+    return error;
   }
-}
+};
 
-const STALE_AFTER = 60_000;
+/** What a file holds, `undefined` when it is gone. @es Lo que tiene un fichero, `undefined` si no está. */
+const contentOf = (file) => {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return undefined;
+  }
+};
 
-/** Backdates a lock file so it was made `ms` before `at`. @es Retrocede un fichero de lock: se hizo `ms` antes de `at`. */
+/** Backdates a file so it was made `ms` before `at`. @es Retrocede un fichero: se hizo `ms` antes de `at`. */
 const backdate = (file, at, ms) => utimesSync(file, (at - ms) / 1000, (at - ms) / 1000);
 
-/** Another writer's lock, made by the fixture and not by the code under test, and the clock it is judged by. @es El lock de otro escritor, hecho por el fixture, y el reloj con que se juzga. */
+/** Another writer's (still empty) lock, `ageMs` old. @es El lock (aún vacío) de otro escritor, de `ageMs` de edad. */
 function held(name, ageMs = 0) {
   const lock = path.join(scratch, `${name}.lock`);
   const at = Date.now();
@@ -67,74 +74,71 @@ function held(name, ageMs = 0) {
   return { lock, at };
 }
 
-/** Options of a unit case: a fixed clock, no sleeping, three attempts. @es Opciones de un caso: reloj fijo, sin esperas, tres intentos. */
-const options = (at, extra) => ({ attempts: 3, staleAfterMs: STALE_AFTER, now: () => at, wait: () => undefined, ...extra });
-
+const options = (at, extra) => ({ attempts: 3, now: () => at, wait: () => undefined, ...extra });
 const gone = (file) => !existsSync(file);
-const attempt = (work) => { try { return work(); } catch (error) { return error; } };
 
-// --- taking, holding, releasing ------------------------------------------------------------------------
+// --- the API: take, hold, release --------------------------------------------------------------------------
 {
   const lock = path.join(scratch, 'free.lock');
 
-  check('a free lock is taken and its file exists', taken(lock, options(Date.now())) === true && existsSync(lock));
+  check('a free lock is taken, holding this process\'s owner token', attempt(() => takeLock(lock, options(Date.now()))) === true && String(contentOf(lock)).startsWith(`${String(process.pid)}:`), contentOf(lock));
   releaseLock(lock);
-  check('releasing removes the file, and releasing it again is harmless', gone(lock) && attempt(() => releaseLock(lock)) === undefined);
+  check('releasing removes it, and releasing it again is harmless', gone(lock) && attempt(() => releaseLock(lock)) === undefined);
 }
 
 {
   const { lock, at } = held('held');
   let waits = 0;
 
-  check('a freshly made (still empty) lock is held, not taken', taken(lock, options(at, { wait: () => { waits += 1; } })) === false);
-  check('...the holder keeps its file and the taker waited once per attempt', existsSync(lock) && waits === 3, `waits: ${String(waits)}`);
+  check('a freshly made (still empty) lock is held, not taken, and the holder keeps it', attempt(() => takeLock(lock, options(at, { wait: () => { waits += 1; } }))) === false && existsSync(lock) && waits === 3, `waits: ${String(waits)}`);
 }
 
 {
-  const { lock, at } = held('released-meanwhile');
-
-  check('a lock released while the taker waits is taken on the next attempt', taken(lock, options(at, { wait: () => rmSync(lock, { force: true }) })) === true);
-}
-
-// --- a stale lock ---------------------------------------------------------------------------------------
-{
-  const { lock, at } = held('stale', STALE_AFTER + 10_000);
-
-  check('a lock older than the stale limit belonged to a dead process and is taken', taken(lock, options(at)) === true);
-  check('...and the file is the new holder\'s, not the dead one\'s', statSync(lock).mtimeMs > at - 5_000);
-}
-
-{
-  const { lock, at } = held('nearly-stale', STALE_AFTER - 10_000);
-
-  check('NEAR MISS: a lock just inside the stale limit is still held', taken(lock, options(at)) === false);
-}
-
-{
-  // No option but the clock and the pause: the defaults are what the writers get, a minute and forty attempts.
-  // @es Solo el reloj y la pausa: los valores por defecto son los que reciben los escritores, un minuto y cuarenta intentos.
+  // No option but the clock and the pause: the defaults are what the ledger writers get, a minute and forty attempts.
+  // @es Solo el reloj y la pausa: los valores por defecto son los de los escritores de ledgers.
   const old = held('default-old', 2 * 60_000);
   const recent = held('default-recent', 30_000);
   let waits = 0;
 
-  check('by default a lock two minutes old is taken', taken(old.lock, { now: () => old.at, wait: () => undefined }) === true);
-  check('...and one half a minute old is held for forty attempts', taken(recent.lock, { now: () => recent.at, wait: () => { waits += 1; } }) === false && waits === 40, `waits: ${String(waits)}`);
+  check('the ledger lock\'s stale age is a minute', STALE_AFTER_MS === 60_000, STALE_AFTER_MS);
+  check('by default an empty lock two minutes old is taken', attempt(() => takeLock(old.lock, { now: () => old.at, wait: () => undefined })) === true);
+  releaseLock(old.lock);
+  check('...and one half a minute old is held for forty attempts', attempt(() => takeLock(recent.lock, { now: () => recent.at, wait: () => { waits += 1; } })) === false && waits === 40, `waits: ${String(waits)}`);
 }
 
+// --- faults: said as the ledger lock's, in both languages ---------------------------------------------------
 {
-  const { lock, at } = held('vanishing');
-  const outcome = attempt(() => takeLock(lock, options(at, { now: () => { rmSync(lock, { force: true }); return at; } })));
+  const missing = path.join(scratch, 'no-such-dir', 'x.lock');
+  const isLedgerFault = (fault) => fault instanceof Error && fault.name === 'LockFault' && fault.cause?.code === 'ENOENT' && fault.message.startsWith(`The ledger lock ${missing} failed: `) && fault.message.includes('could not be created (ENOENT)') && fault.message.includes(` @es Falló el lock del ledger ${missing}: No se pudo crear el lock`);
+  const taken = attempt(() => takeLock(missing, options(Date.now())));
+  const within = attempt(() => withLock(missing, () => 'never', options(Date.now())));
 
-  check('a lock that vanishes while it is being examined is no error, and is taken next', outcome === true, String(outcome));
-}
+  check('a lock that cannot be created throws a fault named as the ledger lock\'s, in both halves, with its cause', isLedgerFault(taken), String(taken?.message));
+  check('...and withLock says it the same way', isLedgerFault(within), String(within?.message));
 
-{
-  // "It already exists" is contention to wait out; anything else (a missing directory, say) is a fault to name at once.
-  // @es «Ya existe» es contienda que se espera; cualquier otra cosa (un directorio ausente, por ejemplo) es un fallo que se nombra de inmediato.
-  let waits = 0;
-  const fault = attempt(() => takeLock(path.join(scratch, 'no-such-dir', 'x.lock'), options(Date.now(), { wait: () => { waits += 1; } })));
+  // L4: a fault of ANOTHER lock, thrown by the work, is not the ledger lock's and reaches the caller as it was.
+  // @es L4: un fallo de OTRO lock, lanzado por el trabajo, no es del lock del ledger y llega tal cual.
+  const ledger = path.join(scratch, 'ledger-own.lock');
+  const other = path.join(scratch, 'no-such-dir', 'other.lock');
+  let inner;
+  const relabelled = attempt(() => withLock(ledger, () => {
+    try {
+      takeLock(other, options(Date.now()));
+    } catch (error) {
+      inner = error;
+    }
 
-  check('a lock that cannot be created for another reason throws at once, naming the cause in both languages', fault instanceof Error && fault.cause?.code === 'ENOENT' && fault.message.includes('could not be created') && fault.message.includes('ENOENT') && fault.message.includes(' @es ') && waits === 0, `${String(fault)} waits: ${String(waits)}`);
+    throw inner;
+  }, options(Date.now())));
+
+  check('L4: a fault of another lock thrown inside the work is not relabelled as the ledger lock\'s', relabelled === inner && relabelled?.name === 'LockFault' && !String(relabelled?.message).includes(`The ledger lock ${ledger}`), String(relabelled?.message));
+  check('L4: ...and the ledger lock is released after it', !existsSync(ledger));
+
+  // A fault of the ledger lock's own breaker IS the ledger lock's. @es Un fallo del breaker del propio lock SÍ es suyo.
+  const { lock: staleLedger, at } = held('stale-ledger', 2 * 60_000);
+  const breakerDenied = attempt(() => takeLock(staleLedger, options(at, { create: (file, token) => { if (file.endsWith('.breaker')) throw Object.assign(new Error('EACCES: injected'), { code: 'EACCES' }); writeFileSync(file, token, { flag: 'wx' }); } })));
+
+  check('L4: a fault of the ledger lock\'s own breaker is said as the ledger lock\'s, keeping the file it is about', breakerDenied?.name === 'LockFault' && String(breakerDenied?.message).startsWith(`The ledger lock ${staleLedger} failed: `) && breakerDenied?.file === `${staleLedger}.breaker`, String(breakerDenied?.message));
 }
 
 // --- withLock: released on success and on failure -------------------------------------------------------
@@ -148,10 +152,10 @@ const attempt = (work) => { try { return work(); } catch (error) { return error;
 
 {
   const lock = path.join(scratch, 'with-failure.lock');
-  const failure = attempt(() => withLock(lock, () => { throw new Error('boom'); }, options(Date.now())));
+  const boom = new Error('boom');
+  const failure = attempt(() => withLock(lock, () => { throw boom; }, options(Date.now())));
 
-  check('a failure in the work reaches the caller unchanged', failure instanceof Error && failure.message === 'boom', String(failure));
-  check('...and the lock is gone after the failure', gone(lock));
+  check('a failure in the work reaches the caller unchanged, and the lock is gone after it', failure === boom && gone(lock), String(failure));
 }
 
 {
@@ -217,7 +221,7 @@ const ledgerOf = (target) => (existsSync(target.ledger) && statSync(target.ledge
   const target = world('stale');
 
   writeFileSync(target.lock, '');
-  backdate(target.lock, Date.now(), 2 * STALE_AFTER);
+  backdate(target.lock, Date.now(), 2 * STALE_AFTER_MS);
 
   const run = capture(target, 'stale-lesson');
 

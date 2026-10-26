@@ -42,13 +42,14 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { stateDir } from '../hook-state/locations.mjs';
 import { findMarker } from './markers.mjs';
 import { GLOBAL_SCOPE, projectOf } from './project.mjs';
+import { cooldownFile, readJson, stampFile, writeJson } from './session-state.mjs';
 
 /**
  * The project scope of `cwd`, as a list. A broken project config names no scope rather than failing the
@@ -68,8 +69,6 @@ function safeProjectScopes(cwd) {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
 const stateDirectory = () => stateDir('failure-capture');
-const guardStateFile = () => path.join(stateDirectory(), 'guard-state.json');
-const lastCaptureFile = () => path.join(stateDirectory(), 'last-capture.json');
 const CAPTURE_CLI = path.join(HERE, 'capture.mjs');
 
 /** Independent anti-loop bound, in case `stop_hook_active` is ever absent. @es Cota antibucle independiente por si faltara `stop_hook_active`. */
@@ -89,18 +88,10 @@ function recordError(error, raw) {
   }
 }
 
-function readJson(file, fallback) {
+/** Persists the cooldown of one scope in its own file; nothing else reads or writes it. @es Guarda el cooldown de un alcance en su propio fichero; nadie más lo lee ni lo escribe. */
+function saveCooldown(scopeKey, value) {
   try {
-    return JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJson(file, value) {
-  try {
-    mkdirSync(stateDirectory(), { recursive: true });
-    writeFileSync(file, JSON.stringify(value), 'utf8');
+    writeJson(cooldownFile(stateDirectory(), scopeKey), value);
   } catch {
     /* state is an optimisation; failing to persist it must never block a turn */
   }
@@ -184,21 +175,22 @@ function decide(payload) {
   // Recorded already? The capture CLI stamps every capture and every dismissal. This is the
   // deterministic half of the decision: not "was there a mistake", but "was something written down".
   // @es ¿Ya registrado? El CLI sella cada captura y cada descarte. Esta es la mitad determinista.
-  const state = readJson(guardStateFile(), {});
-  const previous = state[scopeKey] ?? { blockedAt: 0, seenAt: 0 };
-  const stamped = readJson(lastCaptureFile(), undefined);
+  // Each session reads its OWN stamp and keeps its OWN cooldown, so no other live session can overwrite them.
+  // @es Cada sesión lee SU sello y guarda SU cooldown, así que ninguna otra sesión viva puede pisarlos.
+  const previous = readJson(cooldownFile(stateDirectory(), scopeKey), { blockedAt: 0, seenAt: 0 });
+  const stamped = readJson(stampFile(stateDirectory(), sessionId), undefined);
 
-  if (stamped !== undefined && stamped.session === sessionId && Number(stamped.at) > Number(previous.seenAt)) {
-    writeJson(guardStateFile(), { ...state, [scopeKey]: { ...previous, seenAt: now } });
+  if (stamped !== undefined && Number(stamped.at) > Number(previous.seenAt)) {
+    saveCooldown(scopeKey, { ...previous, seenAt: now });
     return undefined;
   }
 
   if (now - Number(previous.blockedAt) < COOLDOWN_MS) {
-    writeJson(guardStateFile(), { ...state, [scopeKey]: { ...previous, seenAt: now } });
+    saveCooldown(scopeKey, { ...previous, seenAt: now });
     return undefined;
   }
 
-  writeJson(guardStateFile(), { ...state, [scopeKey]: { blockedAt: now, seenAt: now } });
+  saveCooldown(scopeKey, { blockedAt: now, seenAt: now });
 
   return blockOutput(marker, agentType === undefined ? 'orchestrator' : `worker:${agentType}`, sessionId, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());
 }

@@ -19,9 +19,7 @@
  * fallo propio.
  */
 
-import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
-
+import { deny, hookMain, parsePayload, runWhenMain } from '../hook-io/hook-io.mjs';
 import { SOURCE_ROOT_RECORDED } from '../vendored/vendored.mjs';
 import { vendoredWrites } from './decide.mjs';
 
@@ -75,28 +73,14 @@ export function evaluate(raw, { decide = vendoredWrites } = {}) {
   let offences;
 
   try {
-    offences = decide(JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw));
+    offences = decide(parsePayload(raw));
   } catch {
     return undefined;
   }
 
   if (offences.length === 0) return undefined;
 
-  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: refusalText(offences) } };
+  return deny(refusalText(offences));
 }
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-}
-
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+runWhenMain(import.meta.url, hookMain(evaluate));

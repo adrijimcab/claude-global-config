@@ -11,11 +11,12 @@
  * presente-pero-ilegible, nunca como ausente.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { readJson } from './landing-path.mjs';
+import { runInstalledKnip } from './knip-facts.mjs';
+import { readJson, readJsonResult } from './landing-path.mjs';
 
 const ESLINT_CONFIGS = ['eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs', 'eslint.config.ts', 'eslint.config.mts', 'eslint.config.cts', '.eslintrc.json', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.yml', '.eslintrc.yaml', '.eslintrc'];
 const DEPCRUISE_CONFIGS = ['.dependency-cruiser.cjs', '.dependency-cruiser.js', '.dependency-cruiser.mjs', '.dependency-cruiser.json'];
@@ -56,11 +57,14 @@ export async function depcruiseConfig(root) {
   }
 }
 
-/** The jscpd settings as `{ file, config }` or undefined. @es Los ajustes de jscpd. */
+/** The jscpd settings as `{ file, config }`, `{ file, error }` when `.jscpd.json` is unreadable, or undefined. @es Los ajustes de jscpd; `{ file, error }` si `.jscpd.json` es ilegible. */
 export function jscpdConfig(root) {
   const file = path.join(root, '.jscpd.json');
 
-  if (existsSync(file)) return { file, config: readJson(file) };
+  const read = readJsonResult(file);
+
+  if (read.state === 'invalid') return { file, error: 'cannot be read or is not valid JSON @es no se puede leer o no es JSON válido' };
+  if (read.state === 'ok') return { file, config: read.value };
 
   const inPackage = readJson(path.join(root, 'package.json'))?.jscpd;
 
@@ -78,19 +82,32 @@ export function knipIgnoreEntries(config) {
   }, 0);
 }
 
-/** The knip config as `{ file, config?, ignoreEntries }` or undefined. @es La config de knip. */
-export function knipConfig(root) {
+/** knip's answer as the ignore debt of a config: `{ ignoreEntries }`, or `{ ignoreEntries: undefined, reason }` when it could not say. @es La respuesta de knip como deuda ignore de una config. */
+function debtOf(answer) {
+  return answer.error === undefined ? { ignoreEntries: answer.ignoreEntries } : { ignoreEntries: undefined, reason: answer.error };
+}
+
+/**
+ * The ignore debt of a knip config FILE. A `.json` file is JSON and is counted here; any other (`knip.ts`,
+ * `knip.js`, `knip.jsonc`) is code or JSON with comments, so knip itself is asked (`askKnip`). `ignoreEntries` is
+ * `undefined` (with a `reason`) when the debt could not be measured, which is not the same as zero.
+ * @es La deuda ignore de un FICHERO de config de knip. Un `.json` es JSON y se cuenta aquí; cualquier otro
+ * (`knip.ts`, `knip.js`, `knip.jsonc`) es código o JSON con comentarios, así que se le pregunta a knip
+ * (`askKnip`). `ignoreEntries` es `undefined` (con `reason`) si no se pudo medir, que no es lo mismo que cero.
+ */
+function fileDebt(root, file, askKnip) {
+  if (!file.endsWith('.json')) return debtOf(askKnip(root, file));
+
+  const read = readJsonResult(file);
+
+  return read.state === 'ok' ? { config: read.value, ignoreEntries: knipIgnoreEntries(read.value) } : { ignoreEntries: undefined, reason: 'cannot be read or is not valid JSON @es no se puede leer o no es JSON válido' };
+}
+
+/** The knip config as `{ file, config?, ignoreEntries, reason? }` or undefined. @es La config de knip. */
+export function knipConfig(root, askKnip = runInstalledKnip) {
   const file = firstExisting(root, KNIP_CONFIGS);
 
-  if (file !== undefined) {
-    try {
-      const config = JSON.parse(readFileSync(file, 'utf8'));
-
-      return { file, config, ignoreEntries: knipIgnoreEntries(config) };
-    } catch {
-      return { file, ignoreEntries: undefined };
-    }
-  }
+  if (file !== undefined) return { file, ...fileDebt(root, file, askKnip) };
 
   const inPackage = readJson(path.join(root, 'package.json'))?.knip;
 

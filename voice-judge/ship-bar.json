@@ -1,0 +1,9 @@
+{
+  "rubric": "rubrics/v8g.mjs",
+  "promptSha256": "0c563fac501dfa38983f779b153357ee6048129331ace9a369adcff9b5ff7d8c",
+  "met": false,
+  "verdict": "NOT MET",
+  "ownerLabels": 12,
+  "runs": 6,
+  "measuredOn": "2026-10-25"
+}

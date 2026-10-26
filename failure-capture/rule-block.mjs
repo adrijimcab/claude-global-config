@@ -19,6 +19,8 @@
  * rechaza entera.
  */
 
+import { commitTransaction } from './route-transaction.mjs';
+
 const opens = (key) => `- **\`${key}\`**`;
 
 /** A line without its carriage return. @es Una línea sin su retorno de carro. */
@@ -110,22 +112,29 @@ export function provesBlockRoute({ before, after, block, key, header }) {
 }
 
 /**
- * Writes a planned block route, RE-READS both files and proves it, restoring what was there when the proof fails.
- * The writes are the caller's (`io`), so a proof can make them lie; the proof is taken on what `readBack` gives.
- * @param input `{ before, plan, io }` — `before` the `{ from, to }` texts as they were (`to` `undefined` when the file did not exist); `plan` from `planBlockRoute`; `io` `{ writeFrom(text), writeTo(text | undefined), readBack() }`.
- * @returns the proof; on `ok: false` both files were restored.
- * @es Escribe una ruta de bloque planeada, RELEE ambos ficheros y la prueba, restaurando lo que había si falla.
+ * Writes a planned block route as ONE transaction (`route-transaction.mjs`), RE-READS both files and proves it: the
+ * bytes both files had are kept before the first write and put back when a write or the re-read throws or the proof
+ * fails, so a failed second write never leaves the rule in two files. The plan is proved BEFORE any write, as a lesson
+ * route is: a plan that would alter, drop or duplicate the block never reaches the disk. The writes are the caller's
+ * (`io`), so a proof can make them lie; the proof after the write is taken on what `readBack` gives.
+ * @param input `{ before, plan, io }` — `before` the `{ from, to }` texts as they were (`to` `undefined` when the file did not exist); `plan` from `planBlockRoute`; `io` `{ writeFrom(text), writeTo(text | undefined), readBack(), snapshot(), restore(saved) }`.
+ * @returns the proof; on `ok: false` both files were restored, or, when `written` is `false`, never touched. A write
+ *   that throws is rethrown, bilingual, after both files were restored.
+ * @es Escribe una ruta de bloque planeada como UNA transacción, RELEE ambos ficheros y la prueba: los bytes de ambos se
+ * guardan antes de la primera escritura y se reponen si una escritura o la relectura lanza o la prueba falla. El plan
+ * se prueba ANTES de escribir: un plan que alteraría, perdería o duplicaría el bloque nunca llega al disco.
  */
 export function commitBlockRoute({ before, plan, io }) {
-  io.writeTo(plan.to);
-  io.writeFrom(plan.from);
+  const planned = provesBlockRoute({ before, after: { from: plan.from, to: plan.to }, block: plan.block, key: plan.key, header: plan.header });
 
-  const proof = provesBlockRoute({ before, after: io.readBack(), block: plan.block, key: plan.key, header: plan.header });
+  if (!planned.ok) return { ...planned, written: false };
 
-  if (!proof.ok) {
-    io.writeFrom(before.from);
-    io.writeTo(before.to);
-  }
-
-  return proof;
+  return commitTransaction({
+    io,
+    write: () => {
+      io.writeTo(plan.to);
+      io.writeFrom(plan.from);
+    },
+    prove: () => provesBlockRoute({ before, after: io.readBack(), block: plan.block, key: plan.key, header: plan.header })
+  });
 }

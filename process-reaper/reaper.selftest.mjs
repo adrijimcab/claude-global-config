@@ -33,7 +33,7 @@ isolateState('process-reaper');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const { reapAgentProcesses } = await import(pathToFileURL(path.join(HERE, 'reaper.mjs')).href);
 const { descendantsOf } = await import(pathToFileURL(path.join(HERE, 'process-tree.mjs')).href);
-const { listProcesses } = await import(pathToFileURL(path.join(HERE, '..', 'worker-status', 'processes.mjs')).href);
+const { listProcesses } = await import(pathToFileURL(path.join(HERE, '..', 'process-control', 'process-port.mjs')).href);
 
 const results = [];
 function check(name, actual, expected) {

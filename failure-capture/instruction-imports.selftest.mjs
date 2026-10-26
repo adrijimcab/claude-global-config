@@ -61,7 +61,15 @@ const CASES = [
 ];
 
 for (const [name, text, expected] of CASES) {
-  const actual = importTargets(text, IMPORTER, HOME);
+  // A throw is a value the check compares, so a broken module fails this case instead of aborting the selftest.
+  // @es Un lanzamiento es un valor que el check compara, así un módulo roto falla este caso y no aborta el selftest.
+  let actual;
+
+  try {
+    actual = importTargets(text, IMPORTER, HOME);
+  } catch (error) {
+    actual = `threw ${error instanceof Error ? error.message : String(error)}`;
+  }
 
   if (JSON.stringify(actual) === JSON.stringify(expected)) passed += 1;
   else failures.push(`${name} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);

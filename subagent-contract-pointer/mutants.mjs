@@ -72,14 +72,14 @@ const MUTANTS = [
   ['the contract files are not listed', TEXT, '...located.files.map((file) => `  ${file}`), ', ''],
   ['a project with files is told none was found', TEXT, 'const contract = located.files.length > 0', 'const contract = located.files.length < 0'],
   // The hook / El hook
-  ['the hook answers for another event', HOOK, "hookEventName: 'SubagentStart'", "hookEventName: 'PreToolUse'"],
-  ['the hook does not strip a byte-order mark', HOOK, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
-  ['the hook delivers nothing', HOOK, 'additionalContext: workerPointer(payload, env)', "additionalContext: ''"]
-];
+  ['the hook answers for another event', HOOK, "context('SubagentStart',", "context('PreToolUse',"],
+  ['the hook does not read the payload through the port parser', HOOK, 'const payload = parsePayload(raw);', 'const payload = JSON.parse(raw);'],
+  ['the hook delivers nothing', HOOK, "context('SubagentStart', workerPointer(payload, env))", "context('SubagentStart', '')"],
+  ['the hook never runs as the main process', HOOK, 'runWhenMain(import.meta.url, hookMain(envelopeFor));', '']];
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['subagent-contract-pointer', 'engineering-standard.md', 'rules', 'settings.json', 'agent-contract-parity', 'brief-feasibility', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['subagent-contract-pointer', 'engineering-standard.md', 'rules', 'settings.json', 'agent-contract-parity', 'brief-feasibility', 'mutation-proof', 'hook-state', 'bilingual-output', 'hook-io'],
   selftest: 'subagent-contract-pointer/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

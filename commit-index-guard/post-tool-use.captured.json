@@ -1,0 +1,28 @@
+{
+  "provenance": "CAPTURED verbatim from the live harness on 2026-10-25 by a hook registered through `claude -p --settings` that appended its stdin (claude 2.1.x, Bash tool, command `git --version`). A second probe ran `git nosuchverb` (exit 1): NO PostToolUse payload was produced, so PostToolUse implies the command succeeded. The payload carries no exit code; tool_response is { stdout, stderr, interrupted, isImage, noOutputExpected }.",
+  "payload": {
+    "session_id": "0b574dec-3f4d-46ea-a6be-213d6ac18fdf",
+    "transcript_path": "C:\\Users\\adrian.jimenez\\.claude\\projects\\C--Users-adrian-jimenez-AppData-Local-Temp-claude-C--Users-adrian-jimenez-Desktop-Projects-di-1700002-discovery-fe-5f411d3c-9331-4b00-8d07-466c793d523f-scratchpad-t4d4\\0b574dec-3f4d-46ea-a6be-213d6ac18fdf.jsonl",
+    "cwd": "C:\\Users\\adrian.jimenez\\AppData\\Local\\Temp\\claude\\C--Users-adrian-jimenez-Desktop-Projects-di-1700002-discovery-fe\\5f411d3c-9331-4b00-8d07-466c793d523f\\scratchpad\\t4d4",
+    "prompt_id": "18364806-46c6-41f1-8a49-ea6bf7103558",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "git --version",
+      "description": "Print installed git version"
+    },
+    "tool_response": {
+      "stdout": "git version 2.54.0.windows.1",
+      "stderr": "",
+      "interrupted": false,
+      "isImage": false,
+      "noOutputExpected": false
+    },
+    "tool_use_id": "toolu_01GHuab6ZSmxA5NBdh6ej5fT",
+    "duration_ms": 822
+  }
+}

@@ -28,6 +28,50 @@ export const MESSAGE_TABLE = {
     en: 'The fires counter {file} is not a valid counter and was left untouched.',
     es: 'El contador de disparos {file} no es un contador válido y se dejó intacto.'
   },
+  'fires-busy': {
+    en: 'The fires counter {file} stayed locked by another process; this fire was not counted.',
+    es: 'Otro proceso mantuvo bloqueado el contador de disparos {file}; este disparo no se contó.'
+  },
+  'fires-budget-spent': {
+    en: 'The fires counter {file} was not tried again: the wait budget it shares with the other counters of this run was spent; this fire was not counted.',
+    es: 'El contador de disparos {file} no se volvió a intentar: se agotó el presupuesto de espera que comparte con los demás contadores de esta corrida; este disparo no se contó.'
+  },
+  'fires-uncounted': {
+    en: 'This fire of {mechanism} was not counted; the reason is in the record.',
+    es: 'Este disparo de {mechanism} no se contó; el motivo está en el registro.'
+  },
+  'lock-create-fault': {
+    en: 'The lock {file} could not be created ({code}): {detail}. This is a fault, not another writer holding it.',
+    es: 'No se pudo crear el lock {file} ({code}): {detail}. Es un fallo, no otro escritor que lo tiene.'
+  },
+  'lock-break-fault': {
+    en: 'The stale lock {file} could not be broken ({code}): {detail}.',
+    es: 'No se pudo romper el lock caducado {file} ({code}): {detail}.'
+  },
+  'lock-break-journal-fault': {
+    en: 'The break of the stale lock {file} could not be journaled ({code}): {detail}. The lock was taken all the same.',
+    es: 'No se pudo registrar la rotura del lock caducado {file} ({code}): {detail}. El lock se tomó igualmente.'
+  },
+  'lock-release-fault': {
+    en: 'The lock {file} could not be released ({code}): {detail}.',
+    es: 'No se pudo soltar el lock {file} ({code}): {detail}.'
+  },
+  'lock-breaker-release-fault': {
+    en: 'The breaker {file} could not be released ({code}): {detail}. It is left for a later break to clear once this process has exited.',
+    es: 'No se pudo soltar el breaker {file} ({code}): {detail}. Queda para que una rotura posterior lo quite cuando este proceso haya terminado.'
+  },
+  'lock-broken-dead-owner': {
+    en: 'The lock {file} was {ageMs} ms old and its owner pid {pid} is gone; it was broken.',
+    es: 'El lock {file} tenía {ageMs} ms y su dueño, el pid {pid}, ya no existe; se rompió.'
+  },
+  'lock-broken-no-owner': {
+    en: 'The lock {file} was {ageMs} ms old and names no owner (empty or unreadable); it was broken by its age.',
+    es: 'El lock {file} tenía {ageMs} ms y no nombra dueño (vacío o ilegible); se rompió por su edad.'
+  },
+  'lock-broken-ceiling': {
+    en: 'The lock {file} was {ageMs} ms old, past the absolute ceiling of {ceilingMs} ms, and was broken although its owner pid {pid} still answers: a reused pid must not wedge the lock.',
+    es: 'El lock {file} tenía {ageMs} ms, más que el techo absoluto de {ceilingMs} ms, y se rompió aunque su dueño, el pid {pid}, aún responde: un pid reutilizado no debe bloquear el lock.'
+  },
   dismissed: {
     en: 'Block {blockId} of {mechanism} dismissed; it is lifted.',
     es: 'Bloqueo {blockId} de {mechanism} descartado; queda levantado.'

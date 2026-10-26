@@ -22,8 +22,9 @@ const MUTANTS = [
   ['the caller gate is dropped: the orchestrator is refused too', DECIDE, 'if (!isSubagentCaller(payload)) return undefined;', ''],
   ['the refusal names the wrong subagent', DECIDE, "agentId: payload.agent_id ?? '(unknown)'", "agentId: '(unknown)'"],
   ['the allow/refuse branch is inverted', GUARD, 'if (refusal === undefined) return undefined;', 'if (refusal !== undefined) return undefined;'],
-  ['the hook decision is flipped from deny to allow', GUARD, "permissionDecision: 'deny'", "permissionDecision: 'allow'"],
-  ['a UTF-8 BOM is no longer stripped', GUARD, "raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw", 'raw']
+  ['the hook decision is flipped from deny to allow', GUARD, 'return deny(reason(refusal));', "return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: reason(refusal) } };"]
+  // The BOM strip lives in `hook-io`, pinned there by its mutant 'the BOM is not stripped'.
+  // @es El BOM lo quita `hook-io`, que lo fija con su mutante 'the BOM is not stripped'.
 ];
 
 const survivors = runMutants({

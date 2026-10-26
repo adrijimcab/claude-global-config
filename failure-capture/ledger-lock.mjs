@@ -1,81 +1,59 @@
 /**
- * The exclusive right to write a ledger: one lock file that every ledger writer takes, so two writers never
- * read-modify-write the same ledger at once. Taking is an atomic create (`wx`); a writer that finds it held
- * waits a bounded number of attempts and then stands aside without writing, and never removes a lock it did
- * not take. A lock older than the stale limit belonged to a process that died holding it and is broken, so a
- * crashed writer cannot wedge every later one. The age is the lock file's own modification time, which exists
- * the instant the file does: a lock still being made is never mistaken for an old one (the earlier code read
- * a timestamp from the file's content, so a lock read before its writer stamped it looked infinitely old).
+ * The exclusive right to write a ledger: the one state lock of `../hook-state/file-lock.mjs`, named for the ledger.
+ * Every rule of taking, judging, breaking and releasing lives there (owner token, breaker re-check, identity check,
+ * absolute ceiling, Windows contention codes); this adapter keeps the public API the ledger writers import
+ * (`takeLock`, `releaseLock`, `withLock`, `STALE_AFTER_MS`) and only says, in both languages, that a fault is the
+ * ledger lock's. A fault inside the work is not the lock's and reaches the caller unchanged.
  *
- * @es El derecho exclusivo a escribir un ledger: un fichero de lock que todo escritor toma, para que dos
- * escritores nunca lean-modifiquen-escriban el mismo ledger a la vez. Tomarlo es una creación atómica (`wx`);
- * quien lo encuentra ocupado espera un número acotado de intentos y se aparta sin escribir, y nunca borra un
- * lock que no tomó. Un lock más viejo que el límite era de un proceso muerto y se rompe, para que un escritor
- * caído no bloquee a los demás. La edad es la fecha de modificación del propio fichero, que existe desde el
- * instante en que existe el fichero: un lock aún en creación nunca se confunde con uno viejo (el código
- * anterior leía una marca de tiempo del contenido, así que un lock leído antes de que su escritor lo sellara
- * parecía infinitamente viejo).
+ * @es El derecho exclusivo a escribir un ledger: el único lock de estado de `../hook-state/file-lock.mjs`, con el
+ * nombre del ledger. Toda regla de tomar, juzgar, romper y soltar vive allí; este adaptador mantiene la API pública
+ * que importan los escritores de ledgers y solo dice, en ambos idiomas, que un fallo es del lock del ledger. Un
+ * fallo dentro del trabajo no es del lock y llega al llamante sin cambios.
  */
 
-import { closeSync, openSync, rmSync, statSync } from 'node:fs';
+import * as stateLock from '../hook-state/file-lock.mjs';
 
-/** A lock older than this belonged to a dead process. @es Un lock más viejo que esto era de un proceso muerto. */
-export const STALE_AFTER_MS = 60_000;
+/** The stale age of the ledger lock: the one of the state lock. @es La edad límite del lock del ledger: la del lock de estado. */
+export const STALE_AFTER_MS = stateLock.STALE_AFTER_MS;
 
-/** Sleeps the thread 50 ms; the callers are synchronous by design. @es Duerme el hilo 50 ms; los llamantes son síncronos por diseño. */
-const pause = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+/**
+ * A fault of THIS ledger lock (its lock file or its breaker), said as the ledger lock's in both halves; any other
+ * error, a fault of another lock thrown by the work included, is returned unchanged.
+ * @es Un fallo de ESTE lock del ledger (su fichero o su breaker), dicho como del lock del ledger en ambas mitades;
+ * cualquier otro error, también el fallo de otro lock lanzado por el trabajo, vuelve igual.
+ */
+function asLedgerFault(error, lockFile) {
+  if (!(error instanceof stateLock.LockFault) || (error.file !== lockFile && error.file !== `${lockFile}.breaker`)) return error;
 
-/** Whether the lock file is older than the limit; one that vanished meanwhile is not. @es Si el lock es más viejo que el límite; uno que desapareció no lo es. */
-function isStale(lockFile, staleAfterMs, now) {
+  const [english, spanish = english] = error.message.split(' @es ');
+
+  return new stateLock.LockFault(`The ledger lock ${lockFile} failed: ${english} @es Falló el lock del ledger ${lockFile}: ${spanish}`, { cause: error.cause, file: error.file });
+}
+
+/**
+ * Takes the ledger lock, or returns false once its attempts are spent with the lock held.
+ * @es Toma el lock del ledger, o devuelve false al agotar los intentos con el lock ocupado.
+ */
+export function takeLock(lockFile, options) {
   try {
-    return now() - statSync(lockFile).mtimeMs > staleAfterMs;
-  } catch {
-    return false;
+    return stateLock.takeLock(lockFile, options);
+  } catch (error) {
+    throw asLedgerFault(error, lockFile);
   }
 }
 
-/**
- * Takes the lock, or returns false once `attempts` are spent. Every option is injectable so a proof never sleeps.
- * @es Toma el lock, o devuelve false al agotar los intentos. Toda opción es inyectable para que una prueba no duerma.
- */
-export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_MS, now = Date.now, wait = pause } = {}) {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      closeSync(openSync(lockFile, 'wx'));
-
-      return true;
-    } catch (error) {
-      // Only "it already exists" is contention worth waiting for; any other failure (a missing or unwritable
-      // directory) will not clear by waiting and must not be reported as another writer holding the lock.
-      // @es Solo «ya existe» es contienda que vale la pena esperar; cualquier otro fallo (directorio ausente o
-      // sin permiso) no se arregla esperando y no debe presentarse como otro escritor con el lock.
-      if (error?.code !== 'EEXIST') throw new Error(`the ledger lock ${lockFile} could not be created: ${error instanceof Error ? error.message : String(error)}. @es no se pudo crear el lock del ledger ${lockFile}.`, { cause: error });
-
-      if (isStale(lockFile, staleAfterMs, now)) releaseLock(lockFile);
-
-      wait();
-    }
-  }
-
-  return false;
-}
-
-/** Removes the lock; one already gone is no error. @es Quita el lock; uno ya ausente no es error. */
-export function releaseLock(lockFile) {
-  rmSync(lockFile, { force: true });
-}
+/** Removes the ledger lock this process took, only while it still holds this process's token. @es Quita el lock del ledger que tomó este proceso. */
+export const { releaseLock } = stateLock;
 
 /**
- * Runs `work` holding the lock and releases it whether `work` returns or throws.
- * @returns `{ held: true, value }`, or `{ held: false }` when the lock could not be taken: `work` did not run and the holder's lock is untouched.
- * @es Ejecuta `work` con el lock y lo suelta tanto si vuelve como si lanza. Con el lock ocupado, `work` no corre y el lock del dueño queda intacto.
+ * Runs `work` holding the ledger lock and releases it whether `work` returns or throws.
+ * @returns `{ held: true, value }`, or `{ held: false }` when the lock could not be taken: `work` did not run.
+ * @es Ejecuta `work` con el lock del ledger y lo suelta tanto si vuelve como si lanza.
  */
 export function withLock(lockFile, work, options) {
-  if (!takeLock(lockFile, options)) return { held: false };
-
   try {
-    return { held: true, value: work() };
-  } finally {
-    releaseLock(lockFile);
+    return stateLock.withLock(lockFile, work, options);
+  } catch (error) {
+    throw asLedgerFault(error, lockFile);
   }
 }

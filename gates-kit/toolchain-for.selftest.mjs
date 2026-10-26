@@ -5,7 +5,9 @@
  * integer (string, fraction, absent); each runner the profile can name against each toolchain (the project's
  * runner wins over the major's default; `jasmine` without Karma and an unknown runner are refused; an absent
  * runner is refused); Nest and Node, and a framework with no toolchain; the host Node at, under and over each
- * range (framework and toolchain refused apart), and an unreadable host Node; that a refusal never carries a
+ * range (framework and toolchain refused apart), and an unreadable host Node; a kit range broken in any
+ * alternative (its third included) refused as a kit defect on every host, and every kit range read in full
+ * with no host version; that a refusal never carries a
  * toolchain to run; every refusal's bilingual line. Against the live kit: every table id is a toolchain folder
  * and every toolchain folder is in the table; each toolchain declares the packages of exactly the runners the
  * table says it pins; the pinned TypeScript lies in the range of its Angular major and angular-eslint has the
@@ -14,7 +16,9 @@
  *
  * @es Prueba de que `toolchainFor` DISCRIMINA y de que su tabla dice la verdad sobre las toolchains reales:
  * cada major y las vecinas, majors no enteras, cada runner contra cada toolchain (gana el del proyecto), Nest,
- * Node y un framework sin toolchain, el Node anfitrión en, bajo y sobre cada rango, y uno ilegible; un rechazo
+ * Node y un framework sin toolchain, el Node anfitrión en, bajo y sobre cada rango, y uno ilegible; un rango
+ * del kit roto en cualquier alternativa (la tercera incluida) rechazado como defecto del kit en todo
+ * anfitrión, y cada rango del kit leído entero sin versión anfitriona; un rechazo
  * nunca lleva toolchain; cada línea bilingüe. Contra el kit real: ids de la tabla y carpetas coinciden, cada
  * toolchain declara los paquetes de los runners que la tabla dice, el TypeScript fijado está en el rango de su
  * major, angular-eslint tiene la major de su toolchain, y el rango de Node de cada toolchain acepta
@@ -25,7 +29,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { satisfies } from './node-range.mjs';
+import { parseRange, satisfies } from './node-range.mjs';
 import { ANGULAR_MAJORS, REFUSALS, TOOLCHAINS, describeRefusal, refusalPair, toolchainFor, toolchainForProfile } from './toolchain-for.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -106,7 +110,60 @@ check('Node-vitest on Node 22.13.0 is refused by its toolchain', pick({ framewor
 check('Node-vitest on Node 22.18.0 is accepted', pick({ framework: 'node', testRunner: 'vitest' }, '22.18.0') === 'node-vitest/vitest');
 check('an unreadable host Node is refused', pick(angular(21, 'vitest'), '22') === 'unreadable-node:22');
 check('an absent host Node is refused', toolchainFor(angular(21, 'vitest'), undefined).reason === 'unreadable-node');
-check('a framework refusal names its range', toolchainFor(angular(22, 'vitest'), '22.22.0').range === TOOLCHAINS['angular-22'].node.framework);
+// A range the kit's OWN table holds that cannot be read is a defect of the kit, never blamed on the host Node.
+// @es Un rango ilegible de la tabla PROPIA del kit es un defecto del kit, nunca se achaca al Node anfitrión.
+/** The refusal of `toolchainFor` while `TOOLCHAINS[id].node[field]` holds `range`; the table is restored. @es El rechazo con un rango dañado; la tabla se restaura. */
+function withBrokenRange(id, field, range, host = NODE) {
+  const node = TOOLCHAINS[id].node;
+  const original = node[field];
+
+  node[field] = range;
+
+  try {
+    return toolchainFor(angular(Number(id.slice(-2)), 'vitest'), host);
+  } finally {
+    node[field] = original;
+  }
+}
+
+{
+  const broken = withBrokenRange('angular-21', 'toolchain', 'banana');
+  const brokenFramework = withBrokenRange('angular-21', 'framework', '>=banana');
+
+  check('a bad toolchain range in the kit table is a kit defect, not an unreadable host Node', broken.ok === false && broken.reason === 'invalid-kit-range');
+  check('a kit defect names the toolchain, the field and the bad range', broken.toolchain === 'angular-21' && broken.range === 'banana' && broken.field === 'toolchain' && broken.detail === 'banana');
+  check('a bad framework range in the kit table is a kit defect too', brokenFramework.reason === 'invalid-kit-range' && brokenFramework.field === 'framework' && brokenFramework.range === '>=banana');
+  check('an unreadable host Node is still unreadable beside a bad kit range', withBrokenRange('angular-21', 'toolchain', 'banana', '22').reason === 'unreadable-node');
+  check('a kit defect from the framework range names its toolchain', brokenFramework.toolchain === 'angular-21');
+  check('a kit defect line is bilingual and names the range', (() => { try { const line = describeRefusal(broken); return line.includes(' @es ') && line.includes('banana') && line.includes('angular-21'); } catch { return false; } })());
+  // A broken THIRD alternative is a kit defect on every host, also on one the first or second alternative accepts.
+  // @es Una TERCERA alternativa rota es un defecto del kit en todo anfitrión, también en uno que acepta la primera o la segunda.
+  for (const host of ['22.13.0', '24.15.0', '30.0.0', '18.0.0']) {
+    const thirdBroken = withBrokenRange('angular-21', 'toolchain', '^22.13.0 || ^24.0.0 || >=banana', host);
+
+    check(`a broken third alternative of a kit range is a kit defect on Node ${host}`, thirdBroken.reason === 'invalid-kit-range' && thirdBroken.field === 'toolchain');
+  }
+  check('the table is restored after the broken-range probes', pick(angular(21, 'vitest')) === 'angular-21/vitest');
+}
+
+/** True when the range reads in full, with no host version involved. @es Verdadero si el rango se lee entero, sin versión anfitriona. */
+function readable(range) {
+  try {
+    parseRange(range);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const KIT_RANGES = Object.entries(TOOLCHAINS).flatMap(([id, { node }]) => Object.entries(node).filter(([, range]) => range !== undefined).map(([field, range]) => ({ id, field, range })));
+
+check('the kit table holds a Node range to read for every toolchain', new Set(KIT_RANGES.map(({ id }) => id)).size === Object.keys(TOOLCHAINS).length);
+for (const { id, field, range } of KIT_RANGES) check(`the ${field} range of ${id} reads in full without a host (${range})`, readable(range));
+check('the host-free reader refuses a broken third alternative', !readable('^22.13.0 || ^24.0.0 || >=banana'));
+
+check('a framework refusal names its range',toolchainFor(angular(22, 'vitest'), '22.22.0').range === TOOLCHAINS['angular-22'].node.framework);
 check('a toolchain refusal names its range', toolchainFor(angular(21, 'vitest'), '25.0.0').range === TOOLCHAINS['angular-21'].node.toolchain);
 check('a refusal carries no toolchain to run', toolchainFor(angular(23, 'vitest'), NODE).ok === false && !('testRunner' in toolchainFor(angular(23, 'vitest'), NODE)));
 
@@ -197,6 +254,11 @@ for (const [id, { node }] of Object.entries(TOOLCHAINS)) {
   const packages = JSON.parse(readFileSync(path.join(HERE, 'toolchains', id, 'package-lock.json'), 'utf8')).packages;
   const engines = Object.entries(packages).filter(([key, entry]) => key !== '' && entry.optional !== true && typeof entry.engines?.node === 'string').map(([, entry]) => entry.engines.node);
   const lockAccepts = SAMPLES.filter((version) => engines.every((range) => satisfies(version, range)));
+
+  // An unreadable table range is already a failed check above; it is not weighed against the lockfile.
+  // @es Un rango ilegible de la tabla ya es un check fallido arriba; no se compara con el lockfile.
+  if (!readable(node.toolchain)) continue;
+
   const tableAccepts = SAMPLES.filter((version) => satisfies(version, node.toolchain));
 
   check(`${id} Node range ${node.toolchain} accepts what its lockfile accepts (lock: ${lockAccepts.join(' ')}; table: ${tableAccepts.join(' ')})`, lockAccepts.join() === tableAccepts.join());

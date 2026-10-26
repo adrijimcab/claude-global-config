@@ -1,6 +1,6 @@
 {
   "id": "prose-plan-with-closing-next-step",
-  "expect": "pass",
-  "source": "orchestrator session 2026-10-11: an all-prose reply about what remains, refused by v3 as a status report although it has no enumeration and closes on the next step",
+  "expect": "unadjudicated",
+  "source": "UNADJUDICATED since 2026-10-19 (Judgment Day round 2, W1 and W2): this real reply has no label from the owner, and silence is not a label, so it is printed with its verdict and never scored; the notes that follow are its history. orchestrator session 2026-10-11: an all-prose reply about what remains, refused by v3 as a status report although it has no enumeration and closes on the next step RELABELLED 2026-10-19 for rubric v8: labelled pass at the v7 floor, where a closing next step inside prose was content; v8 asks the close to land, not re-adjudicated by the owner",
   "message": "Casi todo lo que queda cuelga de una sola pieza, y por eso el orden importa.\n\nEsa pieza es el arreglo que hace que `land.mjs` pruebe cada proyecto con su propia suite. Lo terminé yo y su campaña de mutantes está cerrando bien. Cuando aterrice, la sesión de Discovery va a poder integrar el trabajo que tiene retenido, y eso libera el guard que hoy me impide lanzar agentes en este repo. Recién ahí arranca la auditoría de las dos configuraciones que me pediste.\n\nMientras tanto hay limpieza que no quiero perder: algunas ramas viejas las voy a leer una por una antes de decidir si se integran o se descartan, porque borrar sin leer es la forma más rápida de perder trabajo. El trabajo que solo vive en disco es trabajo que todavía no existe."
 }

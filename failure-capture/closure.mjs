@@ -66,6 +66,16 @@ export const MINIMUM_REASON_LENGTH = 25;
  */
 const SELFTEST_TIMEOUT_MS = 1_800_000;
 
+/**
+ * How much output a mechanism's selftest may print before the run is abandoned: 64 MiB, sixty-four times the
+ * 1 MiB default of `execFileSync`, whose overflow killed a chatty selftest and was reported as a run that "did
+ * not finish". Past this limit the run is reported as an OVERFLOW, which is a different cause.
+ * @es Cuánta salida puede imprimir el selftest de un mecanismo antes de abandonar la corrida: 64 MiB, sesenta y
+ * cuatro veces el 1 MiB por defecto de `execFileSync`, cuyo desborde mataba a un selftest locuaz y se informaba
+ * como una corrida que «no terminó». Pasado este límite se informa como DESBORDE, que es otra causa.
+ */
+const SELFTEST_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+
 /** The proof file every fleet guard keeps beside itself. @es El fichero de prueba que cada guard guarda a su lado. */
 const SELFTEST_NAME = 'selftest.mjs';
 
@@ -171,7 +181,7 @@ function resolveMechanism(mechanismPath, { repoRoot, home }) {
  * 0, y el mecanismo o su selftest nombran la clave. Un selftest matado o que no arranca es una medición
  * que no ocurrió: nunca un pase.
  */
-export function verifyMechanism({ mechanismPath, key, repoRoot, home }) {
+export function verifyMechanism({ mechanismPath, key, repoRoot, home, maxBuffer = SELFTEST_MAX_OUTPUT_BYTES }) {
   const absolute = resolveMechanism(mechanismPath, { repoRoot, home });
 
   if (!existsSync(absolute)) return { ok: false, problem: both(`the mechanism ${mechanismPath} does not exist (resolved to ${absolute})`, `el mecanismo ${mechanismPath} no existe (resuelto a ${absolute})`) };
@@ -188,10 +198,12 @@ export function verifyMechanism({ mechanismPath, key, repoRoot, home }) {
   if (!named) return { ok: false, problem: both(`the mechanism ${mechanismPath} never names "${key}" in its source or its selftest, so nothing ties it to this lesson`, `el mecanismo ${mechanismPath} nunca nombra "${key}" en su código ni en su selftest, así que nada lo ata a esta lección`) };
 
   try {
-    execFileSync(process.execPath, [selftest], { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: SELFTEST_TIMEOUT_MS });
+    execFileSync(process.execPath, [selftest], { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: SELFTEST_TIMEOUT_MS, maxBuffer });
   } catch (error) {
     const status = typeof error?.status === 'number' ? error.status : undefined;
     const output = `${error?.stdout ?? ''}${error?.stderr ?? ''}`.trim().split('\n').slice(-5).join(' | ');
+
+    if (error?.code === 'ENOBUFS') return { ok: false, problem: both(`the selftest of ${mechanismPath} printed more than ${String(maxBuffer)} bytes and was stopped: an output overflow, not a verdict about the mechanism — make the selftest print less`, `el selftest de ${mechanismPath} imprimió más de ${String(maxBuffer)} bytes y se detuvo: un desborde de salida, no un veredicto sobre el mecanismo; que el selftest imprima menos`) };
 
     if (status === undefined) return { ok: false, problem: both(`the selftest of ${mechanismPath} did not finish (${error instanceof Error ? error.message : String(error)}) — a killed run is not a verdict, and not a pass`, `el selftest de ${mechanismPath} no terminó (${error instanceof Error ? error.message : String(error)}): una ejecución abortada no es un veredicto, y no es un pase`) };
 

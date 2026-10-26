@@ -1,6 +1,6 @@
 {
   "id": "held-red-664a8a26-10181710",
-  "expect": "fail",
-  "source": "664a8a26 2026-10-18T17:10:13.814Z (held-out set, never used to tune the rubric; real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
+  "expect": "unadjudicated",
+  "source": "UNADJUDICATED since 2026-10-19 (Judgment Day round 2, W1 and W2): this real reply has no label from the owner, and silence is not a label, so it is printed with its verdict and never scored; the notes that follow are its history. 664a8a26 2026-10-18T17:10:13.814Z (held-out set, never used to tune the rubric; real final reply to the owner; plain first-person status register, no voseo address, no mentor voice)",
   "message": "**pdt quedó aprobado.** Los dos jueces dieron limpia la unidad de seguimiento y verificaron por su cuenta el método de la refutación del contraste. La otra sesión ya arrancó su integración: corre la suite e2e completa sobre la rama y después `land.mjs`. Para no pisarnos en la cadena completa, le avisé al writer de `test:land` que siga con la causa raíz de la fuga de `localStorage` entre specs, pero que no corra la suite entera ni `test:land` hasta mi aviso.\n\nLo de esta tanda quedó registrado en el backlog (#1572, ítems 391 a 397):\n\n- frame/network integrado;\n- las \"dos pantallas faltantes\", cerradas porque no eran pantallas;\n- la auditoría completa y su ola 1;\n- el primer `test:land`, que frenó como corresponde;\n- pdt aprobado;\n- el título del tema oscuro, que me quedo como pendiente para después de pdt."
 }

@@ -12,7 +12,7 @@
  * la compuerta no pueden llamarla de nuevo desde dentro de esta corrida.
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -42,6 +42,47 @@ export function claudeBinary() {
   return 'claude';
 }
 
+/**
+ * The asynchronous twin of `spawnSync` for `askModel`'s `spawn` option: same options read (`input`, `encoding`,
+ * `cwd`, `timeout`, `env`) and same result shape (`status`, `stdout`, `stderr`, `error`), but it never blocks the
+ * event loop, so several runs can be in flight at once. A child past `timeout` is killed and reported in `error`;
+ * a command that cannot start resolves with `status: null` and the spawn error.
+ * @es El gemelo asíncrono de `spawnSync` para la opción `spawn` de `askModel`: lee las mismas opciones y devuelve
+ * la misma forma, pero nunca bloquea el bucle de eventos, así que varias corridas pueden estar en curso a la vez.
+ * Un hijo que pasa su `timeout` se mata y se informa en `error`; un comando que no arranca resuelve con
+ * `status: null` y el error de arranque.
+ */
+export function spawnAsync(command, args, { input = '', encoding = 'utf8', cwd, timeout, env }) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let error;
+    let stdout = '';
+    let stderr = '';
+    const settle = (status) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr, error });
+    };
+    const child = spawn(command, args, { cwd, env, windowsHide: true });
+    const timer = timeout === undefined ? undefined : setTimeout(() => {
+      error = new Error(`The child ran past its timeout of ${timeout} ms. @es El hijo superó su timeout de ${timeout} ms.`);
+      child.kill();
+    }, timeout);
+
+    child.on('error', (spawnError) => {
+      error ??= spawnError;
+      if (child.pid === undefined) settle(null);
+    });
+    child.stdout.setEncoding(encoding).on('data', (chunk) => { stdout += chunk; });
+    child.stderr.setEncoding(encoding).on('data', (chunk) => { stderr += chunk; });
+    child.on('close', (status) => settle(status));
+    // A child that exits before reading its stdin makes the write fail with EPIPE; its exit status tells the story.
+    child.stdin.on('error', () => {});
+    child.stdin.end(input);
+  });
+}
+
 /** The command-line arguments of the run for `model`. @es Los argumentos de la corrida para `model`. */
 export const modelArguments = (model) => ['-p', '--model', model, '--tools', '', '--setting-sources', '', '--system-prompt', SYSTEM_PROMPT, '--disable-slash-commands', '--strict-mcp-config', '--no-session-persistence', '--output-format', 'json'];
 
@@ -57,7 +98,7 @@ export async function askModel(prompt, { spawn = spawnSync, timeoutMs, model = M
   let run;
 
   try {
-    run = spawn(claudeBinary(), modelArguments(model), { input: prompt, encoding: 'utf8', cwd, timeout: timeoutMs, env: { ...process.env, [NESTED_VARIABLE]: '1' } });
+    run = await spawn(claudeBinary(), modelArguments(model), { input: prompt, encoding: 'utf8', cwd, timeout: timeoutMs, env: { ...process.env, [NESTED_VARIABLE]: '1' } });
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

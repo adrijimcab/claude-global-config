@@ -23,7 +23,8 @@ const MUTANTS = [
   // the verdict and its failure mode
   ['a refusal is never produced', GUARD, 'if (offenders.length === 0) return undefined;', 'return undefined;'],
   ['an internal failure refuses the call instead of failing open', GUARD, 'return undefined; // fail open: a malfunction of the decision must never block a call', "throw new Error('boom');"],
-  ['a BOM-prefixed payload is not parsed', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
+  // BOM row retired: the guard parses through hook-io's `tryParsePayload`, whose mutants pin the BOM.
+  // @es Fila del BOM retirada: el guard parsea con `tryParsePayload` de hook-io, cuyos mutantes fijan el BOM.
   ['the files named by options are not part of the call\'s targets', GUARD, '[...toolCallWrites(payload), ...optionNamed]', '[...toolCallWrites(payload)]'],
   ['a shell line is never read for option targets', GUARD, "dialect !== undefined && typeof command === 'string'", 'false'],
   ['the offending target is not named', GUARD, 'refusalText(offenders[0].path, offenders[0].via)', "refusalText('(target)', offenders[0].via)"],

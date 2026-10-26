@@ -26,10 +26,7 @@
  * `write-targets` y `option-writes.mjs`; cuál es la raíz, `shared-temp-targets.mjs`. Falla ABIERTO.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import { deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
 import { dialectOfTool } from '../shell-command/shell-command.mjs';
 import { callDirectory, toolCallWrites } from '../write-targets/tool-call-writes.mjs';
@@ -52,13 +49,9 @@ function writeTargetsOf(payload) {
  * @es La salida de hook para un payload crudo, o `undefined` para dejar correr la llamada.
  */
 export function evaluate(raw, decision = sharedTempOffenders) {
-  let payload;
+  const payload = tryParsePayload(raw);
 
-  try {
-    payload = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-  } catch {
-    return undefined;
-  }
+  if (payload === undefined) return undefined;
 
   if (!isSubagentCaller(payload)) return undefined;
 
@@ -72,27 +65,7 @@ export function evaluate(raw, decision = sharedTempOffenders) {
 
   if (offenders.length === 0) return undefined;
 
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: refusalText(offenders[0].path, offenders[0].via)
-    }
-  };
+  return deny(refusalText(offenders[0].path, offenders[0].via));
 }
 
-function main() {
-  let raw;
-
-  try {
-    raw = readFileSync(0, 'utf8');
-  } catch {
-    return;
-  }
-
-  const output = evaluate(raw);
-
-  if (output !== undefined) console.log(JSON.stringify(output));
-}
-
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
+runWhenMain(import.meta.url, hookMain(evaluate));

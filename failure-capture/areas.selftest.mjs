@@ -31,6 +31,9 @@ import { AREAS, areaLedgerFile, areaRulesFile, isAreaScope } from './ledger-rout
 import { holdsWholeLine } from './conservation.mjs';
 import { loadedSet } from './loaded-set.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
 // session reads, and never a line a previous run left behind.
@@ -218,6 +221,30 @@ for (const [name, args, files] of [
   const recurred = capture(world, KEY, 'global');
 
   check('a recurrence of the moved rule is told ALREADY PROMOTED and pointed at the AREA file now holding its text', recurred.out.includes('ALREADY PROMOTED') && recurred.out.includes(`promoted-${AREA}.md`) && !recurred.out.includes('promoted-rules.md'), recurred.out);
+}
+
+{
+  // The SECOND write of a block route lands and then fails (`write-fault.preload.cjs`): the route is one transaction,
+  // so the area rules file it created is removed again and the source gets back its exact bytes.
+  // @es La SEGUNDA escritura de una ruta de bloque aterriza y luego falla: la ruta es una transacción, así que el
+  // fichero de reglas del área que creó se borra otra vez y el origen recupera sus bytes exactos.
+  const move = `- **\`${KEY}\`** — the rule that moves.\n  RULE: first sentence.\n`;
+  const rules = `# Promoted\n\n${move}\n\n\n`;
+  const world = makeCaptureWorld({ scratch, name: 'route-block-fault', files: { 'home/.claude/lessons-ledger.md': GLOBAL_HEAD, 'home/.claude/lessons-promoted.md': `# Stubs\n\n---\n\n- [promoted] 2026-09-30 — ${KEY}: no mechanism <!--fc:${KEY}#4-->\n`, 'home/.claude/rules/promoted-rules.md': rules } });
+  const failed = world.run(['route', '--key', KEY, '--to', AREA, '--write'], { nodeArgs: ['--require', path.join(HERE, 'write-fault.preload.cjs')], env: { FC_FAULT_RENAME_MATCH: 'promoted-rules.md' } });
+
+  check('a block route whose second write fails exits non-zero and says so in both languages, naming the cause', failed.status !== 0 && failed.out.includes('injected write fault') && failed.out.includes('route FAILED while writing') && failed.out.includes('route FALLÓ al escribir'), failed.out);
+  check('...the source rules file gets back its exact bytes and the area rules file it created is gone', readFileSync(at(world, 'rules', 'promoted-rules.md'), 'utf8') === rules && !existsSync(areaRulesFile(world.home, AREA)), JSON.stringify([readOrEmpty(at(world, 'rules', 'promoted-rules.md')), existsSync(areaRulesFile(world.home, AREA))]));
+}
+
+{
+  // The block route writes through a temporary file renamed over each file, never in place.
+  // @es La ruta de bloque escribe por un fichero temporal renombrado encima de cada fichero, nunca en el sitio.
+  const move = `- **\`${KEY}\`** — the rule that moves.\n  RULE: first sentence.\n`;
+  const world = makeCaptureWorld({ scratch, name: 'route-block-atomic', files: { 'home/.claude/lessons-ledger.md': GLOBAL_HEAD, 'home/.claude/lessons-promoted.md': `# Stubs\n\n---\n\n- [promoted] 2026-09-30 — ${KEY}: no mechanism <!--fc:${KEY}#4-->\n`, 'home/.claude/rules/promoted-rules.md': `# Promoted\n\n${move}` } });
+  const failed = world.run(['route', '--key', KEY, '--to', AREA, '--write'], { nodeArgs: ['--require', path.join(HERE, 'write-fault.preload.cjs')], env: { FC_FAULT_RENAME_MATCH: `promoted-${AREA}.md` } });
+
+  check('...and each write of a block route is an atomic rename (a fault on the first rename is seen and undone)', failed.status !== 0 && failed.out.includes('injected write fault') && !existsSync(areaRulesFile(world.home, AREA)) && readOrEmpty(at(world, 'rules', 'promoted-rules.md')) === `# Promoted\n\n${move}`, failed.out);
 }
 
 {

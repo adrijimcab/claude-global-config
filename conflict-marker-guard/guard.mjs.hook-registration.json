@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "a check chained with `;` before `git add && git rebase --continue` printed its warning and the chain ran anyway, so a conflict marker was committed and rode ten commits (2026-10-25, recurrence of removal-chained-after-an-unconfirmed-check); the refusal sits on the step that commits (rebase|merge|cherry-pick|am --continue, commit), for any caller."
+}

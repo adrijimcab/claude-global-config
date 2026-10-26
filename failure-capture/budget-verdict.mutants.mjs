@@ -50,7 +50,8 @@ const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
   paths: ['failure-capture', 'agent-contract-parity', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'failure-capture/budget-verdict.selftest.mjs',
-  mutants: MUTANTS
+  mutants: MUTANTS,
+  crashKills: 'fail'
 });
 
 process.exit(survivors === 0 ? 0 : 1);
