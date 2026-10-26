@@ -54,7 +54,7 @@ try {
   const copiedBeside = (name) => (existsSync(path.join(everything, '..', name)) ? mjsOf(path.join(everything, '..', name)) : []);
 
   equal('the authored-writes journal modules are copied beside the loop, and only they', copiedBeside('config-sync-guard'), ['authored-writes.mjs', 'touched-paths.mjs', 'transcript-writes.mjs']);
-  equal('the state-location module and its message table are copied beside the loop, and only they', copiedBeside('hook-state'), ['locations.mjs', 'message-table.mjs']);
+  equal('the state-location module, the state lock the ledger lock adapts and their message table are copied beside the loop, and only they', copiedBeside('hook-state'), ['file-lock.mjs', 'locations.mjs', 'message-table.mjs']);
 
   const filtered = loopAt('filtered');
 

@@ -3,7 +3,8 @@
  * shared `bilingual-output` modules that `capture.mjs` imports from its sibling directory, so a sandboxed
  * `capture.mjs` resolves the same imports it has in the real tree. A shared module the copied code imports
  * but the sandbox lacks is reported by name, here, instead of surfacing as a crash inside a child process.
- * The state-location module (`hook-state/locations.mjs` and the message table it speaks through) is copied
+ * The state-location module (`hook-state/locations.mjs`), the state lock the ledger lock adapts
+ * (`hook-state/file-lock.mjs`) and the message table both speak through are copied
  * beside them, and so are the modules of the shared contract-parity engine (`agent-contract-parity/`) that
  * `promote-parity.mjs` imports, so the copy resolves its state the way the real loop does; `worldEnv` is the environment a
  * process of the world runs under, so that resolution lands in the world's own home.
@@ -13,8 +14,9 @@
  * de modo que un `capture.mjs` en sandbox resuelve los mismos imports que en el árbol real. Un módulo
  * compartido que el código copiado importa pero el sandbox no tiene se informa por su nombre, aquí, en vez de
  * aparecer como un fallo dentro de un proceso hijo. Junto a ellos se copian los módulos del motor compartido de
- * paridad de contratos (`agent-contract-parity/`) que importa `promote-parity.mjs`. El módulo de ubicaciones de estado (`hook-state/locations.mjs`
- * y su tabla de mensajes) se copia al lado, así la copia resuelve su estado como el lazo real; `worldEnv` es el
+ * paridad de contratos (`agent-contract-parity/`) que importa `promote-parity.mjs`. El módulo de ubicaciones de estado (`hook-state/locations.mjs`),
+ * el lock de estado que adapta el lock del ledger (`hook-state/file-lock.mjs`) y la tabla de mensajes de ambos se
+ * copian al lado, así la copia resuelve su estado como el lazo real; `worldEnv` es el
  * entorno de un proceso del mundo, para que esa resolución caiga en el home del propio mundo.
  */
 
