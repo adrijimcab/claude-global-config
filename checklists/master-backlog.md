@@ -448,9 +448,15 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   until a candidate passes its 10-owner-label ship bar. The pending judge stays off the live Stop hook until its
   ship bar passes, and backlog-guard stays live meanwhile. PENDING, reason (2): promoting either one is the
   owner's call, once measure.mjs reports the bar passed.
-- C8 launcher unwrap (vendored shell-command): waiting for b100's fix of the duplicate wrapper entry and the cmd
-  dialect. Then vendored sync, check, and the importer selftests in a worktree. PENDING, reason (1): b100 owns
-  the source.
+- C8 launcher unwrap (vendored shell-command). b100's fix has landed at its source and was pushed to its tooling
+  backup (2026-10-26): `fix(shell-command): lex cmd scripts in a cmd dialect and carry runner scripts without a
+  program of their own`. b100 re-ran launchers 167/167 and cmd-dialect 38/38. Its worker reports
+  actions.selftest 125/125 on a copy. Contract: a runner (Start-Process, iex, env -S) behaves like `bash -c`.
+  The written entry stays, with resolveCommand(...).index === -1, and the carried command is a nested script.
+  Next: vendored sync and check in the worktree feat/c8-vendored-launchers (b4d9ee2), then the importer selftests
+  and campaigns, then integration. b100 still has open: 3 stale ungated-landing-guard mutants and the unmodelled
+  cmd `( )` grouping. PENDING, reason (3): the owner froze new work until backlog-1-6 lands (L18). It is the
+  first unit of the next batch.
 - T8 port units still to do after this landing: F2 (re-export company-remote's fold), G2/G3 (git consumers), G4
   (delete the wrappers), P2u (rotate and file-lock liveness), J1-J4 (journal port), H4 and H8 (remaining guards),
   Z (census enforcement). Design: engram #1885. PENDING, reason (4): each is its own unit on the landed master.
