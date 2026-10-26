@@ -96,6 +96,7 @@ export const KINDS = Object.freeze([
   ['commit-index-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['commit-index-guard', 'errors.jsonl', ARCHIVE, 'git errors and timeouts that let a command go'],
   ['commit-index-guard', 'stale-*.json', KEEP, 'paths a hook left stale after a commit, read by the next commit (the guard removes a settled one)'],
+  ['conflict-marker-guard', 'journal.jsonl', ARCHIVE, 'refusal and fail-open journal'],
   ['config-sync-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['config-sync-guard', 'dismissals.jsonl', KEEP, 'dismissals in force'],
   ['config-sync-guard', 'pending.jsonl', KEEP, 'paths still waiting for a commit'],
