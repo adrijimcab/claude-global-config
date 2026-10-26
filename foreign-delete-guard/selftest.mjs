@@ -206,6 +206,13 @@ function tick() {
 const agentWrites = (file) => announce(asAgent('Write', { file_path: file, content: 'x' }), file);
 
 try {
+  // THE JOURNAL makes its own folder: a call recorded in an empty state folder leaves its interval.
+  // @es EL JOURNAL hace su propia carpeta: una llamada anotada con la carpeta de estado vacía deja su intervalo.
+  recordCall('journal-probe', 'probe-call', 1, []);
+  confirmCall('journal-probe', 'probe-call', 2);
+  check('journal: a call recorded in an empty state folder is kept', JSON.stringify(readJournal('journal-probe').intervals) === JSON.stringify([{ start: 1, end: 2 }]));
+  isolateState('fdg');
+
   // THE FILE-SYSTEM CLOCK, read while the state folder is still empty, so the stamp's folder is made by the clock.
   // @es EL RELOJ DEL SISTEMA DE FICHEROS, leído con la carpeta de estado aún vacía.
   const firstStamp = fileSystemNow('clock-probe', { fallback: () => -1 });
@@ -398,6 +405,11 @@ try {
   expect('allow', bash(`rm ${gitBash(at('mine.mjs'))}`), 'own file named in the Git Bash drive spelling');
   expect('allow', bash(`rm ${p('aliased', 'via-alias.txt')}`), 'a file the agent wrote through a link is its own under its real path (recorded canonically)');
   expect('deny', bash(`rm ${p('aliased', 'keep.txt')}`), 'a foreign file beside it is not');
+  check('ownership: a tenancy worktree given through a link owns its real path', safely(() => ownershipOf(EMPTY, at('alias')).ownsCanonical(canonical(at('aliased', 'keep.txt')))) === true);
+
+  const firstCommandText = reasonOf(bash(`rm -rf ${p('shared')}; unlink ${p('shared', 'x.txt')}`));
+
+  check('the refusal names the first command that reaches a foreign file, not a later one', firstCommandText.includes('and rm would delete') && !firstCommandText.includes('and unlink would delete'), firstCommandText.slice(0, 300));
   expect('allow', bash(`rm ${slashes(at('MINE.MJS'))}`), 'own file named in another case (Windows folds case)');
   expect('allow', bash(`cd ${p('')} && rm mine.mjs`), 'own file through a cd and a relative name');
   expect('deny', bash(`cd ${p('')} && rm provision.mjs`), 'foreign file through a cd and a relative name');
