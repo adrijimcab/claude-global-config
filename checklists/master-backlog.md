@@ -426,6 +426,32 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   read-only assessment found no overlay or contract break, but the check "Windows Full Suite (rest)" fails on
   that commit. PENDING, reason (1): waiting for a tagged release (4.2.1 or 4.3.0). Then install it, run sync
   through the overlay wrapper, and run check.mjs.
+- Owed judgments for units landed without a final judgment (owner order L18, 2026-10-26). The full list, with
+  each unit's open findings, is engram #1899 (topic backlog-1-6/unjudged-landings).
+  - Security guards, in this order: T4f foreign-delete-guard, T4e conflict-marker-guard, T4d4 commit-index-guard,
+    T4D3 worker-git-guard, T4B orphan-work + eval-guard.
+  - Then LOCKS and T4C (their follow-ups are unjudged).
+  - Then T9A, T4A2, T6C, T7 and T10.
+  - Last, the T8 port migrations.
+  PENDING, reason (2): the owner ordered the landing without these judgments. Run a judgment-day on each fix
+  delta, in that order.
+- Voice judge and pending judge stay as candidates (backlog-1-6 L16, L17). The voice judge keeps rubric v7 live
+  until a candidate passes its 10-owner-label ship bar. The pending judge stays off the live Stop hook until its
+  ship bar passes, and backlog-guard stays live meanwhile. PENDING, reason (2): promoting either one is the
+  owner's call, once measure.mjs reports the bar passed.
+- C8 launcher unwrap (vendored shell-command): waiting for b100's fix of the duplicate wrapper entry and the cmd
+  dialect. Then vendored sync, check, and the importer selftests in a worktree. PENDING, reason (1): b100 owns
+  the source.
+- T8 port units still to do after this landing: F2 (re-export company-remote's fold), G2/G3 (git consumers), G4
+  (delete the wrappers), P2u (rotate and file-lock liveness), J1-J4 (journal port), H4 and H8 (remaining guards),
+  Z (census enforcement). Design: engram #1885. PENDING, reason (4): each is its own unit on the landed master.
+- Mutation campaign paths gap (T6C worker, 2026-10-26): a failure-capture campaign slice that mutates no
+  capture.mjs code never copies config-sync-guard, which fixture-loop.mjs reads with readdirSync rather than an
+  import. Full runs hide the gap. Fix: derive campaign paths from the runtime file reads, or list them in the
+  campaign. PENDING, reason (3).
+- Loaded-set budget: `capture.mjs budget` measured 9,684 OVER the 147,000 global ceiling, counting a worktree's
+  CLAUDE.md as a project (T6C worker, 2026-10-26). Re-measure on master after the landing, and decide whether a
+  linked worktree counts as a project. PENDING, reason (3).
 
 ## ORDER (decided 2026-10-11)
 
