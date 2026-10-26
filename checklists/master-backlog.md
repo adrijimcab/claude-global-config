@@ -462,22 +462,6 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
 - T8 port units still to do after this landing: F2 (re-export company-remote's fold), G2/G3 (git consumers), G4
   (delete the wrappers), P2u (rotate and file-lock liveness), J1-J4 (journal port), H4 and H8 (remaining guards),
   Z (census enforcement). Design: engram #1885. PENDING, reason (4): each is its own unit on the landed master.
-- Back-repo write guard (requested by the Discovery session, 2026-10-26). Lesson
-  recommendation-ignored-standing-constraint is at its 2nd occurrence in Discovery. The owner's standing rule:
-  «EL BACK NUNA NUNCA SE TOCA».
-  - Occurrence 1 (2026-10-25): a branch merged into the back.
-  - Occurrence 2 (2026-10-26): a worker cherry-picked 7 tooling commits onto a new branch in "insight_web - copia/
-    di_1700002_insight_web". It was deleted, and back develop 9bea9885 and feature/new-discovery-on-develop
-    b3e5b929 are untouched (Discovery's measurement).
-  Needed: a PreToolUse guard, for delegated agents and sessions alike, that refuses writes to that repo path.
-  - Refused: Write/Edit under it, and git write subcommands targeting it (commit, cherry-pick, merge, branch
-    -c/-m/-D, worktree add, switch -c, push).
-  - Allowed: reads (log, show, diff, grep), and starting a server from a back worktree.
-  - Override: an explicit owner authorization per turn.
-  - Selftest cases: a refused `git -C <back> cherry-pick`, a refused Edit under fuentes/discovery-api, an allowed
-    `git -C <back> log`, and an allowed front-repo write.
-  PENDING, reason (3): the owner froze new work until backlog-1-6 lands (L18). Put it first in the next batch,
-  next to C8, because it is a second occurrence.
 - commit-cadence-guard follow-ups (T10 worker, 2026-10-26):
   - The guard is listed in hook-dispatch/manifests/pretooluse-language.json, the only PreToolUse manifest with no
     matcher, so the name no longer says what it covers. Renaming it (for example pretooluse-all) needs a
@@ -506,6 +490,10 @@ install once b100 finishes FR, dashboard and chart -> always-loaded budget (LAST
 to master with one full run -> full report of done and pending, recorded in engram.
 
 ## DROPPED (with the reason)
+
+- Back-repo write guard requested by the Discovery session, 2026-10-26. The owner's decision, verbatim: «No lo
+  hagas, se deja como memoria de esa prouyecto, ya estoy atengo yo para que no pase». His rule against touching
+  the back is kept as a Discovery project memory in engram, not as a ~/.claude mechanism.
 
 Carried from the engram re-plan of 2026-10-05 (`sdd/hardened-dev-environment/replan`); the 119-task list it
 replaced (`sdd/hardened-dev-environment/tasks`, `tasks-2`) is retired, checkboxes included.
