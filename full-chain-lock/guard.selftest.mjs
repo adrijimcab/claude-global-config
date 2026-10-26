@@ -35,7 +35,7 @@ import { payloadFor } from '../hook-payloads/payloads.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 import { fullChainInvocations } from './chain-invocations.mjs';
 import { DECLARATION, loadChains } from './chains-config.mjs';
-import { evaluate } from './guard.mjs';
+import { evaluate as rawEvaluate } from './guard.mjs';
 import { MESSAGES } from './messages.mjs';
 import { wrappedCommand } from './refusal.mjs';
 
@@ -69,6 +69,16 @@ function asMain(tool, command) {
 /** A delegated worker's payload. @es El payload de un worker delegado. */
 const asWorker = (tool, command) => ({ ...asMain(tool, command), agent_id: 'worker-1', agent_type: 'general-purpose' });
 
+/** The guard's answer, or a marker answer when it throws, so a defect fails a check instead of crashing the proof. @es La respuesta del guard, o una respuesta marcada si lanza, para que un defecto falle un check en vez de tumbar la prueba. */
+function attempt(run) {
+  try {
+    return run();
+  } catch (error) {
+    return { hookSpecificOutput: { permissionDecision: 'threw', permissionDecisionReason: String(error) } };
+  }
+}
+
+const evaluate = (raw, options) => attempt(() => rawEvaluate(raw, options));
 const decide = (payload) => evaluate(JSON.stringify(payload));
 const verdictOf = (payload) => decide(payload)?.hookSpecificOutput?.permissionDecision;
 
@@ -195,8 +205,8 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
 
   check('an option with its value fused (--prefix=x) is one word', found('npm --prefix=x run deploy').join() === 'deploy');
   check('an option after the script belongs to the script', found('npm run deploy --silent').join() === 'deploy');
-  check('the projects that declare a chain are ALL named', fullChainInvocations('npm run deploy', 'bash', custom)[0].projects.join() === 'p,q');
-  check('a declared command names its single project', fullChainInvocations('node a/tools/big.mjs', 'bash', custom)[0].projects.join() === 'q');
+  check('the projects that declare a chain are ALL named', fullChainInvocations('npm run deploy', 'bash', custom)[0]?.projects.join() === 'p,q');
+  check('a declared command names its single project', fullChainInvocations('node a/tools/big.mjs', 'bash', custom)[0]?.projects.join() === 'q');
   check('several chains in one line are all found, in execution order', found('npm test && npm start; node tools/big.mjs').join() === 'test,start,tools/big.mjs');
   check('the first of several is the one the answer names', decide(asMain('Bash', 'npm run ci:test && npm run build:ci-pr'))?.hookSpecificOutput.permissionDecisionReason.includes('npm run ci:test is a full chain'));
 }
@@ -221,7 +231,7 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
 
   for (const [tool, command] of [['Bash', 'npm run build:ci-pr'], ['PowerShell', 'npm run ci:test'], ['Bash', 'node selftest-runner/run.mjs --root x']]) {
     const offender = fullChainInvocations(command, tool === 'Bash' ? 'bash' : 'powershell', chains)[0];
-    const suggested = wrappedCommand(offender, 'sess-1');
+    const suggested = offender === undefined ? 'no full chain was found in the line' : wrappedCommand(offender, 'sess-1');
 
     check(`the suggested command passes the guard itself (round trip): ${command}`, verdictOf(asMain(tool, suggested)) === undefined, suggested);
   }
@@ -239,8 +249,8 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
   check('a non-shell tool passes', evaluate(JSON.stringify({ tool_name: 'Read', tool_input: { command: 'npm run build:ci-pr' } })) === undefined);
   check('a payload with no command passes', evaluate(JSON.stringify({ tool_name: 'Bash', tool_input: {} })) === undefined);
   check('a command that is not text passes', evaluate(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 5 } })) === undefined);
-  check('an unreadable declaration fails open', evaluate(payload, { chainsOf: () => { throw new Error('unreadable'); } }) === undefined);
-  check('a decision that throws fails open', evaluate(payload, { decision: () => { throw new Error('boom'); } }) === undefined);
+  check('an unreadable declaration fails open', attempt(() => evaluate(payload, { chainsOf: () => { throw new Error('unreadable'); } })) === undefined);
+  check('a decision that throws fails open', attempt(() => evaluate(payload, { decision: () => { throw new Error('boom'); } })) === undefined);
   check('a payload with no session still refuses, without a session flag', !evaluate(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'npm run build:ci-pr' } }))?.hookSpecificOutput?.permissionDecisionReason.includes('--session'));
 }
 
@@ -250,7 +260,7 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
   const refused = run(asMain('Bash', 'npm run build:ci-pr'));
   const allowed = run(asMain('Bash', 'npm test -- foo.spec'));
 
-  check('as a process, a full chain prints one deny line and exits 0', refused.status === 0 && JSON.parse(refused.stdout).hookSpecificOutput.permissionDecision === 'deny', refused.stdout);
+  check('as a process, a full chain prints one deny line and exits 0', refused.status === 0 && attempt(() => JSON.parse(refused.stdout)).hookSpecificOutput.permissionDecision === 'deny', refused.stdout);
   check('as a process, a non-chain prints nothing and exits 0', allowed.status === 0 && allowed.stdout === '', allowed.stdout);
 }
 
