@@ -609,6 +609,42 @@ const cases = [
   ['deny', payload(`sed \\\n  ${String.raw`"s/a\\b/c/"`} f`), 'a line continuation does not hide a dangerous script that follows it', 'backslash the shell eats'],
   ['deny', payload(`sed "s/a\\\nb/c/" f`), 'a backslash-newline INSIDE double quotes is still eaten', 'before "\\n"'],
 
+  // --- A PATH WRITTEN IN BASH FOR A NESTED POWERSHELL OR CMD (`shell-payload-quoting-corrupted-data`). The incident
+  // first, exactly its shape: a Windows path in bash double quotes with `\$n`; bash ate the backslash and PowerShell
+  // received `worktrees$n`. Then each quoting that consumes, each way the nested shell is reached, and the near misses.
+  // @es UNA RUTA ESCRITA EN BASH PARA UN POWERSHELL O CMD ANIDADO. Primero el incidente, con su forma exacta; luego cada
+  // entrecomillado que consume, cada forma de llegar a la shell anidada y los casi-aciertos.
+  ['deny', payload(String.raw`for n in wt1 wt2; do powershell -NoProfile -Command "New-Item -ItemType Junction -Path C:\Users\me\repo\.claude\worktrees\$n\node_modules -Target C:\Users\me\repo\node_modules"; done`), 'INCIDENT 2026-10-16: a junction path with \\$n in bash double quotes, inside a for loop', 'backslash inside bash double quotes'],
+  ['deny', payload(String.raw`for n in wt1; do powershell -Command "New-Item C:\Users\me\repo\.claude\worktrees\$n"; done`), 'INCIDENT: the refusal names the switch and gives the -File recipe', 'powershell -NoProfile -File'],
+  ['deny', payload(String.raw`pwsh -c Get-Item C:\x\y`), 'an unquoted backslash after pwsh -c', 'unquoted backslash'],
+  ['deny', payload(String.raw`pwsh -c Get-Item C:\x\y`), 'the refusal carries its Spanish half', '@es EVAL-GUARD RECHAZÓ este comando: `pwsh -c` recibe un script'],
+  ['deny', payload(String.raw`pwsh -c Get-Item C:\x\y`), 'the refusal shows where the backslash is', 'at offset 19 (U+005C)'],
+  ['deny', payload(String.raw`powershell -Command 'Get-Item C:\wt\$n'`), 'a single-quoted backslash before $: the nested shell expands it', 'backslash next to $'],
+  ['deny', payload(String.raw`pwsh -c 'Write-Host $\x'`), 'a single-quoted backslash after $', 'backslash next to $'],
+  ['deny', payload(String.raw`pwsh -c $'Get-Item C:\\x'`), "a backslash inside $'…', which bash reads as an escape", "inside $'"],
+  ['deny', payload(String.raw`cmd //c "dir C:\Users"`), 'cmd //c with a backslash in bash double quotes', 'backslash inside bash double quotes'],
+  ['deny', payload(String.raw`cmd //C "dir C:\Users"`), 'the switch is read whatever its case', 'cmd //C'],
+  ['deny', payload(String.raw`cmd //k "dir C:\Users"`), 'cmd //k carries a script too', 'cmd //k'],
+  ['deny', payload(String.raw`pwsh -C "Get-Item C:\x"`), 'an upper-case -C', 'pwsh -C'],
+  ['deny', payload(String.raw`powershell -c "Get-Item C:\x"`), 'powershell -c', 'powershell -c'],
+  ['deny', payload(String.raw`pwsh -c "Get-Item C:/wt/\$n"`), 'the only backslash is the one bash consumes before $', 'backslash inside bash double quotes'],
+  ['deny', payload(String.raw`timeout 30 pwsh -Command "Get-Item C:\x"`), 'a launcher before the nested shell', 'backslash inside bash double quotes'],
+  ['deny', payload(String.raw`/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command "Get-Item C:\x"`), 'the nested shell named by a path with .exe', 'powershell.exe -Command'],
+  ['deny', payload(String.raw`pwsh -c Get-Item 'C:\a' "C:\b"`), 'every word after the switch is the script, not only the first', 'backslash inside bash double quotes'],
+  ['deny', payload(String.raw`x=$(pwsh -c "Get-Item C:\x")`), 'inside a substitution', 'backslash inside bash double quotes'],
+  ['deny', payload(String.raw`! pwsh -c "Get-Item C:\x"`), 'after the ! keyword', 'backslash inside bash double quotes'],
+  ['deny', payload(String.raw`if true; then node -e "console.log('\\b')"; fi`), 'a keyword before the program is skipped for every rule, not only this one', 'backslash the shell eats'],
+  ['allow', payload(String.raw`'do' pwsh -c "Get-Item C:\x"`), 'NEAR MISS: a QUOTED keyword is the program itself'],
+  ['allow', payload(String.raw`powershell -NoProfile -Command 'Get-ChildItem C:\Users\me\repo\.claude\worktrees'`), 'NEAR MISS: a single-quoted script without expansion reaches PowerShell intact'],
+  ['allow', payload(String.raw`powershell -NoProfile -File "C:\Users\me\link.ps1" -Name wt1`), 'NEAR MISS: a .ps1 file invocation, the refusal\'s own remedy'],
+  ['allow', payload('for n in wt1; do powershell -NoProfile -Command "New-Item -ItemType Junction -Path C:/Users/me/repo/.claude/worktrees/$n/node_modules -Target C:/Users/me/repo/node_modules"; done'), 'NEAR MISS: forward-slash paths, the variable expanded by bash on purpose'],
+  ['allow', payload(String.raw`powershell -Command "Get-Item C:\x\$n"`, 'PowerShell'), 'NEAR MISS: through the PowerShell tool there is no outer bash'],
+  ['allow', payload(String.raw`"C:\Program Files\PowerShell\pwsh.exe" -c 'Get-Date'`), 'NEAR MISS: a backslash in the program word, before the switch'],
+  ['allow', payload(String.raw`echo "C:\x\$n"`), 'NEAR MISS: a backslash for a program that is no nested shell'],
+  ['allow', payload(String.raw`pwsh -NoProfile -File C:/x/a.ps1 "C:\x"`), 'NEAR MISS: no script switch, so the words are arguments of a file'],
+  ['allow', payload(String.raw`pwsh -c a'C:\x'`), 'NEAR MISS: a single quote after a plain character is no $\'…\''],
+  ['allow', payload(String.raw`pwsh -c "$"'Get-Item C:\x'`), 'NEAR MISS: a $ inside double quotes opens no $\'…\''],
+
   // --- FAIL OPEN: every corruption of the hook's own input / FALLAR ABIERTO
   ['allow', 'this is not json at all', 'unparseable stdin'],
   ['allow', '', 'empty stdin'],

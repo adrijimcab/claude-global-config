@@ -23,6 +23,7 @@ const GUARD = 'eval-guard/guard.mjs';
 const WRITES = 'eval-guard/script-writes.mjs';
 const SOURCE = 'eval-guard/script-source.mjs';
 const LAUNCHERS = 'eval-guard/launchers.mjs';
+const NESTED = 'eval-guard/nested-shell-backslashes.mjs';
 
 /** A call marker taken out of the list, one mutant each. @es Un marcador de llamada fuera de la lista, un mutante cada uno. */
 const callMarkerMutants = ['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'createWriteStream', 'writeSync', 'fs.write', 'copyFileSync', 'renameSync', 'cpSync', 'write_text', 'write_bytes', 'shutil.copy*', 'os.replace', 'copyFile', 'fs.rename', 'fs.cp', 'shutil.move', 'os.rename', 'Deno.writeTextFile', 'Bun.write'].map((marker) => [`the write marker ${marker} is no longer recognised`, WRITES, `'${marker}',`, '']);
@@ -206,8 +207,8 @@ const MUTANTS = [
   ['a PowerShell backtick inside double quotes opens a substitution', DETECT, `closer === '"' && opensSubstitution(command, index, powershell)`, `closer === '"' && opensSubstitution(command, index, false)`],
   ['a substitution inside double quotes is not kept', DETECT, '          current.substitutions.push(substitution.inner);\n', ''],
   ['nothing before (( is no command position', DETECT, 'return last === undefined || last.kind', 'return last.kind'],
-  ['an operator before (( is no command position', DETECT, "last === undefined || last.kind === 'operator' || (", 'last === undefined || ('],
-  ['a quoted keyword opens a command position', DETECT, "(last.kind === 'word' && !last.quoted && COMMAND_KEYWORDS.has(last.raw))", "(last.kind === 'word' && COMMAND_KEYWORDS.has(last.raw))"],
+  ['an operator before (( is no command position', DETECT, "last === undefined || last.kind === 'operator' || isCommandKeyword(last);", 'last === undefined || isCommandKeyword(last);'],
+  ['a quoted keyword opens a command position', DETECT, "word.kind === 'word' && !word.quoted && COMMAND_KEYWORDS.has(word.raw);", "word.kind === 'word' && COMMAND_KEYWORDS.has(word.raw);"],
   ...['if', 'elif', 'while', 'until', 'then', 'do', 'else'].map((keyword) => [`(( after ${keyword} is no arithmetic`, DETECT, `'${keyword}', `, '']),
   ['(( after ! is no arithmetic', DETECT, ", '!']);", ']);'],
   // --- X3: a substitution is part of its word, and its text is judged ---
@@ -350,6 +351,48 @@ const MUTANTS = [
   ['a quoted delimiter is not recognised, so the terminator never matches', DETECT, "    if (character === \"'\" || character === '\"') {\n      const close = command.indexOf", "    if (false) {\n      const close = command.indexOf"],
   ['a line that merely starts with the delimiter ends the body', DETECT, 'if (line === heredoc.delimiter) return', 'if (line.startsWith(heredoc.delimiter)) return'],
   ['a here-string is treated as a heredoc instead of an argument separator', DETECT, 'if (startsHereString(command, index)) {', 'if (false) {'],
+
+  // --- a path written in bash for a nested PowerShell or cmd (shell-payload-quoting-corrupted-data) ---
+  ['the nested-shell rule never runs', DETECT, "      const nestedRefusal = nestedShellRefusal(programWords(invocation, position) ?? []);\n\n      if (nestedRefusal !== undefined) return nestedRefusal;\n", ''],
+  ['the nested-shell rule runs through the PowerShell tool, which has no outer bash', DETECT, "    if (msysTranslates) {\n      const nestedRefusal", "    if (true) {\n      const nestedRefusal"],
+  ['a keyword before the program is read as the program', DETECT, '(isEnvironmentAssignment(invocation[position]) || isCommandKeyword(invocation[position]))', '(isEnvironmentAssignment(invocation[position]))'],
+  ['an unquoted backslash is not recorded', DETECT, "    if (character === BACKSLASH) noteBackslash(index, 'bare');\n", ''],
+  ['an escaping backslash inside double quotes is not recorded', DETECT, '          noteBackslash(index, quote);\n          current.raw += command[index] + command[index + 1];', '          current.raw += command[index] + command[index + 1];'],
+  ['a literal backslash inside quotes is not recorded', DETECT, '        if (command[index] === BACKSLASH) noteBackslash(index, quote);\n', ''],
+  ['double quotes are read as single quotes', DETECT, "const quote = closer === '\"' ? 'double' :", "const quote = closer === '\"' ? 'single' :"],
+  ["$'…' is read as single quotes", DETECT, "bareDollarAt === index - 1 ? 'ansi' : 'single';", "false ? 'ansi' : 'single';"],
+  ["every single quote is read as $'…'", DETECT, "bareDollarAt === index - 1 ? 'ansi' : 'single';", "true ? 'ansi' : 'single';"],
+  ['a bare $ is not remembered', DETECT, "    if (character === '$') bareDollarAt = index;\n", ''],
+  ['every bare character is remembered as a $', DETECT, "    if (character === '$') bareDollarAt = index;\n", '    bareDollarAt = index;\n'],
+  ['the character before a backslash is not recorded', DETECT, 'previous: command[at - 1],', 'previous: undefined,'],
+  ['the character after a backslash is not recorded', DETECT, 'next: command[at + 1] });', 'next: undefined });'],
+  ['powershell is no nested shell', NESTED, "powershell: ['-command', '-c'], ", ''],
+  ['pwsh is no nested shell', NESTED, "pwsh: ['-command', '-c'], ", ''],
+  ['cmd is no nested shell', NESTED, ", cmd: ['//c', '//k'] }", ' }'],
+  ['powershell -Command is no script switch', NESTED, "powershell: ['-command', '-c']", "powershell: ['-c']"],
+  ['powershell -c is no script switch', NESTED, "powershell: ['-command', '-c']", "powershell: ['-command']"],
+  ['pwsh -Command is no script switch', NESTED, "pwsh: ['-command', '-c']", "pwsh: ['-c']"],
+  ['pwsh -c is no script switch', NESTED, "pwsh: ['-command', '-c']", "pwsh: ['-command']"],
+  ['cmd //c is no script switch', NESTED, "cmd: ['//c', '//k']", "cmd: ['//k']"],
+  ['cmd //k is no script switch', NESTED, "cmd: ['//c', '//k']", "cmd: ['//c']"],
+  ['a switch is matched only in lower case', NESTED, 'switches.includes(word.raw.toLowerCase())', 'switches.includes(word.raw)'],
+  ['a command with no script switch is judged all the same', NESTED, '  if (switchAt === -1) return undefined;\n', ''],
+  ['only the first word of the script is judged', NESTED, 'for (const word of words.slice(switchAt + 1)) {', 'for (const word of words.slice(switchAt + 1, switchAt + 2)) {'],
+  ['the first word of the script is skipped', NESTED, 'for (const word of words.slice(switchAt + 1)) {', 'for (const word of words.slice(switchAt + 2)) {'],
+  ['the backslashes of a word are never read', NESTED, '(word.backslashes ?? []).flatMap(', '[].flatMap('],
+  ['a script with no refused backslash is refused all the same', NESTED, 'if (findings.length > 0) return', 'if (findings.length >= 0) return'],
+  ['an unquoted backslash is allowed', NESTED, "const CONSUMING_QUOTES = new Set(['bare', 'double', 'ansi']);", "const CONSUMING_QUOTES = new Set(['double', 'ansi']);"],
+  ['a backslash in double quotes is allowed', NESTED, "const CONSUMING_QUOTES = new Set(['bare', 'double', 'ansi']);", "const CONSUMING_QUOTES = new Set(['bare', 'ansi']);"],
+  ["a backslash in $'…' is allowed", NESTED, "const CONSUMING_QUOTES = new Set(['bare', 'double', 'ansi']);", "const CONSUMING_QUOTES = new Set(['bare', 'double']);"],
+  ['a single-quoted backslash before $ is allowed', NESTED, "previous === '$' || next === '$' ?", "previous === '$' ?"],
+  ['a single-quoted backslash after $ is allowed', NESTED, "previous === '$' || next === '$' ?", "next === '$' ?"],
+  ['the refusal does not say where the backslash is', NESTED, '[{ offset: backslash.offset, code: 0x5c, kind }]', '[{ offset: 0, code: 0x5c, kind }]'],
+  ['the refusal does not say why the backslash is refused', NESTED, "if (CONSUMING_QUOTES.has(quote)) return KINDS[quote];", "if (CONSUMING_QUOTES.has(quote)) return KINDS.dollar;"],
+  ['the refusal does not name the switch', NESTED, 'flag: `${program.raw} ${words[switchAt].raw}`', 'flag: program.raw'],
+  ['the refusal reads as a node payload', NESTED, "kind: 'nested-shell-path'", "kind: 'node-eval'"],
+  ['the nested-shell refusal loses its own text', GUARD, "  if (refusal.kind === 'nested-shell-path') return nestedShellReason(refusal);\n", ''],
+  ['the nested-shell refusal loses its Spanish half', GUARD, '`@es EVAL-GUARD RECHAZÓ este comando: \\`${refusal.flag}\\` recibe un script', '`EVAL-GUARD RECHAZÓ este comando: \\`${refusal.flag}\\` recibe un script'],
+  ['the nested-shell refusal loses its recipe', GUARD, '`     powershell -NoProfile -File "${scaffold}" -Path <the path, with forward slashes>`,\n', ''],
 ];
 
 const survivors = runMutants({
