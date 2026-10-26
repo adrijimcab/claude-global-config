@@ -28,9 +28,10 @@ import path from 'node:path';
 import { findConfig } from '../config/load-config.mjs';
 import { isAgentWorktree, listWorktrees } from '../lib/agent-worktrees.mjs';
 import { gitAsker, isAncestor, porcelainEntries } from '../lib/git.mjs';
-import { deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
+import { advise, deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
 import { ACTIVE_WINDOW_MS, activeOwner, agentRecords } from '../../agent-liveness/active-owner.mjs';
 import { nativeSpelling } from '../../cherry-pick-guard/working-directory.mjs';
+import { agentDirectories, launchAccess } from './role-access.mjs';
 
 export const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 
@@ -293,9 +294,18 @@ function describe({ worktree, work }) {
   return `  - ${worktree.path} (${worktree.branch ?? 'detached'}): ${what}`;
 }
 
-function reason(parked) {
+/**
+ * Why the launched role counts as a writer when its definition could not be read, or nothing when it was read.
+ * @es Por qué el rol lanzado cuenta como escritor cuando su definición no se pudo leer, o nada si se leyó.
+ */
+function unreadRole(problem) {
+  return problem === undefined ? [] : ['', `The launched role counts as a WRITER because its definition was not read: ${problem}`, '@es El rol lanzado cuenta como ESCRITOR porque su definición no se leyó.'];
+}
+
+function reason(parked, problem) {
   return [
     'ORPHANED WORK (fleet-kit): a stopped agent\'s work is parked in its worktree, and a new agent is about to launch.',
+    ...unreadRole(problem),
     '',
     ...parked.map(describe),
     '',
@@ -306,10 +316,29 @@ function reason(parked) {
   ].join('\n');
 }
 
+/**
+ * The note shown, without refusing, to a launch that cannot write. @es La nota que se muestra, sin rechazar, a un lanzamiento que no puede escribir.
+ */
+function information(parked) {
+  return [
+    "ORPHANED WORK (fleet-kit, information only): a stopped agent's work is parked in its worktree. This launch is READ-ONLY, so it can redo nothing and is NOT refused.",
+    '@es TRABAJO HUÉRFANO (fleet-kit, solo información): el trabajo de un agente detenido está aparcado en su worktree. Este lanzamiento es de SOLO LECTURA, así que no puede rehacer nada y NO se rechaza.',
+    '',
+    ...parked.map(describe),
+    '',
+    'A writer launch stays refused until each is triaged: resume the stopped agent, land or salvage the work, or discard it deliberately.',
+    '@es Un lanzamiento que escribe sigue rechazado hasta que se clasifique cada uno: reanudar el agente detenido, integrar o rescatar el trabajo, o descartarlo a propósito.'
+  ].join('\n');
+}
+
 export const evaluate = evaluator('orphan-work', (payload) => {
   const parked = parkedWork(payload);
 
-  return parked.length === 0 ? undefined : deny(reason(parked));
+  if (parked.length === 0) return undefined;
+
+  const access = launchAccess(payload, agentDirectories(findConfig(payload.cwd).repository.mainCheckout));
+
+  return access.readOnly ? advise(information(parked)) : deny(reason(parked, access.problem));
 });
 
 runWhenMain(import.meta.url, hookMain(evaluate));

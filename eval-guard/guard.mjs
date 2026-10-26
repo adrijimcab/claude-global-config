@@ -39,6 +39,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
+import { digestInput } from '../hook-state/journal.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { inspectCommand } from './detect.mjs';
 
@@ -152,7 +154,40 @@ function textEditReason(refusal) {
   ].join('\n');
 }
 
+/**
+ * Refusal for a delegated agent that feeds a file-writing script to an interpreter through a heredoc or a
+ * here-string. The remedy is the tool that never goes through a shell.
+ * @es Rechazo para un agente delegado que entrega a un intérprete, por heredoc o here-string, un script que
+ * escribe un fichero. El remedio es la herramienta que no pasa por ningún shell.
+ */
+function scriptWriteReason(refusal) {
+  return [
+    `EVAL-GUARD REFUSED this command: a script fed to \`${refusal.flag}\` writes a file through a shell.`,
+    `@es EVAL-GUARD RECHAZÓ este comando: un script entregado a \`${refusal.flag}\` escribe un fichero a través de un shell.`,
+    '',
+    'Found in the script:',
+    '@es Hallado en el script:',
+    evidenceLines(refusal),
+    '',
+    'Why. The shell re-parses the text before the interpreter reads it, so a backslash, an apostrophe or a',
+    'quote can be dropped on the way and the file is written WRONG with exit code 0 (measured 2026-10-18:',
+    'a heredoc dropped a backslash of a guard source file). The Write and Edit tools never go through a shell.',
+    '@es Por qué. El shell re-parsea el texto antes de que el intérprete lo lea, así que un backslash, un',
+    '@es apóstrofe o una comilla pueden perderse y el fichero se escribe MAL con código de salida 0 (medido',
+    '@es el 2026-10-18). Las herramientas Write y Edit no pasan por ningún shell.',
+    '',
+    'What works instead: write or change the file with the Write tool (a new file) or the Edit tool (an existing one).',
+    '@es Lo que sí funciona: escribir o cambiar el fichero con la herramienta Write (nuevo) o Edit (existente).',
+    '',
+    'This rule applies to delegated agents only, and only to a script that writes a file: reading, printing',
+    'and computing from a heredoc are untouched.',
+    '@es Esta regla es solo para agentes delegados y solo para un script que escribe un fichero: leer, imprimir',
+    '@es y calcular desde un heredoc no se toca.'
+  ].join('\n');
+}
+
 function reason(refusal) {
+  if (refusal.kind === 'script-write') return scriptWriteReason(refusal);
   if (refusal.kind === 'msys-switch') return switchReason(refusal);
   if (refusal.kind === 'text-edit') return textEditReason(refusal);
 
@@ -197,7 +232,7 @@ function decideFor(payload) {
 
   if (command === undefined) return undefined;
 
-  const refusal = inspectCommand(command, { toolName: payload?.tool_name });
+  const refusal = inspectCommand(command, { toolName: payload?.tool_name, delegated: isSubagentCaller(payload) });
 
   if (refusal === undefined) return undefined;
 
@@ -207,7 +242,9 @@ function decideFor(payload) {
     tool: typeof payload?.tool_name === 'string' ? payload.tool_name : undefined,
     flag: refusal.flag,
     findings: refusal.findings.slice(0, MAX_REPORTED_FINDINGS),
-    command,
+    // The command text is never journaled, only its sha256 (the block-journal policy).
+    // @es El texto del comando nunca se registra, solo su sha256 (la política del block-journal).
+    commandDigest: digestInput(command),
   });
 
   return {

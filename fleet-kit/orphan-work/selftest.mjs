@@ -7,11 +7,12 @@
  * @es Selftest de la detección de trabajo huérfano sobre un repositorio construido, recorriendo cada estado.
  */
 
-import { rmSync, utimesSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, utimesSync } from 'node:fs';
 import path from 'node:path';
 
 import { baseConfig, cleanup, commitFiles, git, makeRepository, suite, tempDir, writeConfig, writeFile } from '../testing/fixtures.mjs';
 import { absolutePathsIn, delegationTouches, evaluate, lastWorkedMs, parkedWork } from './guard.mjs';
+import { agentDirectories } from './role-access.mjs';
 
 const { check, finish } = suite();
 const root = tempDir('orphan');
@@ -110,7 +111,123 @@ try {
 
   const output = await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: {} }));
 
-  check('evaluate refuses the delegation and names the worktree', [output?.hookSpecificOutput.permissionDecision, output?.hookSpecificOutput.permissionDecisionReason.includes('agent-committed')], ['deny', true]);
+  check('evaluate refuses the delegation and names the worktree', [output?.hookSpecificOutput.permissionDecision, output?.hookSpecificOutput.permissionDecisionReason?.includes('agent-committed')], ['deny', true]);
+  // --- A launch that cannot write is told about the parked work, never refused; a writer still is.
+  // The role is read from its definition (project `.claude/agents` first, then the install's `agents/`).
+  // @es Un lanzamiento que no puede escribir recibe la nota del trabajo aparcado, sin rechazo; un escritor sí
+  // se rechaza. El rol se lee de su definición (`.claude/agents` del proyecto y luego `agents/` de la instalación).
+  const defineRole = (name, frontmatter) => writeFile(repository, `.claude/agents/${name}.md`, `---\nname: ${name}\n${frontmatter}\n---\nbody\n`);
+
+  defineRole('probe-readonly', 'tools: Read, Glob, Grep');
+  defineRole('probe-writer', 'tools: Read, Write');
+  defineRole('probe-editor', 'tools: Read, Edit');
+  defineRole('probe-notebook', 'tools: Read, NotebookEdit');
+  defineRole('probe-all', 'tools: []');
+  defineRole('probe-all-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit, Bash, PowerShell');
+  defineRole('probe-all-no-shell-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit');
+  defineRole('probe-bash-only', 'tools: Read, Bash');
+  defineRole('probe-powershell-only', 'tools: Read, PowerShell');
+  defineRole('probe-bash-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit, PowerShell');
+  defineRole('probe-powershell-closed', 'tools: []\ndisallowedTools: Write, Edit, NotebookEdit, Bash');
+  defineRole('probe-all-half-closed', 'tools: []\ndisallowedTools: Write, Edit');
+  defineRole('probe-no-tools-line', 'description: x');
+  // Shapes YAML reads differently from a comma split: each one fails closed, read-only tools or not.
+  // @es Formas que YAML lee distinto de un corte por comas: cada una falla cerrada, sean o no de solo lectura.
+  defineRole('probe-flow-writer', 'tools: [Read, Write]');
+  defineRole('probe-flow-readonly', 'tools: [Read, Grep]');
+  defineRole('probe-quoted', 'tools: "Read, Write"');
+  defineRole('probe-quoted-token', 'tools: Read, "Write"');
+  defineRole('probe-block-list', 'tools:\n  - Read\n  - Write');
+  defineRole('probe-bare-tools', 'tools:');
+  defineRole('probe-repeated-key', 'tools: Read\ntools: Read, Write');
+  // Scoped tools and MCP tools. @es Herramientas con ámbito y herramientas MCP.
+  defineRole('probe-scoped-shell', 'tools: Read, Bash(npm:*)');
+  defineRole('probe-scoped-write', 'tools: Read, Write(src/**)');
+  defineRole('probe-mcp-write', 'tools: Read, mcp__github__create_or_update_file');
+  defineRole('probe-mcp-read', 'tools: Read, mcp__plugin_engram_engram__mem_search');
+  // The judges' X1 examples: a YAML multi-line plain scalar, and a key spelled with a space before its colon.
+  // @es Los ejemplos X1 de los jueces: un escalar plano YAML de varias líneas y una clave con espacio antes de los dos puntos.
+  defineRole('probe-continued', 'tools: Read,\n  Write');
+  defineRole('probe-spaced-key', 'tools: Read\ntools : Write');
+  defineRole('probe-blank-continued', 'tools: Read,\n\n  Write');
+  defineRole('probe-blank-then-key', 'tools: Read\n\nmodel: haiku');
+  defineRole('probe-scoped-disallow', 'tools: Read, Bash\ndisallowedTools: Bash(rm:*)');
+  defineRole('probe-write-disallowed', 'tools: Read, Write\ndisallowedTools: Write');
+  // A definition that exists and cannot be read: a folder where the file should be.
+  // @es Una definición que existe y no se puede leer: una carpeta donde debería estar el fichero.
+  mkdirSync(path.join(repository, '.claude', 'agents', 'probe-unreadable.md'), { recursive: true });
+
+  const launch = async (subagentType) => {
+    const output = await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: subagentType === undefined ? {} : { subagent_type: subagentType } }));
+    const specific = output?.hookSpecificOutput;
+
+    if (specific === undefined) return 'allow';
+
+    return specific.permissionDecision === 'deny' ? 'deny' : (specific.additionalContext ?? '').includes('agent-committed') ? 'note' : 'note-without-the-worktree';
+  };
+
+  check('Explore (built-in, no file) passes with the parked-work note', await launch('Explore'), 'note');
+  check('Plan (built-in, no file) passes with the note', await launch('Plan'), 'note');
+  check('claude-code-guide (built-in, no file) passes with the note', await launch('claude-code-guide'), 'note');
+  check('general-purpose is refused', await launch('general-purpose'), 'deny');
+  check('a launch with no subagent_type is general-purpose: refused', await launch(undefined), 'deny');
+  check('an unknown role is refused', await launch('no-such-role-anywhere'), 'deny');
+  check('a custom role whose tools exclude Write, Edit and NotebookEdit passes with the note', await launch('probe-readonly'), 'note');
+  check('a role declaring Write is refused', await launch('probe-writer'), 'deny');
+  check('a role declaring Edit is refused', await launch('probe-editor'), 'deny');
+  check('a role declaring NotebookEdit is refused', await launch('probe-notebook'), 'deny');
+  check('a role with every tool (`tools: []`) is refused', await launch('probe-all'), 'deny');
+  check('every tool minus the write tools and both shells is read-only', await launch('probe-all-closed'), 'note');
+  check('every tool minus the three write tools still reaches a shell: refused', await launch('probe-all-no-shell-closed'), 'deny');
+  check('a Bash-only role can commit or redirect: refused', await launch('probe-bash-only'), 'deny');
+  check('a PowerShell-only role can write through a command: refused', await launch('probe-powershell-only'), 'deny');
+  check('every tool but Bash closed still reaches Bash: refused', await launch('probe-bash-closed'), 'deny');
+  check('every tool but PowerShell closed still reaches PowerShell: refused', await launch('probe-powershell-closed'), 'deny');
+  check('every tool minus only two write tools still writes', await launch('probe-all-half-closed'), 'deny');
+  check('a role file with no `tools:` line is refused, never read as read-only', await launch('probe-no-tools-line'), 'deny');
+  // A read-only definition that EXISTS one folder above the agents folder: only the name check keeps it out of reach.
+  // @es Una definición de solo lectura que EXISTE una carpeta por encima de la de agentes: solo la comprobación del nombre la deja fuera de alcance.
+  writeFile(repository, '.claude/probe-outside.md', '---\nname: probe-outside\ntools: Read\n---\nbody\n');
+  check('a role name that walks out of the agents folder is refused', await launch('../probe-outside'), 'deny');
+  check('the install\'s read-only judge (jd-judge-a) passes with the note', await launch('jd-judge-a'), 'note');
+  check('the install\'s read-only judge (jd-judge-b) passes with the note', await launch('jd-judge-b'), 'note');
+  check('the project agents folder is searched first, then the install agents folder', [agentDirectories(repository)[0] === path.join(repository, '.claude', 'agents'), agentDirectories(repository).length, existsSync(path.join(agentDirectories(repository)[1] ?? '', 'jd-judge-a.md'))], [true, 2, true]);
+  check('a flow list naming Write is refused', await launch('probe-flow-writer'), 'deny');
+  check('a flow list of read tools is refused too: the reader does not read flow lists', await launch('probe-flow-readonly'), 'deny');
+  check('a quoted tools value is refused', await launch('probe-quoted'), 'deny');
+  check('a quoted Write token is refused', await launch('probe-quoted-token'), 'deny');
+  check('a block list is refused', await launch('probe-block-list'), 'deny');
+  check('a bare tools key (null inherits every tool) is refused', await launch('probe-bare-tools'), 'deny');
+  check('a repeated tools key (YAML keeps the last, which writes) is refused', await launch('probe-repeated-key'), 'deny');
+  check('a scoped shell Bash(npm:*) is refused', await launch('probe-scoped-shell'), 'deny');
+  check('a scoped Write(src/**) is refused', await launch('probe-scoped-write'), 'deny');
+  check('an MCP tool is out of scope: it cannot redo repository work', await launch('probe-mcp-write'), 'note');
+  check('an MCP read tool passes with the note', await launch('probe-mcp-read'), 'note');
+  check('a multi-line tools value (YAML continues the scalar) is refused', await launch('probe-continued'), 'deny');
+  check('a tools key spelled with a space before its colon is refused', await launch('probe-spaced-key'), 'deny');
+  check('a tools value continued after a blank line is refused', await launch('probe-blank-continued'), 'deny');
+  check('a blank line before the next key leaves a read-only role', await launch('probe-blank-then-key'), 'note');
+  check('a scoped disallowedTools leaves the rest of Bash open: refused', await launch('probe-scoped-disallow'), 'deny');
+  check('a write tool closed by disallowedTools leaves a read-only role', await launch('probe-write-disallowed'), 'note');
+  check('a role file that exists but cannot be read is refused', await launch('probe-unreadable'), 'deny');
+
+  const refusal = async (subagentType) => (await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { subagent_type: subagentType } })))?.hookSpecificOutput.permissionDecisionReason ?? '';
+
+  check('the refusal of an unreadable role file shows the read error', (await refusal('probe-unreadable')).includes('probe-unreadable cannot be read ('), true);
+  check('the refusal of an unread shape names the shape', (await refusal('probe-flow-readonly')).includes('does not read ([Read)'), true);
+  check('the refusal of an unread shape says it counts as a writer, in both languages', [(await refusal('probe-repeated-key')).includes('counts as a WRITER because its definition was not read'), (await refusal('probe-repeated-key')).includes('@es El rol lanzado cuenta como ESCRITOR')], [true, true]);
+  check('a readable writer is refused without an unread-definition line', (await refusal('probe-writer')).includes('was not read'), false);
+  check('the install\'s writing fixer (jd-fix-agent) is refused', await launch('jd-fix-agent'), 'deny');
+  check('the install\'s `tools: []` reviewer (review-risk) is refused', await launch('review-risk'), 'deny');
+  const note = (await evaluate(JSON.stringify({ tool_name: 'Agent', cwd: repository, tool_input: { subagent_type: 'Explore' } })))?.hookSpecificOutput.additionalContext ?? '';
+
+  check('the note says it is information only', note.includes('information only'), true);
+  check('the note is bilingual, Spanish after English', [note.includes('@es TRABAJO HUÉRFANO (fleet-kit, solo información)'), note.includes('@es Un lanzamiento que escribe sigue rechazado'), note.indexOf('information only') < note.indexOf('@es TRABAJO HUÉRFANO')], [true, true, true]);
+
+  defineRole('claude-code-guide', 'tools: Read, Write');
+  check('a role file overrides the built-in of the same name: a writing definition is refused', await launch('claude-code-guide'), 'deny');
+  rmSync(path.join(repository, '.claude', 'agents', 'claude-code-guide.md'));
+
   check('an ungoverned repository is not judged', parkedNames([], root), []);
   check('a malformed payload fails open', await evaluate('nope'), undefined);
 

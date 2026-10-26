@@ -41,6 +41,14 @@ export const MESSAGE_TABLE = {
     en: 'UNKNOWN  {file}: no known state kind; reported and left alone, never guessed',
     es: 'DESCONOCIDO {file}: ningún tipo de estado conocido; se informa y se deja intacto, nunca se adivina'
   },
+  'plan-redact': {
+    en: 'REPLACE  {file}: {count} line(s) still hold the `{field}` text; it is replaced by its sha256 (`{digest}`)',
+    es: 'SUSTITUIR {file}: {count} línea(s) aún guardan el texto de `{field}`; se sustituye por su sha256 (`{digest}`)'
+  },
+  redacted: {
+    en: 'Replaced the `{field}` text by its sha256 in {count} line(s) of {file}.',
+    es: 'Sustituido el texto de `{field}` por su sha256 en {count} línea(s) de {file}.'
+  },
   summary: {
     en: '{archive} to archive, {remove} to remove, {keep} kept, {unknown} unknown.',
     es: '{archive} por archivar, {remove} por borrar, {keep} mantenidos, {unknown} desconocidos.'

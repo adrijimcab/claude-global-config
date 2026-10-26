@@ -22,6 +22,9 @@
  *   REMOVE   an obsolete file no code reads any more (a pre-split shared state file): removed.
  * A file no rule names is UNKNOWN: reported and left alone, never guessed.
  *
+ * TEXT A JOURNAL MUST NOT HOLD. Each `REDACTIONS` field (the command text of an old eval-guard denial) is replaced
+ * by its sha256, in the live journal and in every archive, before anything moves; a second run finds none left.
+ *
  * IDEMPOTENT. A moved or removed file is gone, a journal that holds only the dismissals in force is current, and
  * an empty file has nothing to archive, so a second run plans nothing. An archive file that already exists (a second
  * rotation the same day) is appended to, never overwritten.
@@ -45,6 +48,7 @@ import { appendFileSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdir
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { digestInput } from './journal.mjs';
 import { claudeHome, stateDirsUnder } from './locations.mjs';
 import { speakerFor } from './rotate-messages.mjs';
 
@@ -214,6 +218,78 @@ const recordOf = (line) => {
 
 /** The lines of a journal that lift a block, kept in force by a rotation. @es Las líneas de un journal que levantan un bloqueo. */
 export const dismissalsIn = (text) => text.split('\n').filter((line) => recordOf(line)?.kind === 'dismissal');
+
+/**
+ * Journal fields the block-journal policy keeps only as a sha256, `[mechanism, file, field, digestField]`. A journal
+ * written before the policy still holds the text; a rotation replaces it, in the live file and in every archive.
+ * WHY HERE (2026-10-19): rewriting a journal from the guard's own first write could race another session's append
+ * and lose a line; `--apply` already refuses while a session lives or a lock exists, so it is the one window with
+ * a single writer, and it is the tool that already walks the archives that hold the oldest entries.
+ * @es Campos de journal que la política del block-journal guarda solo como sha256. Un journal escrito antes de la
+ * política aún guarda el texto; una rotación lo sustituye, en el fichero vivo y en cada archivo. POR QUÉ AQUÍ:
+ * reescribir el journal desde la primera escritura de la guardia podría pisar el append de otra sesión y perder una
+ * línea; `--apply` ya se rechaza con una sesión viva o un lock, así que es la única ventana con un solo escritor.
+ */
+export const REDACTIONS = Object.freeze([['eval-guard', 'denials.jsonl', 'command', 'commandDigest']]);
+
+/**
+ * One journal line with its text `field` replaced by `digestField`, the sha256 of that text; the line itself when
+ * it holds no such text (already digested, another shape, not JSON), which is what makes a second run a no-op.
+ * @es Una línea de journal con su `field` de texto sustituido por `digestField`, el sha256 de ese texto; la línea tal
+ * cual si no guarda ese texto (ya resumida, otra forma, no JSON), y por eso una segunda corrida no cambia nada.
+ */
+export function redactedLine(line, field, digestField) {
+  const record = recordOf(line);
+
+  if (typeof record !== 'object' || typeof record?.[field] !== 'string') return line;
+
+  const { [field]: text, ...rest } = record;
+
+  return JSON.stringify({ ...rest, [digestField]: digestInput(text) });
+}
+
+/**
+ * Every live or archived file a redaction names that still holds text: `{ source, field, digestField, pending }`.
+ * @es Cada fichero vivo o archivado que nombra una sustitución y que aún guarda texto.
+ */
+export function planRedactions(home) {
+  const archiveRoot = path.join(home, ARCHIVE_FOLDER);
+  // Only folders are archive dates; a file where the archive should be is the move's failure to report, not this one's.
+  // @es Solo las carpetas son fechas de archivo; un fichero donde debería estar el archivo es un fallo del movimiento.
+  const dates = statSync(archiveRoot, { throwIfNoEntry: false })?.isDirectory() === true ? readdirSync(archiveRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : [];
+
+  return REDACTIONS.flatMap(([mechanism, file, field, digestField]) => {
+    const live = stateDirsUnder(home).filter((entry) => entry.mechanism === mechanism).map(({ directory }) => path.join(directory, file));
+    const archived = dates.map((date) => path.join(archiveRoot, date, mechanism, file));
+
+    return [...live, ...archived]
+      .filter((source) => lstatSync(source, { throwIfNoEntry: false })?.isFile() === true)
+      .flatMap((source) => {
+        const pending = readFileSync(source, 'utf8').split('\n').filter((line) => redactedLine(line, field, digestField) !== line).length;
+
+        return pending === 0 ? [] : [{ source, field, digestField, pending }];
+      });
+  });
+}
+
+/** Rewrites each planned file with its text replaced; `false` when one failed. @es Reescribe cada fichero planificado; `false` si uno falló. */
+function applyRedactions(redactions, speaker) {
+  for (const { source, field, digestField, pending } of redactions) {
+    try {
+      const text = readFileSync(source, 'utf8').split('\n').map((line) => redactedLine(line, field, digestField)).join('\n');
+
+      writeFileSync(`${source}.tmp`, text);
+      renameSync(`${source}.tmp`, source);
+      speaker.say('redacted', { file: source, count: pending, field });
+    } catch (error) {
+      speaker.complain('failed', { file: source, detail: error instanceof Error ? error.message : String(error) });
+
+      return false;
+    }
+  }
+
+  return true;
+}
 
 /**
  * The plan for the Claude home `home`: one entry per file of every state directory,
@@ -421,15 +497,18 @@ export function main(argv, { sink = console, now = Date.now(), alive = processAl
     return 2;
   }
 
+  const redactions = planRedactions(options.home);
+
   speaker.say('header', { home: options.home, archive, mode: options.apply ? '--apply' : '--dry-run' });
   for (const entry of plan) sayEntry(speaker, entry);
+  for (const { source, field, digestField, pending } of redactions) speaker.say('plan-redact', { file: source, count: pending, field, digest: digestField });
 
   const moving = plan.filter(({ action }) => CHANGING.has(action)).length;
   const removing = plan.filter(({ action }) => action === 'prune' || action === 'remove').length;
 
   speaker.say('summary', { archive: moving - removing, remove: removing, keep: plan.filter(({ action }) => !CHANGING.has(action) && action !== 'unknown').length, unknown: plan.filter(({ action }) => action === 'unknown').length });
 
-  if (moving === 0) {
+  if (moving === 0 && redactions.length === 0) {
     speaker.say('nothing-to-do');
 
     return 0;
@@ -442,6 +521,10 @@ export function main(argv, { sink = console, now = Date.now(), alive = processAl
 
     return 0;
   }
+
+  // Text is replaced before anything moves, so an archive only ever receives digests.
+  // @es El texto se sustituye antes de mover nada, así un archivo solo recibe digests.
+  if (!applyRedactions(redactions, speaker)) return 1;
 
   const { count, failed } = applyPlan(plan, archive, speaker);
 

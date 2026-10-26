@@ -19,8 +19,8 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INSTALL = path.resolve(KIT, '..');
 const KIT_FOLDER = path.basename(KIT);
 
-/** The non-vendored folders outside the kit a kit module imports (the state-location module and its bilingual output, the git port, and the one `-C` fold the guards share). @es Las carpetas de fuera del kit que importa un módulo del kit: el estado, su salida bilingüe, el puerto de git y el pliegue de `-C` compartido. */
-const SHARED_PATHS = ['hook-state', 'bilingual-output', 'git-port', 'company-remote'];
+/** The non-vendored folders outside the kit a kit module imports (the state-location module and its bilingual output, the git port, the one `-C` fold the guards share, and the role reader orphan-work uses with the roles it reads). @es Las carpetas de fuera del kit que importa un módulo del kit: el estado, su salida bilingüe, el puerto de git, el pliegue de `-C` compartido y el lector de roles de orphan-work con los roles que lee. */
+const SHARED_PATHS = ['hook-state', 'bilingual-output', 'git-port', 'company-remote', 'agent-toolset-check', 'agents'];
 
 /** Every kit folder a selftest can reach through its imports. @es Cada carpeta del kit alcanzable desde un selftest. */
 export const KIT_PATHS = ['config', 'lib', 'testing', 'diff-coverage', 'gate-run', 'landing-guard', 'worktree-tenancy', 'orphan-work', 'handback'];
