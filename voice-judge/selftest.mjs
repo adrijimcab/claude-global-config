@@ -17,10 +17,11 @@
  * `fixtures/`, sin llamar a un modelo.
  */
 
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { isolateState } from '../hook-state/locations.mjs';
 
@@ -444,6 +445,114 @@ const runsBefore = [fires('premise-judge'), fires(VOICE_MECHANISM)];
 
 check('hook: evaluate never returns a verdict', await evaluate(JSON.stringify(stopPayload(transcript([]), { session_id: 'v6' }))), undefined);
 check('hook: a Stop counts one run of each judge', [fires('premise-judge') - runsBefore[0], fires(VOICE_MECHANISM) - runsBefore[1]], [1, 1]);
+
+// --- v8h, THE CANDIDATE THAT READS A THIRD PERSON'S su FROM THE TEXT (2026-10-26). @es v8h, LA CANDIDATA DEL su.
+const V8H = await import('./rubrics/v8h.mjs').catch(() => ({}));
+const SU_SENTENCE = ' In a reply that addresses the owner with voseo anywhere, through a verb conjugated for vos, an imperative conjugated for vos or the pronoun vos, every su and sus belongs to a third person, because one reply never addresses the same man with vos and with usted: such a su is never usted, and a reason never cites it as usted.';
+const ruleLine = (prompt, number) => (prompt ?? '').split('\n').find((line) => line.startsWith(`${number}. `)) ?? '';
+
+check('v8h: --rubric measures it by name', measure.rubricPathOf(['--rubric', 'v8h']), path.join(HERE, 'rubrics', 'v8h.mjs'));
+check('v8h: it is v8g with the su sentence in rule 4 and its own signature, nothing else', [V8H.PROMPT_SIGNATURE, V8H.MARKER, ruleLine(V8H.PROMPT, 4).includes(SU_SENTENCE), V8H.PROMPT?.replace(SU_SENTENCE, '').replace('voice-judge rubric v8h.', 'voice-judge rubric v8g.') === V8G.PROMPT], ['voice-judge rubric v8h.', MARKER, true, true]);
+check('v8h: it imports no other rubric, so editing one cannot change it', /from '\.\/v\w+\.mjs'/.test(readFileSync(path.join(HERE, 'rubrics', 'v8h.mjs'), 'utf8')), false);
+check('v8h: it is a candidate: neither the ship bar nor the owner record allows it live, and the live judge is still v8g', [measure.promotionAllowed(V8H.PROMPT ?? '', V7.PROMPT, measure.readShipBarRecord(), measure.readPromotionRecord()), LIVE_PROMPT === V8G.PROMPT], [false, true]);
+
+// Four praise sentences the detector counted as rule-4 reasons in the v8g and v8h runs of 2026-10-26, verbatim.
+// @es Cuatro elogios que el detector contaba como motivos de la regla 4, literales.
+check('measure: saying the reply passes rule 4, or that rule 4 is not violated, is praise', [
+  measure.citesRule4("VOICE-JUDGE: The reply is to the owner and passes rule 4, since 'querés' is correct voseo. It fails rule 6.", ['su']),
+  measure.citesRule4('VOICE-JUDGE: The reply is addressed to the owner in Spanish and passes rule 4, but it fails the mentor test.', ['su']),
+  measure.citesRule4("VOICE-JUDGE: The reply is addressed to the owner, and rule 4 is not violated: there is no tú or usted word, and 'su' is third person because the reply uses voseo. Rule 6 fails.", ['su']),
+  measure.citesRule4("VOICE-JUDGE: Rule 6 fails. (a) passes: voseo aimed at the owner in 'sepas', 'fijate' and 'decime'.", ['sepas', 'tengas', 'integres']),
+], [false, false, false, false]);
+check('measure: each new form of praise is read on its own (constructed)', ["VOICE-JUDGE: It passes rule 4 with 'sepas'.", "VOICE-JUDGE: For 'sepas', rule 4 is not violated.", "VOICE-JUDGE: 'sepas' is correct voseo.", "VOICE-JUDGE: 'sepas' is voseo aimed at him.", "VOICE-JUDGE: 'sepas' is voseo."].map((reason) => measure.citesRule4(reason, ['sepas'])), [false, false, false, false, false]);
+check('measure: a denied tú or usted does not cite rule 4, a present one beside it still does', [measure.citesRule4('VOICE-JUDGE: there is no tú or usted word.'), measure.citesRule4('VOICE-JUDGE: neither tú nor usted appears.'), measure.citesRule4('VOICE-JUDGE: no tuteo.'), measure.citesRule4("VOICE-JUDGE: no tú form appears, but 'tienes' is tuteo."), measure.citesRule4('VOICE-JUDGE: usted, not no usted.'), measure.citesRule4('VOICE-JUDGE: the reply addresses the owner with usted forms.', ['su'])], [false, false, false, true, true, true]);
+check('measure: voseo said to be absent is no praise, so a quoted pinned form there still cites rule 4', measure.citesRule4("VOICE-JUDGE: there is no voseo aimed at him in 'sepas'.", ['sepas']), true);
+check('measure: a word that only ends in no is no denial', measure.citesRule4('VOICE-JUDGE: ninguno usted form here.'), true);
+
+// --- THE DECISION RULE OF DECISION.md. @es LA REGLA DE DECISIÓN DE DECISION.md.
+const ownerSet = (green, blocked, nonVerdicts = 0) => ({ red: 0, missedRed: [], green, blockedGreen: [...Array(blocked).fill({ id: 'x', verdict: false, reason: 'r' }), ...Array(nonVerdicts).fill({ id: 'y', verdict: null, reason: '' })] });
+const decided = (green, blocked, nonVerdicts) => measure.decisionOf(ownerSet(green, blocked, nonVerdicts)).decision;
+
+check('decision: the bar is the ship bar\'s own: recall 90%, precision 95%, so 5% false blocks', [measure.SHIP_BAR, measure.FALSE_BLOCK_BAR], [{ recall: 0.9, precision: 0.95 }, 0.05]);
+check('decision: shadow once the Wilson low end is above 5%', [decided(9, 7), decided(5, 2), decided(10, 2)], ['shadow', 'shadow', 'shadow']);
+check('decision: undecided while the interval holds 5%', [decided(5, 1), decided(9, 0), decided(70, 0), decided(10, 1)], ['undecided', 'undecided', 'undecided', 'undecided']);
+check('decision: within the bar once the Wilson high end is at or below 5%', [decided(80, 0), decided(200, 3)], ['within-bar', 'within-bar']);
+check('decision: no owner passes is not measured', decided(0, 0), 'not measured');
+check('decision: a non-verdict passes live, so it is no false block', [measure.decisionOf(ownerSet(5, 0, 5)).falseBlocks, decided(5, 0, 5), decided(5, 2, 3)], [0, 'undecided', 'shadow']);
+check('decision: the line names the rate, its interval, the bar and the decision, in both languages', [measure.decisionLine(1, ownerSet(9, 7)), measure.decisionLine(2, ownerSet(0, 0))], ['run 1 owner false-block 7/9 = 77.8% (Wilson 95% 45.3%-93.7%), bar 5%: decision=shadow @es corrida 1 falsos bloqueos del dueño 7/9 = 77.8% (Wilson 95% 45.3%-93.7%), barra 5%: decisión=sombra', 'run 2 owner false-block 0/0 (not measured), bar 5%: decision=not measured @es corrida 2 falsos bloqueos del dueño 0/0 (no medido), barra 5%: decisión=no medida']);
+check('decision: the Spanish names of the other two decisions', [measure.decisionLine(1, ownerSet(9, 0)).endsWith('decisión=indecisa'), measure.decisionLine(1, ownerSet(80, 0)).endsWith('decisión=dentro-de-la-barra')], [true, true]);
+check('decision: --rates prints one decision line per run', [1, 2].map((run) => prefixLines.filter((line) => line.startsWith(`run ${run} owner false-block `)).length), [1, 1]);
+
+// --- THE OWNER PACKET. @es EL PAQUETE DEL DUEÑO.
+const ids = Array.from({ length: 12 }, (_, index) => `f${String(index).padStart(2, '0')}`);
+
+check('packet: a seeded shuffle is a permutation, the same for the same seed and another for another seed', [[...measure.seededShuffle(ids, 7)].sort(), measure.seededShuffle(ids, 7), JSON.stringify(measure.seededShuffle(ids, 7)) === JSON.stringify(measure.seededShuffle(ids, 8)), JSON.stringify(measure.seededShuffle(ids, 7)) === JSON.stringify(ids)], [ids, measure.seededShuffle(ids, 7), false, false]);
+check('packet: the shuffle leaves its input alone', (() => { const input = [...ids]; measure.seededShuffle(input, 3); return input; })(), ids);
+check('packet: the shuffle of seed 1 is pinned, so a seed names one packet on every machine', measure.seededShuffle(ids, 1), ['f04', 'f10', 'f02', 'f06', 'f09', 'f03', 'f01', 'f11', 'f08', 'f05', 'f00', 'f07']);
+
+const corpus = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json')).map((name) => JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8')));
+const drawn = measure.packetFixtures(corpus, 10, 1);
+
+check('packet: it draws the size asked, only unadjudicated replies, each once', [drawn.length, drawn.every((fixture) => fixture.expect === 'unadjudicated'), new Set(drawn.map((fixture) => fixture.id)).size], [10, true, 10]);
+check('packet: the draw does not depend on the order the fixtures are listed in', measure.packetFixtures([...corpus].reverse(), 10, 1).map((fixture) => fixture.id), drawn.map((fixture) => fixture.id));
+check('packet: a size above the pool is the whole pool, and the default size is 10', [measure.packetFixtures(corpus, 1000, 1).length, measure.PACKET_SIZE], [corpus.filter((fixture) => fixture.expect === 'unadjudicated').length, 10]);
+
+asked.length = 0;
+
+const packets = [];
+let packetCall = 0;
+const alternating = async (prompt) => {
+  asked.push(prompt);
+  packetCall += 1;
+
+  return packetCall % 2 === 0 ? { answer: JSON.stringify({ ok: false, reason: 'X-JUDGE: trait (c) is absent' }), costUsd: 0, durationMs: 1 } : { answer: '{"ok": true}', costUsd: 0, durationMs: 1 };
+};
+
+printedLines.splice(0);
+console.log = (text) => printedLines.push(String(text));
+
+const packetExit = await measure.main(['--packet', path.join(WORK, 'packet.md'), '--size', '4', '--seed', '3', '--rubric', goodRubric], { ask: alternating, writePacket: (file, text) => packets.push({ file, text }) }).catch((error) => `threw: ${error.message}`);
+const packetLines = printedLines.splice(0);
+
+console.log = consoleLog;
+
+const packetText = packets[0]?.text ?? '';
+
+check('packet: it judges each drawn reply once and writes one packet where asked', [packetExit, asked.length, packets.length, packets[0]?.file], [0, 4, 1, path.join(WORK, 'packet.md')]);
+check('packet: one case per reply, in the order drawn, each with a blank owner label', [packetText.split('\n').filter((line) => line.startsWith('## ')).map((line) => line.replace(/^## \d+\. /, '')), packetText.split('- Owner label: ____ (pass / fail) @es Etiqueta del dueño: ____ (pasa / falla)').length - 1], [measure.packetFixtures(corpus, 4, 3).map((fixture) => fixture.id), 4]);
+check('packet: each reply is quoted whole, line by line', measure.packetFixtures(corpus, 4, 3).every((fixture) => packetText.includes(fixture.message.split('\n').map((line) => `> ${line}`).join('\n'))), true);
+check('packet: the judge line carries the verdict and the reason, in both languages', [packetText.includes('- judge: pass @es juez: pasa'), packetText.includes('- judge: FAIL: X-JUDGE: trait (c) is absent @es juez: FALLA')], [true, true]);
+check('packet: the header names rubric, model, seed and how a label is recorded, in both languages', [packetText.startsWith('# Voice judge owner packet @es Paquete del dueño del juez de voz\n'), packetText.includes(`Rubric ${path.relative(HERE, goodRubric).split(path.sep).join('/')}, model haiku, seed 3, generated `), packetText.includes('"labelledBy": "owner"'), packetText.includes("--rates --runs 1 --prefix ''` applies DECISION.md"), packetText.includes('@es Rúbrica ') && packetText.includes('Etiquetá cada una pasa o falla')], [true, true, true, true, true]);
+check('packet: the summary names the file, the replies, the blocks and the seed, in both languages', packetLines.at(-1), `packet=${path.join(WORK, 'packet.md')} replies=4 blocked=2 seed=3 @es paquete=${path.join(WORK, 'packet.md')} respuestas=4 bloqueadas=2 semilla=3`);
+
+asked.length = 0;
+printedErrors.length = 0;
+console.error = (text) => printedErrors.push(String(text));
+console.log = () => {};
+
+const wrongPacket = [];
+
+for (const argv of [['--packet'], ['--packet', '--size', '3'], ['--packet', 'p.md', '--size', '0'], ['--packet', 'p.md', '--size', 'x'], ['--packet', 'p.md', '--seed', '-1'], ['--packet', 'p.md', '--seed', '1.5']]) {
+  wrongPacket.push(await measure.main([...argv, '--rubric', goodRubric], { ask: alternating, writePacket: (file, text) => packets.push({ file, text }) }).catch((error) => `threw: ${error.message}`));
+}
+console.error = consoleError;
+console.log = consoleLog;
+check('packet: a missing path, a size or a seed that is no positive integer exits 2 with no model call and no packet, in both languages', [wrongPacket, asked.length, packets.length, printedErrors.every((line) => line.includes('@es'))], [[2, 2, 2, 2, 2, 2], 0, 1, true]);
+check('packet: with no size and no seed it draws 10 with seed 1', await (async () => {
+  asked.length = 0;
+  console.log = () => {};
+  await measure.main(['--packet', 'p.md', '--rubric', goodRubric], { ask: alternating, writePacket: (file, text) => packets.push({ file, text }) }).catch(() => undefined);
+  console.log = consoleLog;
+
+  return [asked.length, packets.at(-1)?.text.includes(', seed 1, ')];
+})(), [10, true]);
+
+// --- THE LOCAL TIMESTAMP IN TWO REAL ZONES: a UTC host cannot tell the offset's sign or a UTC hour apart.
+// @es LA MARCA LOCAL EN DOS ZONAS REALES: un host en UTC no distingue el signo del desfase ni una hora UTC.
+const stampIn = (zone) => spawnSync(process.execPath, ['--input-type=module', '-e', `const { isoWithOffset } = await import(${JSON.stringify(pathToFileURL(path.join(HERE, 'measure.mjs')).href)}); console.log(isoWithOffset(new Date(Date.UTC(2026, 9, 25, 23, 30, 5))));`], { encoding: 'utf8', env: { ...process.env, TZ: zone } }).stdout.trim();
+
+check('measure: a local timestamp west of UTC carries its negative offset and its local hour', stampIn('America/Sao_Paulo'), '2026-10-25T20:30:05-03:00');
+check('measure: a local timestamp east of UTC carries its positive half-hour offset and its local day', stampIn('Asia/Kolkata'), '2026-10-26T05:00:05+05:30');
 
 for (const failure of failures) console.log(`FAIL ${failure}`);
 console.log(`${passed}/${passed + failures.length} passed`);

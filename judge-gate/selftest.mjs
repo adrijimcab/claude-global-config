@@ -39,8 +39,10 @@ process.on('exit', () => {
 });
 
 const { readVerdict } = await import('./verdict.mjs');
-const { hookCommand, importJudgeModule, JUDGE_NAMES, loadJudge, loadJudges } = await import('./judges.mjs');
-const JUDGES = await loadJudges();
+const { hookCommand, importJudgeModule, JUDGE_NAMES, loadJudge, loadJudges, MODES = [], MODES_PATH = '', modeOf = () => undefined, readModes = () => ({}) } = await import('./judges.mjs');
+// Loaded with the record read straight from disk, so a broken default reader fails the mode checks, not the whole run.
+// @es Cargados con el registro leído del disco, para que un lector por defecto roto falle los checks de modos.
+const JUDGES = await loadJudges({ modes: () => JSON.parse(readFileSync(path.join(HERE, 'modes.json'), 'utf8')) });
 const { decide, MAX_BLOCKS_PER_TURN, NESTED_VARIABLE } = await import('./gate.mjs');
 // A missing spawnAsync is a stub, so its absence fails checks instead of crashing the run. @es Un spawnAsync ausente es un stub.
 const { askModel, modelArguments, spawnAsync = async () => ({}) } = await import('./model.mjs');
@@ -207,10 +209,12 @@ const withFallback = (extra = {}) => ({ ...voice, fallback: (parsed, why) => `FA
 const fellBack = await gate(payload({ session_id: 'f1' }), failing, withFallback());
 
 check('fallback: a failed model call blocks with the fallback text and keeps why', [fellBack.outcome, fellBack.reason, fellBack.why, fellBack.costUsd, fellBack.durationMs], ['block', 'FALLBACK f1 model unavailable', 'model unavailable', 0, 0]);
+check('fallback: a fallback block after a failed call names the cause malfunction', fellBack.cause, 'malfunction');
 
 const fellBackProse = await gate(payload({ session_id: 'f2' }), answering('Sorry, I cannot.'), withFallback());
 
 check('fallback: an answer that is no verdict blocks with the fallback, keeping its cost and latency', [fellBackProse.outcome, fellBackProse.reason?.startsWith('FALLBACK f2 '), typeof fellBackProse.why, fellBackProse.costUsd, fellBackProse.durationMs], ['block', true, 'string', 0.0002, 900]);
+check('fallback: a fallback block after a non-verdict names the cause non-verdict', fellBackProse.cause, 'non-verdict');
 check('fallback: a continued stop that falls back is marked continued', (await gate(payload({ stop_hook_active: true }), failing, withFallback(), false, () => 0)).continued, true);
 
 const fallbackThrew = await gate(payload(), failing, withFallback({ fallback: () => { throw new Error('no text'); } }));
@@ -264,14 +268,28 @@ check('gate: a block keeps the cost and latency', [blocks.costUsd, blocks.durati
 
 const stray = await gate(payload(), answering('{"ok": false, "reason": "insufficient evidence in transcript"}'));
 
-check('gate: an ok false that is not a rubric verdict passes as a malfunction', [stray.outcome, stray.reason], ['malfunction', undefined]);
-check('gate: a model that answers prose passes as a malfunction', (await gate(payload(), answering('Sorry, I cannot.'))).outcome, 'malfunction');
+check('gate: an ok false that is not a rubric verdict passes as a non-verdict', [stray.outcome, stray.reason, typeof stray.why], ['non-verdict', undefined, 'string']);
+check('gate: a model that answers prose passes as a non-verdict', (await gate(payload(), answering('Sorry, I cannot.'))).outcome, 'non-verdict');
+check('gate: the incident answer of 2026-10-12 passes as a non-verdict that says why', [stray.why?.startsWith(`ok false without a reason starting with ${voice.marker}`), stray.cause], [true, undefined]);
+check('gate: a non-verdict of a continued stop is marked continued', (await gate(payload({ stop_hook_active: true }), answering('{"ok": "maybe"}'), voice, false, () => 0)).continued, true);
 
 const down = await gate(payload(), failing);
 
 check('gate: a model call that throws passes as a malfunction', [down.outcome, down.why?.includes('model unavailable')], ['malfunction', true]);
 check('gate: a failed model call has no reason to block with', down.reason, undefined);
-check('gate: a malfunction keeps the cost and latency of the answer', [stray.costUsd, stray.durationMs], [0.0002, 900]);
+check('gate: a non-verdict keeps the cost and latency of the answer', [stray.costUsd, stray.durationMs], [0.0002, 900]);
+check('gate: a failed model call is a malfunction, never a non-verdict, and carries no cause', [down.outcome, down.cause], ['malfunction', undefined]);
+
+// --- SHADOW MODE: a shadow judge is decided the same way, but its block is recorded and never obeyed.
+// @es MODO SOMBRA: un juez en sombra se decide igual, pero su bloqueo se registra y nunca se obedece.
+const shadow = { ...voice, mode: 'shadow' };
+const shadowBlock = await gate(payload(), blockingAnswer, shadow);
+
+check('shadow: a block of a shadow judge is a shadow-block that keeps its reason, cost and latency', [shadowBlock.outcome, shadowBlock.reason, shadowBlock.costUsd, shadowBlock.durationMs], ['shadow-block', goodBlock, 0.0002, 900]);
+check('shadow: a pass, a non-verdict and a malfunction of a shadow judge are unchanged', [(await gate(payload(), answering('{"ok": true}'), shadow)).outcome, (await gate(payload(), answering('prose'), shadow)).outcome, (await gate(payload(), failing, shadow)).outcome], ['pass', 'non-verdict', 'malfunction']);
+check('shadow: a fallback block of a shadow judge is a shadow-block too, with its cause', (({ outcome, cause }) => [outcome, cause])(await gate(payload(), failing, { ...shadow, fallback: () => 'FB' })), ['shadow-block', 'malfunction']);
+check('shadow: a live judge still blocks', [(await gate(payload(), blockingAnswer, { ...voice, mode: 'live' })).outcome, (await gate(payload(), blockingAnswer)).outcome], ['block', 'block']);
+check('shadow: a continued shadow block is marked continued', (await gate(payload({ stop_hook_active: true }), blockingAnswer, shadow, false, () => 0)).continued, true);
 
 // --- OUTCOME LOG. @es REGISTRO DE DESENLACES.
 check('turn: no log yet means no blocks, not an error', blocksThisTurn('voice', 's1'), 0);
@@ -291,10 +309,12 @@ check('log: one line per outcome', lines.length, 2);
 check('log: a line names judge, session, outcome, cost and latency', [lines[0]?.judge, lines[0]?.session, lines[0]?.outcome, lines[0]?.costUsd, lines[0]?.durationMs], ['voice', 's1', 'block', 0.0002, 900]);
 check('log: a line carries a timestamp', Number.isFinite(Date.parse(lines[0]?.ts)), true);
 check('log: a malfunction keeps its why', lines[1]?.why, 'nope');
+check('log: a line has no cause unless the outcome carries one', Object.hasOwn(lines[1] ?? {}, 'cause'), false);
+check('log: the cause of a fallback block is kept', recordOutcome('pending', 's9', { outcome: 'block', costUsd: 0, durationMs: 1, reason: 'r', why: 'w', cause: 'non-verdict' }).cause, 'non-verdict');
 check('log: the reason is kept for a block', lines[0]?.reason, goodBlock);
 check('log: the file lives under the judge-gate state directory', outcomesPath().startsWith(path.resolve(process.env.HOOK_STATE_DIR)) && path.basename(path.dirname(outcomesPath())) === 'judge-gate', true);
 recordOutcome('voice', 's2', { outcome: 'pass', costUsd: 0, durationMs: 1 });
-check('log: a second outcome is appended, the first is kept', readLog().split('\n').filter((line) => line !== '').length, 3);
+check('log: a second outcome is appended, the first is kept', readLog().split('\n').filter((line) => line !== '').length, 4);
 
 // --- TURN COUNT. @es CUENTA DEL TURNO.
 const log = (judge, session, outcome, continued) => recordOutcome(judge, session, { outcome, costUsd: 0, durationMs: 1, continued });
@@ -318,6 +338,7 @@ check('turn: another judge\'s blocks are not counted', blocksThisTurn('voice', '
 log('voice', 'turn-c', 'block');
 check('turn: another session\'s blocks are not counted', blocksThisTurn('voice', 'turn-none'), 0);
 check('turn: a session that only has continued records counts all its blocks', (log('voice', 'turn-d', 'block', true), blocksThisTurn('voice', 'turn-d')), 1);
+check('turn: a shadow block held no turn, so it is never counted', (log('voice', 'turn-e', 'block'), log('voice', 'turn-e', 'shadow-block', true), blocksThisTurn('voice', 'turn-e')), 1);
 
 // --- WHEN THE TURN WAS LAST BLOCKED: the time of the newest block of the current turn, for the pending judge's
 // --- dismissal lookup. @es CUÁNDO SE BLOQUEÓ POR ÚLTIMA VEZ EL TURNO.
@@ -515,7 +536,7 @@ check('run: the outcome is recorded for this judge and session', await (async ()
 // @es CARGADOS POR NOMBRE: un juez de pendientes con su cadena rota es un fallo propio; premise y voice siguen.
 const brokenPending = (specifier) => (specifier.startsWith('../pending-judge/') || specifier.startsWith('../backlog-guard/') ? Promise.reject(new SyntaxError('broken pending chain')) : importJudgeModule(specifier));
 
-check('lazy: a broken pending chain fails only the pending judge load', [await loadJudge('pending', { importModule: brokenPending }).then(() => 'loaded', (error) => error.message), (await loadJudge('premise', { importModule: brokenPending }))?.name, (await loadJudge('voice', { importModule: brokenPending }))?.name], ['broken pending chain', 'premise', 'voice']);
+check('lazy: a broken pending chain fails only the pending judge load', [await loadJudge('pending', { importModule: brokenPending }).then(() => 'loaded', (error) => error.message), await loadJudge('premise', { importModule: brokenPending }).then((loaded) => loaded?.name, (error) => `threw: ${error.message}`), await loadJudge('voice', { importModule: brokenPending }).then((loaded) => loaded?.name, (error) => `threw: ${error.message}`)], ['broken pending chain', 'premise', 'voice']);
 seen.length = 0;
 check('lazy: the pending judge with a broken chain prints nothing and asks no model', [await run('pending', payload({ session_id: 'lazy-1' }), { model: blockingModel, importModule: brokenPending }).catch((error) => `threw: ${error.message}`), seen.length], ['', 0]);
 check('lazy: that load failure is logged as the pending judge\'s malfunction, in both languages', readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'lazy-1' && line.judge === 'pending' && line.outcome === 'malfunction' && String(line.why).includes('the pending judge could not be loaded: broken pending chain') && String(line.why).includes('@es no se pudo cargar el juez pending')), true);
@@ -525,9 +546,56 @@ const voiceDespite = await run('voice', payload({ session_id: 'lazy-2' }), { mod
 const premiseDespite = await run('premise', payload({ session_id: 'lazy-3' }), { model: async (prompt, options) => (seen.push(options), { answer: JSON.stringify({ ok: false, reason: `${premise.marker} x` }), costUsd: 0, durationMs: 1 }), importModule: brokenPending });
 
 check('lazy: voice and premise still run and block past a broken pending chain', [voiceDespite.includes(goodBlock), premiseDespite.includes(`${premise.marker} x`), seen.length], [true, true, 2]);
-check('lazy: a name that is no judge loads nothing, inherited names included', [await loadJudge('tone'), await loadJudge('constructor'), await loadJudge('toString')], [undefined, undefined, undefined]);
+check('lazy: a name that is no judge loads nothing, inherited names included', await Promise.all(['tone', 'constructor', 'toString'].map((name) => loadJudge(name).catch((error) => `threw: ${error.message}`))), [undefined, undefined, undefined]);
 check('lazy: every judge loads under its own name', Object.entries(JUDGES).map(([name, loaded]) => [name, loaded.name]), JUDGE_NAMES.map((name) => [name, name]));
-check('lazy: judges.mjs imports no judge module when it loads', readFileSync(path.join(HERE, 'judges.mjs'), 'utf8').split('\n').filter((line) => line.startsWith('import ')), []);
+check('lazy: judges.mjs imports no judge module when it loads', readFileSync(path.join(HERE, 'judges.mjs'), 'utf8').split('\n').filter((line) => line.startsWith('import ') && (line.includes('-judge/') || line.includes('backlog-guard'))), []);
+check('lazy: judges.mjs imports only node built-ins when it loads', readFileSync(path.join(HERE, 'judges.mjs'), 'utf8').split('\n').filter((line) => line.startsWith('import ')).every((line) => line.includes("from 'node:")), true);
+
+// MODES: the owner's record gives every judge exactly one known mode, and a judge without one never loads.
+// @es MODOS: el registro del dueño da a cada juez exactamente un modo conocido; un juez sin él nunca carga.
+{
+  const onDisk = JSON.parse(readFileSync(path.join(HERE, 'modes.json'), 'utf8'));
+
+  check('modes: the record lists exactly the judges, in wiring order', Object.keys(onDisk), JUDGE_NAMES);
+  check('modes: every judge in the record has a known mode', Object.values(onDisk).every((mode) => MODES.includes(mode)), true);
+  check('modes: the known modes are live and shadow', MODES, ['live', 'shadow']);
+  const settled = (promise) => promise.then((value) => value, (error) => `threw: ${error.message}`);
+  const readDefault = () => {
+    try {
+      return readModes();
+    } catch (error) {
+      return `threw: ${error.message}`;
+    }
+  };
+
+  check('modes: the record read is the file beside the gate', [path.resolve(MODES_PATH), readDefault()], [path.join(HERE, 'modes.json'), onDisk]);
+  check('modes: every loaded judge carries the mode of the record', Object.values(JUDGES).map((loaded) => loaded.mode), JUDGE_NAMES.map((name) => onDisk[name]));
+  check('modes: by default a judge reads its mode from the record on disk', await Promise.all(JUDGE_NAMES.map((name) => settled(loadJudge(name)).then((loaded) => loaded?.mode ?? loaded))), JUDGE_NAMES.map((name) => onDisk[name]));
+
+  const thrown = (action) => {
+    try {
+      return action();
+    } catch (error) {
+      return `threw: ${error.message}`;
+    }
+  };
+
+  check('modes: a mode is read by the judge name', [thrown(() => modeOf('voice', { voice: 'shadow' })), thrown(() => modeOf('voice', { voice: 'live' }))], ['shadow', 'live']);
+  check('modes: a missing, unknown, inherited or malformed mode throws in both languages', [thrown(() => modeOf('voice', {})), thrown(() => modeOf('voice', { voice: 'off' })), thrown(() => modeOf('constructor', {})), thrown(() => modeOf('voice', Object.create({ voice: 'live' }))), thrown(() => modeOf('voice', null)), thrown(() => modeOf('voice', 'voice'))].map((value) => String(value).startsWith('threw: the ') && String(value).includes('@es')), [true, true, true, true, true, true]);
+  check('modes: a loaded judge takes its mode from the record it is given', [await settled(loadJudge('voice', { modes: () => ({ voice: 'shadow' }) })).then((loaded) => loaded?.mode ?? loaded), await settled(loadJudge('premise', { modes: () => ({ premise: 'live' }) })).then((loaded) => loaded?.mode ?? loaded)], ['shadow', 'live']);
+  check('modes: a judge with no mode does not load', await loadJudge('voice', { modes: () => ({ premise: 'live' }) }).then(() => 'loaded', (error) => error.message.includes('the voice judge has no valid mode')), true);
+  check('modes: an unreadable record does not load the judge', await loadJudge('voice', { modes: () => { throw new Error('no file'); } }).then(() => 'loaded', (error) => error.message), 'no file');
+  check('modes: a name that is no judge reads no mode', await settled(loadJudge('tone', { modes: () => { throw new Error('read'); } })), undefined);
+
+  const shadowRun = await run('voice', payload({ session_id: 'shadow-1' }), { model: blockingModel, importModule: importJudgeModule, modes: () => ({ voice: 'shadow' }) }).catch((error) => `threw: ${error.message}`);
+
+  check('modes: a shadow judge that blocks prints nothing', shadowRun, '');
+  check('modes: its block is logged as a shadow-block with the reason', readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'shadow-1' && line.outcome === 'shadow-block' && line.reason === goodBlock), true);
+
+  const nomodeRun = await run('voice', payload({ session_id: 'shadow-2' }), { model: blockingModel, modes: () => ({}) }).catch((error) => `threw: ${error.message}`);
+
+  check('modes: a judge with no mode prints nothing and is logged as its malfunction', [nomodeRun, readLog().split('\n').filter((line) => line !== '').map((line) => JSON.parse(line)).some((line) => line.session === 'shadow-2' && line.outcome === 'malfunction' && String(line.why).includes('has no valid mode'))], ['', true]);
+}
 check('lazy: run.mjs reaches no judge module but through the loader', readFileSync(path.join(HERE, 'run.mjs'), 'utf8').split('\n').filter((line) => line.startsWith('import ') && (line.includes('-judge/') || line.includes('backlog-guard'))), []);
 
 // THE BILINGUAL MIRRORS of this folder name every judge. @es LOS ESPEJOS BILINGÜES nombran a cada juez.

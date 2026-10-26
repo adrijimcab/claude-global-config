@@ -12,7 +12,19 @@
  * POR NOMBRE, A DEMANDA: `loadJudge(name)` importa solo los módulos de ese juez. Cada juez corre en su propio
  * proceso de hook, así que un juez cuya cadena de módulos no carga es un fallo solo de ese juez: los demás nunca
  * la importan y siguen corriendo.
+ *
+ * EACH JUDGE HAS A MODE, from `modes.json`: `live` (its blocks hold the turn) or `shadow` (it is asked and its
+ * verdicts are recorded, but a block is recorded as `shadow-block` and never printed, `gate.mjs`). The file is the
+ * owner's decision, written by hand, one entry per judge; a judge whose mode is missing or unknown, or a file that
+ * cannot be read, is that judge's load failure, so it is logged as a malfunction and never guessed.
+ * @es CADA JUEZ TIENE UN MODO, de `modes.json`: `live` (sus bloqueos retienen el turno) o `shadow` (se le pregunta y
+ * se registran sus veredictos, pero un bloqueo se registra como `shadow-block` y nunca se imprime). El fichero es la
+ * decisión del dueño, escrita a mano, una entrada por juez; un juez sin modo o con un modo desconocido, o un fichero
+ * ilegible, es un fallo de carga de ese juez: se registra como fallo y nunca se adivina.
  */
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 /**
  * The seconds of the hook timeout kept free after the model call gives up, so the gate can still log and pass.
@@ -30,6 +42,26 @@ export const JUDGE_NAMES = Object.freeze(['premise', 'voice', 'pending']);
  * @es Cómo se importa un módulo de un juez: relativo a este fichero. Un punto de inyección para romper una cadena.
  */
 export const importJudgeModule = (specifier) => import(specifier);
+
+/** The modes a judge may run in. @es Los modos en que puede correr un juez. */
+export const MODES = Object.freeze(['live', 'shadow']);
+
+/** Where the owner's modes live. @es Donde viven los modos del dueño. */
+export const MODES_PATH = fileURLToPath(new URL('./modes.json', import.meta.url));
+
+/** The modes record on disk; throws when it cannot be read. @es El registro de modos en disco; lanza si no se puede leer. */
+export const readModes = () => JSON.parse(readFileSync(MODES_PATH, 'utf8'));
+
+/** The mode `modes` gives the judge `name`; throws for a missing or unknown one. @es El modo que `modes` da al juez `name`. */
+export function modeOf(name, modes) {
+  const mode = modes !== null && typeof modes === 'object' && Object.hasOwn(modes, name) ? modes[name] : undefined;
+
+  if (!MODES.includes(mode)) {
+    throw new Error(`the ${name} judge has no valid mode in modes.json (got ${JSON.stringify(mode)}, known: ${MODES.join(', ')}) @es el juez ${name} no tiene un modo válido en modes.json (vino ${JSON.stringify(mode)}, conocidos: ${MODES.join(', ')})`);
+  }
+
+  return mode;
+}
 
 /** Each judge built from its own modules only. @es Cada juez construido solo con sus propios módulos. */
 const LOADERS = {
@@ -61,16 +93,25 @@ const LOADERS = {
 };
 
 /**
- * The judge `name`, or `undefined` for a name that is no judge; rejects when the judge's modules cannot load.
- * @es El juez `name`, o `undefined` si el nombre no es de un juez; rechaza si sus módulos no cargan.
+ * The judge `name` with its mode, or `undefined` for a name that is no judge; rejects when the judge's modules cannot
+ * load or its mode cannot be read. `importModule` and `modes` are seams for the selftest.
+ * @es El juez `name` con su modo, o `undefined` si el nombre no es de un juez; rechaza si sus módulos no cargan o
+ * su modo no se puede leer. `importModule` y `modes` son puntos de inyección del selftest.
  */
-export async function loadJudge(name, { importModule = importJudgeModule } = {}) {
-  return Object.hasOwn(LOADERS, name) ? LOADERS[name](importModule) : undefined;
+export async function loadJudge(name, { importModule = importJudgeModule, modes = readModes } = {}) {
+  if (!Object.hasOwn(LOADERS, name)) return undefined;
+
+  const loaded = await LOADERS[name](importModule);
+
+  return { ...loaded, mode: modeOf(name, modes()) };
 }
 
-/** Every judge by name, for the selftests that check the wiring. @es Todos los jueces por nombre, para los selftests del cableado. */
-export async function loadJudges() {
-  return Object.fromEntries(await Promise.all(JUDGE_NAMES.map(async (name) => [name, await loadJudge(name)])));
+/**
+ * Every judge by name, for the selftests that check the wiring; `options` go to each `loadJudge`.
+ * @es Todos los jueces por nombre, para los selftests del cableado; `options` va a cada `loadJudge`.
+ */
+export async function loadJudges(options = {}) {
+  return Object.fromEntries(await Promise.all(JUDGE_NAMES.map(async (name) => [name, await loadJudge(name, options)])));
 }
 
 /** The command `settings.json` wires for the judge `name`. @es El comando que `settings.json` cablea para `name`. */
