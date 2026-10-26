@@ -15,6 +15,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { isolateState } from '../hook-state/locations.mjs';
+
+isolateState('judge-gate');
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRATCH = mkdtempSync(path.join(tmpdir(), 'judge-rates-'));
 
