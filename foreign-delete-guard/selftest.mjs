@@ -72,6 +72,15 @@ function check(label, condition, detail = '') {
   }
 }
 
+/** `foreignLeaves` with a throw turned into a verdict that fails its check, never a crash. @es `foreignLeaves` con un lanzamiento convertido en un veredicto que falla su check, nunca un crash. */
+function leavesOf(...args) {
+  try {
+    return foreignLeaves(...args);
+  } catch (error) {
+    return { foreign: [`threw: ${error.message}`], exceeded: false };
+  }
+}
+
 /** A value computed by `read`, or a marker when it throws, so a throw is a failed check and never a crash. @es El valor de `read`, o una marca si lanza. */
 function safely(read) {
   try {
@@ -549,11 +558,11 @@ try {
   check('judge: the identity reader it is given decides', judged(`rm ${p('provision.mjs')}`, { journalOf: () => ({ confirmed: new Map([[foreignCanonical, { id: '1:1', born: 5 }]]), intervals: [] }), identify: () => ({ id: '1:1', born: 5 }) }) === undefined);
 
   const mineOnly = ownershipOf(readJournal('abc'), undefined);
-  const sharedFolder = foreignLeaves(at('shared'), mineOnly, 2);
+  const sharedFolder = leavesOf(at('shared'), mineOnly, 2);
 
   check('foreignLeaves: only the foreign file of a mixed folder', sharedFolder.foreign.length === 1 && sharedFolder.foreign[0].endsWith('x.txt') && !sharedFolder.exceeded);
-  check('foreignLeaves: a walk past the limit is exceeded', foreignLeaves(at('shared'), ownershipOf(EMPTY, undefined), 1).exceeded);
-  check('foreignLeaves: a path that does not exist holds nothing', foreignLeaves(at('nothing'), ownershipOf(EMPTY, undefined)).foreign.length === 0);
+  check('foreignLeaves: a walk past the limit is exceeded', leavesOf(at('shared'), ownershipOf(EMPTY, undefined), 1).exceeded);
+  check('foreignLeaves: a path that does not exist holds nothing', leavesOf(at('nothing'), ownershipOf(EMPTY, undefined)).foreign.length === 0);
 
   // --- the decision units ----------------------------------------------------------------------------
   check('wildcard: * matches a run', wildcardMatch('a*c', 'abbbc') && !wildcardMatch('a*c', 'abbbd'));
@@ -601,7 +610,7 @@ try {
   check('targets: cmd //c with a backslash reports the reason', targetsOf('cmd //c del C:\\a\\b.txt').some((target) => target.unresolvable === 'backslash'));
   check('targets: cmd //c that deletes nothing reports nothing', targetsOf('cmd //c echo hi').length === 0);
   check('targets: a move reports its sources, not its destination', safely(() => names(targetsOf(`mv ${p('mine.mjs')} ${p('mine.txt')} ${p('shared')}`)).join()) === 'mine.mjs,mine.txt' && safely(() => names(targetsOf(`Move-Item -Destination ${p('shared')} ${p('mine.mjs')}`, 'powershell')).join()) === 'mine.mjs');
-  check('targets: a move with a target folder option', names(targetsOf(`mv -t ${p('shared')} ${p('mine.mjs')}`)).join() === 'mine.mjs');
+  check('targets: a move with a target folder option', safely(() => names(targetsOf(`mv -t ${p('shared')} ${p('mine.mjs')}`)).join()) === 'mine.mjs');
 
   check('targets: rm names its operands only', targetsOf(`rm -rf -v ${p('mine.mjs')}`).map((target) => path.basename(target.path)).join() === 'mine.mjs');
   check('targets: a command with no deleter has none', targetsOf('ls -la').length === 0);
@@ -775,7 +784,7 @@ try {
   check('ownership: a foreign file is not owned', !mineOwns(at('provision.mjs')));
   check('ownership: the scratchpad root is not owned, a folder the agent made is', !mineOwns(SCRATCH) && mineOwns(at('mydir', 'out.log')));
   check('ownership: writing a file INTO a folder does not make the folder the agent\'s', mineOwns(at('shared', 'y.txt')) && !mineOwns(at('shared', 'x.txt')) && !mineOwns(at('shared')));
-  check('ownership: the tenancy worktree is owned when given', ownershipOf(EMPTY, worktree).owns(path.join(worktree, 'a', 'b.ts')) && !ownershipOf(EMPTY, worktree).owns(path.join(otherWorktree, 'a')));
+  check('ownership: the tenancy worktree is owned when given', safely(() => ownershipOf(EMPTY, worktree).owns(path.join(worktree, 'a', 'b.ts'))) === true && safely(() => ownershipOf(EMPTY, worktree).owns(path.join(otherWorktree, 'a'))) === false);
 
   check('linkedWorktreeRoot: a linked worktree from a subfolder', linkedWorktreeRoot(path.join(worktree, 'src', 'sub')) === worktree);
   check('linkedWorktreeRoot: the main checkout, a submodule and a stray .git file have none', linkedWorktreeRoot(path.join(mainCheckout, 'src')) === undefined && linkedWorktreeRoot(path.join(submodule, 'src')) === undefined && linkedWorktreeRoot(pointedElsewhere) === undefined);
@@ -783,9 +792,9 @@ try {
   check('tenancyWorktree: the harness record and the brief give it, nothing else does', safely(() => tenancyWorktree({ cwd: worktree, agentKey: 'abc', records: harness(worktree) })) === worktree && safely(() => tenancyWorktree({ cwd: worktree, agentKey: 'abc', records: byBrief(`TENANCY: ${slashes(worktree)}`) })) === worktree && safely(() => tenancyWorktree({ cwd: worktree, agentKey: 'abc', records: () => [] })) === undefined);
   check('linkedWorktreeRoot: a gitdir line needs its prefix, and a backslash spelling counts', linkedWorktreeRoot(noPrefix) === undefined && linkedWorktreeRoot(backslashed) === backslashed);
 
-  const dangling = foreignLeaves(at('linkdir', 'out'), ownershipOf(mine, undefined), 100, readdirSync, () => { throw new Error('ENOENT'); });
+  const dangling = leavesOf(at('linkdir', 'out'), ownershipOf(mine, undefined), 100, readdirSync, () => { throw new Error('ENOENT'); });
 
-  check('foreignLeaves: a link that cannot be resolved is foreign even inside an owned folder', foreignLeaves(at('linkdir'), ownershipOf(mine, undefined), 100, readdirSync, () => { throw new Error('ENOENT'); }).foreign.length === 1 && dangling.foreign.length === 1);
+  check('foreignLeaves: a link that cannot be resolved is foreign even inside an owned folder', leavesOf(at('linkdir'), ownershipOf(mine, undefined), 100, readdirSync, () => { throw new Error('ENOENT'); }).foreign.length === 1 && dangling.foreign.length === 1);
 
   const listed = [];
   const countingList = (directory, options) => {
@@ -794,10 +803,10 @@ try {
     return readdirSync(directory, options);
   };
 
-  foreignLeaves(at('nested'), ownershipOf(EMPTY, undefined), 1, countingList);
+  leavesOf(at('nested'), ownershipOf(EMPTY, undefined), 1, countingList);
   check('foreignLeaves: the walk stops as soon as the budget is spent', listed.length === 2, `${listed.length} folders read`);
 
-  const unreadable = foreignLeaves(at('shared'), ownershipOf(EMPTY, undefined), 100, () => {
+  const unreadable = leavesOf(at('shared'), ownershipOf(EMPTY, undefined), 100, () => {
     throw new Error('EACCES');
   });
 
