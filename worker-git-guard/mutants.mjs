@@ -246,8 +246,8 @@ export const MUTANTS = [
   ['a prefix assignment of a git command is a touch (C)', TOUCH, 'words.slice(0, at).filter((word) => !isAssignment(word)) :', 'words.slice(0, at) :'],
   ['a prefix assignment of another command is a touch (C)', TOUCH, 'words.filter((word, index) => index >= at || !isAssignment(word))', 'words'],
   ['a bare assignment is no touch (C)', TOUCH, 'const scanned = at === -1 ? words :', 'const scanned = at === -1 ? [] :'],
-  ['a command word that is an option is a command (C)', TOUCH, "return at !== -1 && words[at].startsWith('-') && words.slice(at)", 'return at !== -1 && words.slice(at)'],
-  ['every wrapper option hides a git command (C)', TOUCH, " && words.slice(at).some((word) => executableName(word) === 'git');", ';'],
+  ['env options before a program other than git hide a git command (A)', TOUCH, "    if (at === -1 || executableName(words[at]) !== 'git') return false;", '    if (at === -1) return false;'],
+  ['the options of any launcher hide git, not only env (A)', TOUCH, "const env = words.findIndex((word, index) => index < at && executableName(word) === 'env');", 'const env = words.findIndex((word, index) => index < at);'],
   // untracked pathspec: composition in the guard
   ['the untracked check never runs', GUARD, 'const reason = offenders.length === 0 ? untrackedRefusal(payload, command, dialect, cwd, list) :', 'const reason = offenders.length === 0 ? undefined :'],
   ['the untracked check also runs when the lexical rules refused (wrong message wins)', GUARD, 'const reason = offenders.length === 0 ? untrackedRefusal(payload, command, dialect, cwd, list) : refusalText(offenders[0].family, offenders[0].text);', 'const reason = untrackedRefusal(payload, command, dialect, cwd, list) ?? (offenders.length === 0 ? undefined : refusalText(offenders[0].family, offenders[0].text));'],

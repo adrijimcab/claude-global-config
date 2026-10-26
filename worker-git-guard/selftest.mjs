@@ -665,6 +665,24 @@ denied('git read-tree --index-output= HEAD');
 denied('git -c "clean.requireForce= 0" clean -d');
 for (const command of ['cat MYGIT_DIR.txt && git commit -m x -- clean','cat GIT_DIRECTORY.md && git commit -m x -- clean', 'git commit -m "GIT_DIR" -- clean', 'GIT_DIR=x npm test; git commit -m x -- clean', 'env X=1 git commit -m x -- clean']) check(`C: not a touch: ${command}`, !reasonFor(command).includes(UNRESOLVABLE));
 allowed('env -u X npm test');
+// Only `env` changes the environment git sees: another launcher's options (`timeout -s`, `nice -n`) leave it alone.
+// @es Solo `env` cambia el entorno que ve git: las opciones de otro lanzador (`timeout -s`, `nice -n`) no lo tocan.
+for (const command of ['timeout -s KILL 5 git status', 'nice -n 5 git status']) {
+  allowed(command);
+  check(`C: not unresolvable, a launcher that is not env: ${command}`, !reasonFor(command).includes(UNRESOLVABLE));
+}
+// A launcher carrying a READABLE literal script is no touch: its script is listed as nested commands and judged there,
+// allowed when they are allowed and refused by their own family when they are not.
+// @es Un lanzador que lleva un script literal LEGIBLE no es un toque: su script se lista como comandos anidados y se
+// juzga ahí, permitido si ellos lo están y rechazado por su propia familia si no.
+for (const command of ["Invoke-Expression 'git status'", "iex 'git status'", "Invoke-Expression 'git log -1'; git status"]) {
+  expect('allow', asSubagent('PowerShell', command), `C: a readable carried script is scanned, not unresolvable (PowerShell): ${command}`);
+}
+for (const command of ["Invoke-Expression 'git reset --hard'", "iex 'git switch main'"]) {
+  const reason = evaluate(JSON.stringify(asSubagent('PowerShell', command)))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+
+  check(`C: a readable carried script is refused by its own family, not as unresolvable (PowerShell): ${command}`, reason.includes('may not run `git ') && !reason.includes(UNRESOLVABLE), reason.slice(0, 200));
+}
 check('C: a substitution inside a top-level export does not make the export conditional', untrackedVerdict('export GIT_INDEX_FILE=/tmp/i X=$(true); git read-tree HEAD') === undefined);
 check('B: a fused PowerShell assignment of a literal runs no command', untrackedVerdict("$x='a'; git commit -m \"x\" -- clean", REPO, 'PowerShell') === undefined);
 check('C: Remove-Item -Path Env:\\NAME is modelled, so setting it again counts', untrackedVerdict('Remove-Item -Path Env:\\GIT_INDEX_FILE; $env:GIT_INDEX_FILE = "C:\\t\\i"; git read-tree HEAD', REPO, 'PowerShell') === undefined);
