@@ -40,7 +40,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
-import { digestInput } from '../hook-state/journal.mjs';
+import { digestInput } from '../hook-state/input-digest.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { inspectCommand } from './detect.mjs';
 

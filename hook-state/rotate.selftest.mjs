@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { digestInput } from './journal.mjs';
+import { digestInput } from './input-digest.mjs';
 import { isolateState } from './locations.mjs';
 import * as rotation from './rotate.mjs';
 

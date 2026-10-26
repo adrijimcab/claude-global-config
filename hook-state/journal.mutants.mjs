@@ -62,10 +62,6 @@ const MUTANTS = [
   ['an exhausted sequence overflows its width', J, 'sequence >= ID_SEQ_LIMIT', 'sequence > ID_SEQ_LIMIT'],
   ['an exhausted sequence keeps the same millisecond', J, 'lastMs += 1;', 'lastMs += 0;'],
 
-  // --- digest ---
-  ['the digest is sha1', J, "createHash('sha256')", "createHash('sha1')"],
-  ['an object is digested without JSON', J, "typeof input === 'string' ? input : JSON.stringify(input)", 'input'],
-
   // --- the journal ---
   ['the journal file has another name', J, "'journal.jsonl'", "'journal.json'"],
   ['every mechanism shares one journal', J, "path.join(stateDir(mechanism), 'journal.jsonl')", "path.join(stateDir('shared'), 'journal.jsonl')"],

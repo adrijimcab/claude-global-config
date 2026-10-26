@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { digestInput } from '../hook-state/journal.mjs';
+import { digestInput } from '../hook-state/input-digest.mjs';
 import { extractPowerShellHereStrings } from './detect.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
 

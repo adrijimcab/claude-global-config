@@ -14,7 +14,7 @@
  * veces corrió un mecanismo SIN añadir línea al journal: un permiso se cuenta, nunca se registra.
  */
 
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { appendFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -62,10 +62,8 @@ export function createIdGenerator() {
 /** The id generator of this process. @es El generador de ids de este proceso. */
 export const newId = createIdGenerator();
 
-/** The sha256 hex digest of a tool input (a string, or the JSON of anything else). @es El sha256 hex de una entrada. */
-export function digestInput(input) {
-  return createHash('sha256').update(typeof input === 'string' ? input : JSON.stringify(input)).digest('hex');
-}
+/** The digest policy the records are correlated by, owned by `input-digest.mjs`. @es La política de digest que correlaciona los registros, propia de `input-digest.mjs`. */
+export { digestInput } from './input-digest.mjs';
 
 const badField = (field, expected) => new Error(bilingual('bad-field', { field, expected }));
 

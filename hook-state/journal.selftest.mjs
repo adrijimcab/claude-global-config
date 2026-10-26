@@ -133,11 +133,6 @@ try {
   check('a field outside the record shape is not written', 'secret' in appendRecord('guard-c', { kind: 'decision', ...GOOD, secret: 'x' }), false);
   check('a mechanism that is a path is refused', /@es /.test(thrown(() => appendRecord('../x', { kind: 'decision', ...GOOD })) ?? ''), true);
 
-  // --- digest ---
-  check('digestInput of a string is its sha256 hex', digestInput('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
-  check('digestInput of an object digests its JSON', thrown(() => digestInput({ a: 1 })) ?? digestInput({ a: 1 }), digestInput('{"a":1}'));
-  check('two different inputs have two digests', digestInput('a') === digestInput('b'), false);
-
   // --- ids ---
   const times = [255, 4096, 65536, CLOCK, CLOCK + 1, CLOCK + 1000, CLOCK * 2];
   const newId = createIdGenerator();

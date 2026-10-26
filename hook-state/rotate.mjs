@@ -48,7 +48,7 @@ import { appendFileSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdir
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { digestInput } from './journal.mjs';
+import { digestInput } from './input-digest.mjs';
 import { claudeHome, stateDirsUnder } from './locations.mjs';
 import { speakerFor } from './rotate-messages.mjs';
 
