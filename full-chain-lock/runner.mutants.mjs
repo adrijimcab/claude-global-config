@@ -59,9 +59,11 @@ const MUTANTS = [
   ['the default wait changes', R, 'export const DEFAULT_WAIT_SECONDS = 3600;', 'export const DEFAULT_WAIT_SECONDS = 60;'],
 
   // --- the lock adapter
-  ['the holder record is never written', A, '        writeFileSync(holderFile, JSON.stringify(record));', '        void record;'],
+  ['the holder record is never written', A, '        renameSync(partial, holderFile);', '        void partial;'],
+  ['a failed record write leaves its partial record', A, '        rmSync(partial, { force: true });\n', ''],
+  ['the partial record is never renamed into place', A, '        renameSync(partial, holderFile);', '        writeFileSync(holderFile, JSON.stringify(record));'],
   ['a failed record write keeps the lock', A, '        releaseLock(lockFile);\n\n        throw error;', '        throw error;'],
-  ['the lock ceiling is the port\'s default, so a long chain\'s live lock is broken', A, 'ceilingMs: CEILING_MS,', 'ceilingMs: undefined,'],
+  ['the lock ceiling is the port\'s default, so a long chain\'s live lock is broken', A, 'const LOCK_AGES = Object.freeze({ staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS });', 'const LOCK_AGES = Object.freeze({ staleAfterMs: STALE_AFTER_MS });'],
   ['the taken pid is not remembered, so the lock is never released', A, '      mine = record.pid;\n', ''],
   ['a release removes the record of whoever holds it now', A, 'if (this.readHolder()?.pid === pid) rmSync(holderFile, { force: true });', 'rmSync(holderFile, { force: true });'],
   ['a release leaves its own record behind', A, 'if (this.readHolder()?.pid === pid) rmSync(holderFile, { force: true });', 'void pid;'],
@@ -69,8 +71,8 @@ const MUTANTS = [
   ['a record that is not an object is returned as the holder', A, "return holder !== null && typeof holder === 'object' ? holder : undefined;", 'return holder;'],
   ['a running holder ignores the lock owner, so a dead chain still counts', A, 'const holder = owner === undefined ? undefined : this.readHolder();', 'const holder = this.readHolder();'],
   ['a running holder ignores whose record it is', A, 'return holder?.pid === owner ? holder : undefined;', 'return holder;'],
-  ['a running holder uses the port\'s default ceiling', A, 'liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS, ...lockOptions })', 'liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ...lockOptions })'],
-  ['a running holder ignores the injected lock options', A, 'liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS, ...lockOptions })', 'liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS })'],
+  ['a running holder uses the port\'s default ceiling', A, 'liveOwnerOf(lockFile, { ...LOCK_AGES, ...lockOptions })', 'liveOwnerOf(lockFile, { ...lockOptions })'],
+  ['a running holder ignores the injected lock options', A, 'liveOwnerOf(lockFile, { ...LOCK_AGES, ...lockOptions })', 'liveOwnerOf(lockFile, { ...LOCK_AGES })'],
   ['an unreadable record throws instead of reading as none', A, '      } catch {\n        return undefined;\n      }\n    },\n\n    release', '      } catch (error) {\n        throw error;\n      }\n    },\n\n    release'],
 
   // --- how a command is started

@@ -24,7 +24,7 @@
  * rompe como dueño muerto pasada la edad de caducidad aunque ese hijo siga corriendo.
  */
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { STALE_AFTER_MS, liveOwnerOf, releaseLock, takeLock } from '../hook-state/file-lock.mjs';
@@ -41,6 +41,9 @@ export const CEILING_MS = 12 * 60 * 60 * 1000;
 /** Takes no pause between attempts: the runner paces its own polling. @es Sin pausa entre intentos: el runner marca su propio ritmo. */
 const NO_PAUSE = () => undefined;
 
+/** The ages this adapter judges the lock by, for taking it and for reading who holds it. @es Las edades con las que este adaptador juzga el lock, al tomarlo y al leer quién lo tiene. */
+const LOCK_AGES = Object.freeze({ staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS });
+
 /**
  * @param {string} directory The shared state directory (created on the first take).
  * @param {object} [lockOptions] Overrides handed to the port (`staleAfterMs`, `isAlive`, `now`, `report`...).
@@ -56,11 +59,17 @@ export function fileLockAdapter(directory, lockOptions = {}) {
     tryTake(record) {
       mkdirSync(directory, { recursive: true });
 
-      if (!takeLock(lockFile, { attempts: 1, wait: NO_PAUSE, staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS, ...lockOptions })) return false;
+      if (!takeLock(lockFile, { attempts: 1, wait: NO_PAUSE, ...LOCK_AGES, ...lockOptions })) return false;
+
+      // Written whole, then renamed into place: a reader (a waiting chain, the write guard) never reads half a record.
+      // @es Se escribe entero y luego se renombra: un lector (una cadena que espera, el guard de escrituras) nunca lee medio registro.
+      const partial = `${holderFile}.${String(record.pid)}.partial`;
 
       try {
-        writeFileSync(holderFile, JSON.stringify(record));
+        writeFileSync(partial, JSON.stringify(record));
+        renameSync(partial, holderFile);
       } catch (error) {
+        rmSync(partial, { force: true });
         releaseLock(lockFile);
 
         throw error;
@@ -81,23 +90,6 @@ export function fileLockAdapter(directory, lockOptions = {}) {
       }
     },
 
-    /**
-     * The holder record of a chain that is RUNNING now, or `undefined`: the lock's own reader rule says a live
-     * process holds it (`liveOwnerOf`, with this adapter's ceiling), and the record is that process's (its pid is the
-     * lock's owner). A dead holder, a lock past the ceiling, or a record left by another process is no running chain,
-     * so nothing that waits on a running chain ever waits on it.
-     * @es El registro del dueño de una cadena que CORRE ahora, o `undefined`: la regla de lector del propio lock dice
-     * que un proceso vivo lo tiene (`liveOwnerOf`, con el techo de este adaptador) y el registro es de ese proceso (su
-     * pid es el dueño del lock). Un dueño muerto, un lock pasado el techo o un registro de otro proceso no son una
-     * cadena que corre, así que nada que espere a una cadena viva la espera nunca.
-     */
-    liveHolder() {
-      const owner = liveOwnerOf(lockFile, { staleAfterMs: STALE_AFTER_MS, ceilingMs: CEILING_MS, ...lockOptions });
-      const holder = owner === undefined ? undefined : this.readHolder();
-
-      return holder?.pid === owner ? holder : undefined;
-    },
-
     release() {
       if (mine === undefined) return;
 
@@ -112,6 +104,23 @@ export function fileLockAdapter(directory, lockOptions = {}) {
       } finally {
         releaseLock(lockFile);
       }
+    },
+
+    /**
+     * The holder record of a chain that is RUNNING now, or `undefined`: the lock's own reader rule says a live
+     * process holds it (`liveOwnerOf`, with this adapter's ceiling), and the record is that process's (its pid is the
+     * lock's owner). A dead holder, a lock past the ceiling, or a record left by another process is no running chain,
+     * so nothing that waits on a running chain ever waits on it.
+     * @es El registro del dueño de una cadena que CORRE ahora, o `undefined`: la regla de lector del propio lock dice
+     * que un proceso vivo lo tiene (`liveOwnerOf`, con el techo de este adaptador) y el registro es de ese proceso (su
+     * pid es el dueño del lock). Un dueño muerto, un lock pasado el techo o un registro de otro proceso no son una
+     * cadena que corre, así que nada que espere a una cadena viva la espera nunca.
+     */
+    liveHolder() {
+      const owner = liveOwnerOf(lockFile, { ...LOCK_AGES, ...lockOptions });
+      const holder = owner === undefined ? undefined : this.readHolder();
+
+      return holder?.pid === owner ? holder : undefined;
     }
   };
 }

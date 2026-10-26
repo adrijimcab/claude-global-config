@@ -29,7 +29,7 @@
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -534,6 +534,7 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   const successor = { session: 'next', project: 'next', chain: 'next', pid: process.pid + 1, startedAt: 't', command: 'c' };
 
   check('the adapter takes the lock and writes its record', lock.tryTake({ session: 's', project: 'p', chain: 'c', pid: process.pid, startedAt: 't', command: 'c' }) && lock.readHolder()?.session === 's');
+  check('the record is renamed into place: no partial record is left beside it', readdirSync(STATE).every((name) => !name.endsWith('.partial')), readdirSync(STATE).join(', '));
 
   writeFileSync(HOLDER, JSON.stringify(successor));
   lock.release();
@@ -551,6 +552,7 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   const unwritable = (() => { try { lock.tryTake({ session: 's', project: 'p', chain: 'c', pid: process.pid, startedAt: 't', command: 'c' }); return false; } catch { return true; } })();
 
   check('a take whose record cannot be written fails and does not keep the lock', unwritable && !existsSync(LOCK));
+  check('a failed record write leaves no partial record behind', readdirSync(STATE).every((name) => !name.endsWith('.partial')), readdirSync(STATE).join(', '));
 
   clearState();
   check('with no record file there is no holder', (() => { try { return lock.readHolder() === undefined; } catch { return false; } })());
