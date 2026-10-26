@@ -383,3 +383,9 @@
 !/review-site/
 !/review-site/**
 /review-site/state/
+
+# Runs a command and prints a short verdict with a per-run log (code and proof; its run logs stay ignored).
+# @es Corre una orden e imprime un veredicto corto con un log por corrida (código y prueba; sus logs quedan ignorados).
+!/gate-summary/
+!/gate-summary/**
+/gate-summary/state/
