@@ -460,6 +460,15 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
 - T8 port units still to do after this landing: F2 (re-export company-remote's fold), G2/G3 (git consumers), G4
   (delete the wrappers), P2u (rotate and file-lock liveness), J1-J4 (journal port), H4 and H8 (remaining guards),
   Z (census enforcement). Design: engram #1885. PENDING, reason (4): each is its own unit on the landed master.
+- commit-cadence-guard follow-ups (T10 worker, 2026-10-26):
+  - The guard is listed in hook-dispatch/manifests/pretooluse-language.json, the only PreToolUse manifest with no
+    matcher, so the name no longer says what it covers. Renaming it (for example pretooluse-all) needs a
+    settings.json change.
+  - A deletion-only change has no mtime, so the guard does not see it.
+  - `git -C <dir>` and a `cd` into a variable are not followed when locating the worker's worktree.
+  - Measured: the PreToolUse payload `cwd` is the launch directory, never the worker's worktree. Every guard
+    that judges `cwd` alone misses TENANCY-placed writers. Audit the guards that do so.
+  PENDING, reason (3).
 - Mutation campaign paths gap (T6C worker, 2026-10-26): a failure-capture campaign slice that mutates no
   capture.mjs code never copies config-sync-guard, which fixture-loop.mjs reads with readdirSync rather than an
   import. Full runs hide the gap. Fix: derive campaign paths from the runtime file reads, or list them in the
