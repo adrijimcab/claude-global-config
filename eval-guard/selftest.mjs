@@ -279,8 +279,9 @@ const roundTwoCases = [
   ['deny', payload(String.raw`(( (a) )) && node -e "console.log('\\b')"`), 'C1: a nested ( … ) inside the arithmetic is no close'],
   ['deny', payload(lines("(( a == 'x", String.raw`y' )) && node -e "console.log('\\b')"`)), 'C1: a single-quoted run that crosses the line ends no arithmetic, so what follows is read'],
   ['deny', payload(String.raw`(( a \)) )) && node -e "console.log('\\b')"`), 'C1: an escaped ) is no close'],
-  ['allow', delegated(lines("bash <<'EOF'", '(( n > $(printf 3) ))', '(( "$n" > 2 ))', '(( (n) > 2 ))', 'EOF')), 'C1: arithmetic with a harmless substitution, a quoted operand and nested parentheses'],
+  ['allow', delegated(lines("bash <<'EOF'", '(( n > $(printf 3) ))', '(( "$n" > 2 ))', '(( (n) > 2 ))', '(( x == "\\"" > 2 ))', 'EOF')), 'C1: arithmetic with a harmless substitution, a quoted operand, an escaped quote and nested parentheses'],
   ['deny', delegated(lines("bash <<'EOF'", '((a)>out.txt)', 'EOF')), 'C1: ((a)>f) is nested subshells whose > writes', 'redirects output'],
+  ['deny', delegated(lines("bash <<'EOF'", "(( a == 'x", "y' > out.txt ))", 'EOF')), 'C1: an arithmetic whose quote crosses its line is read as plain parentheses (fails closed)', 'redirects output'],
   ['allow', payload(String.raw`echo '$(node -e "console.log(\\b)")'`), 'C2: single quotes run no substitution'],
   // Class 2: double-quoted words record their substitutions like bare ones.
   ['deny', payload(String.raw`echo "$(node -e "console.log('\\b')")"`), 'C2: a $(…) inside double quotes is judged'],
