@@ -61,7 +61,7 @@ branches and `npm view`, measured 2026-10-06; the per-major detail and citations
 | Host bindings | `host: {}` metadata (the legacy 19 style guide's "consider @HostBinding" is superseded) | `host: {}` | same | same |
 | DI | `inject()` | `inject()` | `inject()` | `inject()` |
 | HTTP backend | XHR default; add `withFetch()` for SSR | same | same | Fetch default: omit `withFetch()` (deprecated); `withXhr()` only for upload progress |
-| Incremental hydration | DP: avoid | stable: `withIncrementalHydration()` | same | default: omit it (deprecated) |
+| Incremental hydration | EXP: avoid | stable: `withIncrementalHydration()` | same | default: omit it (deprecated) |
 | Route render mode (SSR) | DP | stable: `provideServerRendering(withRoutes(...))` | same | same |
 | Builder | `@angular-devkit/build-angular:application` | `@angular/build:application` | same | same; webpack builders deprecated |
 | `ng new` test runner | Karma+Jasmine | Karma+Jasmine (Vitest builder EXP) | Vitest | Vitest |
