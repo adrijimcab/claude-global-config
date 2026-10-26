@@ -437,17 +437,23 @@ afirmación de la sesión en la nube que no se volvió a correr en el host.
   delta, in that order.
 - Voice judge calibration (T9A, landed 2026-10-26). On the owner's 12 labels, 6 runs each, the live v7 agrees on
   22 of 72 judgments, v8f on 52 and v8g on 61. v8g was derived from those same labels, so 61 is optimistic.
-  No rubric meets the ship bar (ship-bar.json: v8g, met: false). Master keeps v7 live: promotion needs a met bar,
-  and v8g's 92% block rate on unlabelled replies means promoting it untested would block most replies.
-  Next step: the owner labels the 10-reply v8g packet (scratchpad t9a-owner-packet.md, also reproducible with
-  measure.mjs --packet). That is the first out-of-sample test, and v8g is promoted only if it then meets the bar.
-  The model and the owner hear the register differently; see the worker's three examples in engram #1823 / L16.
-  Open in it: the `third-person-su-possessive` fixture is unstable (it passes 2 of 6 under v8g), and
-  ship-bar.json's measuredOn is a UTC date. PENDING, reason (2): the owner's labels decide.
-- Voice judge and pending judge stay as candidates (backlog-1-6 L16, L17). The voice judge keeps rubric v7 live
-  until a candidate passes its 10-owner-label ship bar. The pending judge stays off the live Stop hook until its
-  ship bar passes, and backlog-guard stays live meanwhile. PENDING, reason (2): promoting either one is the
-  owner's call, once measure.mjs reports the bar passed.
+  No rubric meets the ship bar (ship-bar.json: v8g, met: false). The owner promoted v8g anyway on 2026-10-26
+  («Deja el que mas cosas tenga y el que mejor hecho este de la voz… dejalo metido»), recorded in
+  voice-judge/promotion.json with bar "not met". Open risk: v8g blocked 92% of unlabelled replies when measured,
+  so watch its live block rate after the landing. The 10-reply v8g packet (measure.mjs --packet) is still the
+  first out-of-sample test. Open in it: the `third-person-su-possessive` fixture is unstable (it passes 2 of 6
+  under v8g), and ship-bar.json's measuredOn is a UTC date. PENDING, reason (3): measure the live block rate on
+  the next batch.
+- Pending judge is live (T4A2, landed 2026-10-26): settings.json runs `judge-gate/run.mjs pending` on Stop, and
+  backlog-guard is no longer in hook-dispatch/manifests/stop.json. DONE in landing branch
+  land/checkpoint-backlog-1-6 (5bddd1d).
+- T7 full-chain-lock proofs still owed (landed 2026-10-26 in b854954, no final judgment). Master re-ran the
+  runner selftest (104 passed), the guard selftest (137 passed), rotate (106) and hook-dispatch (43/43) on the
+  merged tree. The worker measured guard mutants at 62/62 and runner mutants at 77/77, but the runner campaign
+  ran before its last commit 1db2cfe; its rerun was reaped for low memory. The rotate mutants with T7's new
+  entries were never run. The guard goes live with this landing: it is registered in
+  hook-dispatch/manifests/pretooluse-shell.json, so from then on a full chain run without the machine-wide lock
+  is refused and the refusal names the runner command. PENDING, reason (3): run both campaigns on the next batch.
 - C8 launcher unwrap (vendored shell-command). b100's fix has landed at its source and was pushed to its tooling
   backup (2026-10-26): `fix(shell-command): lex cmd scripts in a cmd dialect and carry runner scripts without a
   program of their own`. b100 re-ran launchers 167/167 and cmd-dialect 38/38. Its worker reports
