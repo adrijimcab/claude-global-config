@@ -558,3 +558,21 @@ replaced (`sdd/hardened-dev-environment/tasks`, `tasks-2`) is retired, checkboxe
 - `selftest-runner/pollution.mjs` as a second detector: one question, one answer (R3).
 - discovery-api and conversion_js hardening: owner decision 2026-10-06 (Track P is Discovery-FE only).
 - rtk: H7.
+
+## QUEUE 2026-10-27 (cloud session; on master UNVERIFIED where marked)
+
+- UNVERIFIED on master, review first: P2-12/13 (protected-branch-guard, full-chain-lock write-guard; the
+  repository default branch is NOT yet protected), T2b (TEMP env, worktree-landing npm seam, pollution fold,
+  derived campaign paths), T2c (post-stop commit gate, incidentFixture, brief line wraps), T2d (Stop fast
+  path, git spawn counter, budget). b100 T2a (parser nested-dialect tags, quote spans, engine plan-time
+  abort) is on b100 master but NOT synced into ~/.claude: `vendored.mjs check` will report SOURCE MOVED ON.
+- worktree-landing selftest leaks ~/.npm into the sandbox home (npm cache seam, as worktree-install 7234120).
+- b100 orphan-work-guard has the P1-5 takeover conflict; needs `holderOf` -> vendoring direction.
+- Vendoring direction: invert it — generic engines owned by ~/.claude, projects consume them (decided).
+- 2 MB `EXHAUSTED_TRANSCRIPT_BYTES`: provenance unmeasured (owner item).
+- Differential command corpus across all shell guards (after the parser change); WIP limit on open
+  branches/worktrees; one actor-ownership module grown from `holderOf`.
+- gates-kit selftest leaves `a/ x/ aaa.txt residue.txt .claude/` in its folder (seen in the A6 worktree).
+- Host only: foreign-delete-guard 2 case-fold survivors; worker-git-guard 5 win32-only survivors; real
+  brief-feasibility selftest + campaign; voice-judge packet labels (DECISION.md) and v8h promotion;
+  P1-6 npm ci timing inside hooks.

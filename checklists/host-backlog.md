@@ -160,3 +160,15 @@ Host 2026-10-11: `hook-state/rotate.selftest.mjs:116` and `project-profile/selft
 the host. The fix is in the repository (fixtures built with a junction or a constructed directory), not on
 the host: tracked as master-backlog R2. Closes with `node $HOME\.claude\selftest-runner\run.mjs --root
 $HOME\.claude` exit 0 on this host.
+
+## H12 — Discovery: replace the junction instruction in its agent contract — OPEN
+
+`junctioned-node-modules-broke-vitest-coverage` (P1-6, landed 95f0db3 in b100 and ae64d8e here). In the
+Discovery repository, `.claude/AGENT-CONTRACT.md:157` §4 still tells agents to junction `node_modules` from
+the main checkout. Replace it with: "Give the worktree its dependencies with `node
+~/.claude/worktree-install/worktree-install.mjs provision --main <main checkout> --worktree <worktree>`:
+its own `npm ci` by default, a junction to the main checkout's tree only once this project's own runner
+passed the coverage probe through it (`junctioned-node-modules-broke-vitest-coverage`). Never junction
+`node_modules` by hand, and never hard-link it." Then run the Discovery Karma probe once (needs Chrome).
+Also unblocked for Discovery after `git pull` of ~/.claude: P1-5 (`holderOf`, b167bce) — a takeover brief
+with `TENANCY: <worktree> — taking over…` of an unresumable holder is no longer refused by orphan-work.
