@@ -25,6 +25,7 @@ import path from 'node:path';
 import { readStdin, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { describeBlocks, recordBlocks } from './block-journal.mjs';
+import { announceGuard } from './guard-channel.mjs';
 import { appliesTo, loadManifest } from './manifest.mjs';
 import { mergeOutputs } from './merge.mjs';
 import { runGuard } from './run-guard.mjs';
@@ -63,7 +64,9 @@ export async function dispatch(manifestFile, raw, options = {}) {
   for (const guard of manifest.guards) {
     if (toolName !== undefined && !appliesTo(guard.registrations, manifest.event, toolName)) continue;
 
+    announceGuard('start', guard.name);
     const result = await runGuard(guard, raw, options);
+    announceGuard('end', guard.name);
 
     if (result.error !== undefined) failures.push(`${guard.name}: ${result.error}`);
     else results.push({ guard: guard.name, mechanism: guard.mechanism, output: result.output });

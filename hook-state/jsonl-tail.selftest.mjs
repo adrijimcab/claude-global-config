@@ -171,6 +171,14 @@ try {
   check('growing file, first read: the torn tail waits', first, { records: [rec(1)], offset: l1 });
   appendFileSync(growing, `2}\n${lineOf(rec(3))}`);
   check('growing file, second read from the returned offset: only the new records, the torn one now whole', attempt(() => readFrom(growing, first.offset), {}), { records: [rec(2), rec(3)], offset: l1 + lineOf(rec(2)).length + lineOf(rec(3)).length });
+  // --- readFrom handing each record to onRecord: streamed, with its line, none collected ---
+  // @es readFrom entregando cada registro a onRecord: en flujo, con su línea, sin acumular ninguno.
+  {
+    const handed = [];
+    const streamed = attempt(() => readFrom(fileWith(`${lineOf(rec(1))}garbage\n\n0\n{ "i" : 4 }\r\n{"i":5}`), 0, { onRecord: (value, text) => handed.push([value, text]) }), {});
+    check('onRecord: records stay empty and the offset is the same as without it', streamed, { records: [], offset: l1 + 8 + 1 + 2 + 13 });
+    check('onRecord: every record, a falsy one included, with the exact line it came from; corrupt, blank and unterminated lines never', handed, [[rec(1), lineOf(rec(1)).slice(0, -1)], [0, '0'], [{ i: 4 }, '{ "i" : 4 }\r']]);
+  }
   // --- a file that changes under the reader: short reads, truncation, growth. The reader is injected, never timed ---
   // @es Un fichero que cambia bajo el lector: lecturas cortas, truncado, crecimiento. El lector se inyecta, nunca se cronometra.
   const calls = { count: 0 };

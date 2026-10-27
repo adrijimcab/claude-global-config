@@ -62,14 +62,71 @@ export function shellWindowsIn(transcriptText, now = Date.now()) {
   return pairedShellCalls(transcriptText, now).map(({ start, end }) => ({ start, end }));
 }
 
-/** Pairs each shell `tool_use` with its `tool_result`; see `shellCallsIn`. @es Empareja cada `tool_use` de shell con su `tool_result`; ver `shellCallsIn`. */
+/** Whether a line can carry a shell call or its result: the whole-text reader parses no other. @es Si una línea puede llevar una llamada de shell o su resultado. */
+const carriesToolTraffic = (line) => line.includes('"tool_use"') || line.includes('"tool_result"');
+
+/**
+ * The fold of a transcript's shell calls, for `transcript-index/index.mjs` `foldTranscript`: `{ open, windows,
+ * last }` — calls still waiting for their result (`{ id, start, command, cwd }`, in the order a `Map` keyed by
+ * id would keep them: a repeated id replaces its entry in place), closed calls, and the latest timestamp of a
+ * tool line. `finishShellCalls(state, now)` turns it into the call list. It is the ONE pairing of a `tool_use`
+ * with its `tool_result`: `shellCallsIn` runs the same `absorb` over a whole text.
+ * @es El pliegue de las llamadas de shell de un transcript: `{ open, windows, last }` — llamadas sin resultado
+ * todavía (en el orden en que las guardaría un `Map` por id: un id repetido reemplaza su entrada en su sitio),
+ * llamadas cerradas y la última marca de tiempo de una línea de herramienta. `finishShellCalls(state, now)` da la
+ * lista. Es el ÚNICO emparejamiento de `tool_use` con `tool_result`: `shellCallsIn` corre el mismo `absorb`.
+ */
+export const SHELL_CALLS_FOLD = {
+  name: 'shell-calls',
+  version: 1,
+  initial: () => ({ open: [], windows: [], last: 0 }),
+  isState: (state) => Array.isArray(state?.open) && Array.isArray(state?.windows) && typeof state?.last === 'number',
+  absorb(state, record, line) {
+    if (!carriesToolTraffic(line)) return;
+
+    const at = Date.parse(record?.timestamp);
+
+    if (Number.isNaN(at)) return;
+
+    state.last = Math.max(state.last, at);
+
+    for (const block of blocksOf(record)) {
+      if (block?.type === 'tool_use' && SHELL_TOOLS.has(block.name)) {
+        const entry = { id: block.id, start: at, command: String(block.input?.command ?? ''), cwd: typeof record.cwd === 'string' ? record.cwd : undefined };
+        const known = state.open.findIndex((open) => open.id === block.id);
+
+        if (known === -1) state.open.push(entry);
+        else state.open[known] = entry;
+      }
+
+      const waiting = block?.type === 'tool_result' ? state.open.findIndex((open) => open.id === block.tool_use_id) : -1;
+
+      if (waiting !== -1) {
+        const { start, command, cwd } = state.open[waiting];
+
+        state.windows.push({ start, command, cwd, end: at, failed: block.is_error === true });
+        state.open.splice(waiting, 1);
+      }
+    }
+  }
+};
+
+/**
+ * The call list of a `SHELL_CALLS_FOLD` state: the closed calls, then each call still open, which ends at the
+ * last tool timestamp when later tool lines exist (it was interrupted), else at `now` (it is still running).
+ * @es La lista de llamadas de un estado del pliegue: las cerradas y luego cada abierta, que termina en la última
+ * marca de tiempo si hay líneas posteriores (se interrumpió), si no en `now` (sigue corriendo).
+ */
+export function finishShellCalls(state, now) {
+  return [...state.windows.map(({ start, command, cwd, end, failed }) => ({ start, command, cwd, end, failed })), ...state.open.map(({ start, command, cwd }) => ({ start, command, cwd, failed: false, end: start < state.last ? state.last : now }))];
+}
+
+/** Pairs each shell `tool_use` with its `tool_result` over a whole text; see `shellCallsIn`. @es Empareja cada `tool_use` de shell con su `tool_result` sobre un texto entero. */
 function pairedShellCalls(transcriptText, now) {
-  const open = new Map();
-  const windows = [];
-  let last = 0;
+  const state = SHELL_CALLS_FOLD.initial();
 
   for (const line of transcriptText.split('\n')) {
-    if (!line.includes('"tool_use"') && !line.includes('"tool_result"')) continue;
+    if (!carriesToolTraffic(line)) continue;
 
     let record;
 
@@ -79,25 +136,10 @@ function pairedShellCalls(transcriptText, now) {
       continue;
     }
 
-    const at = Date.parse(record?.timestamp);
-
-    if (Number.isNaN(at)) continue;
-
-    last = Math.max(last, at);
-
-    for (const block of blocksOf(record)) {
-      if (block?.type === 'tool_use' && SHELL_TOOLS.has(block.name)) open.set(block.id, { start: at, command: String(block.input?.command ?? ''), cwd: typeof record.cwd === 'string' ? record.cwd : undefined });
-
-      if (block?.type === 'tool_result' && open.has(block.tool_use_id)) {
-        windows.push({ ...open.get(block.tool_use_id), end: at, failed: block.is_error === true });
-        open.delete(block.tool_use_id);
-      }
-    }
+    SHELL_CALLS_FOLD.absorb(state, record, line);
   }
 
-  for (const { start, command, cwd } of open.values()) windows.push({ start, command, cwd, failed: false, end: start < last ? last : now });
-
-  return windows;
+  return finishShellCalls(state, now);
 }
 
 /** Whether `mtimeMs` lies inside any of `windows`, widened by `tolerance` on both sides. @es Si `mtimeMs` cae en alguna ventana, ensanchada por `tolerance`. */

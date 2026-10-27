@@ -32,12 +32,13 @@
  * guarda (subagente: `<sesión>/subagents/`; la propia sesión: `<sesión>.jsonl`).
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
-import { shellCallsIn } from './shell-windows.mjs';
-import { normalizedPath, writtenPathsIn } from './transcript-writes.mjs';
+import { foldTranscript } from '../transcript-index/index.mjs';
+import { finishShellCalls, SHELL_CALLS_FOLD } from './shell-windows.mjs';
+import { normalizedPath, WRITTEN_PATHS_FOLD } from './transcript-writes.mjs';
 
 /** Same measured window as `agent-liveness/liveness.mjs`, same measured reason (see module docblock). @es Misma ventana medida, mismo motivo medido. */
 export const ACTIVE_WINDOW_MS = 30 * 60 * 1000;
@@ -115,6 +116,26 @@ export function isLive(record, now = Date.now()) {
 }
 
 /**
+ * What one agent's transcript says it did, folded incrementally (`transcript-index/index.mjs`): the files it
+ * wrote (`WRITTEN_PATHS_FOLD`) and its shell calls (`SHELL_CALLS_FOLD`), in ONE read of the appended bytes.
+ * A Stop used to read every live transcript whole (measured on a fixture home 2026-10-27: 1,401 ms for 4 live
+ * transcripts of 30 MB); now only what each one gained since the last Stop is read.
+ * @es Lo que dice el transcript de un agente que hizo, plegado de forma incremental: los ficheros que escribió y
+ * sus llamadas de shell, en UNA lectura de los bytes añadidos. Un Stop leía entero cada transcript vivo (medido en
+ * un home de fixture el 2026-10-27: 1.401 ms con 4 transcripts vivos de 30 MB); ahora solo lo que ganó cada uno.
+ */
+export const AGENT_ACTIVITY_FOLD = {
+  name: 'agent-activity',
+  version: 1,
+  initial: () => ({ writes: WRITTEN_PATHS_FOLD.initial(), shells: SHELL_CALLS_FOLD.initial() }),
+  isState: (state) => WRITTEN_PATHS_FOLD.isState(state?.writes) && SHELL_CALLS_FOLD.isState(state?.shells),
+  absorb(state, record, line) {
+    WRITTEN_PATHS_FOLD.absorb(state.writes, record, line);
+    SHELL_CALLS_FOLD.absorb(state.shells, record, line);
+  }
+};
+
+/**
  * `Map<id, { session, subagent, live, writes, windows }>` for every transcript still worth reading: each
  * LIVE one, and each FINISHED subagent's within `FINISHED_HORIZON_MS` (`live: false`, its unclosed last
  * shell call ending where the transcript ends). `writes` is what it wrote through structured calls and
@@ -133,9 +154,9 @@ export function liveAgentWrites(now = Date.now(), records = agentRecords()) {
     if (!live && !(record.subagent && age < FINISHED_HORIZON_MS)) continue;
 
     try {
-      const text = readFileSync(record.transcript, 'utf8');
+      const { state } = foldTranscript(record.transcript, AGENT_ACTIVITY_FOLD, { unterminated: true });
 
-      byAgent.set(record.id, { session: record.session, subagent: record.subagent, live, writes: writtenPathsIn(text), windows: shellCallsIn(text, live ? now : now - age) });
+      byAgent.set(record.id, { session: record.session, subagent: record.subagent, live, writes: [...state.writes.written], windows: finishShellCalls(state.shells, live ? now : now - age) });
     } catch {
       continue;
     }

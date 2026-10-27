@@ -56,10 +56,12 @@ function splitLines(bytes) {
   return lines;
 }
 
-/** `{ value }` for a line that parses, `undefined` for one that does not. @es `{ value }` si la línea parsea, `undefined` si no. */
+/** `{ value, text }` for a line that parses, `undefined` for one that does not. @es `{ value, text }` si la línea parsea, `undefined` si no. */
 function parseLine(bytes) {
+  const text = bytes.toString('utf8');
+
   try {
-    return { value: JSON.parse(bytes.toString('utf8')) };
+    return { value: JSON.parse(text), text };
   } catch {
     return undefined;
   }
@@ -111,9 +113,13 @@ export function lastRecords(file, n, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead 
  * alineados. Un offset pasado el final indica fichero reemplazado, y se lee desde 0. Solo se lee hasta el
  * tamaño medido al entrar: lo que otro escritor añada durante la lectura queda para la llamada siguiente.
  * Reading stops at the size measured on entry: what a writer appends meanwhile waits for the next call.
+ * With `onRecord`, each record is handed to it as `(value, text)` (the line it came from) as soon as it is read,
+ * and `records` stays empty, so a caller that folds a long file never holds it all in memory.
+ * @es Con `onRecord`, cada registro se le entrega como `(value, text)` (la línea de la que salió) en cuanto se lee,
+ * y `records` queda vacío, para que quien pliega un fichero largo nunca lo tenga entero en memoria.
  * @returns `{ records, offset }`. @es `{ records, offset }`.
  */
-export function readFrom(file, offset, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING, readBytes = readSync, onSkip = NOTHING } = {}) {
+export function readFrom(file, offset, { chunkBytes = DEFAULT_CHUNK_BYTES, onRead = NOTHING, readBytes = readSync, onSkip = NOTHING, onRecord } = {}) {
   const io = { onRead, readBytes, onSkip };
   const fd = openSync(file, 'r');
   try {
@@ -138,8 +144,10 @@ export function readFrom(file, offset, { chunkBytes = DEFAULT_CHUNK_BYTES, onRea
       if (last !== -1) {
         for (const line of splitLines(buffer.subarray(0, last))) {
           const parsed = parseLine(line);
-          if (parsed !== undefined) records.push(parsed.value);
-          else if (!isBlank(line)) io.onSkip();
+          if (parsed === undefined) {
+            if (!isBlank(line)) io.onSkip();
+          } else if (onRecord === undefined) records.push(parsed.value);
+          else onRecord(parsed.value, parsed.text);
         }
       }
       carry = buffer.subarray(last + 1);
