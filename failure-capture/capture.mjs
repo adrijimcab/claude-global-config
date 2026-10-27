@@ -51,6 +51,7 @@ import { describeOutcome, newRunId, runCondense } from './condense.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { loadedSet } from './loaded-set.mjs';
 import { promotedStub } from './promotion.mjs';
+import { describeRecount, runRecount } from './recount.mjs';
 import { describeSupersede, runSupersede } from './supersede.mjs';
 import { isPromotedStub, promotedRecurrenceLines } from './promoted-recurrence.mjs';
 import { GLOBAL_TARGET, PROJECT_TARGET, promotionFiles, promotionTargetOf } from './promotion-target.mjs';
@@ -128,7 +129,7 @@ function parityOf(target) {
 let SCOPES;
 
 /** The commands that read the project: every one except `dismiss`, `budget` (which resolves its own) and the usage text. @es Los comandos que leen el proyecto: todos salvo `dismiss`, `budget` (que resuelve el suyo) y el texto de uso. */
-const PROJECT_COMMANDS = new Set(['init', 'keys', 'capture', 'promote', 'condense', 'supersede', 'status', 'route']);
+const PROJECT_COMMANDS = new Set(['init', 'keys', 'capture', 'promote', 'condense', 'supersede', 'recount', 'status', 'route']);
 
 /** Resolves the project of the current directory and binds what derives from it. @es Resuelve el proyecto del directorio actual y fija lo que se deriva de él. */
 function bindLoopContext() {
@@ -1204,6 +1205,25 @@ function commandSupersede(args) {
 }
 
 /**
+ * Lowers the counter of a lesson that counted one incident more than once (`recount.mjs`). `--dry-run` reads the
+ * ledgers and prints the line it would write, and writes nothing: not the state directory, not the lock.
+ * @es Baja el contador de una lección que contó un incidente más de una vez. `--dry-run` lee los ledgers e imprime la
+ * línea que escribiría, y no escribe nada: ni el directorio de estado ni el lock.
+ */
+function commandRecount(args) {
+  const dryRun = args['dry-run'] === true;
+
+  if (!dryRun) ensureDirs();
+
+  const count = typeof args.count === 'string' && [...args.count].every((digit) => digit >= '0' && digit <= '9') ? Number(args.count) : Number.NaN;
+  const outcome = runRecount({ load: loadLedgers, key: args.key, count, reason: args.reason, date: today(), lockFile: lockFile(), dryRun });
+
+  for (const line of describeRecount(outcome)) (outcome.status === 0 ? speaker.data : speaker.dataError)(line);
+
+  return outcome.status;
+}
+
+/**
  * The loaded instruction set of a project (or of `directory` when no project holds it) and its verdict,
  * shared by the `budget` command and the advisory after a capture. `ceiling` is the highest directory walked.
  * @es El conjunto de instrucciones cargado de un proyecto (o de `directory` si ningún proyecto lo contiene) y
@@ -1327,6 +1347,8 @@ function dispatch(command, args) {
       return commandCondense(args);
     case 'supersede':
       return commandSupersede(args);
+    case 'recount':
+      return commandRecount(args);
     case 'route':
       return commandRoute(args);
     case 'budget':

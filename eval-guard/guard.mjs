@@ -186,7 +186,45 @@ function scriptWriteReason(refusal) {
   ].join('\n');
 }
 
+/**
+ * Refusal for a path built in a Bash line for a nested PowerShell or cmd. The remedy is a script file that takes
+ * the path as a plain argument, or the PowerShell tool, where no outer bash exists.
+ * @es Rechazo de una ruta construida en una línea de Bash para un PowerShell o cmd anidado. El remedio es un fichero
+ * de script que recibe la ruta como argumento simple, o la herramienta PowerShell, donde no hay bash exterior.
+ */
+function nestedShellReason(refusal) {
+  const scaffold = path.join(os.tmpdir(), 'claude', 'eval-guard', `nested-${Date.now()}-${process.pid}.ps1`);
+
+  return [
+    `EVAL-GUARD REFUSED this command: \`${refusal.flag}\` gets a script whose backslashes this Bash line consumes or may consume.`,
+    `@es EVAL-GUARD RECHAZÓ este comando: \`${refusal.flag}\` recibe un script cuyos backslashes esta línea de Bash consume o puede consumir.`,
+    '',
+    'Found in the script:',
+    '@es Hallado en el script:',
+    evidenceLines(refusal),
+    '',
+    'Why. The path is parsed twice, by bash and then by the nested shell, and bash removes the backslash it reads',
+    'as an escape. Measured 2026-10-16: "...\\worktrees\\$n" reached PowerShell as ...worktrees$n, a stray folder',
+    'got two junctions and three calls failed, with exit code 0 from the line that built the path.',
+    '@es Por qué. La ruta se analiza dos veces, por bash y luego por la shell anidada, y bash quita el backslash que',
+    '@es lee como escape. Medido el 2026-10-16: "...\\worktrees\\$n" llegó a PowerShell como ...worktrees$n, una',
+    '@es carpeta suelta recibió dos junctions y tres llamadas fallaron, con código 0 en la línea que construyó la ruta.',
+    '',
+    'What works instead:',
+    '@es Lo que sí funciona:',
+    `  1. a script file: Write tool -> ${scaffold} (param($Path) ...), then run:`,
+    `     powershell -NoProfile -File "${scaffold}" -Path <the path, with forward slashes>`,
+    '  2. or run the command from the PowerShell tool, where no bash parses it first.',
+    '@es   1. un fichero de script escrito con Write que recibe la ruta como argumento simple (`-File`), o',
+    '@es   2. ejecutar la orden desde la herramienta PowerShell, donde ningún bash la analiza antes.',
+    '',
+    'Passes untouched: a single-quoted script with no $ next to a backslash, forward-slash paths, `-File` scripts.',
+    '@es Pasa intacto: un script en comillas simples sin $ junto a un backslash, rutas con barras normales y `-File`.'
+  ].join('\n');
+}
+
 function reason(refusal) {
+  if (refusal.kind === 'nested-shell-path') return nestedShellReason(refusal);
   if (refusal.kind === 'script-write') return scriptWriteReason(refusal);
   if (refusal.kind === 'msys-switch') return switchReason(refusal);
   if (refusal.kind === 'text-edit') return textEditReason(refusal);

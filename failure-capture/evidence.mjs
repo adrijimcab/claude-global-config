@@ -16,8 +16,8 @@ import path from 'node:path';
 import { holdsWholeLine } from './conservation.mjs';
 import { isDate, isValidKey } from './ledger-line.mjs';
 
-/** Why a line is archived: shortened later, captured shortened, promoted, or superseded by a newer rule. @es Por qué se archiva una línea: acortada después, capturada ya acortada, promovida o sustituida por una regla más nueva. */
-export const EVIDENCE_KINDS = ['condensed', 'captured', 'promoted', 'superseded'];
+/** Why a line is archived: shortened later, captured shortened, promoted, superseded by a newer rule, or recounted because its counter was wrong. @es Por qué se archiva una línea: acortada después, capturada ya acortada, promovida, sustituida por una regla más nueva o recontada porque su contador era erróneo. */
+export const EVIDENCE_KINDS = ['condensed', 'captured', 'promoted', 'superseded', 'recounted'];
 
 /**
  * Where the evidence store is for the ledger at `ledgerFile`: beside it, except that a ledger in a `rules/` directory

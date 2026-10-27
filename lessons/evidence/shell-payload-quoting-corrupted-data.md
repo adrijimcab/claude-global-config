@@ -9,3 +9,9 @@ Ledger lines archived verbatim, append-only: each block is one original line, by
 ## Ledger line archived 2026-10-16 (captured)
 
 - [global] 2026-10-16 — Creating node_modules junctions for four worktrees, the orchestrator built a Windows path inside a bash double-quoted string as "...worktrees\$1"; the escaped dollar was not expanded, PowerShell received the literal path .claude/worktrees$1, created that stray folder with two junctions to the real node_modules, and the other three junction calls failed -> root cause: a path with backslashes and a shell variable assembled inline in bash for another shell RULE: Paths passed from bash to PowerShell or cmd are never assembled inline with backslashes and variables; the work goes in a .ps1 or .mjs file that takes plain arguments. <!--fc:shell-payload-quoting-corrupted-data#1-->
+
+## Ledger line archived 2026-10-26 (recounted)
+
+- [global] 2026-10-16 — RULE: Paths passed from bash to PowerShell or cmd are never assembled inline with backslashes and variables; the work goes in a .ps1 or .mjs file that takes plain arguments. Evidence: lessons/evidence/shell-payload-quoting-corrupted-data.md <!--fc:shell-payload-quoting-corrupted-data#4-->
+
+Recounted 2026-10-26 from 4 to 3: one recurrence carried in 9f8c0cf was captured twice by the Discovery session (orchestrator P2-7 finding; HYPOTHESIS here: incidents.jsonl lives on the owner host)

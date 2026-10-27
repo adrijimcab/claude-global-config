@@ -54,6 +54,7 @@
  */
 
 import { isEnvironmentAssignment, programName, programWords } from './launchers.mjs';
+import { nestedShellRefusal } from './nested-shell-backslashes.mjs';
 import { familyOf, NODE_OPTIONS_TAKING_A_VALUE, readsScriptFromStdin } from './script-source.mjs';
 import { writeEvidence } from './script-writes.mjs';
 
@@ -86,11 +87,14 @@ const ARITHMETIC_CLOSE = '))';
 /** Words after which a command position starts again (`if (( n > 3 ))`). @es Palabras tras las que vuelve a empezar una posición de orden. */
 const COMMAND_KEYWORDS = new Set(['if', 'elif', 'while', 'until', 'then', 'do', 'else', '!']);
 
+/** Whether a word is an unquoted keyword after which a command starts. @es Si una palabra es una palabra clave sin comillas tras la que empieza una orden. */
+const isCommandKeyword = (word) => word.kind === 'word' && !word.quoted && COMMAND_KEYWORDS.has(word.raw);
+
 /** Whether the next word would be a command: nothing before it, an operator, or a keyword. @es Si la siguiente palabra sería una orden. */
 function atCommandPosition(items) {
   const last = items.at(-1);
 
-  return last === undefined || last.kind === 'operator' || (last.kind === 'word' && !last.quoted && COMMAND_KEYWORDS.has(last.raw));
+  return last === undefined || last.kind === 'operator' || isCommandKeyword(last);
 }
 
 /**
@@ -348,11 +352,20 @@ export function tokenize(command, { powershell = false } = {}) {
 
   const open = (start) => {
     if (current === undefined) {
-      current = { kind: 'word', raw: '', start, quoted: false, bare: false, unterminated: false, hereString: hereStringAt !== undefined, hereStringAt, redirectTarget: nextWordIsTarget, substitutions: [] };
+      current = { kind: 'word', raw: '', start, quoted: false, bare: false, unterminated: false, hereString: hereStringAt !== undefined, hereStringAt, redirectTarget: nextWordIsTarget, substitutions: [], backslashes: [] };
       hereStringAt = undefined;
       nextWordIsTarget = false;
     }
   };
+
+  // Every backslash a word holds, with the quoting it was written in (`bare`, `single`, `double`, or `ansi` for
+  // `$'…'`) and its two neighbours in the command, so a rule can tell one the shell consumes from one it keeps.
+  // @es Cada backslash de una palabra, con el entrecomillado en que se escribió (`bare`, `single`, `double`, o
+  // `ansi` para `$'…'`) y sus dos vecinos en la orden, para que una regla distinga el que el shell consume del que conserva.
+  const noteBackslash = (at, quote) => current.backslashes.push({ offset: at, quote, previous: command[at - 1], next: command[at + 1] });
+  // Where the last bare `$` of a word was written: a `'` right after it opens `$'…'`, whose backslashes bash consumes.
+  // @es Dónde se escribió el último `$` desnudo: una `'` justo detrás abre `$'…'`, cuyos backslashes bash consume.
+  let bareDollarAt;
 
   // A bare run of digits glued to a redirection (`2>&1`, `0<<EOF`) is the file descriptor it redirects, not a
   // word of the command. @es Unos dígitos pegados a una redirección son el descriptor que redirige, no una palabra.
@@ -493,6 +506,7 @@ export function tokenize(command, { powershell = false } = {}) {
 
     if (character === "'" || character === '"') {
       const closer = character;
+      const quote = closer === '"' ? 'double' : bareDollarAt === index - 1 ? 'ansi' : 'single';
 
       current.quoted = true;
       index += 1;
@@ -505,6 +519,7 @@ export function tokenize(command, { powershell = false } = {}) {
         // @es Dentro de comillas dobles un backslash escapa la comilla de cierre: no debe leerse como
         // terminador. El par se conserva literal en `raw`.
         if (closer === '"' && command[index] === BACKSLASH && index + 1 < command.length) {
+          noteBackslash(index, quote);
           current.raw += command[index] + command[index + 1];
           index += 2;
           continue;
@@ -529,6 +544,8 @@ export function tokenize(command, { powershell = false } = {}) {
           break;
         }
 
+        if (command[index] === BACKSLASH) noteBackslash(index, quote);
+
         current.raw += command[index];
         index += 1;
       }
@@ -540,11 +557,15 @@ export function tokenize(command, { powershell = false } = {}) {
 
     current.bare = true;
 
+    if (character === BACKSLASH) noteBackslash(index, 'bare');
+
     if (character === BACKSLASH && index + 1 < command.length) {
       current.raw += character + command[index + 1];
       index += 2;
       continue;
     }
+
+    if (character === '$') bareDollarAt = index;
 
     current.raw += character;
     index += 1;
@@ -1146,7 +1167,11 @@ export function inspectCommand(command, { toolName, delegated = false } = {}) {
 
     let position = 0;
 
-    while (position < invocation.length && isEnvironmentAssignment(invocation[position])) position += 1;
+    // A keyword that opens a command position (`do`, `then`, `!`) is not the program: in `for n in a; do powershell
+    // -Command "..."; done` the program is `powershell` (the 2026-10-16 incident ran in such a loop).
+    // @es Una palabra clave que abre posición de orden (`do`, `then`, `!`) no es el programa: en `for …; do powershell
+    // -Command "..."; done` el programa es `powershell` (el incidente del 2026-10-16 corrió en un bucle así).
+    while (position < invocation.length && (isEnvironmentAssignment(invocation[position]) || isCommandKeyword(invocation[position]))) position += 1;
 
     const program = invocation[position];
 
@@ -1183,6 +1208,17 @@ export function inspectCommand(command, { toolName, delegated = false } = {}) {
           findings: [{ offset: 0, code: raw.charCodeAt(0), kind: `single-slash switch \`${raw}\` is rewritten to a path before cmd sees it` }]
         };
       }
+    }
+
+    // A path written for a nested PowerShell or cmd inside a Bash line: the same family, one shell further. Bash
+    // consumes a backslash the nested shell needed (2026-10-16: `"...\worktrees\$n"` reached PowerShell as
+    // `worktrees$n`). Through the PowerShell tool there is no outer bash, so nothing is consumed.
+    // @es Una ruta escrita para un PowerShell o cmd anidado dentro de una línea de Bash: la misma familia, una shell
+    // más allá. Por la herramienta PowerShell no hay bash exterior, así que nada se consume.
+    if (msysTranslates) {
+      const nestedRefusal = nestedShellRefusal(programWords(invocation, position) ?? []);
+
+      if (nestedRefusal !== undefined) return nestedRefusal;
     }
 
     // A script an interpreter reads from standard input that WRITES A FILE: the same family again. The file
