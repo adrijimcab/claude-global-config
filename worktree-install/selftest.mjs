@@ -429,6 +429,8 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
   // The CLI runs the REAL npm, which cannot install the fixture's fake lockfile: a failed install is exit 1, no receipt.
   check('cli: a failing install exits 1, no receipt', () => [runCli(['install', '--main', project.main, '--worktree', sixth], { write, storeFile, env: OWN_NPM }), existsSync(path.join(sixth, 'node_modules', RECEIPT)), JSON.parse(lines.at(-1)).ok], [1, false, false]);
 
+  check('cli: the install wrote its npm cache into the scratch seam, never the user\'s ~/.npm', () => existsSync(path.join(scratch, 'npm-cache')), true);
+
   const seventh = project.worktree('wt-7');
 
   check('cli: provision exits 0', () => runCli(['provision', '--main', project.main, '--worktree', seventh], { write, storeFile, env: OWN_NPM }), 0);
