@@ -118,9 +118,11 @@ export function fileLockAdapter(directory, lockOptions = {}) {
      */
     liveHolder() {
       const owner = liveOwnerOf(lockFile, { ...LOCK_AGES, ...lockOptions });
-      const holder = owner === undefined ? undefined : this.readHolder();
+      const holder = this.readHolder();
 
-      return holder?.pid === owner ? holder : undefined;
+      // No live owner (undefined) never equals a record's pid, so one comparison decides both questions.
+      // @es Sin dueño vivo (undefined) nunca coincide con el pid de un registro: una comparación decide ambas cosas.
+      return holder !== undefined && holder.pid === owner ? holder : undefined;
     }
   };
 }
