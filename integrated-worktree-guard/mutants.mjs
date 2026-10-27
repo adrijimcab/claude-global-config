@@ -24,6 +24,12 @@ const ADDED = 'integrated-worktree-guard/added-worktree-path.mjs';
 const DECLARED = 'integrated-worktree-guard/declared-run-output.mjs';
 
 const MUTANTS = [
+  // --- the worktree's own install, declared by its receipt
+  ['every node_modules is installer output', DECLARED, "  if (segments.at(-1) !== 'node_modules') return false;\n", ''],
+  ['a stale receipt still declares the tree', DECLARED, '&& hashFile(path.join(worktree, ...segments.slice(0, -1), lockfile)) === receipt.lockfileHash;', ';'],
+  ['a receipt naming a path is trusted', DECLARED, " || lockfile !== path.basename(lockfile) || lockfile.includes('/') || lockfile.includes('\\\\')) return false;", ') return false;'],
+  ['the receipt is never consulted', DECLARED, '  if (isReceiptedInstall(worktree, segments)) return [];\n', ''],
+
   // --- the turn
   ['`stop_hook_active` is ignored, so a refusal can loop', GUARD, 'if (payload?.stop_hook_active === true) return undefined;', ''],
   ['a subagent\'s turn end is judged too', GUARD, "if (isSubagentCaller(payload) || payload?.hook_event_name === 'SubagentStop') return undefined;", "if (payload?.hook_event_name === 'SubagentStop') return undefined;"],
@@ -114,7 +120,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['integrated-worktree-guard', 'git-port', 'mutation-proof', 'hook-state', 'hook-caller', 'agent-liveness', 'shell-command', 'cherry-pick-guard', 'bilingual-output', 'brief-tenancy'],
+  paths: ['integrated-worktree-guard', 'worktree-install', 'project-profile', 'toolchain-guard', 'git-port', 'mutation-proof', 'hook-state', 'hook-caller', 'agent-liveness', 'shell-command', 'cherry-pick-guard', 'bilingual-output', 'brief-tenancy'],
   selftest: 'integrated-worktree-guard/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

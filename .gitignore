@@ -271,6 +271,10 @@
 !/project-profile/
 !/project-profile/*.mjs
 !/project-profile/*.json
+!/worktree-install/
+!/worktree-install/*.mjs
+!/worktree-install/fixtures/
+!/worktree-install/fixtures/*.mjs
 
 !/gentle-ai-sync-guard/
 !/gentle-ai-sync-guard/**

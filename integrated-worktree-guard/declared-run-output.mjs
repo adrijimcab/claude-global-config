@@ -27,6 +27,10 @@
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 
+import { readJsonObject } from '../project-profile/facts.mjs';
+import { RECEIPT } from '../worktree-install/own-install.mjs';
+import { hashFile } from '../worktree-install/verdict-store.mjs';
+
 /** The declared process outputs, each as worktree-relative segments with the process that writes it. @es Las salidas de proceso declaradas. */
 export const DECLARED_RUN_OUTPUT = Object.freeze([
   { producer: 'mutation-proof/run-mutants.mjs (sandboxes of the mutation runner)', segments: ['scratch', 'mutation-proof'] }
@@ -39,6 +43,29 @@ const segmentsOf = (entry) => entry.split('/').filter((segment) => segment !== '
 const startsWith = (inner, outer) => outer.length <= inner.length && outer.every((segment, at) => inner[at] === segment);
 
 /**
+ * Whether `segments` name a `node_modules` that the worktree's OWN install produced from the lockfile beside it,
+ * as its receipt (`worktree-install/own-install.mjs`) proves: the receipt names a lockfile in the same folder
+ * (a bare file name, never a path) whose sha256 is still the one installed from. Such a tree is reproducible
+ * from the tracked lockfile, so deleting it loses nothing; it is declared output of the installer, the
+ * worktree's default since `junctioned-node-modules-broke-vitest-coverage`. A tree with no receipt, a receipt
+ * naming a path, or a lockfile that moved on since the install stays WORK: someone may have changed it.
+ * @es Si `segments` nombran un `node_modules` que produjo la instalación PROPIA del worktree desde el lockfile
+ * de al lado, según su recibo: el recibo nombra un lockfile de la misma carpeta (nombre suelto, nunca una
+ * ruta) cuyo sha256 sigue siendo el instalado. Es reproducible desde el lockfile versionado. Sin recibo, con
+ * una ruta o con un lockfile que cambió después, sigue siendo TRABAJO.
+ */
+export function isReceiptedInstall(worktree, segments) {
+  if (segments.at(-1) !== 'node_modules') return false;
+
+  const receipt = readJsonObject(path.join(worktree, ...segments, RECEIPT));
+  const lockfile = receipt?.lockfile;
+
+  if (typeof lockfile !== 'string' || lockfile === '' || lockfile !== path.basename(lockfile) || lockfile.includes('/') || lockfile.includes('\\')) return false;
+
+  return typeof receipt.lockfileHash === 'string' && hashFile(path.join(worktree, ...segments.slice(0, -1), lockfile)) === receipt.lockfileHash;
+}
+
+/**
  * The part of the ignored `entry` (relative to `worktree`) that is NOT declared process output.
  * @param {string} worktree The worktree directory.
  * @param {string} entry An ignored entry as git reports it, `/`-separated, a directory ending in `/`.
@@ -47,6 +74,8 @@ const startsWith = (inner, outer) => outer.length <= inner.length && outer.every
  */
 export function undeclaredPartOf(worktree, entry) {
   const segments = segmentsOf(entry);
+
+  if (isReceiptedInstall(worktree, segments)) return [];
 
   for (const { segments: declared } of DECLARED_RUN_OUTPUT) {
     if (startsWith(segments, declared)) return [];

@@ -150,6 +150,7 @@ try {
   check('a refusal journal is archived', classify('collision-guard', 'refusals.jsonl').kind, ARCHIVE);
   check('the undecided journal of the dependency-claim face is archived', classify('brief-provenance', 'undecided/entries.jsonl').kind, ARCHIVE);
   check('a dismissal registry is kept', classify('backlog-guard', 'dismissals.jsonl').kind, KEEP);
+  check('the install strategy\'s probe verdicts are kept, and their interrupted write is pruned', [classify('worktree-install', 'verdicts.json').kind, classify('worktree-install', 'verdicts.json.4242.tmp').kind], [KEEP, PRUNE]);
   check('a per-session marker is kept (*.json)', classify('engram-persistence', 'st-1.json').kind, KEEP);
   check('*.json does not match a .jsonl file', classify('engram-persistence', 'notes.jsonl').kind, UNKNOWN);
   check('*.json does not match a file named only .json', classify('engram-persistence', '.json').kind, UNKNOWN);

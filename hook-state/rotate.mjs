@@ -161,6 +161,13 @@ export const KINDS = Object.freeze([
   ['worker-delegation-guard', 'refusals.jsonl', ARCHIVE, 'refusal journal'],
   ['worker-git-guard', 'unchecked.jsonl', ARCHIVE, 'journal of the commits whose pathspec could not be checked for untracked files'],
   ['worktree-landing', 'red-logs/*', ARCHIVE, 'whole output of past red verifications, one file per refused landing'],
+  // KEEP, not ARCHIVE: the install strategy decides from it, and a verdict goes stale only by IDENTITY (the lockfile
+  // hash and the probe's runner it records), never by age, so a rotation has nothing to drop. Archiving it would
+  // not be wrong — no verdict means the own install — but it would throw away the only proof a junction has and
+  // re-run every project's probe. Its staging file (`verdicts.json.<pid>.tmp`) is the `*.tmp` rule below.
+  // @es KEEP: la estrategia decide con él y un veredicto caduca por IDENTIDAD (hash del lockfile y runner), nunca
+  // por edad. Archivarlo tiraría la única prueba que tiene una junction y obligaría a re-sondear cada proyecto.
+  ['worktree-install', 'verdicts.json', KEEP, 'the probe verdict per project the install strategy decides from; it goes stale by identity (lockfile hash, runner), never by age'],
   [ANY, 'journal.jsonl', JOURNAL, 'hook journal'],
   [ANY, 'fires.json', ARCHIVE, 'fires counter, reset with the journal whose rate it gives'],
   [ANY, 'fires.json.lock', LOCK, 'a fires counter increment in flight'],

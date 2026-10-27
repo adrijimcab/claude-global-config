@@ -42,7 +42,7 @@ depends on can be expressed as configuration.
 | `worktree-tenancy/` | Portable | **Rewritten** on the vendored tokenizer (the reference only sees `git -C <path>`), exempting the owning agent itself |
 | `orphan-work-guard/` | Portable question; the reference's work predicate (`worktree-work/`) encodes b100's ignored-deliverable declarations | **Rewritten** with a plain predicate: porcelain entries, or commits `git cherry` finds missing from the integration branch |
 | `fleet-env/handback.mjs` | Portable question; the reference binds `delivery.mjs` (b100 reaper states) and `develop` | **Rewritten**: uncommitted work refuses a handback; then diff coverage of the worker's branch refuses uncovered changed lines |
-| `provision-agent-worktrees.mjs`, `fleet-env/` provisioning, `toolchain-guard/` | Portable in principle, **not built now**: the junction farm is tied to b100's single-`node_modules` layout; the FE workspace-in-a-subfolder layout needs its own design | Stated gap (see §6: without it, coverage cannot run inside an agent worktree) |
+| `provision-agent-worktrees.mjs`, `fleet-env/` provisioning, `toolchain-guard/` | The install STRATEGY is portable and now global: **`~/.claude/worktree-install/`** (2026-10-26, `junctioned-node-modules-broke-vitest-coverage`). A worktree's OWN install is the default; a junction into the main checkout's tree is accepted per project only after the project's own runner passes a coverage probe through it (red probe must fail, green must pass), recorded per lockfile hash and runner. The b100 farm and its manifests stay b100's (`fleet-env/`), asking this owner through a port | `node ~/.claude/worktree-install/worktree-install.mjs provision --main <checkout> --worktree <worktree>` for a repository with no provisioner (see §8) |
 | `integrate/`, `cherry-pick-guard/`, `ungated-commit-guard/`, `gate-run` chain expansion, `agent-contract/`, `prettier-on-edit/`, `stash-watch/`, `task-ledger/` | b100-specific | Stay behind: they encode b100's gate chain, derived-artifact registry, contract files, or formatting policy |
 | eval-guard, brief-provenance, claim guard, failure-capture | Already global in `~/.claude` | Not duplicated |
 
@@ -159,9 +159,13 @@ under `~/.claude/fleet-kit/state/`.
 **di_1700002_discovery_fe**
 - The main checkout holds 418 porcelain entries of someone's work, so the diff-coverage grader and `gate-run`
   REFUSE there until it is committed or cleaned by its owner. They work in clean worktrees.
-- Agent worktrees get no `node_modules` (no provisioner in this repo — §2), so a coverage run inside one reports
-  "cannot grade: toolchain missing" until provisioning exists. The handback guard therefore refuses a worker's
-  handback at most 3 times on that reason, then lets it through.
+- Agent worktrees get their `node_modules` from `worktree-install provision` (§8), run by the orchestrator right
+  after `git worktree add`. The profile finds the project in `Discovery-FE/`, so the worktree's own install is
+  `npm ci` in `<worktree>/Discovery-FE/` from that folder's lockfile; the junction is used only if the Karma probe
+  (`ng test --watch=false --code-coverage --include=src/worktree-install-probe.spec.ts`) passed through it. That
+  probe has NOT been run on this repository yet (it needs the host's Chrome): until it is, every worktree gets
+  its own install, which is correct by construction. A worktree that was never provisioned still reports
+  "cannot grade: toolchain missing", and the handback guard refuses its handback at most 3 times on that reason.
 - The app target's real configuration is Angular's built-in Karma config, which emits no lcov. The grader
   supplies its OWN Karma config from its run directory (no tracked change): for `angular-builtin` it mirrors
   Angular 19.2's built-in frameworks/plugins and refuses on any other `@angular-devkit/build-angular` major, so
@@ -188,6 +192,30 @@ under `~/.claude/fleet-kit/state/`.
 No mechanism required changing a tracked file in either repository: the Karma gap is closed with a run-local
 wrapper config, and everything else is configuration in excluded `.claude/` folders. The legacy backend's
 missing test runner is a NOT-APPLICABLE, stated above, not a tracked-file change.
+
+## 8. How a worktree gets its dependencies (2026-10-26)
+
+Measured on b100-am-ui: with `node_modules` junctioned into the main checkout, 5899/5899 specs passed and
+`test:all` still exited 1 with "Failed to fetch dynamically imported module …/@vitest/coverage-v8/browser"; the
+same tree with the worktree's own `npm ci` landed. Reproduced with real Vite 7.3.7
+(`worktree-install/fixtures/vite-serve-probe.mjs`): through a wholesale link or a per-entry farm the module
+resolves to its realpath in the main checkout and Vite's dev server answers 403; from an own install it answers
+200. Vite is also the dev server of Angular's `application` builder and of `@angular/build:unit-test`, so the
+probe is always the project's own runner, never an assumption about one.
+
+- **Default: the worktree's own install** (`npm ci` of its own lockfile, verified by tree tenancy, with a receipt
+  `node_modules/.worktree-install.json` naming the lockfile and its sha256). Only npm runs automatically; pnpm,
+  yarn and bun get their frozen-lockfile command as advice (unmeasured).
+- **Opt-in: the junction**, per project, only when a recorded verdict for the CURRENT lockfile hash and runner
+  says PASS. No verdict, a changed lockfile or a changed runner means own install plus one probe; a probe that
+  could not run, timed out, or whose red probe passed (the runner never ran it) is never a pass. A worktree whose
+  lockfile differs from the main checkout's never gets the main tree.
+- **Hard-link copies are rejected.** A hard link shares the inode, so any in-place write in the worktree (a
+  postinstall, a patch, a cache) rewrites the main checkout's copy: the junction's hazard with a less visible shape.
+- `npm ci` itself stays refused on a SHARED tree (the main checkout, a farm, a tree another checkout links into);
+  in a linked worktree's private tree it is allowed, decided by tenancy (`toolchain-guard/private-tree.mjs`).
+- A receipted own install is reproducible, so `integrated-worktree-guard` counts it as declared installer output,
+  not as work, when it offers an integrated worktree for removal.
 
 ---
 
@@ -241,8 +269,11 @@ b100 de la que depende se puede expresar como configuración.
   no encuentra en la rama de integración.
 - `fleet-env/handback.mjs`: **reescrito**: trabajo sin commitear rechaza el handback; después, la cobertura de diff
   de la rama del worker rechaza líneas cambiadas sin cubrir.
-- Aprovisionamiento de worktrees y `toolchain-guard/`: portables en principio, **no construidos ahora**; la granja
-  de junctions está atada al `node_modules` único de b100. Hueco declarado en §6.
+- Aprovisionamiento de worktrees y `toolchain-guard/`: la ESTRATEGIA de instalación es portable y ya es global,
+  **`~/.claude/worktree-install/`** (2026-10-26): la instalación PROPIA del worktree es la opción por defecto; la
+  junction al árbol del principal se acepta por proyecto solo cuando el runner del propio proyecto pasa una sonda
+  de cobertura a través de ella, registrada por hash de lockfile y runner. La granja de b100 y sus manifiestos
+  siguen en `fleet-env/`, que pregunta a este dueño por un puerto. Ver §8.
 - `integrate/`, `cherry-pick-guard/`, `ungated-commit-guard/`, expansión de la cadena de gates, contratos,
   formato, stash, task-ledger: **se quedan en b100**, codifican su política.
 - eval-guard, brief-provenance, claim guard, failure-capture: ya son globales; no se duplican.
@@ -285,9 +316,12 @@ invocación cuyo DIRECTORIO es incognoscible no se puede atribuir a ningún repo
 `gate-run` solo califica árboles LIMPIOS; la vivacidad es frescura del transcript (ventana de 30 minutos).
 
 **discovery_fe**: el checkout principal tiene 418 entradas de trabajo ajeno, así que el calificador y `gate-run`
-RECHAZAN ahí; funcionan en worktrees limpios. Los worktrees de agente no tienen `node_modules` (no hay
-aprovisionador), así que la cobertura dentro de uno dice «no se puede calificar» y el handback rechaza como mucho
-3 veces por ese motivo. El target de la app no emite lcov con su configuración real: el calificador aporta su
+RECHAZAN ahí; funcionan en worktrees limpios. Los worktrees de agente reciben su `node_modules` con `worktree-install provision`
+(§8), que el orquestador corre justo después de `git worktree add`: el perfil encuentra el proyecto en
+`Discovery-FE/`, así que la instalación propia es `npm ci` en `<worktree>/Discovery-FE/`; la junction solo se usa si
+la sonda de Karma pasó a través de ella, y esa sonda AÚN NO se ha corrido en este repositorio (necesita el Chrome
+del anfitrión), así que de momento cada worktree recibe su instalación propia. Un worktree nunca aprovisionado
+sigue diciendo «no se puede calificar» y el handback rechaza como mucho 3 veces por ese motivo. El target de la app no emite lcov con su configuración real: el calificador aporta su
 PROPIA configuración de Karma desde su directorio de corrida, espejo de la integrada de Angular 19.2, y se niega
 ante otra versión mayor. Karma cubre por source maps: una línea cambiada sin registro `DA` es invisible. Karma
 cuenta specs, no ficheros; cualquier spec saltado o enfocado vuelve incompleta la corrida y se rechaza. Las rutas
@@ -303,3 +337,26 @@ configuración gobierna solo el subárbol `fuentes/discovery-api/`.
 Ningún mecanismo exigió cambiar un fichero versionado: el hueco de Karma se cierra con una configuración local a la
 corrida, y lo demás es configuración en carpetas `.claude/` excluidas. La falta de runner del legado es un NO
 APLICA declarado, no un cambio en ficheros versionados.
+
+## 8. Cómo recibe un worktree sus dependencias (2026-10-26)
+
+Medido en b100-am-ui: con `node_modules` enlazado al checkout principal, 5899/5899 specs pasaban y `test:all` salía
+con 1 («Failed to fetch dynamically imported module …/@vitest/coverage-v8/browser»); el mismo árbol con el `npm ci`
+propio del worktree aterrizó. Reproducido con Vite 7.3.7 real: a través de un enlace mayorista o de una granja por
+entrada el módulo resuelve a su realpath en el principal y el servidor de Vite contesta 403; desde la instalación
+propia, 200. Vite es también el servidor del builder `application` de Angular y de `@angular/build:unit-test`, así
+que la sonda es siempre el runner del propio proyecto.
+
+- **Por defecto: la instalación propia** (`npm ci` de su lockfile, verificada por tenencia del árbol, con un recibo
+  `node_modules/.worktree-install.json` que nombra el lockfile y su sha256). Solo npm se ejecuta; pnpm, yarn y bun
+  reciben su comando como consejo (sin medir).
+- **Opcional: la junction**, por proyecto, solo con un veredicto PASS para el hash de lockfile y el runner ACTUALES.
+  Sin veredicto, o con lockfile o runner cambiados, instalación propia y una sonda; una sonda que no pudo correr,
+  agotó su tope o cuya sonda roja pasó nunca es un aprobado. Un worktree con otro lockfile nunca recibe el árbol
+  del principal.
+- **Las copias por hard link se rechazan:** comparten inodo, así que una escritura en el sitio dentro del worktree
+  reescribe la copia del checkout principal.
+- `npm ci` sigue rechazado sobre un árbol COMPARTIDO; en el árbol privado de un worktree enlazado se permite, por
+  tenencia (`toolchain-guard/private-tree.mjs`).
+- Una instalación propia con recibo es reproducible, así que `integrated-worktree-guard` la cuenta como salida
+  declarada del instalador, no como trabajo.
