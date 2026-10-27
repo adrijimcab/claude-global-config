@@ -31,7 +31,7 @@ import { forbiddenInvocations } from '../worker-git-guard/forbidden-invocations.
 import { DECISION_LOG_VARIABLE } from './parity-recorder.mjs';
 import { FACES, inspectFeasibility } from './feasibility.mjs';
 import { evaluate } from './guard.mjs';
-import { instructedCommands } from './instructions.mjs';
+import { instructedCommands, referencedCommands } from './instructions.mjs';
 import { shellLessRoleRefusals } from './shell-less-role.mjs';
 import { routeOf, workerGitRefusals } from './worker-git.mjs';
 
@@ -233,6 +233,71 @@ check('NEAR MISS: a role name that could leave the agents folder is not read', r
 check('NEAR MISS: a prohibition passes', roleFindings('Do not run `git diff`; read the files.', 'reader').length === 0);
 check('NEAR MISS: a command that is neither git nor npm passes', roleFindings('Read `src/a.ts` and `node x.mjs` output.', 'reader').length === 0);
 check('NEAR MISS: a resume is no delegation, even when it carries a role name', findingsOf({ ...delegation('Run `git diff`.', { tool: 'SendMessage' }), tool_input: { ...delegation('Run `git diff`.', { tool: 'SendMessage' }).tool_input, subagent_type: 'reader' } }, FACES.SHELL_LESS_ROLE).length === 0);
+
+// ---------------------------------------------------------------------------------------------------
+// ORDER OR MENTION (`instructions.mjs`): a command the brief directs the worker to run, against one it only names.
+// @es ORDEN O MENCIÓN: un comando que el brief manda ejecutar, frente a uno que solo nombra.
+// ---------------------------------------------------------------------------------------------------
+{
+  const ordered = (text) => instructedCommands(text).map(({ script }) => script);
+  const referenced = (text) => referencedCommands(text).map(({ script, order }) => `${order ? 'order' : 'mention'}:${script}`);
+  const orders = [
+    ['`git rebase 3fdb` on your own branch.', ['git rebase 3fdb'], 'a span that heads its clause'],
+    ['Undo it: `git checkout -- a.ts`.', ['git checkout -- a.ts'], 'a span that heads the clause a colon opens'],
+    ['Commit and PUSH to the repo: `git commit -m x`. The owner rule requires it.', ['git commit -m x'], 'REAL (fixture #6): a colon lead-in'],
+    ['Please run `git status` now.', ['git status'], 'a cue before the span in its clause'],
+    ['Print one mark with `printf "` and then `git push`.', ['git push'], 'a cue after an earlier mention in the same clause'],
+    ['5. Run: the selftests of every module, and finally `node r.mjs`.', ['node r.mjs'], 'a cue in the clause a colon opens the list with'],
+    ['6. Verify, with exit codes: `npm run a`, `npm run b`, the plugin suite, and `npx c`.', ['npm run a', 'npm run b', 'npx c'], 'REAL (fixtures #7, #8): every item of a list an order opens'],
+    ['Primero, usa `git status`.', ['git status'], 'a Spanish imperative cue'],
+    ['Lee el informe y luego `git log`.', ['git log'], 'a Spanish sequence cue'],
+    ['The selftests of every module, and finally `node r.mjs`.', ['node r.mjs'], 'finally is a cue'],
+    ['Sync it (then run `git fetch`).', ['git fetch'], 'a cue inside parentheses still orders'],
+    ['Then merge it (now ae64d8e) into x, rerun the guard, and the runner via `node r.mjs`.', ['node r.mjs'], 'rerun is a cue']
+  ];
+  const mentions = [
+    ['I saved them by hand with `git update-ref refs/x abc`.', 'REAL (fixture #5): a command the brief says it ran'],
+    ['A hook that detects ref-moving commands (`git reset`, `git switch -C`, `git update-ref`) and writes a ref.', 'REAL (fixture #5): a parenthesised list of examples'],
+    ['2. P2-9: brief-feasibility lets a worker brief through that asks for `git switch`/`checkout`; only the guard stops it.', 'REAL (this session): a brief describing what another brief asked for'],
+    ['The incident ran `git update-ref x y`.', 'a past incident'],
+    ['Find the actual briefs containing `git worktree add x`.', 'REAL (fixture #6): the command as text to search for'],
+    ['A brief told a worker to `git switch main` last week.', 'a description with no cue']
+  ];
+
+  for (const [text, expected, label] of orders) check(`ORDER: ${label}`, JSON.stringify(ordered(text)) === JSON.stringify(expected), JSON.stringify(referenced(text)));
+  for (const [text, label] of mentions) check(`MENTION: ${label}`, ordered(text).length === 0 && referenced(text).length > 0, JSON.stringify(referenced(text)));
+  check('a list ends with its clause: a mention in the next sentence stays a mention', JSON.stringify(ordered('Run `git status`. The incident ran `git switch main`.')) === JSON.stringify(['git status']), JSON.stringify(referenced('Run `git status`. The incident ran `git switch main`.')));
+  check('a cue in the clause a colon opens the list with orders an item that has none of its own', JSON.stringify(ordered('4. Run in both: vendored check, and G `node r.mjs`.')) === JSON.stringify(['node r.mjs']), JSON.stringify(referenced('4. Run in both: vendored check, and G `node r.mjs`.')));
+  check('a prohibition is neither an order nor a reference', referenced('Never `git switch main`; stay on your branch.').length === 0);
+  check('a quotation is neither an order nor a reference', referenced('The brief said "Run `git switch main`." and was wrong.').length === 0);
+  check('a fenced block and an imperative line stay orders', JSON.stringify(ordered('Steps:\n```\ngit reset --hard\n```\nRun git switch main first.')) === JSON.stringify(['git reset --hard', 'git switch main first.']), JSON.stringify(ordered('Steps:\n```\ngit reset --hard\n```\nRun git switch main first.')));
+  check('a relative tooling path the brief only NAMES is still a reference (the worker opens it)', referenced('The contract in `.claude/AGENT-LEDGER.md` binds you.').includes('mention:.claude/AGENT-LEDGER.md'));
+
+  {
+    // The path face reads every reference: a relative path the brief only names is refused to an isolated worker.
+    // @es La cara de rutas lee toda referencia: una ruta relativa que el brief solo nombra se rechaza a un worker aislado.
+    const repo = join(world, 'path-repo');
+
+    mkdirSync(join(repo, '.claude'), { recursive: true });
+    spawnSync('git', ['init', '-q', repo]);
+    writeFileSync(join(repo, '.gitignore'), '/.claude/*\n');
+    writeFileSync(join(repo, '.claude', 'AGENT-LEDGER.md'), '# contract\n');
+
+    const named = { ...payloadFor('Agent', 'The contract in `.claude/AGENT-LEDGER.md` binds you.', { sessionId: 'selftest', input: { isolation: 'worktree' } }), cwd: repo };
+    const found = inspectFeasibility(briefOf(named), named, { processCwd: repo, home })?.findings ?? [];
+
+    check('REAL (fixture, live true positive): a relative tooling path the brief only names is refused to an isolated worker', found.some((finding) => finding.face === FACES.RELATIVE_TOOLING_PATH), JSON.stringify(found));
+  }
+
+  // MEASURED on the real briefs: the 10 fixture briefs and the session's briefs that name refused commands.
+  // @es MEDIDO sobre los briefs reales: los 10 de los fixtures y los de la sesión que nombran comandos rechazados.
+  const fixtureBriefs = JSON.parse(readFileSync(join(HERE, 'fixtures', 'incidents.json'), 'utf8')).incidents.map((incident, index) => ({ id: `fixture #${String(index)}`, text: incident.input.prompt ?? incident.input.message }));
+  const sessionBriefs = JSON.parse(readFileSync(join(HERE, 'fixtures', 'mention-briefs.json'), 'utf8')).briefs;
+  const refusedBriefs = [...fixtureBriefs, ...sessionBriefs].filter(({ text }) => workerGitRefusals(instructedCommands(text), checkout).length > 0).map(({ id }) => id);
+
+  check(`REAL BRIEFS: the worker-git face refuses exactly the one that orders a refused command (${String(fixtureBriefs.length + sessionBriefs.length)} briefs)`, JSON.stringify(refusedBriefs) === JSON.stringify(['fixture #6']), JSON.stringify(refusedBriefs));
+  check('REAL BRIEFS: the session negatives are all there', sessionBriefs.length === 3);
+}
 
 console.log(`\n${passed}/${passed + failed} passed`);
 process.exit(failed === 0 ? 0 : 1);

@@ -48,7 +48,7 @@ const MUTANTS = [
   ['the refusal prints the relative path back', F, 'const absolute = join(location.mainCheckout, relativePath);', 'const absolute = relativePath;'],
   ['the rebase alternative is lost', F, "['git rebase', 'create a branch", "['git rebasex', 'create a branch"],
   ['a colon-introduced list loses the prohibition that governs it', I, "if (from === 0 || masked.charAt(from - 1) !== ':') return own;", 'return own;'],
-  ['a quoted span reads as an order', I, 'if (isInside(quotes, span.start) || isProhibition(', 'if (isProhibition('],
+  ['a quoted span reads as an order', I, 'const unquoted = spans.filter((span) => !isInside(quotes, span.start));', 'const unquoted = spans;'],
   ['a quoted word governs a clause', I, 'return { quotes, prose: maskRanges(spanMasked, quotes) };', 'return { quotes, prose: spanMasked };'],
   ['a quote inside a code span opens a quotation', I, 'const quotes = quotedRanges(spanMasked);', 'const quotes = quotedRanges(line);'],
   ['typographic quotes and guillemets stop quoting', I, "const QUOTE_PAIRS = [['\"', '\"'], ['“', '”'], ['«', '»']];", "const QUOTE_PAIRS = [['\"', '\"']];"],

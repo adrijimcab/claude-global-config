@@ -146,11 +146,9 @@
       }
     },
     {
-      "label": "REAL NEAR MISS: isolation worker told \"`git rebase` is denied to workers by permissions\" — since 2026-10-26 REFUSED on the worker-git face: its lines DESCRIBE `git update-ref` and `git reset` in code spans with no prohibition word, which instructions.mjs reads as orders (its stated limit, a measured false refusal kept as a named state)",
-      "expected": "deny",
-      "faces": [
-        "worker-git-refused"
-      ],
+      "label": "REAL NEAR MISS: isolation worker told \"`git rebase` is denied to workers by permissions\" — it DESCRIBES `git update-ref` and `git reset` in code spans: an earlier rule read those as orders (a measured false refusal on the worker-git face, 2026-10-26); instructions.mjs now reads them as mentions",
+      "expected": "allow",
+      "faces": [],
       "source": {
         "transcript": "c45d798b-d78f-4f60-9a32-1f722bbe86e5.jsonl",
         "toolUseId": "toolu_0124FvFAXMfLPLn1TSAwaGnV"

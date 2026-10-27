@@ -32,7 +32,7 @@ import { join } from 'node:path';
 import { commandWordIndex, executableName } from '../shell-command/shell-command.mjs';
 
 import { denyRules, matchingRule } from './deny-rules.mjs';
-import { instructedCommands, instructedMentions } from './instructions.mjs';
+import { instructedCommands, instructedMentions, referencedCommands } from './instructions.mjs';
 import { shellLessRoleRefusals } from './shell-less-role.mjs';
 import { workerGitRefusals } from './worker-git.mjs';
 import { workerLocation } from './worker-location.mjs';
@@ -115,9 +115,9 @@ function nestedWorktrees(instructions, text, location) {
   return [...adds, ...enters];
 }
 
-/** Relative-tooling-path findings. @es Hallazgos de ruta relativa a tooling. */
-function relativeToolingPaths(instructions, location) {
-  return instructions.flatMap(({ lineNumber, line, commands }) => commands.flatMap(({ words }) => words.flatMap((word) => {
+/** Relative-tooling-path findings, over every command the brief refers to, ordered or named. @es Hallazgos de ruta relativa a tooling, sobre todo comando al que se refiere el brief, ordenado o nombrado. */
+function relativeToolingPaths(references, location) {
+  return references.flatMap(({ lineNumber, line, commands }) => commands.flatMap(({ words }) => words.flatMap((word) => {
     const prefix = RELATIVE_TOOLING_PREFIXES.find((candidate) => word.startsWith(candidate));
 
     if (prefix === undefined) return [];
@@ -143,7 +143,7 @@ export function inspectFeasibility(brief, payload, { processCwd = process.cwd(),
     ...deniedCommands(instructions, denyRules(location.mainCheckout, home)),
     ...workerGitRefusals(instructions, location.mainCheckout).map((finding) => ({ face: FACES.WORKER_GIT_REFUSED, ...finding })),
     ...shellLessRoleRefusals(instructions, payload, location.mainCheckout, home === undefined ? undefined : join(home, '.claude')).map((finding) => ({ face: FACES.SHELL_LESS_ROLE, ...finding })),
-    ...(location.linkedWorktree ? [...nestedWorktrees(instructions, brief.text, location), ...relativeToolingPaths(instructions, location)] : [])
+    ...(location.linkedWorktree ? [...nestedWorktrees(instructions, brief.text, location), ...relativeToolingPaths(referencedCommands(brief.text), location)] : [])
   ];
 
   return findings.length === 0 ? undefined : { findings, toolName: brief.toolName, surface: brief.surface, location };

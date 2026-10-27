@@ -10,7 +10,8 @@
  * the brief that COMMISSIONED this guard describes all three of its faces in code spans.
  *
  * THE DETERMINISTIC RULE. A command is instructed when it sits in one of three places:
- *   1. an inline code span (`…`), unless its CLAUSE carries a prohibition word;
+ *   1. an inline code span (`…`) that reads as an ORDER (`spanReadings`: it heads its clause, follows an order cue
+ *      such as `run` or `then`, or continues a list an order opened), unless its CLAUSE carries a prohibition word;
  *   2. a fenced code block, unless the prose line that introduces the fence carries one;
  *   3. a line that BEGINS with an imperative verb (`Run …`, `Ejecuta …`) and carries no code span.
  * The CLAUSE of a span is the prose on its line between the nearest clause boundary before it and the
@@ -31,6 +32,14 @@
  *     that forbids writing about itself"). A span inside "…", “…” or «…» is a quotation, never an order,
  *     and quoted words never govern a clause either. The scan resumes after the closing quote.
  *
+ * ORDER OR MENTION (2026-10-27). A span that only NAMES a command ("I saved them with `git update-ref x`", "a brief
+ * that asks for `git switch`", "(`git reset`, `git switch -C`)") is a MENTION. Measured before this rule on the 10
+ * real fixture briefs and the 28 briefs of session 8dd13422: the worker-git face refused 3 briefs, 2 of them for a
+ * mention; with it, 1 (the true order) and 0 mentions. Orders it now reads as mentions, measured on the same corpus: an
+ * order inside parentheses ("(`git ls-remote --tags` to find them)"), an instrument ("correct it through `node x`")
+ * and a sentence wrapped onto a new line, where only the line is read. Every reference stays readable to a face about
+ * what the worker RESOLVES (`referencedCommands`).
+ *
  * WHAT IT DOES NOT DO, stated so nobody relies on it for more: it does not parse English. A prohibition
  * phrased without any of the listed words ("rather than `git rebase`") reads as an instruction, and an
  * instruction whose own clause happens to contain "no" reads as a prohibition. Both are named states in
@@ -41,10 +50,14 @@
  * @es Los comandos de shell que un brief ORDENA ejecutar, frente a los que solo MENCIONA. Un brief
  * cuidadoso nombra los comandos prohibidos justamente para prohibirlos, así que rechazar todo brief que
  * contenga `git rebase` rechazaría al que lo hace bien. REGLA DETERMINISTA: se ordena un comando que está
- * en un span de código cuya CLÁUSULA no lleva palabra de prohibición, en un bloque cercado cuya línea de
+ * en un span de código que se lee como ORDEN (encabeza su cláusula, sigue a una palabra de orden o continúa una lista
+ * que abrió una orden) y cuya CLÁUSULA no lleva palabra de prohibición, en un bloque cercado cuya línea de
  * introducción no la lleva, o en una línea que EMPIEZA con un verbo imperativo. La cláusula (no la línea)
  * es el alcance porque un incidente real llevaba «does not» en otra cláusula de la misma línea. No
- * analiza el inglés: sus dos límites son estados nombrados del selftest. SIN REGEX.
+ * analiza el inglés: sus dos límites son estados nombrados del selftest. ORDEN O MENCIÓN (2026-10-27): un span que solo NOMBRA un comando es
+ * MENCIÓN; medido sobre los 10 briefs reales y los 28 de la sesión 8dd13422, la cara worker-git pasó de rechazar 3
+ * briefs (2 por una mención) a 1, la orden real. Lo que ahora se lee como mención siendo orden, medido: una orden entre
+ * paréntesis, un instrumento («corrígelo con `node x`») y una frase partida en otra línea. SIN REGEX.
  */
 
 import { simpleCommands } from '../shell-command/shell-command.mjs';
@@ -62,6 +75,24 @@ export const PROHIBITION_WORDS = new Set([
 
 /** Verbs that make a line an instruction when they open it. @es Verbos que convierten una línea en orden cuando la abren. */
 export const IMPERATIVE_VERBS = ['run', 'execute', 'ejecuta', 'ejecutá', 'corre', 'corré'];
+
+/**
+ * Words that make a code span an ORDER when they stand before it in its own clause, or in the clause a colon opens
+ * its list with ("Run in both: `a`, `b`"): a verb that directs the reader to EXECUTE something (`run`, `use`,
+ * `verify`), or a step of a sequence (`then`, `finally`), in both languages of the briefs. A verb whose object is
+ * the command as text ("find the briefs containing `x`", "detects `git reset`") is deliberately absent. Matched as
+ * whole lower-cased words. MEASURED 2026-10-27 on the 10 real fixture briefs and the 28 briefs of session 8dd13422:
+ * with this set the worker-git face refuses 1 brief (a true order) and no mention.
+ * @es Palabras que convierten un span de código en ORDEN cuando están antes de él en su cláusula, o en la cláusula
+ * que abre su lista con dos puntos: un verbo que manda EJECUTAR algo o un paso de una secuencia, en los dos idiomas.
+ * Un verbo cuyo objeto es el comando como texto («busca los briefs que contienen `x`») falta a propósito. Medido el
+ * 2026-10-27 sobre los 10 briefs reales y los 28 de la sesión 8dd13422: la cara worker-git rechaza 1 brief (una orden
+ * real) y ninguna mención.
+ */
+export const ORDER_CUES = new Set([
+  'run', 'rerun', 'execute', 'use', 'do', 'invoke', 'call', 'launch', 'start', 'finish', 'verify', 'apply', 'then', 'finally',
+  'ejecuta', 'ejecutá', 'corre', 'corré', 'usa', 'usá', 'haz', 'hacé', 'lanza', 'lanzá', 'empieza', 'empezá', 'termina', 'terminá', 'verifica', 'verificá', 'aplica', 'aplicá', 'luego', 'después', 'finalmente'
+]);
 
 /** Characters that end a clause. The comma is deliberately absent. @es Caracteres que cierran una cláusula; la coma no. */
 const CLAUSE_BOUNDARIES = '.;:()!?';
@@ -180,6 +211,40 @@ export function clauseAround(masked, start, end) {
   return `${masked.slice(clauseStart(masked, from - 1), from - 1)} ${own}`;
 }
 
+/**
+ * How each code span of a line reads, ORDER or MENTION, decided on the prose of the line (`spans` in line order). A
+ * span is an order when:
+ *   - the span before it in its clause is an order (a list: "Verify: `a`, `b` and `c`" are all orders);
+ *   - otherwise, an `ORDER_CUES` word stands before it in its clause, or in the clause a colon opens it with;
+ *   - otherwise, it HEADS its clause (nothing but layout, punctuation or earlier spans before it: "`git rebase x` on
+ *     your branch", "Undo it: `git checkout -- a`"), unless that clause was opened by a parenthesis, which makes it
+ *     an aside or a list of examples ("detects ref-moving commands (`git reset`, `git switch -C`)").
+ * Anything else is a MENTION: a command the brief describes ("I saved them with `git update-ref x`", "a brief that
+ * asks for `git switch`"). Quoted spans are left out before this is asked, and read nothing.
+ * @es Cómo se lee cada span de una línea, ORDEN o MENCIÓN. Es orden si un span anterior de su cláusula ya se leyó (una
+ * lista), si una palabra de `ORDER_CUES` está antes de él en su cláusula o en la que la abre con dos puntos, o si
+ * ENCABEZA su cláusula, salvo que la abra un paréntesis (un inciso o una lista de ejemplos). Lo demás es MENCIÓN: un
+ * comando que el brief describe.
+ * @returns {Map<number, boolean>} span start to `true` for an order. @es inicio del span a `true` si es orden.
+ */
+export function spanReadings(prose, spans) {
+  const readings = new Map();
+  let previous;
+
+  for (const { start } of spans) {
+    const from = clauseStart(prose, start);
+    const own = proseWords(prose.slice(from, start));
+    const lead = from > 0 && prose.charAt(from - 1) === ':' ? proseWords(prose.slice(clauseStart(prose, from - 1), from - 1)) : [];
+    const continuesAnOrder = previous !== undefined && previous.from === from && previous.order;
+    const order = continuesAnOrder || [...own, ...lead].some((word) => ORDER_CUES.has(word)) || (own.length === 0 && prose.charAt(from - 1) !== '(');
+
+    readings.set(start, order);
+    previous = { from, order };
+  }
+
+  return readings;
+}
+
 /** The line without leading layout: whitespace, list bullets, numbering, headings, quotes. @es La línea sin maquetación inicial. */
 function withoutLead(line) {
   let index = 0;
@@ -208,11 +273,17 @@ function commandsOf(script) {
 }
 
 /**
- * Every place the brief instructs a command: `{ lineNumber, line, via, script, commands }`, where
- * `commands` are the tokenizer's simple commands (`words`, `text`).
- * @es Cada lugar donde el brief ordena un comando, con sus comandos simples ya tokenizados.
+ * Every command the brief REFERS to outside a quotation and a prohibition: `{ lineNumber, line, via, order, script,
+ * commands }`, where `order` says whether the brief directs the worker to run it (`spanReadings`; a fenced block and
+ * an imperative line are always orders) and `commands` are the tokenizer's simple commands (`words`, `text`). A face
+ * about what the worker will RUN reads `instructedCommands`; a face about what the worker will RESOLVE, such as a
+ * relative path, reads every reference, since a path the brief only names ("the contract in `.claude/X` binds you")
+ * is still one the worker opens.
+ * @es Cada comando al que el brief SE REFIERE fuera de una cita y de una prohibición, con `order` si el brief manda
+ * ejecutarlo. Una cara sobre lo que el worker EJECUTARÁ lee `instructedCommands`; una sobre lo que RESOLVERÁ, como una
+ * ruta relativa, lee toda referencia, porque una ruta que el brief solo nombra es igual una que el worker abre.
  */
-export function instructedCommands(text) {
+export function referencedCommands(text) {
   const instructions = [];
   const lines = text.split('\n').map((line) => line.trimEnd());
   let fenceIntroducedByProhibition;
@@ -228,7 +299,7 @@ export function instructedCommands(text) {
     }
 
     if (fenceIntroducedByProhibition !== undefined) {
-      if (!fenceIntroducedByProhibition && line.trim().length > 0) instructions.push({ lineNumber, line, via: 'fenced block', script: line, commands: commandsOf(line) });
+      if (!fenceIntroducedByProhibition && line.trim().length > 0) instructions.push({ lineNumber, line, via: 'fenced block', order: true, script: line, commands: commandsOf(line) });
 
       return;
     }
@@ -240,22 +311,30 @@ export function instructedCommands(text) {
     if (spans.length === 0) {
       const command = imperativeCommand(line);
 
-      if (command !== undefined && command.length > 0) instructions.push({ lineNumber, line, via: 'imperative line', script: command, commands: commandsOf(command) });
+      if (command !== undefined && command.length > 0) instructions.push({ lineNumber, line, via: 'imperative line', order: true, script: command, commands: commandsOf(command) });
 
       return;
     }
 
     const { quotes, prose } = readLine(line, spans);
+    const unquoted = spans.filter((span) => !isInside(quotes, span.start));
+    const orders = spanReadings(prose, unquoted);
 
-    for (const span of spans) {
-      if (isInside(quotes, span.start) || isProhibition(clauseAround(prose, span.start, span.end))) continue;
+    for (const span of unquoted) {
+      if (isProhibition(clauseAround(prose, span.start, span.end))) continue;
 
-      instructions.push({ lineNumber, line, via: 'code span', script: span.content, commands: commandsOf(span.content) });
+      instructions.push({ lineNumber, line, via: 'code span', order: orders.get(span.start), script: span.content, commands: commandsOf(span.content) });
     }
   });
 
   return instructions;
 }
+
+/**
+ * Every place the brief ORDERS a command: the references that are orders (`referencedCommands`).
+ * @es Cada lugar donde el brief ORDENA un comando: las referencias que son órdenes.
+ */
+export const instructedCommands = (text) => referencedCommands(text).filter((reference) => reference.order);
 
 /**
  * Every line on which `word` appears — in a code span or in prose, never inside a quotation — in a clause

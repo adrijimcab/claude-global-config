@@ -18,6 +18,7 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const W = 'brief-feasibility/worker-git.mjs';
 const R = 'brief-feasibility/shell-less-role.mjs';
 const F = 'brief-feasibility/feasibility.mjs';
+const I = 'brief-feasibility/instructions.mjs';
 const G = 'brief-feasibility/guard.mjs';
 
 const MUTANTS = [
@@ -51,6 +52,22 @@ const MUTANTS = [
   ['the finding does not name the definition file', R, 'the role ${role} (${definition.file}) reaches no', 'the role ${role} reaches no'],
   ['the finding loses its Spanish half', R, ' @es \\`${text.trim()}\\` ejecuta ${program}, y el rol ${role} (${definition.file}) no alcanza ninguna herramienta ${EXECUTION_TOOLS.join(\' / \')}`', '`'],
   ['the alternative loses its Spanish half', R, " @es ejecuta el comando tú mismo y pon su salida en el brief, o delega en un rol que declare ${EXECUTION_TOOLS.join(' o ')}`", '`'],
+
+  // --- order or mention
+  ['every reference is an order', I, '    readings.set(start, order);', '    readings.set(start, true);'],
+  ['no reference is an order', I, '    readings.set(start, order);', '    readings.set(start, false);'],
+  ['a list does not carry its order', I, 'const order = continuesAnOrder || ', 'const order = '],
+  ['a mention carries along a list', I, 'previous.from === from && previous.order;', 'previous.from === from;'],
+  ['a list runs past its clause', I, 'previous !== undefined && previous.from === from && previous.order', 'previous !== undefined && previous.order'],
+  ['no cue orders anything', I, '[...own, ...lead].some((word) => ORDER_CUES.has(word))', 'false'],
+  ['the clause a colon opens a list with is not read', I, "const lead = from > 0 && prose.charAt(from - 1) === ':' ?", "const lead = false ?"],
+  ['a span that heads its clause is no order', I, "|| (own.length === 0 && prose.charAt(from - 1) !== '(')", ''],
+  ['a parenthesis opens no aside', I, " && prose.charAt(from - 1) !== '(')", ')'],
+  ['run is no order cue', I, "'run', 'rerun',", "'rerun',"],
+  ...['rerun', 'verify', 'then', 'finally', 'usa', 'luego'].map((cue) => [`${cue} is no order cue`, I, `'${cue}',`, '']),
+  ['instructedCommands returns mentions too', I, 'referencedCommands(text).filter((reference) => reference.order)', 'referencedCommands(text)'],
+  ['a span reference is never kept as a mention', I, "via: 'code span', order: orders.get(span.start),", "via: 'code span', order: true,"],
+  ['the path face reads only orders', F, 'relativeToolingPaths(referencedCommands(brief.text), location)', 'relativeToolingPaths(instructions, location)'],
 
   // --- the wiring and the refusal text
   ['the worker-git face is never asked', F, '    ...workerGitRefusals(instructions, location.mainCheckout).map((finding) => ({ face: FACES.WORKER_GIT_REFUSED, ...finding })),\n', ''],
