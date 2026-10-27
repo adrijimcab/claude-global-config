@@ -120,6 +120,23 @@ const failing = (codes) => {
   };
 };
 
+// --- R: the live owner a READER sees (`liveOwnerOf`) ------------------------------------------------------------
+{
+  /** The reader's answer, a throw included as a value. @es La respuesta del lector, una excepción incluida como valor. */
+  const ownerOf = (...args) => outcomeOf(() => lock.liveOwnerOf(...args));
+  const reader = (extra) => ({ staleAfterMs: STALE, ceilingMs: STALE * 10, now: () => AT, ...extra });
+
+  check('R1: a lock held by this live process names its pid', ownerOf(held('r-live', `${String(process.pid)}:x`, 0, AT), reader()), process.pid);
+  check('R2: no lock file is no owner', ownerOf(file('r-none'), reader()), undefined);
+  check('R3: a YOUNG lock whose pid is dead has no live owner (a reader must not wait on it)', ownerOf(held('r-dead', `${String(deadPid)}:x`, 0, AT), reader()), undefined);
+  check('R4: an empty lock names no owner', ownerOf(held('r-empty', '', 0, AT), reader()), undefined);
+  check('R5: a live pid past the ceiling is no owner (the pid may be reused)', ownerOf(held('r-ceiling', `${String(process.pid)}:x`, STALE * 10 + 1, AT), reader()), undefined);
+  check('R6: a live pid just under the ceiling still owns it', ownerOf(held('r-at-ceiling', `${String(process.pid)}:x`, STALE * 10 - 1000, AT), reader()), process.pid);
+  check('R7: the injected probe decides liveness', ownerOf(held('r-probe', '4242:x', 0, AT), reader({ isAlive: (pid) => pid === 4242 })), 4242);
+  check('R8: the default ceiling is ten stale ages', ownerOf(held('r-default', `${String(process.pid)}:x`, STALE * 10 + 1, AT), { staleAfterMs: STALE, now: () => AT }), undefined);
+  check('R9: under the default ceiling a live pid past one stale age still owns it', ownerOf(held('r-default-live', `${String(process.pid)}:x`, STALE * 2, AT), { staleAfterMs: STALE, now: () => AT }), process.pid);
+}
+
 // --- K-A: the owner token, and a release that removes only this process's own lock --------------------------
 {
   const target = file('free');

@@ -38,7 +38,7 @@ const MUTANTS = [
   ['a dead owner\'s lock is never stale before the ceiling', L, "  if (!isAlive(pid)) return stale('dead-owner');\n", ''],
   ['a live owner\'s lock is stale', L, "return ageMs > ceilingMs ? stale('ceiling') : undefined;", "return stale('ceiling');"],
   ['K-D: there is no ceiling, so a reused pid wedges the lock', L, "return ageMs > ceilingMs ? stale('ceiling') : undefined;", 'return undefined;'],
-  ['K-D: the ceiling is the stale age', L, 'ceilingMs = staleAfterMs * CEILING_FACTOR', 'ceilingMs = staleAfterMs'],
+  ['K-D: the ceiling is the stale age', L, 'const defaultCeiling = (staleAfterMs) => staleAfterMs * CEILING_FACTOR;', 'const defaultCeiling = (staleAfterMs) => staleAfterMs;'],
   ['K-D: the ceiling factor is a hundred', L, 'export const CEILING_FACTOR = 10;', 'export const CEILING_FACTOR = 100;'],
   ['the stale age shrinks to a millisecond', L, 'export const STALE_AFTER_MS = 60_000;', 'export const STALE_AFTER_MS = 1;'],
   ['the stale age grows past any real age', L, 'export const STALE_AFTER_MS = 60_000;', 'export const STALE_AFTER_MS = 600_000_000;'],
@@ -132,7 +132,13 @@ const MUTANTS = [
   ['L3: an own suppressed chain of the work error is overwritten', L, " && !Object.hasOwn(error, 'suppressed');", ';'],
   ['L3: the failure is attached by assignment, which an inherited read-only suppressed refuses', L, "Object.defineProperty(error, 'suppressed', { value: failure, writable: true, configurable: true, enumerable: true });", 'error.suppressed = failure;'],
   ['L3: withLock releases with the default removal, not the given one', L, '      releaseLock(lockFile, options);', '      releaseLock(lockFile);'],
-  ['L3: withLock reports nowhere by default', L, 'const report = options.report ?? toStderr;', 'const report = options.report ?? (() => undefined);']
+  ['L3: withLock reports nowhere by default', L, 'const report = options.report ?? toStderr;', 'const report = options.report ?? (() => undefined);'],
+  // --- R: the live owner a reader sees
+  ['R: a dead owner still reads as live', L, '  if (pid === undefined || !isAlive(pid)) return undefined;\n\n  return now()', '  if (pid === undefined) return undefined;\n\n  return now()'],
+  ['R: the ceiling is ignored, so a reused pid holds the lock forever', L, '  return now() - found.mtimeMs > ceilingMs ? undefined : pid;', '  return pid;'],
+  ['R: the ceiling is inclusive the wrong way, so nothing is live', L, '  return now() - found.mtimeMs > ceilingMs ? undefined : pid;', '  return now() - found.mtimeMs < ceilingMs ? undefined : pid;'],
+  ['R: the reader has no default ceiling', L, 'export function liveOwnerOf(lockFile, { staleAfterMs = STALE_AFTER_MS, ceilingMs = defaultCeiling(staleAfterMs),', 'export function liveOwnerOf(lockFile, { staleAfterMs = STALE_AFTER_MS, ceilingMs = Infinity,'],
+  ['R: the reader ignores the injected probe', L, 'ceilingMs = defaultCeiling(staleAfterMs), now = Date.now, isAlive = processExists } = {}) {\n  const found = readLock(lockFile);', 'ceilingMs = defaultCeiling(staleAfterMs), now = Date.now, isAlive: _probe = processExists } = {}) {\n  const isAlive = processExists;\n  const found = readLock(lockFile);']
 ];
 
 const survivors = runMutants({

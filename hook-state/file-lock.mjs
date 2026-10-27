@@ -63,6 +63,9 @@ export const STALE_AFTER_MS = 60_000;
 /** The absolute ceiling, in stale ages: past it a lock is stale whatever its pid says. @es El techo absoluto, en edades límite. */
 export const CEILING_FACTOR = 10;
 
+/** The absolute ceiling a lock of stale age `staleAfterMs` gets when none is given: one rule for takers and readers. @es El techo absoluto por defecto para una edad límite: una regla para quien toma y quien lee. */
+const defaultCeiling = (staleAfterMs) => staleAfterMs * CEILING_FACTOR;
+
 /** A wait that sleeps the thread `ms`; the callers are synchronous by design. @es Una espera que duerme el hilo `ms`; los llamantes son síncronos por diseño. */
 export const pauseFor = (ms) => () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
@@ -182,6 +185,30 @@ function staleOf(file, { staleAfterMs, ceilingMs, now, isAlive }) {
   if (!isAlive(pid)) return stale('dead-owner');
 
   return ageMs > ceilingMs ? stale('ceiling') : undefined;
+}
+
+/**
+ * The pid of the LIVE owner of `lockFile`, or `undefined` when nobody alive holds it: the file is gone, its token
+ * names no pid, that pid no longer exists, or the lock is past the absolute ceiling (whose pid may have been reused
+ * by an unrelated process). It is the question a READER asks ("is someone holding this right now?"), and it differs
+ * from `staleOf` on purpose in one case only: a young lock whose owner is dead or unnamed is not breakable yet (it
+ * may be a lock between its create and its write), but nobody alive holds it, so a reader must not wait on it.
+ * @es El pid del dueño VIVO de `lockFile`, o `undefined` si nadie vivo lo tiene: el fichero no está, su token no
+ * nombra pid, ese pid ya no existe o el lock pasó el techo absoluto (su pid pudo reutilizarlo otro proceso). Es la
+ * pregunta de un LECTOR («¿alguien lo tiene ahora?») y difiere a propósito de `staleOf` en un solo caso: un lock
+ * joven con dueño muerto o sin nombre aún no se puede romper (puede estar entre su creación y su escritura), pero
+ * nadie vivo lo tiene, así que un lector no debe esperarlo.
+ */
+export function liveOwnerOf(lockFile, { staleAfterMs = STALE_AFTER_MS, ceilingMs = defaultCeiling(staleAfterMs), now = Date.now, isAlive = processExists } = {}) {
+  const found = readLock(lockFile);
+
+  if (found === undefined) return undefined;
+
+  const pid = pidOf(found.token);
+
+  if (pid === undefined || !isAlive(pid)) return undefined;
+
+  return now() - found.mtimeMs > ceilingMs ? undefined : pid;
 }
 
 /**
@@ -331,7 +358,7 @@ function releaseBreaker(breaker, token, escalate, { remove, platform, wait, repo
  * Lanza `LockFault` si el lock no se puede crear, si un lock caducado no se pudo romper en NINGÚN intento, o si el
  * camino del breaker falla por algo que no pasa esperando.
  */
-export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_MS, ceilingMs = staleAfterMs * CEILING_FACTOR, now = Date.now, wait = pauseFor(50), isAlive = processExists, create = createWithToken, remove = removeFile, platform = process.platform, report = toStderr, spent = () => false } = {}) {
+export function takeLock(lockFile, { attempts = 40, staleAfterMs = STALE_AFTER_MS, ceilingMs = defaultCeiling(staleAfterMs), now = Date.now, wait = pauseFor(50), isAlive = processExists, create = createWithToken, remove = removeFile, platform = process.platform, report = toStderr, spent = () => false } = {}) {
   const settings = { staleAfterMs, ceilingMs, now, isAlive, create, remove, platform, report, wait };
   const token = newToken();
   let held = false;

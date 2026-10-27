@@ -282,7 +282,7 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
   const allowed = through(asMain('Bash', 'npm test -- foo.spec'));
 
   check('a real-shaped Bash payload through the dispatcher is refused by this guard', decision?.hookSpecificOutput?.permissionDecision === 'deny' && decision.hookSpecificOutput.permissionDecisionReason.includes('FULL-CHAIN GUARD REFUSED'), refused.stdout.slice(0, 300) + refused.stderr.slice(0, 300));
-  check('a real-shaped PowerShell payload through the dispatcher is refused too', JSON.stringify(JSON.parse(through(asMain('PowerShell', 'npm run ci:test')).stdout.trim().split('\n').at(-1))).includes('FULL-CHAIN GUARD REFUSED'));
+  check('a real-shaped PowerShell payload through the dispatcher is refused too', through(asMain('PowerShell', 'npm run ci:test')).stdout.includes('FULL-CHAIN GUARD REFUSED'));
   check('a non-chain through the dispatcher is not refused by this guard', !allowed.stdout.includes('FULL-CHAIN GUARD REFUSED'), allowed.stdout.slice(0, 300));
 }
 

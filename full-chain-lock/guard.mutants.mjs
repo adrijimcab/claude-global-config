@@ -14,10 +14,31 @@
  * prosa española de la negativa más allá de sus acentos y una palabra.
  */
 
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { copiedPaths, importClosure } from '../mutation-proof/import-closure.mjs';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
+
+const FLEET = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SHELL_MANIFEST = 'hook-dispatch/manifests/pretooluse-shell.json';
+
+/**
+ * What the selftest RUNS without importing it: the dispatcher and every guard of the shell manifest, which it spawns
+ * through `dispatch.mjs`, with their import closures. Derived from the manifest, so a guard added to it is copied
+ * without anyone editing this list (a hand list here missed `hook-io/`, which left the baseline NOT MEASURED).
+ * @es Lo que el selftest EJECUTA sin importarlo: el dispatcher y cada guard del manifiesto de shell, con sus cierres
+ * de imports. Derivado del manifiesto: una lista a mano omitió `hook-io/` y dejó la línea base SIN MEDIR.
+ */
+function spawnedPaths() {
+  const guards = JSON.parse(readFileSync(path.join(FLEET, SHELL_MANIFEST), 'utf8')).guards.map((guard) => path.posix.join(path.posix.dirname(SHELL_MANIFEST), guard));
+  const { files, problems } = importClosure({ root: FLEET, entries: ['hook-dispatch/dispatch.mjs', ...guards] });
+
+  if (problems.length > 0) throw new Error(problems.join('\n'));
+
+  return copiedPaths(files);
+}
 
 const G = 'full-chain-lock/guard.mjs';
 const I = 'full-chain-lock/chain-invocations.mjs';
@@ -91,33 +112,8 @@ const MUTANTS = [
 ];
 
 const survivors = runMutants({
-  fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: [
-    'full-chain-lock',
-    'mutation-proof',
-    'hook-state',
-    'bilingual-output',
-    'hook-dispatch',
-    'hook-payloads',
-    'hook-caller',
-    'shell-command',
-    'cherry-pick-guard',
-    'settings.json',
-    'eval-guard',
-    'gentle-ai-sync-guard',
-    'exit-code-guard',
-    'collision-guard',
-    'commit-pathspec-guard',
-    'cwd-change-guard',
-    'vendored-edit-guard',
-    'review-cwd-guard',
-    'worker-stash-guard',
-    'worker-git-guard',
-    'shared-temp-guard',
-    'company-commit-guard',
-    'company-push-guard',
-    'shared-resource-guard'
-  ],
+  fleetRoot: FLEET,
+  paths: [SHELL_MANIFEST, 'settings.json', ...spawnedPaths()],
   selftest: 'full-chain-lock/guard.selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

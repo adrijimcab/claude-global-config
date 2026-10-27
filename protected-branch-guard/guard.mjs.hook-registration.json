@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell"
+    }
+  ],
+  "why": "the owner's rule «main y develop NUNCA se borran»: no command may delete main or develop, locally (git branch -d/-D/-m, git update-ref -d) or on a remote (git push --delete, :<branch>, +:<branch>, gh api -X DELETE .../git/refs/heads/<branch>), nor delete branches whose names cannot be read; the real layer is server-side branch protection."
+}
