@@ -36,9 +36,22 @@
  * that asks for `git switch`", "(`git reset`, `git switch -C`)") is a MENTION. Measured before this rule on the 10
  * real fixture briefs and the 28 briefs of session 8dd13422: the worker-git face refused 3 briefs, 2 of them for a
  * mention; with it, 1 (the true order) and 0 mentions. Orders it now reads as mentions, measured on the same corpus: an
- * order inside parentheses ("(`git ls-remote --tags` to find them)"), an instrument ("correct it through `node x`")
- * and a sentence wrapped onto a new line, where only the line is read. Every reference stays readable to a face about
- * what the worker RESOLVES (`referencedCommands`).
+ * instrument ("correct it through `node x`"). Every reference stays readable to a face about what the worker
+ * RESOLVES (`referencedCommands`).
+ *
+ * A CLAUSE SPANS A SOFT WRAP, AND AN ASIDE IS NOT A BOUNDARY (2026-10-27). Two orders of this session's briefs were
+ * read as mentions: "Run the selftests … of every module that imports it (find\n  importers with rg), plus
+ * `node mutation-proof/scope.mjs`" lost its cue twice, once to the line break and once to the parenthesis; and
+ * "(`git ls-remote --tags` / `--heads` to find them; …)" is an order whose clause a parenthesis opens. So:
+ *   - prose is read in UNITS: consecutive lines joined across every SOFT wrap, a line break not followed by a blank
+ *     line, a list item, a fence or a heading (a heading is one line: it ends its unit too);
+ *   - a clause a parenthesised ASIDE interrupts RESUMES after it: for a span after the aside, the aside is masked, so
+ *     its words neither order nor forbid ("Do not run (see the log) `git push`" stays a prohibition). An aside after
+ *     the span still ends the span's clause ("`git rebase x` on your branch (if any does not drop out, stop)" stays
+ *     an order). A span INSIDE the aside reads the aside;
+ *   - a span that heads a clause a parenthesis opens is an order when a PURPOSE clause follows it ("to find them",
+ *     "para verlos"): `to`/`para` followed by a word that is no determiner. A list of examples
+ *     ("(`git reset`, `git switch -C`)") carries none, and stays a mention.
  *
  * WHAT IT DOES NOT DO, stated so nobody relies on it for more: it does not parse English. A prohibition
  * phrased without any of the listed words ("rather than `git rebase`") reads as an instruction, and an
@@ -57,7 +70,12 @@
  * analiza el inglés: sus dos límites son estados nombrados del selftest. ORDEN O MENCIÓN (2026-10-27): un span que solo NOMBRA un comando es
  * MENCIÓN; medido sobre los 10 briefs reales y los 28 de la sesión 8dd13422, la cara worker-git pasó de rechazar 3
  * briefs (2 por una mención) a 1, la orden real. Lo que ahora se lee como mención siendo orden, medido: una orden entre
- * paréntesis, un instrumento («corrígelo con `node x`») y una frase partida en otra línea. SIN REGEX.
+ * paréntesis, un instrumento («corrígelo con `node x`») y una frase partida en otra línea. LA CLÁUSULA CRUZA EL SALTO
+ * BLANDO Y UN INCISO NO LA CORTA (2026-10-27): la prosa se lee en UNIDADES unidas por cada salto de línea no seguido de
+ * línea en blanco, ítem de lista, cerca o encabezado; la cláusula que un inciso interrumpe se REANUDA tras él (para un
+ * span posterior, el inciso ni ordena ni prohíbe; uno posterior al span sigue cerrando su cláusula); y un span que encabeza una cláusula abierta por un
+ * paréntesis es orden si lo sigue una cláusula de PROPÓSITO («to find them», «para verlos»). Queda como mención el
+ * instrumento. SIN REGEX.
  */
 
 import { simpleCommands } from '../shell-command/shell-command.mjs';
@@ -96,6 +114,29 @@ export const ORDER_CUES = new Set([
 
 /** Characters that end a clause. The comma is deliberately absent. @es Caracteres que cierran una cláusula; la coma no. */
 const CLAUSE_BOUNDARIES = '.;:()!?';
+
+/**
+ * Words that open a PURPOSE clause after a span inside parentheses ("(`git ls-remote` to find them)"), when the word
+ * after them is no `DETERMINERS` word. @es Palabras que abren una cláusula de PROPÓSITO tras un span entre paréntesis.
+ */
+export const PURPOSE_MARKERS = new Set(['to', 'para']);
+
+/**
+ * Words after a purpose marker that show a noun phrase, not a verb: "(`git reset` to the last commit)" names a target.
+ * @es Palabras tras un marcador de propósito que muestran un sintagma nominal, no un verbo.
+ */
+export const DETERMINERS = new Set([
+  'the', 'a', 'an', 'this', 'that', 'these', 'those', 'its', 'their', 'your', 'our', 'my', 'his', 'her',
+  'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'su', 'sus', 'este', 'esta', 'ese', 'esa'
+]);
+
+/** Markers that open a bulleted list item. @es Marcas que abren un ítem de lista con viñeta. */
+const BULLETS = ['- ', '* ', '+ '];
+
+/** What follows the digits of a numbered list item. @es Lo que sigue a los dígitos de un ítem numerado. */
+const NUMBERED = ['. ', ') '];
+
+const HEADING = '#';
 
 const BACKTICK = '`';
 const FENCE = '```';
@@ -212,31 +253,84 @@ export function clauseAround(masked, start, end) {
 }
 
 /**
+ * The parenthesised asides of a masked line, parentheses included: each `(` to the next `)`. An unclosed one is no
+ * aside. @es Los incisos entre paréntesis de una línea enmascarada, cada `(` hasta el siguiente `)`.
+ */
+function asideRanges(masked) {
+  const ranges = [];
+  let start = masked.indexOf('(');
+
+  while (start !== -1) {
+    const end = masked.indexOf(')', start + 1);
+
+    if (end === -1) break;
+
+    ranges.push({ start, end });
+    start = masked.indexOf('(', end + 1);
+  }
+
+  return ranges;
+}
+
+/**
+ * The prose a span at `index` is read in: the line with every aside that CLOSES before the span masked, so the clause
+ * an aside interrupted RESUMES after it ("Run the selftests (find importers with rg), plus `node x`"), and that
+ * aside's words neither order nor forbid it. The aside that HOLDS the span is not masked, so its `(` still opens the
+ * span's clause; and an aside AFTER the span still ends that clause, as before: measured 2026-10-27 on the 33 briefs of
+ * session 8dd13422, masking it too let an unrelated "— never …" after the aside forbid 5 references
+ * ("`node capture.mjs supersede` (read its usage) — never hand-edit a ledger").
+ * @es La prosa en la que se lee un span: la línea con cada inciso que CIERRA antes del span enmascarado, para que la
+ * cláusula que interrumpió se REANUDE tras él sin que sus palabras ordenen ni prohíban. El inciso que CONTIENE el span
+ * no se enmascara (su `(` sigue abriendo la cláusula), y uno POSTERIOR sigue cerrándola: enmascararlo dejaba que un
+ * «— never …» ajeno prohibiera 5 referencias de los 33 briefs de la sesión.
+ */
+export const governingProse = (prose, index) => maskRanges(prose, asideRanges(prose).filter(({ end }) => end < index));
+
+/**
+ * True when the words after a span, to the end of its clause, open a purpose clause: a `PURPOSE_MARKERS` word followed
+ * by one that is no determiner ("to find them", never "to the last commit"). Spans and list separators between are no
+ * words. @es Verdadero si las palabras tras un span abren una cláusula de propósito.
+ */
+function opensPurpose(prose, end) {
+  let to = end + 1;
+
+  while (to < prose.length && !CLAUSE_BOUNDARIES.includes(prose.charAt(to))) to += 1;
+
+  const [marker, next] = proseWords(prose.slice(end + 1, to));
+
+  return PURPOSE_MARKERS.has(marker) && next !== undefined && !DETERMINERS.has(next);
+}
+
+/**
  * How each code span of a line reads, ORDER or MENTION, decided on the prose of the line (`spans` in line order). A
  * span is an order when:
  *   - the span before it in its clause is an order (a list: "Verify: `a`, `b` and `c`" are all orders);
  *   - otherwise, an `ORDER_CUES` word stands before it in its clause, or in the clause a colon opens it with;
  *   - otherwise, it HEADS its clause (nothing but layout, punctuation or earlier spans before it: "`git rebase x` on
  *     your branch", "Undo it: `git checkout -- a`"), unless that clause was opened by a parenthesis, which makes it
- *     an aside or a list of examples ("detects ref-moving commands (`git reset`, `git switch -C`)").
+ *     an aside or a list of examples ("detects ref-moving commands (`git reset`, `git switch -C`)") — except when a
+ *     PURPOSE clause follows it there ("(`git ls-remote --tags` to find them)").
+ * Each span is read in its `governingProse`: an aside around it is masked away, an aside holding it is its world.
  * Anything else is a MENTION: a command the brief describes ("I saved them with `git update-ref x`", "a brief that
  * asks for `git switch`"). Quoted spans are left out before this is asked, and read nothing.
  * @es Cómo se lee cada span de una línea, ORDEN o MENCIÓN. Es orden si un span anterior de su cláusula ya se leyó (una
  * lista), si una palabra de `ORDER_CUES` está antes de él en su cláusula o en la que la abre con dos puntos, o si
- * ENCABEZA su cláusula, salvo que la abra un paréntesis (un inciso o una lista de ejemplos). Lo demás es MENCIÓN: un
- * comando que el brief describe.
+ * ENCABEZA su cláusula, salvo que la abra un paréntesis (un inciso o una lista de ejemplos) sin cláusula de propósito
+ * detrás. Lo demás es MENCIÓN: un comando que el brief describe. Cada span se lee en su `governingProse`.
  * @returns {Map<number, boolean>} span start to `true` for an order. @es inicio del span a `true` si es orden.
  */
 export function spanReadings(prose, spans) {
   const readings = new Map();
   let previous;
 
-  for (const { start } of spans) {
-    const from = clauseStart(prose, start);
-    const own = proseWords(prose.slice(from, start));
-    const lead = from > 0 && prose.charAt(from - 1) === ':' ? proseWords(prose.slice(clauseStart(prose, from - 1), from - 1)) : [];
+  for (const { start, end } of spans) {
+    const text = governingProse(prose, start);
+    const from = clauseStart(text, start);
+    const own = proseWords(text.slice(from, start));
+    const lead = from > 0 && text.charAt(from - 1) === ':' ? proseWords(text.slice(clauseStart(text, from - 1), from - 1)) : [];
     const continuesAnOrder = previous !== undefined && previous.from === from && previous.order;
-    const order = continuesAnOrder || [...own, ...lead].some((word) => ORDER_CUES.has(word)) || (own.length === 0 && prose.charAt(from - 1) !== '(');
+    const heads = own.length === 0 && (text.charAt(from - 1) !== '(' || opensPurpose(text, end));
+    const order = continuesAnOrder || [...own, ...lead].some((word) => ORDER_CUES.has(word)) || heads;
 
     readings.set(start, order);
     previous = { from, order };
@@ -272,6 +366,77 @@ function commandsOf(script) {
   }
 }
 
+/** True when a trimmed line opens a list item. @es Verdadero si una línea recortada abre un ítem de lista. */
+function opensListItem(trimmed) {
+  if (BULLETS.some((bullet) => trimmed.startsWith(bullet))) return true;
+
+  const digits = [...trimmed].findIndex((character) => !'0123456789'.includes(character));
+
+  return digits > 0 && NUMBERED.some((marker) => trimmed.slice(digits).startsWith(marker));
+}
+
+/**
+ * The brief as the blocks it is read in, in order: `{ kind: 'fence' }` for a fence line, `{ kind: 'fenced', lineNumber,
+ * line }` for a line inside a fence, and `{ kind: 'prose', text, lines }` for a UNIT of prose: consecutive lines joined
+ * by one space across every SOFT wrap, a line break not followed by a blank line, a list item, a fence or a heading. A
+ * heading is one line, so it ends its unit too. `lines` are `{ offset, lineNumber, line }`: where each physical line
+ * begins in `text`. @es El brief como los bloques en que se lee: líneas de cerca, líneas cercadas y UNIDADES de prosa,
+ * líneas unidas por un espacio a través de cada salto BLANDO (no seguido de línea en blanco, ítem de lista, cerca o
+ * encabezado).
+ */
+export function blocksOf(text) {
+  const blocks = [];
+  let unit;
+  let fenced = false;
+  const close = () => {
+    if (unit !== undefined) blocks.push(unit);
+
+    unit = undefined;
+  };
+
+  text.split('\n').forEach((rawLine, index) => {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+    const lineNumber = index + 1;
+
+    if (trimmed.startsWith(FENCE)) {
+      close();
+      blocks.push({ kind: 'fence', lineNumber, line });
+      fenced = !fenced;
+
+      return;
+    }
+
+    if (fenced) {
+      blocks.push({ kind: 'fenced', lineNumber, line });
+
+      return;
+    }
+
+    if (trimmed.length === 0) {
+      close();
+
+      return;
+    }
+
+    if (unit === undefined || opensListItem(trimmed) || trimmed.startsWith(HEADING)) {
+      close();
+      unit = { kind: 'prose', text: line, lines: [{ offset: 0, lineNumber, line }] };
+    } else {
+      unit.lines.push({ offset: unit.text.length + 1, lineNumber, line });
+      unit.text = `${unit.text} ${trimmed}`;
+    }
+
+    if (trimmed.startsWith(HEADING)) close();
+  });
+  close();
+
+  return blocks;
+}
+
+/** The physical line of a unit that holds `index`. @es La línea física de una unidad que contiene `index`. */
+const lineAt = (unit, index) => unit.lines.findLast(({ offset }) => offset <= index);
+
 /**
  * Every command the brief REFERS to outside a quotation and a prohibition: `{ lineNumber, line, via, order, script,
  * commands }`, where `order` says whether the brief directs the worker to run it (`spanReadings`; a fenced block and
@@ -285,47 +450,49 @@ function commandsOf(script) {
  */
 export function referencedCommands(text) {
   const instructions = [];
-  const lines = text.split('\n').map((line) => line.trimEnd());
   let fenceIntroducedByProhibition;
   let lastProse = '';
 
-  lines.forEach((line, index) => {
-    const lineNumber = index + 1;
-
-    if (line.trim().startsWith(FENCE)) {
+  for (const block of blocksOf(text)) {
+    if (block.kind === 'fence') {
       fenceIntroducedByProhibition = fenceIntroducedByProhibition === undefined ? isProhibition(lastProse) : undefined;
 
-      return;
+      continue;
     }
 
-    if (fenceIntroducedByProhibition !== undefined) {
+    if (block.kind === 'fenced') {
+      const { lineNumber, line } = block;
+
       if (!fenceIntroducedByProhibition && line.trim().length > 0) instructions.push({ lineNumber, line, via: 'fenced block', order: true, script: line, commands: commandsOf(line) });
 
-      return;
+      continue;
     }
 
-    if (line.trim().length > 0) lastProse = line;
+    lastProse = block.text;
 
-    const spans = codeSpans(line);
+    const spans = codeSpans(block.text);
 
     if (spans.length === 0) {
-      const command = imperativeCommand(line);
+      const command = imperativeCommand(block.text);
+      const { lineNumber, line } = block.lines[0];
 
       if (command !== undefined && command.length > 0) instructions.push({ lineNumber, line, via: 'imperative line', order: true, script: command, commands: commandsOf(command) });
 
-      return;
+      continue;
     }
 
-    const { quotes, prose } = readLine(line, spans);
+    const { quotes, prose } = readLine(block.text, spans);
     const unquoted = spans.filter((span) => !isInside(quotes, span.start));
     const orders = spanReadings(prose, unquoted);
 
     for (const span of unquoted) {
-      if (isProhibition(clauseAround(prose, span.start, span.end))) continue;
+      if (isProhibition(clauseAround(governingProse(prose, span.start), span.start, span.end))) continue;
+
+      const { lineNumber, line } = lineAt(block, span.start);
 
       instructions.push({ lineNumber, line, via: 'code span', order: orders.get(span.start), script: span.content, commands: commandsOf(span.content) });
     }
-  });
+  }
 
   return instructions;
 }
@@ -338,28 +505,30 @@ export const instructedCommands = (text) => referencedCommands(text).filter((ref
 
 /**
  * Every line on which `word` appears — in a code span or in prose, never inside a quotation — in a clause
- * with no prohibition: a tool the brief tells its reader to CALL, such as `EnterWorktree`.
- * `{ lineNumber, line }`.
- * @es Cada línea donde `word` aparece en una cláusula sin prohibición: una herramienta que el brief manda LLAMAR.
+ * with no prohibition: a tool the brief tells its reader to CALL, such as `EnterWorktree`. The clause is read in
+ * its prose unit (`blocksOf`), so a prohibition wrapped onto the line before still governs it; a unit yields one
+ * mention at most. `{ lineNumber, line }`.
+ * @es Cada línea donde `word` aparece en una cláusula sin prohibición: una herramienta que el brief manda LLAMAR. La
+ * cláusula se lee en su unidad de prosa, así que una prohibición partida en la línea anterior la sigue gobernando.
  */
 export function instructedMentions(text, word) {
   const mentions = [];
 
-  text.split('\n').forEach((rawLine, index) => {
-    const line = rawLine.trimEnd();
-    const { quotes, prose } = readLine(line, codeSpans(line));
-    let at = line.indexOf(word);
+  for (const unit of blocksOf(text).filter((block) => block.kind === 'prose')) {
+    const { quotes, prose } = readLine(unit.text, codeSpans(unit.text));
+    let at = unit.text.indexOf(word);
 
     while (at !== -1) {
-      if (!isInside(quotes, at) && !isProhibition(clauseAround(prose, at, at + word.length - 1))) {
-        mentions.push({ lineNumber: index + 1, line });
+      if (!isInside(quotes, at) && !isProhibition(clauseAround(governingProse(prose, at), at, at + word.length - 1))) {
+        const { lineNumber, line } = lineAt(unit, at);
 
-        return;
+        mentions.push({ lineNumber, line });
+        break;
       }
 
-      at = line.indexOf(word, at + word.length);
+      at = unit.text.indexOf(word, at + word.length);
     }
-  });
+  }
 
   return mentions;
 }
