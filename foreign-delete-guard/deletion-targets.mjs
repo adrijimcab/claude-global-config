@@ -213,15 +213,27 @@ function findTargets(args, directory, dialect, platform) {
 }
 
 /**
- * The entry of a `cmd /c ...` command that runs a remover while its text holds a backslash. The shared parser reads
- * the script of a nested `cmd /c` with bash escapes, so every backslash of a Windows path in it is eaten before
- * this module sees the path (`del C:\a\b\*.mjs` arrives as `C:ab*.mjs`) and the deletion cannot be located. That
- * grammar belongs to the vendored parser's owner; until it is fixed at the source such a deletion is refused as
- * unresolvable instead of judged on a wrong path.
- * @es La entrada de un `cmd /c ...` que ejecuta un borrador y cuyo texto lleva una barra invertida. El parser
- * compartido lee el script de un `cmd /c` anidado con escapes de bash y se come las barras de una ruta de Windows
- * antes de que este módulo la vea; esa gramática es del dueño del parser vendorizado, y mientras no se arregle en
- * origen el borrado se rechaza como no resoluble en vez de juzgarse sobre una ruta falsa.
+ * The entries of a `cmd /c ...` command (or `/k`, or Git Bash's `//c` and `//k`) that runs a remover.
+ *
+ * IN CMD'S GRAMMAR, NOT THE OUTER LINE'S. The shared parser lists the script's commands as nested commands, but
+ * reads them in the grammar of the line around them, and a PowerShell line reads `del -WhatIf x` as Remove-Item's
+ * dry run (`del` is its alias there) while cmd's own `del` deletes `x`. So the script is read here once more, in
+ * the grammar of cmd's builtins: operands and slash flags, no PowerShell parameter, which is this module's bash
+ * reading. Both readings of one place are one target (`distinctTargets`).
+ *
+ * A BACKSLASH. The shared parser reads the script with bash escapes, so every backslash of a Windows path in it is
+ * eaten before this module sees the path (`del C:\a\b\*.mjs` arrives as `C:ab*.mjs`) and the deletion cannot be
+ * located. That grammar belongs to the vendored parser's owner; until it is fixed at the source such a deletion is
+ * refused as unresolvable instead of judged on a wrong path.
+ * @es Las entradas de un `cmd /c ...` (o `/k`, o el `//c` y `//k` de Git Bash) que ejecuta un borrador. EN LA
+ * GRAMÁTICA DE CMD, NO EN LA DE LA LÍNEA: el parser compartido lista los comandos del script como anidados, pero los
+ * lee con la gramática de la línea que los rodea, y una línea de PowerShell lee `del -WhatIf x` como la prueba en seco
+ * de Remove-Item (allí `del` es su alias) mientras el `del` de cmd borra `x`; por eso el script se vuelve a leer
+ * aquí con la gramática de las órdenes de cmd (operandos y banderas con barra, sin parámetros de PowerShell), que es
+ * la lectura bash de este módulo, y las dos lecturas de un mismo lugar son un solo objetivo. UNA BARRA INVERTIDA: el
+ * parser lee el script con escapes de bash y se come las barras de una ruta de Windows antes de que este módulo la
+ * vea; esa gramática es del dueño del parser vendorizado, y mientras no se arregle en origen el borrado se rechaza
+ * como no resoluble en vez de juzgarse sobre una ruta falsa.
  */
 function cmdTargets(args, text, dialect, directory, options) {
   const flagAt = args.findIndex((word) => CMD_SCRIPT_FLAGS.includes(word.toLowerCase()));
@@ -229,11 +241,7 @@ function cmdTargets(args, text, dialect, directory, options) {
 
   if (flagAt === -1 || !runsRemover(script, dialect)) return [];
   if (text.includes('\\')) return [{ path: undefined, unresolvable: 'backslash', via: 'cmd /c' }];
-
-  // The shared parser unwraps `/c` and `/k` itself, but not Git Bash's `//c`: that script is read here.
-  // @es El parser compartido desenvuelve `/c` y `/k`, pero no el `//c` de Git Bash: ese script se lee aquí.
-  if (!args[flagAt].startsWith('//')) return [];
-  if (directory === undefined) return [{ path: undefined, unresolvable: 'directory', via: 'cmd //c' }];
+  if (directory === undefined) return [{ path: undefined, unresolvable: 'directory', via: 'cmd /c' }];
 
   return deletionTargets(script, DIALECTS.BASH, directory, options);
 }
@@ -356,6 +364,24 @@ function gitCleanTargets(script, dialect, cwd, platform, cleanPreview) {
 }
 
 /**
+ * One entry per place: a place two readings reach (a `cmd /c` script read by the parser and by `cmdTargets`) is
+ * judged once, under the command that reached it first. An unresolvable entry is kept, each one says why.
+ * @es Una entrada por lugar: un lugar al que llegan dos lecturas se juzga una vez, con el primer comando que llegó.
+ */
+function distinctTargets(entries) {
+  const seen = new Set();
+
+  return entries.filter((entry) => {
+    if (entry.path === undefined) return true;
+    if (seen.has(entry.path)) return false;
+
+    seen.add(entry.path);
+
+    return true;
+  });
+}
+
+/**
  * @param {string} script The shell line exactly as the tool received it.
  * @param {string} dialect `bash` or `powershell`.
  * @param {string} cwd The directory the line starts in.
@@ -389,5 +415,5 @@ export function deletionTargets(script, dialect, cwd, { platform = process.platf
 
   found.push(...gitCleanTargets(script, dialect, cwd, platform, cleanPreview));
 
-  return found;
+  return distinctTargets(found);
 }

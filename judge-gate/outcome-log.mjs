@@ -1,10 +1,10 @@
 /**
  * What the gate writes down for every Stop it sees: judge, session, outcome, model cost and latency, plus the
- * reason of a block or the why of a malfunction. One JSON line per Stop under the `judge-gate` state directory,
+ * reason of a block (a shadow block too), the why of a malfunction or a non-verdict, and the cause of a fallback block. One JSON line per Stop under the `judge-gate` state directory,
  * so the cost and the latency per turn, and the rate of malfunctions, are measured instead of assumed.
  *
  * @es Lo que la compuerta anota de cada Stop: juez, sesión, desenlace, costo y latencia del modelo, y el motivo
- * de un bloqueo o el porqué de un fallo. Una línea JSON por Stop bajo el directorio de estado `judge-gate`, para
+ * de un bloqueo (también en sombra), el porqué de un fallo o de un no-veredicto, y la causa de un bloqueo de respaldo. Una línea JSON por Stop bajo el directorio de estado `judge-gate`, para
  * medir el costo y la latencia por turno y la tasa de fallos en lugar de suponerlos.
  */
 
@@ -23,8 +23,8 @@ export const outcomesPath = () => path.join(stateDir(MECHANISM), 'outcomes.jsonl
  * Appends one outcome line and returns the record.
  * @es Añade una línea de desenlace y devuelve el registro.
  */
-export function recordOutcome(judge, session, { outcome, costUsd, durationMs, reason, why, continued }) {
-  const record = { ts: new Date().toISOString(), judge, session, outcome, costUsd, durationMs, ...(reason === undefined ? {} : { reason }), ...(why === undefined ? {} : { why }), ...(continued === true ? { continued: true } : {}) };
+export function recordOutcome(judge, session, { outcome, costUsd, durationMs, reason, why, cause, continued }) {
+  const record = { ts: new Date().toISOString(), judge, session, outcome, costUsd, durationMs, ...(reason === undefined ? {} : { reason }), ...(why === undefined ? {} : { why }), ...(cause === undefined ? {} : { cause }), ...(continued === true ? { continued: true } : {}) };
 
   mkdirSync(stateDir(MECHANISM), { recursive: true });
   appendFileSync(outcomesPath(), `${JSON.stringify(record)}\n`);

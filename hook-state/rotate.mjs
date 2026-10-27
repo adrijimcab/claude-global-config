@@ -134,6 +134,7 @@ export const KINDS = Object.freeze([
   ['fleet-kit', 'repos/*/run.lock', LOCK, 'a running gate'],
   ['fleet-kit', 'repos/*/verdicts/*', KEEP, 'the gate verdicts a landing reads'],
   ['fleet-kit', 'repos/*/diff-coverage/**', ARCHIVE, 'output of past coverage runs'],
+  ['foreign-delete-guard', 'authored/*.clock', PRUNE, "an agent's file-system clock stamp, rewritten and read back at once by each of its calls", HOUR_MS],
   ['foreign-delete-guard', 'authored/*.jsonl', ARCHIVE, 'per-agent journal of the paths a delegated agent created; a rotation refuses while a session lives, so no agent is running'],
   ['full-chain-lock', 'chain.lock', LOCK, 'a full chain running under the machine-wide lock'],
   ['full-chain-lock', 'holder.json', REMOVE, 'the record of the chain that held the lock; a rotation refuses while the lock exists, so what is left is orphaned'],
