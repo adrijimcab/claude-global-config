@@ -22,7 +22,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { cachePath, INDEX_VERSION, indexTranscript } from './index.mjs';
+import { cachePath, foldTranscript, INDEX_VERSION, indexTranscript, TOOL_CALLS_FOLD } from './index.mjs';
 
 let passed = 0;
 const failures = [];
@@ -278,9 +278,22 @@ try {
   put(stale, lines([use(1, 'v1', 'Write', { file_path: 'real' })]));
   const current = run(stale).index;
   const plant = (text) => { mkdirSync(path.dirname(cachePath(stale)), { recursive: true }); writeFileSync(cachePath(stale), text); };
-  const poisoned = (changes) => plant(JSON.stringify({ ...current, writes: [{ id: 'x', tool: 'Write', path: 'POISON', timestamp: null }], ...changes }));
+  const stored = () => {
+    try {
+      return JSON.parse(readFileSync(cachePath(stale), 'utf8'));
+    } catch (error) {
+      failures.push(`the cache of a fresh index cannot be read — ${error.message}`);
+
+      return { state: { writes: [] } };
+    }
+  };
+  const real = stored();
+  const poisoned = (changes, stateChanges = {}) => plant(JSON.stringify({ ...real, state: { ...real.state, writes: [{ id: 'x', tool: 'Write', path: 'POISON', timestamp: null }], ...stateChanges }, ...changes }));
   const rebuiltPaths = () => run(stale).index.writes?.map((write) => write.path);
 
+  check('the cache holds the fold name, its version and the fold state apart from the bookkeeping', [real.fold, real.foldVersion, real.state.writes.length, real.writes], [TOOL_CALLS_FOLD.name, TOOL_CALLS_FOLD.version, 1, undefined]);
+  poisoned({});
+  check('a poisoned but well-formed cache IS trusted: the poison cases below are not vacuous', run(stale, { readBytes: NEVER }).index.writes.map((write) => write.path), ['POISON']);
   poisoned({ version: 1 });
   check('a cache written by version 1 (no head fingerprint) is rebuilt', rebuiltPaths(), ['real']);
   poisoned({ head: 7 });
@@ -291,10 +304,16 @@ try {
   check('a cache with a negative head length is rebuilt', rebuiltPaths(), ['real']);
   poisoned({ headBytes: 1.5 });
   check('a cache with a fractional head length is rebuilt', rebuiltPaths(), ['real']);
+  poisoned({ version: 2 });
+  check('a cache of version 2 (no fold, flat fields) is rebuilt', rebuiltPaths(), ['real']);
   poisoned({ version: INDEX_VERSION - 1 });
   check('a cache of an older version is rebuilt, not trusted', rebuiltPaths(), ['real']);
   poisoned({ version: INDEX_VERSION + 1 });
   check('a cache of a newer version is rebuilt too', rebuiltPaths(), ['real']);
+  poisoned({ fold: 'another-fold' });
+  check('a cache of another fold is rebuilt', rebuiltPaths(), ['real']);
+  poisoned({ foldVersion: TOOL_CALLS_FOLD.version + 1 });
+  check('a cache of another version of the fold is rebuilt', rebuiltPaths(), ['real']);
   poisoned({ path: path.resolve(other) });
   check('a cache that names another transcript is rebuilt', rebuiltPaths(), ['real']);
   poisoned({ offset: current.size + 5 });
@@ -303,15 +322,68 @@ try {
   check('a cache with a negative offset is rebuilt', rebuiltPaths(), ['real']);
   poisoned({ offset: 1.5 });
   check('a cache with a fractional offset is rebuilt', rebuiltPaths(), ['real']);
-  poisoned({ writes: undefined });
+  poisoned({}, { writes: undefined });
   check('a cache missing an array is rebuilt', rebuiltPaths(), ['real']);
-  poisoned({ shells: 'no' });
+  poisoned({}, { shells: 'no' });
   check('a cache whose shells are not an array is rebuilt', run(stale).index.shells, []);
+  poisoned({ state: null });
+  check('a cache with no fold state is rebuilt', rebuiltPaths(), ['real']);
   plant('{ not json');
   check('a corrupt cache file is rebuilt', rebuiltPaths(), ['real']);
   plant('null');
   check('a cache that is not an object is rebuilt', rebuiltPaths(), ['real']);
   check('a current cache is trusted', run(stale, { readBytes: NEVER }).mode, 'unchanged');
+
+  // --- any fold: its own cache, its own state, the line text, and the unterminated last line ---
+  // @es Cualquier pliegue: su propia caché, su propio estado, el texto de la línea y la última línea sin terminar.
+  const seen = [];
+  /** `foldTranscript`, a throw read as a checked value. @es `foldTranscript`, con un fallo leído como valor comprobado. */
+  const fold = (file, theFold, options) => {
+    try {
+      return foldTranscript(file, theFold, options);
+    } catch (error) {
+      return { mode: `threw: ${error.message}`, state: { lines: [] }, cache: { offset: -1, state: { lines: [] } } };
+    }
+  };
+  const LINES_FOLD = { name: 'lines-seen', version: 1, initial: () => ({ lines: [] }), isState: (state) => Array.isArray(state?.lines), absorb: (state, record, line) => { state.lines.push(line); seen.push(record); } };
+  const folded = freshFile();
+  put(folded, `{"a":1}\n{ "b" : 2 }\r\nnot json\n7\n{"c":`);
+  const firstFold = fold(folded, LINES_FOLD);
+  check('a fold receives every complete parsed record with its exact line, in order; the torn tail waits', [firstFold.mode, firstFold.state.lines, seen], ['rebuilt', ['{"a":1}', '{ "b" : 2 }\r', '7'], [{ a: 1 }, { b: 2 }, 7]]);
+  check('two folds of one transcript keep two caches', cachePath(folded, LINES_FOLD) === cachePath(folded), false);
+  check('a second fold of the same transcript starts from its own initial state', run(folded).index.records, 2);
+  check('an unchanged transcript under a fold reads nothing and absorbs nothing', [fold(folded, LINES_FOLD, { readBytes: NEVER }).mode, seen.length], ['unchanged', 3]);
+  check('a tail that does not parse yet is not absorbed even when asked', fold(folded, LINES_FOLD, { unterminated: true }).state.lines.length, 3);
+  add(folded, '3}');
+  const withTail = fold(folded, LINES_FOLD, { unterminated: true });
+  check('unterminated: a last line that parses is absorbed into this answer', withTail.state.lines.at(-1), '{"c":3}');
+  check('unterminated: the copy is not the cached state, which never holds the tail', withTail.cache.state.lines.length, 3);
+  check('unterminated: the cache never holds it, the offset waits before it', [(() => { try { return JSON.parse(readFileSync(cachePath(folded, LINES_FOLD), 'utf8')).state.lines.length; } catch { return 'no cache on disk'; } })(), withTail.cache.offset], [3, Buffer.byteLength(readFileSync(folded)) - 7]);
+  check('unterminated: an answer without the option ignores the tail', fold(folded, LINES_FOLD, { readBytes: NEVER }).state.lines.length, 3);
+  const tailBytes = [];
+  fold(folded, LINES_FOLD, { unterminated: true, onRead: (bytes) => tailBytes.push(bytes) });
+  check('unterminated on an unchanged file reads exactly the tail bytes', tailBytes.reduce((sum, bytes) => sum + bytes, 0), 7);
+  add(folded, '\n');
+  const complete = freshFile();
+  put(complete, '{"z":1}\n');
+  fold(complete, LINES_FOLD);
+  check('unterminated on a file that ends in a newline reads nothing at all', fold(complete, LINES_FOLD, { unterminated: true, readBytes: NEVER }).mode, 'unchanged');
+  check('the completed line is absorbed once into the cache', fold(folded, LINES_FOLD, { unterminated: true }).state.lines, ['{"a":1}', '{ "b" : 2 }\r', '7', '{"c":3}']);
+
+  // --- a state directory that cannot be written costs a rebuild, never the answer ---
+  // @es Un directorio de estado que no se puede escribir cuesta una reconstrucción, nunca la respuesta.
+  {
+    const unwritable = freshFile();
+    put(unwritable, lines([use(1, 'q1', 'Write', { file_path: 'kept' })]));
+    const realState = process.env.HOOK_STATE_DIR;
+    const blocker = path.join(scratch, 'state-is-a-file');
+    writeFileSync(blocker, 'x');
+    process.env.HOOK_STATE_DIR = blocker;
+    const blocked = (() => { try { return indexTranscript(unwritable); } catch (error) { return { mode: `threw: ${error.message}`, index: { writes: [] } }; } })();
+    const blockedAgain = (() => { try { return indexTranscript(unwritable).mode; } catch (error) { return `threw: ${error.message}`; } })();
+    process.env.HOOK_STATE_DIR = realState;
+    check('an unwritable cache still answers, and the next call rebuilds', [blocked.mode, blocked.index.writes.map((entry) => entry.path), blockedAgain], ['rebuilt', ['kept'], 'rebuilt']);
+  }
 
   // --- bad arguments speak both languages ---
   const missing = thrownBy(() => indexTranscript(path.join(scratch, 'nowhere.jsonl')));
