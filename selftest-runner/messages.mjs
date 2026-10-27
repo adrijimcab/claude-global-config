@@ -64,6 +64,18 @@ export const MESSAGES = {
     en: '{path} no longer differs from the index: the selftest reverted or staged it',
     es: '{path} ya no difiere del índice: el selftest lo revirtió o lo preparó'
   },
+  'escape-checkout-added': {
+    en: '{path} added to the main checkout of the worktree under test: the selftest wrote outside its own tree',
+    es: '{path} añadido al checkout principal del worktree bajo prueba: el selftest escribió fuera de su propio árbol'
+  },
+  'escape-checkout-changed': {
+    en: '{path} changed in the main checkout of the worktree under test: the selftest wrote outside its own tree',
+    es: '{path} cambiado en el checkout principal del worktree bajo prueba: el selftest escribió fuera de su propio árbol'
+  },
+  'escape-checkout-removed': {
+    en: '{path} no longer differs from the index of the main checkout of the worktree under test',
+    es: '{path} ya no difiere del índice del checkout principal del worktree bajo prueba'
+  },
   'tree-unreadable': {
     en: 'Cannot read git status of the tree {tree} around {selftest}: {reason}. Nothing after it was measured.',
     es: 'No se puede leer el git status del árbol {tree} en torno a {selftest}: {reason}. No se midió nada después.'

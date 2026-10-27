@@ -29,7 +29,8 @@
  *
  * THE LEAK VERDICT (`sandbox-verdict.mjs`) looks only at what no other process writes: anything left in the
  * sandbox home (a module that bypassed the state seam), anything left in the private temp directory, and any
- * change to the tree's `git status` across the selftest. Any of them turns the selftest RED whatever its exit,
+ * change to the tree's `git status` across the selftest, and, when the tree is a linked worktree, any change to its
+ * MAIN checkout's `git status`. Any of them turns the selftest RED whatever its exit,
  * each path named. The real home is not watched, so a live session writing it during a run cannot make the run
  * red. A tree git cannot read stops the run, exit 2: no later selftest could be judged.
  *
@@ -45,7 +46,8 @@
  * selftest que necesita leer el árbol lo lee de ahí, nunca por `homedir()`. Un selftest de proyecto que importa
  * un módulo COMPARTIDO de la flota lo resuelve desde `SELFTEST_FLEET`, de solo lectura. EL VEREDICTO DE FUGAS
  * (`sandbox-verdict.mjs`) mira solo lo que ningún otro proceso escribe: lo que quede en el home del sandbox, lo
- * que quede en el temporal privado y cualquier cambio del `git status` del árbol; cualquiera pone el selftest
+ * que quede en el temporal privado, cualquier cambio del `git status` del árbol y, si el árbol es un worktree
+ * enlazado, de su checkout PRINCIPAL; cualquiera pone el selftest
  * ROJO, sea cual sea su salida, con cada ruta. El home real no se vigila, así una sesión viva que lo escriba no
  * puede poner roja la corrida. Un árbol que git no puede leer detiene la corrida con 2.
  */
@@ -61,7 +63,7 @@ import { MESSAGES } from './messages.mjs';
 import { createSandbox, removeSandbox, sandboxEnv } from './sandbox.mjs';
 import { escapesOf } from './sandbox-verdict.mjs';
 import { writeLineSync } from './stream.mjs';
-import { TreeStatusError, treeStatus } from './tree-status.mjs';
+import { TreeStatusError, mainCheckoutOf, treeStatus } from './tree-status.mjs';
 
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 const EXIT_GREEN = 0;
@@ -83,11 +85,14 @@ function runOne({ root, gitDir, entry, timeoutMs, spawn }) {
   const sandbox = createSandbox();
 
   try {
+    const mainCheckout = mainCheckoutOf(root);
     const treeBefore = treeStatus(root);
+    const checkoutBefore = mainCheckout === undefined ? undefined : treeStatus(mainCheckout);
     const failure = exitOf({ root, entry, timeoutMs, spawn, env: sandboxEnv(sandbox, { base: process.env, tree: root, gitDir }) });
     const treeAfter = treeStatus(root);
+    const checkout = mainCheckout === undefined ? undefined : { top: mainCheckout, before: checkoutBefore, after: treeStatus(mainCheckout) };
 
-    return { failure, escapes: escapesOf({ sandbox, tree: root, treeBefore, treeAfter }) };
+    return { failure, escapes: escapesOf({ sandbox, tree: root, treeBefore, treeAfter, checkout }) };
   } finally {
     removeSandbox(sandbox);
   }

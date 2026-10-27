@@ -7,7 +7,10 @@
  *     `~/.claude` removed is a write too;
  *   - its private temp directory: anything still there after the child exited is a leftover, named `$TMP/<path>`;
  *   - the tree under test: a path `git status` lists after the selftest and not before, or lists differently, or
- *     no longer lists (`tree-status.mjs`), named by its absolute path.
+ *     no longer lists (`tree-status.mjs`), named by its absolute path;
+ *   - the MAIN checkout, when the tree under test is a linked worktree of it: the same `git status` comparison, so a
+ *     selftest run in a worktree that writes its main checkout is named there (measured 2026-10-27: a fixture that
+ *     appended to a tracked file and created a file in the main checkout read GREEN before this area existed).
  * A directory is named only when it is empty; otherwise its contents are, so each path says what was written.
  *
  * WHAT IT CANNOT TELL: a write that left no trace by the time the child exited (created and removed), a write
@@ -23,7 +26,10 @@
  * lista después y no antes, distinta, o que ya no lista, por su ruta absoluta). Un directorio solo se nombra si
  * está vacío; si no, su contenido. NO PUEDE SABER de una escritura que no dejó rastro al salir el hijo, de una
  * fuera de esos sitios (ruta ignorada del árbol, ruta absoluta fija) ni, si el árbol bajo prueba ES un home vivo,
- * de un fichero seguido que una sesión viva edite durante el selftest.
+ * de un fichero seguido que una sesión viva edite durante el selftest. Si el árbol es un worktree enlazado, también
+ * su checkout PRINCIPAL, con la misma comparación de `git status` (medido el 2026-10-27: un fixture que escribía el
+ * checkout principal salía VERDE antes de esta área). Igual que con un home vivo, una sesión que edite un fichero
+ * seguido del checkout principal durante el selftest no se distingue de él.
  */
 
 import { lstatSync, readdirSync } from 'node:fs';
@@ -68,14 +74,17 @@ function tempEscapes(sandbox) {
   return leavesUnder(sandbox.temp).map((relative) => ({ area: 'temp', change: 'created', path: `$TMP/${relative}` }));
 }
 
-/**
- * Every escape of one selftest: `{ area, change, path }` with `area` one of `home`, `temp`, `tree`, in that
- * order, each area sorted by path.
- * @es Cada fuga de un selftest: `{ area, change, path }`, por áreas `home`, `temp`, `tree` en ese orden, y
- * cada área ordenada por ruta.
- */
-export function escapesOf({ sandbox, tree, treeBefore, treeAfter }) {
-  const inTree = treeChanges(treeBefore, treeAfter).map(({ path: relative, change }) => ({ area: 'tree', change, path: path.join(tree, relative) }));
+/** The `git status` changes of one checkout as escapes of `area`, named absolute. @es Los cambios de `git status` de un checkout como fugas de `area`. */
+const statusEscapes = (area, top, before, after) => treeChanges(before, after).map(({ path: relative, change }) => ({ area, change, path: path.join(top, relative) }));
 
-  return [...homeEscapes(sandbox), ...tempEscapes(sandbox), ...inTree];
+/**
+ * Every escape of one selftest: `{ area, change, path }` with `area` one of `home`, `temp`, `tree`, `checkout`, in
+ * that order, each area sorted by path. `checkout` is present only when the tree has a main checkout of its own.
+ * @es Cada fuga de un selftest: `{ area, change, path }`, por áreas `home`, `temp`, `tree`, `checkout` en ese orden,
+ * y cada área ordenada por ruta. `checkout` solo existe si el árbol tiene un checkout principal propio.
+ */
+export function escapesOf({ sandbox, tree, treeBefore, treeAfter, checkout }) {
+  const inCheckout = checkout === undefined ? [] : statusEscapes('checkout', checkout.top, checkout.before, checkout.after);
+
+  return [...homeEscapes(sandbox), ...tempEscapes(sandbox), ...statusEscapes('tree', tree, treeBefore, treeAfter), ...inCheckout];
 }
