@@ -830,7 +830,12 @@ check('pathspecCommitCommand stages then commits only the named paths, quoted, a
 
   check('liveAgentWrites includes the live agent, with its session and what it wrote', texts.get('agent-live'), { session: 's-live', subagent: true, live: true, writes: ['c:/fake/live.ts'], windows: [{ start: Date.parse('2026-10-01T00:00:01.000Z'), command: '', end: Date.parse('2026-10-01T00:00:03.000Z'), failed: false }] });
   check('liveAgentWrites keeps a FINISHED subagent within the horizon, marked not live, with what it wrote', texts.get('agent-dead'), { session: 's-dead', subagent: true, live: false, writes: ['c:/fake/dead.ts'], windows: [] });
-  check('a finished subagent\'s shell call that never returned ends where its transcript ends, not now', texts.get('agent-cut-off')?.windows, [{ start: Date.parse('2026-10-01T00:00:01.000Z'), command: '', failed: false, end: now - 60 * 60 * 1000 }]);
+  // The END is the transcript's mtime AS THE FILESYSTEM REPORTS IT, never the value handed to `utimesSync`: utimes
+  // takes seconds as a float and the read-back `mtimeMs` can differ in the last bit (measured 2026-10-27:
+  // 1793056848101.999 for a write of ...102), which is the module reading the real mtime correctly.
+  // @es El FIN es el mtime del transcript tal como lo da el sistema de ficheros, nunca el valor pasado a `utimesSync`.
+  check('a finished subagent\'s shell call that never returned ends where its transcript ends, not now', texts.get('agent-cut-off')?.windows, [{ start: Date.parse('2026-10-01T00:00:01.000Z'), command: '', failed: false, end: statSync(cutOff).mtimeMs }]);
+  check('...and that end is the backdated hour, not now', Math.abs(statSync(cutOff).mtimeMs - (now - 60 * 60 * 1000)) < 1, true);
   check('liveAgentWrites EXCLUDES a finished subagent past the horizon', texts.has('agent-ancient'), false);
   check('liveAgentWrites EXCLUDES a stopped MAIN transcript: the horizon is for workers only', texts.has('main-dead'), false);
   check('the finished subagent window is exactly six hours', FINISHED_HORIZON_MS, 6 * 60 * 60 * 1000);
