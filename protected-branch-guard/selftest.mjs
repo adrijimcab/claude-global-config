@@ -19,6 +19,8 @@
  *     `origin/main` with `-r`, `:feature/main`, a rename TO main, `git push origin main`, `git branch main`,
  *     `git checkout main`, a `gh api` GET, `gh api -X DELETE` of another resource, `git update-ref refs/heads/main x`.
  *   - DATA: `echo`, a quoted commit message, a heredoc body, a comment.
+ *   - THE DEFAULT BRANCH: on a clone whose origin HEAD is master, master is refused and feature/master passes; an
+ *     unreadable origin HEAD still protects main/develop; git is asked lazily, once per directory and remote.
  *   - THE OUTPUT: `deny`, bilingual with accents, the owner's rule, every offender, server-side protection named;
  *     fails open on a throwing decision, a non-shell tool, malformed JSON; the real process via stdin.
  *
@@ -36,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { messageProblems } from '../bilingual-output/message.mjs';
 import { payloadFor } from '../hook-payloads/payloads.mjs';
 import { protectedBranchDeletions } from './branch-deletions.mjs';
+import { gitDefaultBranch } from './default-branch.mjs';
 import { evaluate } from './guard.mjs';
 import { MESSAGES } from './refusal.mjs';
 
@@ -170,6 +173,82 @@ expect('deny', 'git status; gh api -X DELETE repos/o/r/git/refs/heads/main', 'Po
   check('a rename of the current branch in a directory that cannot be followed is unknowable', protectedBranchDeletions('cd "$D" && git branch -m x', 'bash', '/a', { currentBranchOf: () => undefined })[0]?.unknowable === 'current-branch');
 }
 
+// --- THE DEFAULT BRANCH joins the pair, read from git, lazily -----------------------------------------------
+{
+  const origin = path.join(SCRATCH, 'origin.git');
+  const seed = path.join(SCRATCH, 'seed');
+  const clone = path.join(SCRATCH, 'clone');
+  const bare = path.join(SCRATCH, 'no-origin');
+
+  mkdirSync(seed);
+  git(seed, 'init', '--quiet', '--initial-branch=master');
+  git(seed, 'config', 'user.email', 'selftest@example.invalid');
+  git(seed, 'config', 'user.name', 'selftest');
+  writeFileSync(path.join(seed, 'f.txt'), 'one\n');
+  git(seed, 'add', 'f.txt');
+  git(seed, 'commit', '--quiet', '-m', 'initial');
+  git(SCRATCH, 'clone', '--quiet', '--bare', seed, origin);
+  git(SCRATCH, 'clone', '--quiet', origin, clone);
+  mkdirSync(bare);
+  git(bare, 'init', '--quiet', '--initial-branch=master');
+
+  check('premise: a clone records its origin HEAD, and it names master', gitDefaultBranch(clone, 'origin') === 'master');
+  git(SCRATCH, 'clone', '--quiet', origin, path.join(SCRATCH, 'undefined'));
+
+  const startedIn = process.cwd();
+
+  process.chdir(SCRATCH);
+  check('an unknowable directory has no default branch (git is not asked of a directory named "undefined")', gitDefaultBranch(undefined, 'origin') === undefined);
+  process.chdir(startedIn);
+  check('a repository without an origin HEAD has no default branch', gitDefaultBranch(bare, 'origin') === undefined);
+  git(clone, 'remote', 'add', 'upstream', origin);
+  git(clone, 'fetch', '--quiet', 'upstream');
+  git(clone, 'remote', 'set-head', 'upstream', 'master');
+  git(clone, 'remote', 'set-head', 'origin', '--delete');
+  git(clone, 'remote', 'add', 'mirror', origin);
+  check('the HEAD of the remote asked is read, not origin\'s', gitDefaultBranch(clone, 'upstream') === 'master' && gitDefaultBranch(clone, 'origin') === undefined);
+  check('a remote with no HEAD has no default branch', gitDefaultBranch(clone, 'mirror') === undefined);
+  git(clone, 'remote', 'set-head', 'origin', 'master');
+
+  const at = (directory, command) => verdictOf(call('Bash', command, directory));
+
+  check('deny: deleting master where origin HEAD is master', at(clone, 'git branch -D master') === 'deny');
+  check('deny: pushing the deletion of master to that origin', at(clone, 'git push origin --delete master') === 'deny');
+  check('deny: an empty-source refspec onto refs/heads/master', at(clone, 'git push origin :refs/heads/master') === 'deny');
+  check('deny: renaming master away', at(clone, 'git branch -m master trunk') === 'deny');
+  check('deny: git -C into that clone from elsewhere', at(SCRATCH, `git -C ${clone} branch -D master`) === 'deny');
+  check('allow: deleting feature/master there', at(clone, 'git branch -D feature/master') === undefined);
+  check('allow: deleting master-fix there', at(clone, 'git push origin --delete master-fix') === undefined);
+  check('allow: deleting master where no origin HEAD can be read', at(bare, 'git branch -D master') === undefined);
+  check('deny: an unreadable origin HEAD still protects main and develop', at(bare, 'git branch -D main') === 'deny' && at(bare, 'git push origin --delete develop') === 'deny');
+
+  const asked = [];
+  const counting = (command, cwd = '/r') => protectedBranchDeletions(command, 'bash', cwd, { defaultBranchOf: (directory, remote) => { asked.push([directory, remote]); return 'trunk'; } });
+
+  counting('git status && git log --oneline && git branch -D main && git push origin --delete develop');
+  check('lazy: no deletion outside the pair asks git for the default branch', asked.length === 0, JSON.stringify(asked));
+  check('a deletion of the default branch is refused by name', counting('git branch -D trunk')[0]?.branch === 'trunk');
+  asked.length = 0;
+  counting('git branch -D feat/a feat/b && git push origin --delete feat/c');
+  check('the default branch is asked once per directory and remote', asked.length === 1 && asked[0][1] === 'origin', JSON.stringify(asked));
+  asked.length = 0;
+  counting('git push upstream --delete feat/a');
+  check('a push asks the remote it pushes to', JSON.stringify(asked) === JSON.stringify([['/r', 'upstream']]), JSON.stringify(asked));
+  asked.length = 0;
+  counting('git push --repo=up --delete feat/a && git push --repo mirror :feat/b');
+  check('--repo names the remote asked, fused or separate', JSON.stringify(asked.map(([, remote]) => remote)) === JSON.stringify(['up', 'mirror']), JSON.stringify(asked));
+  asked.length = 0;
+  counting('git push $REMOTE --delete feat/a');
+  check('an unreadable remote asks origin', asked[0]?.[1] === 'origin', JSON.stringify(asked));
+  asked.length = 0;
+  counting('git -C sub branch -D feat/a');
+  check('a local deletion asks in the directory git acts in', asked[0]?.[0] === path.resolve('/r', 'sub') && asked[0]?.[1] === 'origin', JSON.stringify(asked));
+  asked.length = 0;
+  counting('gh api -X DELETE repos/o/r/git/refs/heads/feat/a', '/g');
+  check('a gh deletion asks origin of the line\'s cwd', JSON.stringify(asked) === JSON.stringify([['/g', 'origin']]), JSON.stringify(asked));
+  check('a default branch that cannot be read keeps the pair, and fails nothing closed', protectedBranchDeletions('git branch -D feat/a', 'bash', '/r', { defaultBranchOf: () => undefined }).length === 0);
+}
+
 // --- UNKNOWABLE NAMES are refused ---------------------------------------------------------------------------
 for (const command of [
   'git branch -D $BRANCH',
@@ -253,7 +332,7 @@ check('refusal event is PreToolUse', refusal?.hookSpecificOutput?.hookEventName 
 check('refusal is bilingual: English, then " @es " Spanish with accents', spanishStarts > 0 && text.indexOf('REFUSED') < spanishStarts && text.includes('RECHAZÓ') && text.includes('POR QUÉ') && text.includes('protección'), text);
 check('refusal quotes the owner\'s rule in both halves', text.slice(0, spanishStarts).includes('«main y develop NUNCA se borran»') && text.slice(spanishStarts).includes('«main y develop NUNCA se borran»'));
 check('refusal names each offender and what it deletes', text.includes('git branch -D main: deletes the protected branch main') && text.includes('git push origin :$B: the branch is named by a variable') && text.includes('git branch -D main: borra la rama protegida main') && text.includes('la rama la nombra una variable'), text);
-check('refusal names the protected set and the exact match', text.includes('(main, develop)') && text.includes('feature/main, main-fix or develop2'));
+check('refusal names the protected set and the exact match', text.includes('(main, develop, or the') && text.includes('default branch') && text.includes('por defecto del repositorio') && text.includes('feature/main, main-fix or develop2'));
 check('refusal says the real layer is server-side branch protection', text.includes('server-side branch protection') && text.includes('protección de ramas del servidor'));
 check('the message table has no bilingual problems', messageProblems(MESSAGES).length === 0, messageProblems(MESSAGES).join('; '));
 

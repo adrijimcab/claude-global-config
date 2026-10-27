@@ -16,6 +16,10 @@
  *   - `gh api -X|--method DELETE .../git/refs/heads/<name>`;
  *   - `gh pr merge|close --delete-branch` (`-d`), which deletes the pull request's head branch.
  *
+ * WHICH NAMES ARE PROTECTED: the constant pair, and the repository's default branch (`default-branch.mjs`), asked
+ * lazily — only for a deleted name outside the pair, once per directory and remote: the remote a push names, else
+ * `origin`. A local deletion asks `origin` in the directory git acts in; a `gh` call asks `origin` of the line's cwd.
+ *
  * WHAT CANNOT BE READ IS REFUSED, unlike the file-write lexer: a deletion whose name is a variable (`$B`, `%B%`), or
  * arrives on standard input (`... | xargs git branch -d`, `update-ref --stdin`), or is not on the line at all
  * (`--mirror`, `--prune`, the head branch of `gh pr merge --delete-branch`), may delete `main` as easily as anything else, and the cost of refusing it is one rewrite
@@ -28,7 +32,9 @@
  * guardia de ramas protegidas, leída con el parser compartido, así que una MENCIÓN es dato. LAS FORMAS: `git branch
  * -d/-D/--delete` (sin `-r`), `git branch -m/-M` (con un solo nombre renombra la rama ACTUAL, preguntada a git),
  * `git push --delete/-d`, `:<ref>`, `+:<ref>`, `--mirror`/`--prune`, `git update-ref -d` (y `--stdin`), y
- * `gh api -X DELETE .../git/refs/heads/<rama>` y `gh pr merge|close --delete-branch`. LO QUE NO SE PUEDE LEER SE RECHAZA: un nombre en una variable, por
+ * `gh api -X DELETE .../git/refs/heads/<rama>` y `gh pr merge|close --delete-branch`. SE PROTEGEN el par constante y
+ * la rama por defecto del repositorio, preguntada de forma perezosa (solo para un nombre fuera del par, una vez por
+ * directorio y remoto). LO QUE NO SE PUEDE LEER SE RECHAZA: un nombre en una variable, por
  * stdin o ausente de la línea puede borrar `main` igual que cualquier otra; rechazarlo cuesta reescribir la línea con
  * los nombres. NO SE MODELA: alias de git, `deleteRef` por GraphQL, lo que haga un proceso hijo.
  */
@@ -38,10 +44,14 @@ import { spawnSync } from 'node:child_process';
 import { invocationDirectory } from '../company-remote/invocation-directory.mjs';
 import { gitInvocations } from '../shell-command/git-invocations.mjs';
 import { executableName, isUnresolvableWord, resolveCommand, simpleCommands } from '../shell-command/shell-command.mjs';
+import { gitDefaultBranch } from './default-branch.mjs';
 import { protectedBranchOf } from './protected-branches.mjs';
 
 /** Why a deletion's names cannot be read. @es Por qué no se pueden leer los nombres de un borrado. */
 export const UNKNOWABLE = Object.freeze({ variable: 'variable', stdin: 'stdin', unnamed: 'unnamed', currentBranch: 'current-branch', headBranch: 'head-branch' });
+
+/** The remote whose HEAD names the default branch when a command names none. @es El remoto cuya HEAD nombra la rama por defecto si el comando no nombra ninguno. */
+const DEFAULT_REMOTE = 'origin';
 
 const isOption = (word) => word.startsWith('-') && word !== '-';
 
@@ -119,12 +129,22 @@ function emptySourceDestination(refspec) {
   return spec.startsWith(':') ? spec.slice(1) : undefined;
 }
 
-/** `git push`: the remote branches it deletes. @es `git push`: las ramas remotas que borra. */
+/** The remote a push goes to: `--repo`, else its first operand; `origin` when neither can be read. @es El remoto de un push. */
+function pushRemote(args) {
+  const fused = args.find((word) => word.startsWith('--repo='));
+  const given = fused === undefined ? (args.includes('--repo') ? args[args.indexOf('--repo') + 1] : operandsOf(args, PUSH_VALUE_OPTIONS)[0]) : fused.slice('--repo='.length);
+
+  return given === undefined || isUnresolvableWord(given) ? DEFAULT_REMOTE : given;
+}
+
+/** `git push`: the remote branches it deletes, each with the remote whose default branch is protected too. @es `git push`: las ramas remotas que borra. */
 function pushNames({ args }) {
   if (pushPrunes(args)) return [{ unknowable: UNKNOWABLE.unnamed }];
-  if (pushDeletes(args)) return refspecsOf(args).map(named);
 
-  return refspecsOf(args).map(emptySourceDestination).filter((destination) => destination !== undefined).map(named);
+  const remote = pushRemote(args);
+  const deleted = pushDeletes(args) ? refspecsOf(args) : refspecsOf(args).map(emptySourceDestination).filter((destination) => destination !== undefined);
+
+  return deleted.map((ref) => ({ ...named(ref), remote }));
 }
 
 const updateRefDeletes = (args) => args.includes('-d') || args.includes('--delete');
@@ -218,12 +238,14 @@ const launchedByXargs = (words, at) => words.slice(0, at).some((word) => executa
  * @param {string} script The shell line exactly as the tool received it.
  * @param {string} dialect `bash` or `powershell`.
  * @param {string} cwd The directory the line starts in.
- * @param {{ currentBranchOf?: (directory: string) => (string|undefined) }} [seams] Replaces the git question.
+ * @param {{ currentBranchOf?: Function, defaultBranchOf?: (directory: string|undefined, remote: string) => (string|undefined) }} [seams]
+ *   Replace the two git questions: the current branch of a directory, and the default branch of a repository's remote
+ *   (asked only for a deleted name outside the constant pair, once per directory and remote).
  * @returns {Array<{ text: string, branch?: string, unknowable?: string }>} Every deletion of a protected branch, or
  *   of a branch whose name cannot be read, in the order the line runs them (git first, then gh).
  * @es Cada borrado de una rama protegida, o de una rama cuyo nombre no se puede leer.
  */
-export function protectedBranchDeletions(script, dialect, cwd, { currentBranchOf = gitCurrentBranch } = {}) {
+export function protectedBranchDeletions(script, dialect, cwd, { currentBranchOf = gitCurrentBranch, defaultBranchOf = gitDefaultBranch } = {}) {
   const commands = simpleCommands(script, dialect);
   const fedByXargs = new Set(commands.filter(({ words }) => launchedByXargs(words, resolveCommand(words).index)).map(({ text }) => text));
   const found = [];
@@ -234,7 +256,7 @@ export function protectedBranchDeletions(script, dialect, cwd, { currentBranchOf
     if (deleter === undefined) continue;
 
     if (fedByXargs.has(invocation.text) && deleter.deletes(invocation.args)) found.push({ text: invocation.text, unknowable: UNKNOWABLE.stdin });
-    else found.push(...deleter.namesOf(invocation, currentBranchOf).map((entry) => ({ text: invocation.text, ...entry })));
+    else found.push(...deleter.namesOf(invocation, currentBranchOf).map((entry) => ({ text: invocation.text, directory: invocationDirectory(invocation), ...entry })));
   }
 
   for (const { words, text } of commands) {
@@ -242,10 +264,19 @@ export function protectedBranchDeletions(script, dialect, cwd, { currentBranchOf
 
     const deleter = at === -1 || executableName(words[at]) !== 'gh' ? undefined : GH_DELETERS.get(words[at + 1]);
 
-    if (deleter !== undefined) found.push(...deleter(words.slice(at + 2)).map((entry) => ({ text, ...entry })));
+    if (deleter !== undefined) found.push(...deleter(words.slice(at + 2)).map((entry) => ({ text, directory: cwd, ...entry })));
   }
 
+  const defaults = new Map();
+  const defaultOf = (directory, remote) => {
+    const key = JSON.stringify([directory, remote]);
+
+    if (!defaults.has(key)) defaults.set(key, defaultBranchOf(directory, remote));
+
+    return defaults.get(key);
+  };
+
   return found
-    .map((entry) => (entry.name === undefined ? entry : { text: entry.text, branch: protectedBranchOf(entry.name) }))
+    .map(({ text, name, unknowable, directory, remote = DEFAULT_REMOTE }) => (name === undefined ? { text, unknowable } : { text, branch: protectedBranchOf(name, () => defaultOf(directory, remote)) }))
     .filter((entry) => entry.unknowable !== undefined || entry.branch !== undefined);
 }

@@ -15,6 +15,7 @@ const G = 'protected-branch-guard/guard.mjs';
 const D = 'protected-branch-guard/branch-deletions.mjs';
 const P = 'protected-branch-guard/protected-branches.mjs';
 const R = 'protected-branch-guard/refusal.mjs';
+const B = 'protected-branch-guard/default-branch.mjs';
 
 const MUTANTS = [
   // --- the hook entry
@@ -26,8 +27,24 @@ const MUTANTS = [
   ['develop is not protected', P, "Object.freeze(['main', 'develop'])", "Object.freeze(['main'])"],
   ['main is not protected', P, "Object.freeze(['main', 'develop'])", "Object.freeze(['develop'])"],
   ['a full refs/heads/ ref is not read as its branch', P, 'const name = ref.startsWith(HEADS) ? ref.slice(HEADS.length) : ref;', 'const name = ref;'],
-  ['the match is a substring, so feature/main is protected', P, 'return PROTECTED_BRANCHES.includes(name) ? name : undefined;', 'return PROTECTED_BRANCHES.find((branch) => name.includes(branch));'],
-  ['the match is a prefix, so main-fix is protected', P, 'return PROTECTED_BRANCHES.includes(name) ? name : undefined;', 'return PROTECTED_BRANCHES.find((branch) => name.startsWith(branch));'],
+  ['the match is a substring, so feature/main is protected', P, '  if (PROTECTED_BRANCHES.includes(name)) return name;', '  if (PROTECTED_BRANCHES.some((branch) => name.includes(branch))) return name;'],
+  ['the match is a prefix, so main-fix is protected', P, '  if (PROTECTED_BRANCHES.includes(name)) return name;', '  if (PROTECTED_BRANCHES.some((branch) => name.startsWith(branch))) return name;'],
+
+  // --- the default branch
+  ['the default branch is never protected', P, '  return name === defaultBranch() ? name : undefined;', '  return undefined;'],
+  ['the default branch is asked eagerly, for every deletion', P, '  if (PROTECTED_BRANCHES.includes(name)) return name;', '  const asked = defaultBranch();\n\n  if (PROTECTED_BRANCHES.includes(name)) return name;\n  if (name === asked) return name;'],
+  ['the default branch is asked again for every deletion', D, '    if (!defaults.has(key)) defaults.set(key, defaultBranchOf(directory, remote));', '    defaults.set(key, defaultBranchOf(directory, remote));'],
+  ['the cache ignores the remote', D, '    const key = JSON.stringify([directory, remote]);', '    const key = JSON.stringify([directory]);'],
+  ['a push asks origin whatever remote it names', D, '  const remote = pushRemote(args);', "  const remote = 'origin';"],
+  ['--repo= is not read as the remote', D, "  const fused = args.find((word) => word.startsWith('--repo='));", '  const fused = undefined;'],
+  ['a separate --repo is not read as the remote', D, "(args.includes('--repo') ? args[args.indexOf('--repo') + 1] : operandsOf(args, PUSH_VALUE_OPTIONS)[0])", 'operandsOf(args, PUSH_VALUE_OPTIONS)[0]'],
+  ['an unreadable remote is asked by its variable', D, '  return given === undefined || isUnresolvableWord(given) ? DEFAULT_REMOTE : given;', '  return given ?? DEFAULT_REMOTE;'],
+  ['a local deletion asks in the line\'s cwd, not where git acts', D, '({ text: invocation.text, directory: invocationDirectory(invocation), ...entry })', '({ text: invocation.text, directory: invocation.directory, ...entry })'],
+  ['a gh deletion asks in no directory', D, '({ text, directory: cwd, ...entry })', '({ text, directory: undefined, ...entry })'],
+  ['an unknowable directory is still asked of git', B, '  if (directory === undefined) return undefined;\n', ''],
+  ['a remote prefix is kept on the default branch', B, '? target.slice(remote.length + 1) : undefined;', '? target : undefined;'],
+  ['a failed symbolic-ref is read as a branch', B, "  const target = run.status === 0 ? run.stdout.trim() : '';", "  const target = `${remote}/${run.stderr.trim() || 'x'}`;"],
+  ['the HEAD of origin is read whatever remote is asked', B, '`refs/remotes/${remote}/HEAD`', '`refs/remotes/origin/HEAD`'],
 
   // --- git branch
   ['a short cluster is not read, so -df passes', D, "const isShortCluster = (word) => word.startsWith('-') && !word.startsWith('--') && word.length > 1;", 'const isShortCluster = () => false;'],

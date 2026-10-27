@@ -25,7 +25,8 @@ const UNKNOWABLE_REASONS = {
 export const MESSAGES = {
   refusal: {
     en: [
-      'PROTECTED-BRANCH GUARD REFUSED this command: it deletes, or may delete, a protected branch ({protected}).',
+      'PROTECTED-BRANCH GUARD REFUSED this command: it deletes, or may delete, a protected branch ({protected}, or the',
+      'repository\'s default branch, the one its remote HEAD names).',
       '',
       '{itemsEn}',
       '',
@@ -39,7 +40,8 @@ export const MESSAGES = {
       '(protect main and develop against deletion there); a client hook is always one flag away from being skipped.'
     ],
     es: [
-      'PROTECTED-BRANCH GUARD RECHAZÓ este comando: borra, o puede borrar, una rama protegida ({protected}).',
+      'PROTECTED-BRANCH GUARD RECHAZÓ este comando: borra, o puede borrar, una rama protegida ({protected}, o la rama',
+      'por defecto del repositorio, la que nombra la HEAD de su remoto).',
       '',
       '{itemsEs}',
       '',
