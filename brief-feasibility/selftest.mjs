@@ -43,7 +43,7 @@ isolateState('brief-feasibility');
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GUARD = join(HERE, 'guard.mjs');
 const DECLARATION = join(HERE, 'guard.mjs.hook-registration.json');
-const REAL_PROJECT_SETTINGS = 'C:/Users/adrian.jimenez/Desktop/Projects/b100-am-ui/.claude/settings.local.json';
+const REAL_PROJECT_SETTINGS = '/home/user/b100-am-ui-claude-tooling/settings.local.json';
 const FIXTURES = JSON.parse(readFileSync(join(HERE, 'fixtures', 'incidents.json'), 'utf8'));
 const INCIDENTS = FIXTURES.incidents;
 const CWD_ONLY = FIXTURES.recipients.cwdOnly;

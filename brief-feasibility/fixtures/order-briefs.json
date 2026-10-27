@@ -1,0 +1,35 @@
+{
+  "provenance": "CAPTURED 2026-10-27 verbatim from session 8dd13422: orders the per-line reader of instructions.mjs read as mentions (a sentence wrapped across lines, and an order heading a parenthesis with a purpose clause), the true positives of the order reader. Each excerpt is a contiguous substring of its source.",
+  "briefs": [
+    {
+      "id": "brief-common.md lines 25-28",
+      "source": {
+        "file": "/tmp/claude-0/-home-user/8dd13422-fd1a-523f-85e2-4beea8788ff6/scratchpad/brief-common.md",
+        "lines": "25-28",
+        "session": "8dd13422-fd1a-523f-85e2-4beea8788ff6"
+      },
+      "missed": "a cue wrapped onto the line before, and a parenthesis between the cue and the span",
+      "text": "- Do NOT run the full chain (`selftest-runner/run.mjs` bare is refused by a guard on the host). Run the\n  selftests and mutant campaigns of everything you touched and of every module that imports it (find\n  importers with rg), plus `node mutation-proof/scope.mjs` and `node vendored/vendored.mjs check` where\n  relevant. Linux container: some selftests are Windows-bound; state which you could not run and why.",
+      "orders": [
+        "node mutation-proof/scope.mjs",
+        "node vendored/vendored.mjs check"
+      ]
+    },
+    {
+      "id": "toolu_01JoENMHxX4uAgK82XkKEdbK line 6",
+      "source": {
+        "transcript": "~/.claude/projects/-home-user/8dd13422-fd1a-523f-85e2-4beea8788ff6.jsonl",
+        "transcriptLine": 137,
+        "toolUseId": "toolu_01JoENMHxX4uAgK82XkKEdbK",
+        "briefLine": 6,
+        "session": "8dd13422-fd1a-523f-85e2-4beea8788ff6"
+      },
+      "missed": "an order heading a parenthesis, followed by a purpose clause",
+      "text": "checkout each branch/tag: the latest 19.2.x, 20.x, 21.x and 22.x release branches or tags (`git ls-remote --tags` / `--heads` to find them; e.g. branches `19.2.x`, `20.3.x`, `21.x`...).",
+      "orders": [
+        "git ls-remote --tags",
+        "--heads"
+      ]
+    }
+  ]
+}

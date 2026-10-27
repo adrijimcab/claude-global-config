@@ -31,7 +31,7 @@ import { forbiddenInvocations } from '../worker-git-guard/forbidden-invocations.
 import { DECISION_LOG_VARIABLE } from './parity-recorder.mjs';
 import { FACES, inspectFeasibility } from './feasibility.mjs';
 import { evaluate } from './guard.mjs';
-import { instructedCommands, referencedCommands } from './instructions.mjs';
+import { blocksOf, instructedCommands, instructedMentions, referencedCommands } from './instructions.mjs';
 import { shellLessRoleRefusals } from './shell-less-role.mjs';
 import { routeOf, workerGitRefusals } from './worker-git.mjs';
 
@@ -255,7 +255,18 @@ check('NEAR MISS: a resume is no delegation, even when it carries a role name', 
     ['Verify the build with `npm run build`.', ['npm run build'], 'verify is a cue'],
     ['Undo it: `git checkout -- a.ts`, the cache and `git clean -n`.', ['git checkout -- a.ts', 'git clean -n'], 'a list item with no cue of its own follows the order that opened the list'],
     ['Sync it (then run `git fetch`).', ['git fetch'], 'a cue inside parentheses still orders'],
-    ['Then merge it (now ae64d8e) into x, rerun the guard, and the runner via `node r.mjs`.', ['node r.mjs'], 'rerun is a cue']
+    ['Then merge it (now ae64d8e) into x, rerun the guard, and the runner via `node r.mjs`.', ['node r.mjs'], 'a cue before an aside reaches past it'],
+    ['Merge it into x, rerun the guard and the runner via `node r.mjs`.', ['node r.mjs'], 'rerun is a cue'],
+    // A clause spans a soft wrap, and resumes after an aside.
+    // @es Una cláusula cruza el salto blando y se reanuda tras un inciso.
+    ['Run the checks and\nthen `git push`.', ['git push'], 'a cue on the line before a soft wrap'],
+    ['Then check it\n  the incident ran `git switch main`.', ['git switch main'], 'a soft wrap joins the clause, so the cue before it orders (the near misses below break it)'],
+    ['Run the selftests (find importers with rg), plus `node s.mjs`.', ['node s.mjs'], 'a clause resumes after an aside'],
+    ['`git rebase x` on your branch (if any does not drop out, stop).', ['git rebase x'], 'an aside after the span still ends its clause: its "not" forbids nothing'],
+    ['`node capture.mjs supersede` (read its usage) — never hand-edit a ledger.', ['node capture.mjs supersede'], 'MEASURED (toolu_01G59ZQ8T3VGarJXdtVpxytE): a "never" past an aside after the span forbids nothing'],
+    ['Release tags (`git ls-remote --tags` / `--heads` to find them).', ['git ls-remote --tags', '--heads'], 'a span heading a parenthesis with a purpose clause, and the list it opens'],
+    ['Las ramas (`git branch -r` para verlas).', ['git branch -r'], 'a Spanish purpose clause'],
+    ['Run git reset --hard HEAD~1 before\nstarting.', ['git reset --hard HEAD~1 before starting.'], 'an imperative line reads its whole unit']
   ];
   const mentions = [
     ['I saved them by hand with `git update-ref refs/x abc`.', 'REAL (fixture #5): a command the brief says it ran'],
@@ -263,7 +274,19 @@ check('NEAR MISS: a resume is no delegation, even when it carries a role name', 
     ['2. P2-9: brief-feasibility lets a worker brief through that asks for `git switch`/`checkout`; only the guard stops it.', 'REAL (this session): a brief describing what another brief asked for'],
     ['The incident ran `git update-ref x y`.', 'a past incident'],
     ['Find the actual briefs containing `git worktree add x`.', 'REAL (fixture #6): the command as text to search for'],
-    ['A brief told a worker to `git switch main` last week.', 'a description with no cue']
+    ['A brief told a worker to `git switch main` last week.', 'a description with no cue'],
+    ['Then check it\n\nthe incident ran `git switch main`.', 'NEAR MISS: a blank line is a hard break'],
+    ['Then check it\n- the incident ran `git switch main`.', 'NEAR MISS: a bulleted list item is a hard break'],
+    ['Then check it\n2. the incident ran `git switch main`.', 'NEAR MISS: a numbered list item is a hard break'],
+    ['Then check it\n2) the incident ran `git switch main`.', 'NEAR MISS: a numbered list item with a parenthesis is a hard break'],
+    ['Then check it\n# the incident ran `git switch main`.', 'NEAR MISS: a heading is a hard break'],
+    ['# Then check it\nthe incident ran `git switch main`.', 'NEAR MISS: a heading is one line, so it ends its unit'],
+    ['Then check it\n```\n```\nthe incident ran `git switch main`.', 'NEAR MISS: a fence is a hard break'],
+    ['It (`git reset` to the last commit) moved the ref.', 'NEAR MISS: a purpose marker followed by a determiner names a target'],
+    ['It (`git reset` to) moved the ref.', 'NEAR MISS: a purpose marker with no word after it'],
+    ['It (`git reset` para el build) moved the ref.', 'NEAR MISS: a Spanish purpose marker followed by a determiner'],
+    ['It (the old `git reset` to find them) moved the ref.', 'NEAR MISS: a purpose clause orders only the span that heads the parenthesis'],
+    ['The examples (`git reset`, `git switch -C`) to find them were wrong.', 'NEAR MISS: a purpose clause past the closing parenthesis is not the span\'s']
   ];
 
   for (const [text, expected, label] of orders) check(`ORDER: ${label}`, JSON.stringify(ordered(text)) === JSON.stringify(expected), JSON.stringify(referenced(text)));
@@ -273,6 +296,35 @@ check('NEAR MISS: a resume is no delegation, even when it carries a role name', 
   check('a prohibition is neither an order nor a reference', referenced('Never `git switch main`; stay on your branch.').length === 0);
   check('a quotation is neither an order nor a reference', referenced('The brief said "Run `git switch main`." and was wrong.').length === 0);
   check('a fenced block and an imperative line stay orders', JSON.stringify(ordered('Steps:\n```\ngit reset --hard\n```\nRun git switch main first.')) === JSON.stringify(['git reset --hard', 'git switch main first.']), JSON.stringify(ordered('Steps:\n```\ngit reset --hard\n```\nRun git switch main first.')));
+  check('a prohibition wrapped onto the line before still governs', referenced('Do not\nrun `git push`.').length === 0, JSON.stringify(referenced('Do not\nrun `git push`.')));
+  check('a prohibition before an aside still governs the span after it', referenced('Do not run (see the log) `git push`.').length === 0, JSON.stringify(referenced('Do not run (see the log) `git push`.')));
+  check('a span inside an aside reads the aside: a prohibition outside it governs nothing there', JSON.stringify(ordered('Never mind (then run `git fetch`).')) === JSON.stringify(['git fetch']), JSON.stringify(referenced('Never mind (then run `git fetch`).')));
+  check('an unclosed parenthesis is no aside: it still ends the clause, so the prohibition before it governs nothing', JSON.stringify(referenced('Do not run (see `git push`.')) === JSON.stringify(['mention:git push']), JSON.stringify(referenced('Do not run (see `git push`.')));
+  {
+    const [wrapped] = referencedCommands('Run the checks and\n  then `git push`.');
+    const [imperative] = referencedCommands('Run git status before\nstarting.');
+
+    check('a span on a wrapped line names ITS line and number, not the unit', wrapped?.lineNumber === 2 && wrapped.line === '  then `git push`.', JSON.stringify(wrapped));
+    check('an imperative unit names its first line', imperative?.lineNumber === 1 && imperative.line === 'Run git status before', JSON.stringify(imperative));
+    check('a fenced line keeps its own number after a wrapped unit', JSON.stringify(referencedCommands('Then the\nsteps:\n```\ngit status\n```').map(({ lineNumber, via }) => `${String(lineNumber)}:${via}`)) === JSON.stringify(['4:fenced block']));
+    check('a numbered item (dot) is a hard break: the prohibition before it introduces no fence', JSON.stringify(ordered('Never do these\n2. steps:\n```\ngit status\n```')) === JSON.stringify(['git status']));
+    check('a numbered item (parenthesis) is a hard break: the prohibition before it introduces no fence', JSON.stringify(ordered('Never do these\n2) steps:\n```\ngit status\n```')) === JSON.stringify(['git status']));
+    check('a fence introduced by a WRAPPED prohibition is not an order', referencedCommands('Never run these\nsteps:\n```\ngit push\n```').length === 0);
+    check('the units of a brief: soft wraps joined, hard breaks kept', JSON.stringify(blocksOf('a\n  b\n\n- c\nd\n# e\nf\n```\ng\n```').map((block) => block.kind === 'prose' ? block.text : block.kind)) === JSON.stringify(['a b', '- c d', '# e', 'f', 'fence', 'fenced', 'fence']), JSON.stringify(blocksOf('a\n  b\n\n- c\nd\n# e\nf\n```\ng\n```')));
+    check('a unit records where each of its lines begins', JSON.stringify(blocksOf('ab\n  cd')[0].lines.map(({ offset, lineNumber }) => [offset, lineNumber])) === JSON.stringify([[0, 1], [3, 2]]));
+    check('a tool call wrapped under a prohibition is no instruction', instructedMentions('Do not\ncall EnterWorktree.', 'EnterWorktree').length === 0);
+    check('a tool call wrapped under a cue is an instruction, on its own line', JSON.stringify(instructedMentions('Then\ncall EnterWorktree. And EnterWorktree again.', 'EnterWorktree')) === JSON.stringify([{ lineNumber: 2, line: 'call EnterWorktree. And EnterWorktree again.' }]));
+    check('a prohibition before an aside governs a tool call after it', instructedMentions('Do not run (see the log) EnterWorktree.', 'EnterWorktree').length === 0);
+    check('a tool call after a prohibited one in the same unit is still found', JSON.stringify(instructedMentions('Never EnterWorktree here.\nThen call EnterWorktree.', 'EnterWorktree')) === JSON.stringify([{ lineNumber: 2, line: 'Then call EnterWorktree.' }]));
+  }
+
+  // MEASURED: the orders the per-line reader missed in this session's briefs, verbatim (`fixtures/order-briefs.json`).
+  // @es MEDIDO: las órdenes que el lector por línea perdió en los briefs de esta sesión, literales.
+  const orderBriefs = JSON.parse(readFileSync(join(HERE, 'fixtures', 'order-briefs.json'), 'utf8')).briefs;
+
+  for (const { id, missed, text, orders: expected } of orderBriefs) check(`REAL ORDER (${id}): ${missed}`, JSON.stringify(ordered(text)) === JSON.stringify(expected), JSON.stringify(referenced(text)));
+
+  check('REAL ORDER: the missed orders are all there', orderBriefs.length === 2);
   check('a relative tooling path the brief only NAMES is still a reference (the worker opens it)', referenced('The contract in `.claude/AGENT-LEDGER.md` binds you.').includes('mention:.claude/AGENT-LEDGER.md'));
 
   {
@@ -301,9 +353,9 @@ check('NEAR MISS: a resume is no delegation, even when it carries a role name', 
   // @es MEDIDO sobre los briefs reales: los 10 de los fixtures y los de la sesión que nombran comandos rechazados.
   const fixtureBriefs = JSON.parse(readFileSync(join(HERE, 'fixtures', 'incidents.json'), 'utf8')).incidents.map((incident, index) => ({ id: `fixture #${String(index)}`, text: incident.input.prompt ?? incident.input.message }));
   const sessionBriefs = JSON.parse(readFileSync(join(HERE, 'fixtures', 'mention-briefs.json'), 'utf8')).briefs;
-  const refusedBriefs = [...fixtureBriefs, ...sessionBriefs].filter(({ text }) => workerGitRefusals(instructedCommands(text), checkout).length > 0).map(({ id }) => id);
+  const refusedBriefs = [...fixtureBriefs, ...sessionBriefs, ...orderBriefs].filter(({ text }) => workerGitRefusals(instructedCommands(text), checkout).length > 0).map(({ id }) => id);
 
-  check(`REAL BRIEFS: the worker-git face refuses exactly the one that orders a refused command (${String(fixtureBriefs.length + sessionBriefs.length)} briefs)`, JSON.stringify(refusedBriefs) === JSON.stringify(['fixture #6']), JSON.stringify(refusedBriefs));
+  check(`REAL BRIEFS: the worker-git face refuses exactly the one that orders a refused command (${String(fixtureBriefs.length + sessionBriefs.length + orderBriefs.length)} briefs)`, JSON.stringify(refusedBriefs) === JSON.stringify(['fixture #6']), JSON.stringify(refusedBriefs));
   check('REAL BRIEFS: the session negatives are all there', sessionBriefs.length === 3);
 }
 
