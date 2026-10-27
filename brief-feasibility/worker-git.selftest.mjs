@@ -252,6 +252,8 @@ check('NEAR MISS: a resume is no delegation, even when it carries a role name', 
     ['Primero, usa `git status`.', ['git status'], 'a Spanish imperative cue'],
     ['Lee el informe y luego `git log`.', ['git log'], 'a Spanish sequence cue'],
     ['The selftests of every module, and finally `node r.mjs`.', ['node r.mjs'], 'finally is a cue'],
+    ['Verify the build with `npm run build`.', ['npm run build'], 'verify is a cue'],
+    ['Undo it: `git checkout -- a.ts`, the cache and `git clean -n`.', ['git checkout -- a.ts', 'git clean -n'], 'a list item with no cue of its own follows the order that opened the list'],
     ['Sync it (then run `git fetch`).', ['git fetch'], 'a cue inside parentheses still orders'],
     ['Then merge it (now ae64d8e) into x, rerun the guard, and the runner via `node r.mjs`.', ['node r.mjs'], 'rerun is a cue']
   ];
@@ -284,7 +286,13 @@ check('NEAR MISS: a resume is no delegation, even when it carries a role name', 
     writeFileSync(join(repo, '.claude', 'AGENT-LEDGER.md'), '# contract\n');
 
     const named = { ...payloadFor('Agent', 'The contract in `.claude/AGENT-LEDGER.md` binds you.', { sessionId: 'selftest', input: { isolation: 'worktree' } }), cwd: repo };
-    const found = inspectFeasibility(briefOf(named), named, { processCwd: repo, home })?.findings ?? [];
+    let found;
+
+    try {
+      found = inspectFeasibility(briefOf(named), named, { processCwd: repo, home })?.findings ?? [];
+    } catch (error) {
+      found = [{ threw: String(error) }];
+    }
 
     check('REAL (fixture, live true positive): a relative tooling path the brief only names is refused to an isolated worker', found.some((finding) => finding.face === FACES.RELATIVE_TOOLING_PATH), JSON.stringify(found));
   }
