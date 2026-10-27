@@ -30,6 +30,8 @@ import { isAgentWorktree, listWorktrees } from '../lib/agent-worktrees.mjs';
 import { gitAsker, isAncestor, porcelainEntries } from '../lib/git.mjs';
 import { advise, deny, evaluator, hookMain, runWhenMain } from '../lib/hook-io.mjs';
 import { ACTIVE_WINDOW_MS, activeOwner, agentRecords } from '../../agent-liveness/active-owner.mjs';
+import { holderOf } from '../../agent-liveness/holder.mjs';
+import { tenancyLines } from '../../brief-tenancy/tenancy-declaration.mjs';
 import { nativeSpelling } from '../../cherry-pick-guard/working-directory.mjs';
 import { agentDirectories, launchAccess } from './role-access.mjs';
 
@@ -264,8 +266,59 @@ export function delegationTouches(payload, repositoryRoot, platform = process.pl
 }
 
 /**
- * The parked worktrees visible from `payload`'s repository, as `[{ worktree, work }]`.
- * @es Los worktrees aparcados visibles desde el repositorio del payload.
+ * The worktrees a delegation's brief declares on its `TENANCY:` lines, as canonical paths: every absolute path
+ * after the colon of a line that HEADS the marker, read with the one marker reader `brief-tenancy` owns
+ * (`tenancyLines`) and this guard's own path reader. Never the wording of the line: `resume-before-fresh`
+ * prints a takeover sentence, and what is accepted is the path it names, so a reworded line declares as much
+ * and a sentence that names no path declares nothing.
+ * @es Los worktrees que el brief de una delegación declara en sus líneas `TENANCY:`, como rutas canónicas:
+ * cada ruta absoluta tras los dos puntos de una línea que ENCABEZA el marcador, leída con el único lector de
+ * marcadores (`tenancyLines`) y el lector de rutas de este guard. Nunca la redacción de la línea.
+ */
+export function declaredTenancies(payload, platform = process.platform) {
+  const prompt = payload?.tool_input?.prompt;
+  const declared = new Set();
+
+  if (typeof prompt !== 'string') return declared;
+
+  for (const rest of tenancyLines(prompt)) {
+    const colon = rest.indexOf(':');
+
+    if (colon === -1) continue;
+
+    for (const named of absolutePathsIn(rest.slice(colon + 1), platform)) declared.add(named);
+  }
+
+  return declared;
+}
+
+/**
+ * A parked worktree with the holder decision attached when the brief declares exactly that worktree, so the
+ * decision is only read where it can change the answer.
+ * @es Un worktree aparcado con la decisión de titular adjunta cuando el brief declara exactamente ese worktree.
+ */
+function withDeclaredHolder(entry, declared, holderContext) {
+  return declared.has(canonicalPath(entry.worktree.path)) ? { ...entry, holder: holderOf(entry.worktree.path, holderContext) } : entry;
+}
+
+/**
+ * The parked worktrees visible from `payload`'s repository, as `[{ worktree, work, holder? }]`.
+ *
+ * A DECLARED TAKEOVER OF AN UNRESUMABLE HOLDER IS NOT PARKED WORK FOR THIS DELEGATION (2026-10-26, P1-5).
+ * MEASURED in the Discovery session: a worktree with 37 unlanded commits whose agent `ac19aff` held a
+ * 21.87 MB transcript; `resume-before-fresh` advised a fresh replacement with `TENANCY: <worktree> — taking
+ * over…`, and this guard refused exactly that replacement. Both now read one holder decision
+ * (`../../agent-liveness/holder.mjs`): a parked worktree leaves THIS delegation's set only when its holder is
+ * `unresumable` — exhausted, outside the resume window, or of another session than the payload's, the one
+ * answer `resume-before-fresh` also gives — AND the brief declares exactly that worktree. A resumable holder
+ * still refuses (resume it instead), a holder of `none` still refuses (nothing says the work has an owner), a declaration of another
+ * worktree clears nothing, and every other parked worktree still refuses.
+ * @es Los worktrees aparcados visibles desde el repositorio del payload. UN RELEVO DECLARADO DE UN TITULAR
+ * IRREANUDABLE NO ES TRABAJO APARCADO PARA ESTA DELEGACIÓN: medido el 2026-10-26, `resume-before-fresh`
+ * aconsejaba un relevo con `TENANCY:` y este guard lo rechazaba. Ahora ambos leen una sola decisión de
+ * titular: un worktree aparcado sale del conjunto de ESTA delegación solo si su titular es `unresumable` Y el
+ * brief declara exactamente ese worktree. Un titular reanudable sigue rechazando (reanúdalo), `none` también,
+ * y una declaración de otro worktree no despeja nada.
  */
 export function parkedWork(payload, { records = agentRecords(), now = Date.now(), lastWorked = lastWorkedMs } = {}) {
   if (!DELEGATION_TOOLS.has(payload?.tool_name) || typeof payload?.cwd !== 'string') return [];
@@ -275,6 +328,7 @@ export function parkedWork(payload, { records = agentRecords(), now = Date.now()
   if (governed === undefined || !delegationTouches(payload, governed.repository.mainCheckout)) return [];
 
   const integrationBranch = governed.config.integrationBranches[0];
+  const declared = declaredTenancies(payload);
 
   const linked = listWorktrees(gitAsker(governed.repository.mainCheckout));
   const isLive = (worktree) => existsSync(worktree.path) && (activeOwner(worktree.path, records, now) !== undefined || now - lastWorked(worktree) < ACTIVE_WINDOW_MS);
@@ -285,13 +339,36 @@ export function parkedWork(payload, { records = agentRecords(), now = Date.now()
     .filter((worktree) => activeOwner(worktree.path, records, now) === undefined)
     .filter((worktree) => now - lastWorked(worktree) >= ACTIVE_WINDOW_MS)
     .map((worktree) => ({ worktree, work: workIn(worktree, integrationBranch, liveBranches) }))
-    .filter(({ work }) => holdsWork(work));
+    .filter(({ work }) => holdsWork(work))
+    .map((entry) => withDeclaredHolder(entry, declared, { records, now, session: payload.session_id }))
+    .filter(({ holder }) => holder?.state !== 'unresumable');
 }
 
-function describe({ worktree, work }) {
+function describe({ worktree, work, holder }) {
   const what = work.unmeasurable === undefined ? `${work.dirty} uncommitted entr${work.dirty === 1 ? 'y' : 'ies'}, ${work.unintegrated} commit(s) in no integration branch` : `UNMEASURABLE — ${work.unmeasurable}`;
 
-  return `  - ${worktree.path} (${worktree.branch ?? 'detached'}): ${what}`;
+  return [`  - ${worktree.path} (${worktree.branch ?? 'detached'}): ${what}`, ...declaredButHeld(holder)].join('\n');
+}
+
+/**
+ * What a brief that declares a parked worktree is told when the declaration does not clear it: the holder
+ * decision and what to do instead, in both languages. Nothing when the brief did not declare it.
+ * @es Lo que se dice a un brief que declara un worktree aparcado cuando la declaración no lo despeja: la
+ * decisión de titular y qué hacer en su lugar, en ambos idiomas. Nada si el brief no lo declaró.
+ */
+function declaredButHeld(holder) {
+  if (holder === undefined) return [];
+
+  const who = holder.agentId === undefined ? '' : ` ${holder.agentId}`;
+
+  const instead = holder.state === 'resumable'
+    ? ['resume that agent by its raw agentId (SendMessage) instead of replacing it.', 'reanuda ese agente por su agentId crudo (SendMessage) en vez de reemplazarlo.']
+    : ['a takeover is accepted only from an UNRESUMABLE holder; land, salvage or discard the work first.', 'un relevo solo se acepta de un titular IRREANUDABLE; integra, rescata o descarta primero el trabajo.'];
+
+  return [
+    `      TENANCY declares this worktree, but its holder${who} is ${holder.state}: ${instead[0]}`,
+    `      @es TENANCY declara este worktree, pero su titular${who} es ${holder.state}: ${instead[1]}`
+  ];
 }
 
 /**
@@ -331,8 +408,15 @@ function information(parked) {
   ].join('\n');
 }
 
-export const evaluate = evaluator('orphan-work', (payload) => {
-  const parked = parkedWork(payload);
+/**
+ * The hook decision over injected agent `records`, clock and last-work reader (`parkedWork`'s options), so a
+ * selftest can feed the same constructed store to this guard and to `resume-before-fresh`. Unset options read
+ * the live store, as the hook does.
+ * @es La decisión del hook sobre registros, reloj y lector de último trabajo inyectados, para que un selftest dé el mismo
+ * store construido a este guard y a `resume-before-fresh`. Sin opciones lee el store vivo, como el hook.
+ */
+export const evaluateWith = (options = {}) => evaluator('orphan-work', (payload) => {
+  const parked = parkedWork(payload, options);
 
   if (parked.length === 0) return undefined;
 
@@ -340,5 +424,7 @@ export const evaluate = evaluator('orphan-work', (payload) => {
 
   return access.readOnly ? advise(information(parked)) : deny(reason(parked, access.problem));
 });
+
+export const evaluate = evaluateWith();
 
 runWhenMain(import.meta.url, hookMain(evaluate));
