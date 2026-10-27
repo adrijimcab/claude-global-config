@@ -33,13 +33,41 @@ function writtenBy(block) {
   return typeof target === 'string' && target.length > 0 ? normalizedPath(target) : undefined;
 }
 
+/** The content blocks of one record. @es Los bloques de contenido de un registro. */
+const blocksOf = (record) => (Array.isArray(record?.message?.content) ? record.message.content : []);
+
+/**
+ * The fold of the files a transcript wrote, for `transcript-index/index.mjs` `foldTranscript`: `{ written }`, each
+ * distinct normalized target in first-written order. It is the ONE reading of a record: `writtenPathsIn` runs
+ * the same `absorb` over a whole text, so the incremental answer and the whole-text answer cannot drift apart.
+ * A line without a `tool_use` marker contributes nothing, exactly as the whole-text reader skips it.
+ * @es El pliegue de los ficheros que escribió un transcript: `{ written }`, cada destino distinto normalizado en
+ * orden de primera escritura. Es la ÚNICA lectura de un registro: `writtenPathsIn` corre el mismo `absorb` sobre
+ * un texto entero, así que la respuesta incremental y la del texto entero no pueden divergir.
+ */
+export const WRITTEN_PATHS_FOLD = {
+  name: 'written-paths',
+  version: 1,
+  initial: () => ({ written: [] }),
+  isState: (state) => Array.isArray(state?.written) && state.written.every((entry) => typeof entry === 'string'),
+  absorb(state, record, line) {
+    if (!line.includes(TOOL_CALL_MARKER)) return;
+
+    for (const block of blocksOf(record)) {
+      const target = writtenBy(block);
+
+      if (target !== undefined && !state.written.includes(target)) state.written.push(target);
+    }
+  }
+};
+
 /**
  * Every distinct file the JSONL `transcriptText` wrote, normalized, in first-written order. A line that
  * is not JSON is skipped: a half-written last line must not hide what came before.
  * @es Cada fichero distinto que escribió `transcriptText` (JSONL), normalizado. Una línea que no es JSON se salta.
  */
 export function writtenPathsIn(transcriptText) {
-  const written = new Set();
+  const state = WRITTEN_PATHS_FOLD.initial();
 
   for (const line of transcriptText.split('\n')) {
     if (!line.includes(TOOL_CALL_MARKER)) continue;
@@ -52,14 +80,8 @@ export function writtenPathsIn(transcriptText) {
       continue;
     }
 
-    const blocks = Array.isArray(record?.message?.content) ? record.message.content : [];
-
-    for (const block of blocks) {
-      const target = writtenBy(block);
-
-      if (target !== undefined) written.add(target);
-    }
+    WRITTEN_PATHS_FOLD.absorb(state, record, line);
   }
 
-  return [...written];
+  return [...state.written];
 }

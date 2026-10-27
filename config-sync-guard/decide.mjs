@@ -132,7 +132,9 @@ function judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf, authore
  * esta sesión deba commitear ni subir, pero hay commits de otras sesiones y/o rutas que ningún transcript
  * vivo explica: se permite con nota), `'dismissed'` o `'dirty'`.
  */
-function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, dismissals, authoredWrites }) {
+function classifyOneRepo(repo, context) {
+  const { sessionId, mtimeOf, fingerprintOf, dismissals, authoredWrites } = context;
+
   if (!repoExists(repo)) return { repo, state: 'missing' };
 
   const status = repo.run(['status', '--porcelain=v1', '--branch']);
@@ -140,6 +142,10 @@ function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, 
   if (!status.ok) return { repo, state: 'unmeasurable', reason: status.stderr || 'git exited non-zero with no stderr' };
 
   const { aheadCount, dirtyPaths } = parseStatusPorcelain(status.stdout);
+
+  if (aheadCount === 0 && dirtyPaths.length === 0) return { repo, state: 'clean' };
+
+  const { liveAgents } = context;
   const judged = judgedPaths(repo, dirtyPaths, { liveAgents, sessionId, mtimeOf, authoredWrites });
   const ownPaths = judged.filter((entry) => entry.verdict === 'maker').map((entry) => entry.absolute);
   const workerOutput = judged.filter((entry) => entry.verdict === 'maker' && entry.workers.length > 0).map((entry) => ({ path: entry.absolute, workers: entry.workers }));
@@ -162,14 +168,33 @@ function classifyOneRepo(repo, { liveAgents, sessionId, mtimeOf, fingerprintOf, 
  * The decision over a parsed Stop payload. Returns `undefined` (allow silently),
  * `{ kind: 'note', notes, unexplained }` (allow, with a non-blocking message; `unexplained` lists the
  * `{ repo, path }` no live session made, for the ledger), or `{ kind: 'block', dirtyRepos }` (block). Every dependency is injectable so the whole state space is exercisable without a live fleet
- * or a real git repo.
- * @es La decisión sobre un payload `Stop` ya parseado. `undefined` (permite en silencio), `{kind:'note'}`
+ * or a real git repo. `liveAgents` is the answer itself; `readLiveAgents` is how to get it when it is needed
+ * (by default `liveAgentWrites(now)`), called at most once and only when a repo is dirty or ahead.
+ * @es La decisión sobre un payload `Stop` ya parseado. `liveAgents` es la respuesta; `readLiveAgents`, cómo
+ * obtenerla cuando hace falta (por omisión `liveAgentWrites(now)`): una vez como mucho, y solo con un repo sucio o adelantado. `undefined` (permite en silencio), `{kind:'note'}`
  * (permite con mensaje), o `{kind:'block'}` (bloquea). Toda dependencia es inyectable.
  */
-export function decide(payload, { repos = declaredRepos(), now = Date.now(), liveAgents, mtimeOf = latestChangeMs, fingerprintOf = measureFingerprint, dismissals, authoredWrites } = {}) {
+export function decide(payload, { repos = declaredRepos(), now = Date.now(), liveAgents, readLiveAgents = () => liveAgentWrites(now), mtimeOf = latestChangeMs, fingerprintOf = measureFingerprint, dismissals, authoredWrites } = {}) {
   if (payload?.stop_hook_active === true) return undefined;
 
-  const context = { liveAgents: liveAgents ?? liveAgentWrites(now), sessionId: payload?.session_id, mtimeOf, fingerprintOf, dismissals: dismissals ?? readDismissals(), authoredWrites: authoredWrites ?? readAuthoredWrites() };
+  // The live agents are read only when a repo has something they could explain: a clean repo is decided by its
+  // status alone, so the transcripts are never opened on a clean Stop (B1, measured 2026-10-27 on a fixture
+  // home: 1,401 ms of this guard's time was spent reading transcripts that decided nothing). Read once, then kept.
+  // @es Los agentes vivos se leen solo cuando un repo tiene algo que ellos podrían explicar: un repo limpio se
+  // decide por su status, así que en un Stop limpio no se abre ningún transcript. Se leen una vez y se guardan.
+  let agents = liveAgents;
+  const context = {
+    get liveAgents() {
+      agents ??= readLiveAgents();
+
+      return agents;
+    },
+    sessionId: payload?.session_id,
+    mtimeOf,
+    fingerprintOf,
+    dismissals: dismissals ?? readDismissals(),
+    authoredWrites: authoredWrites ?? readAuthoredWrites()
+  };
   const classified = repos.map((repo) => classifyOneRepo(repo, context));
 
   const dirtyRepos = classified.filter((entry) => entry.state === 'dirty');
