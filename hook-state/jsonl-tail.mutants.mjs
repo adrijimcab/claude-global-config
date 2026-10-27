@@ -55,7 +55,7 @@ const MUTANTS = [
 
   // --- the skipped-line count ---
   ['lastRecords does not count a corrupt line', J, '        else if (!isBlank(lines[at])) io.onSkip();\n', ''],
-  ['readFrom does not count a corrupt line', J, '          else if (!isBlank(line)) io.onSkip();\n', ''],
+  ['readFrom does not count a corrupt line', J, '            if (!isBlank(line)) io.onSkip();\n', ''],
   ['a blank line is counted as damage', J, "bytes.toString('utf8').trim() === ''", "bytes.toString('utf8') === 'never'"],
   ['every parsed record is counted as a skip too (lastRecords)', J, 'if (parsed !== undefined) found.push(parsed.value);\n        else if', 'if (parsed !== undefined) { found.push(parsed.value); io.onSkip(); }\n        else if'],
   ['lastRecords ignores the onSkip of its caller', J, "const io = { onRead, readBytes, onSkip };\n  const fd = openSync(file, 'r');\n  try {\n    const found", "const io = { onRead, readBytes, onSkip: NOTHING };\n  const fd = openSync(file, 'r');\n  try {\n    const found"],
@@ -80,7 +80,11 @@ const MUTANTS = [
   ['the partial line is lost at a chunk boundary', J, 'carry = buffer.subarray(last + 1);', 'carry = Buffer.alloc(0);'],
   ['the offset includes the unterminated last line', J, 'offset: skipping ? from : position - carry.length', 'offset: skipping ? from : position'],
   ['the offset moves to the end while still re-aligning', J, 'offset: skipping ? from : position - carry.length', 'offset: position - carry.length'],
-  ['a falsy record is dropped from readFrom', J, 'if (parsed !== undefined) records.push(parsed.value);', 'if (parsed !== undefined && parsed.value) records.push(parsed.value);']
+  ['a falsy record is dropped from readFrom', J, '} else if (onRecord === undefined) records.push(parsed.value);', '} else if (onRecord === undefined && parsed.value) records.push(parsed.value);'],
+  ['readFrom collects records even when they are handed to onRecord', J, '} else if (onRecord === undefined) records.push(parsed.value);', '} else if (true) records.push(parsed.value);'],
+  ['readFrom never hands a record to onRecord', J, '          else onRecord(parsed.value, parsed.text);\n', ''],
+  ['onRecord receives no line text', J, 'onRecord(parsed.value, parsed.text)', 'onRecord(parsed.value)'],
+  ['a corrupt line is handed to onRecord', J, '          if (parsed === undefined) {\n            if (!isBlank(line)) io.onSkip();\n          } else', '          if (parsed === undefined) {\n            if (!isBlank(line)) io.onSkip();\n            if (onRecord !== undefined) onRecord(undefined, line.toString());\n          } else']
 ];
 
 const survivors = runMutants({
