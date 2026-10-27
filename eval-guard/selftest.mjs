@@ -27,7 +27,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { digestInput } from '../hook-state/input-digest.mjs';
-import { extractPowerShellHereStrings } from './detect.mjs';
+import { extractPowerShellHereStrings, inspectCommand } from './detect.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
@@ -38,6 +38,8 @@ isolateState('eval-guard');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.join(HERE, 'guard.mjs');
+/** The variable that runs this file as the child of its direct checks. @es La variable que corre este fichero como hijo de sus comprobaciones directas. */
+const DIRECT_CHILD = 'EVAL_GUARD_SELFTEST_DIRECT_CHILD';
 
 /** Runs the guard exactly as the harness does. @es Ejecuta el guard exactamente como lo hace el harness. */
 function run(input) {
@@ -658,6 +660,38 @@ const cases = [
   ['deny', `\uFEFF${payload(String.raw`node -e "console.log('\\b')"`)}`, 'BOM-prefixed valid payload still decides'],
 ];
 
+/**
+ * The checks that call the detector in process: the PowerShell here-string cut (E4) and the nested-shell rule on its
+ * near misses, which must ANSWER, not throw (the hook fails open on a throw, which would read exactly like an allow).
+ * @es Las comprobaciones que llaman al detector en el propio proceso: el recorte de here-strings (E4) y la regla de
+ * shell anidada sobre sus casi-aciertos, que debe RESPONDER, no lanzar (el hook falla abierto ante una excepción, que
+ * se leería igual que un permiso).
+ */
+function directResults() {
+  const unterminated = lines("Write-Output @'", 'never closed', 'node -');
+  const midToken = lines("x@'", 'body', "'@");
+  const closed = lines("$a = @'", 'body', "'@ | node -");
+  const answers = (command) => {
+    try {
+      return inspectCommand(command, { toolName: 'Bash' }) === undefined;
+    } catch {
+      return false;
+    }
+  };
+
+  return [
+    [JSON.stringify(extractPowerShellHereStrings(unterminated)) === JSON.stringify({ text: unterminated, scripts: [] }), 'an unterminated opener is left in the text, hiding nothing'],
+    [JSON.stringify(extractPowerShellHereStrings(midToken)) === JSON.stringify({ text: midToken, scripts: [] }), 'an opener inside a token is no here-string'],
+    [JSON.stringify(extractPowerShellHereStrings(closed)) === JSON.stringify({ text: '$a = POWERSHELLHEREDATA0 | node -', scripts: [{ text: 'body', offset: 5, code: 0x40 }] }), 'a terminated one is cut with its offset and code point'],
+    ...[String.raw`pwsh -NoProfile -File C:/x/a.ps1 "C:\x"`, String.raw`powershell -NoProfile -File "C:\Users\me\link.ps1" -Name wt1`, String.raw`pwsh -c 'Get-Date'`].map((command) => [answers(command), `the nested-shell rule answers, and allows, without throwing: ${command}`])
+  ];
+}
+
+if (process.env[DIRECT_CHILD] === '1') {
+  process.stdout.write(JSON.stringify(directResults()));
+  process.exit(0);
+}
+
 let failures = 0;
 
 for (const [expected, input, label, fragment] of cases) {
@@ -693,19 +727,21 @@ for (const [expected, input, label, fragment] of cases) {
   }
 }
 
-// --- E4: the PowerShell here-string cut, read directly: an unterminated opener and a mid-token one stay text.
-// @es E4: el recorte de here-strings de PowerShell, leído directamente: una apertura sin cerrar o dentro de un token sigue siendo texto.
+// --- DIRECT CHECKS, run in a child process with a bounded heap and time: a decision that never terminates (a scan
+// whose index stops advancing) must fail a check here, never abort this proof with no verdict.
+// @es COMPROBACIONES DIRECTAS, en un proceso hijo con memoria y tiempo acotados: una decisión que no termina debe fallar
+// una comprobación aquí, nunca abortar esta prueba sin veredicto.
 let directChecks = 0;
 
 {
-  const unterminated = lines("Write-Output @'", 'never closed', 'node -');
-  const midToken = lines("x@'", 'body', "'@");
-  const closed = lines("$a = @'", 'body', "'@ | node -");
-  const results = [
-    [JSON.stringify(extractPowerShellHereStrings(unterminated)) === JSON.stringify({ text: unterminated, scripts: [] }), 'an unterminated opener is left in the text, hiding nothing'],
-    [JSON.stringify(extractPowerShellHereStrings(midToken)) === JSON.stringify({ text: midToken, scripts: [] }), 'an opener inside a token is no here-string'],
-    [JSON.stringify(extractPowerShellHereStrings(closed)) === JSON.stringify({ text: '$a = POWERSHELLHEREDATA0 | node -', scripts: [{ text: 'body', offset: 5, code: 0x40 }] }), 'a terminated one is cut with its offset and code point']
-  ];
+  const child = spawnSync(process.execPath, ['--max-old-space-size=128', fileURLToPath(import.meta.url)], { encoding: 'utf8', timeout: 60_000, env: { ...process.env, [DIRECT_CHILD]: '1' } });
+  let results;
+
+  try {
+    results = JSON.parse(child.stdout);
+  } catch {
+    results = [[false, `the direct checks did not run to a verdict (status ${String(child.status)}, signal ${String(child.signal)}): a decision did not terminate`]];
+  }
 
   for (const [ok, label] of results) {
     directChecks += 1;
