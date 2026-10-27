@@ -72,6 +72,14 @@ function check(name, given, expected) {
 
 const scratch = realpathSync(mkdtempSync(path.join(tmpdir(), 'worktree-install-selftest-')));
 
+/**
+ * Every REAL npm this selftest starts gets a cache inside its scratch: the npm cache is a seam, so a run here never
+ * writes the user's `~/.npm`, and it is OFFLINE, so the fixture's lockfile never reaches the registry. Production
+ * passes no `env` and keeps the user's cache.
+ * @es Todo npm REAL que arranca este selftest usa una caché dentro de su scratch; producción conserva la del usuario.
+ */
+const OWN_NPM = { ...process.env, npm_config_cache: path.join(scratch, 'npm-cache'), npm_config_offline: 'true', npm_config_update_notifier: 'false' };
+
 process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 
 let counter = 0;
@@ -335,6 +343,13 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
   check('own: no manager', ownInstall({ installDir: foreign, lockfile, command: ownInstallFor({}), cli: lying }).reason, 'no own install for package manager undefined');
   check('own: no npm CLI', ownInstall({ installDir: foreign, lockfile, command, cli: null }).reason, 'npm-cli.js not found next to this node');
   check('own: unreadable lockfile', ownInstall({ installDir: foreign, lockfile: path.join(foreign, 'absent'), command, cli: lying }).reason, `the lockfile ${path.join(foreign, 'absent')} cannot be read`);
+  check('own: the install runs in the environment it is given (the npm cache seam)', (() => {
+    let seen;
+
+    ownInstall({ installDir: foreign, lockfile, command, cli: lying, env: { npm_config_cache: '/seam' }, spawn: (_, __, options) => { seen = options.env; return { status: 1 }; } });
+
+    return seen?.npm_config_cache;
+  })(), '/seam');
   check('own: a spawn error', ownInstall({ installDir: foreign, lockfile, command, cli: lying, spawn: () => ({ error: { code: 'ENOENT' } }) }).reason, 'the install could not start: ENOENT');
   check('npm cli: npm_execpath first', npmCli({ env: { npm_execpath: '/x/npm-cli.js' }, execPath: '/n/node', exists: () => true }), '/x/npm-cli.js');
   check('npm cli: a non-npm execpath is skipped', npmCli({ env: { npm_execpath: '/x/yarn.js' }, execPath: '/n/bin/node', exists: (p) => p === '/x/yarn.js' || p.endsWith(path.join('lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')) }), path.join('/n/bin', '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'));
@@ -398,27 +413,27 @@ const vitestPlan = probePlanFor({ framework: 'node', testRunners: ['vitest'] });
   const lines = [];
   const write = (line) => lines.push(line);
 
-  check('cli: decide exits 0 with JSON', () => [runCli(['decide', '--main', project.main], { write, storeFile }), JSON.parse(lines.at(-1)).decision.strategy], [0, 'junction']);
-  check('cli: unknown step -> 2, bilingual usage', () => [runCli(['explode', '--main', project.main], { write, storeFile }), lines.at(-1).includes(' @es ')], [2, true]);
-  check('cli: probe without a worktree -> 2', () => runCli(['probe', '--main', project.main], { write, storeFile }), 2);
-  check('cli: an unknown option -> 2', () => runCli(['decide', '--main', project.main, '--yes', 'y'], { write, storeFile }), 2);
-  check('cli: a dangling option -> 2', () => runCli(['decide', '--main'], { write, storeFile }), 2);
-  check('cli: a bad timeout -> 2', () => runCli(['probe', '--main', project.main, '--worktree', fourth, '--timeout-ms', '0'], { write, storeFile }), 2);
-  check('cli: probe exits 0 and prints the decision', () => [runCli(['probe', '--main', project.main, '--worktree', fourth], { write, storeFile }), JSON.parse(lines.at(-1)).probe.verdict], [0, 'pass']);
-  check('cli: probe with nothing to probe -> 1', () => runCli(['probe', '--main', fresh('none'), '--worktree', fourth], { write, storeFile }), 1);
-  check('cli: install of a non-project -> 1', () => runCli(['install', '--main', fresh('none'), '--worktree', fourth], { write, storeFile }), 1);
-  check('cli: provision of a non-project -> 1', () => runCli(['provision', '--main', fresh('none'), '--worktree', fourth], { write, storeFile }), 1);
+  check('cli: decide exits 0 with JSON', () => [runCli(['decide', '--main', project.main], { write, storeFile, env: OWN_NPM }), JSON.parse(lines.at(-1)).decision.strategy], [0, 'junction']);
+  check('cli: unknown step -> 2, bilingual usage', () => [runCli(['explode', '--main', project.main], { write, storeFile, env: OWN_NPM }), lines.at(-1).includes(' @es ')], [2, true]);
+  check('cli: probe without a worktree -> 2', () => runCli(['probe', '--main', project.main], { write, storeFile, env: OWN_NPM }), 2);
+  check('cli: an unknown option -> 2', () => runCli(['decide', '--main', project.main, '--yes', 'y'], { write, storeFile, env: OWN_NPM }), 2);
+  check('cli: a dangling option -> 2', () => runCli(['decide', '--main'], { write, storeFile, env: OWN_NPM }), 2);
+  check('cli: a bad timeout -> 2', () => runCli(['probe', '--main', project.main, '--worktree', fourth, '--timeout-ms', '0'], { write, storeFile, env: OWN_NPM }), 2);
+  check('cli: probe exits 0 and prints the decision', () => [runCli(['probe', '--main', project.main, '--worktree', fourth], { write, storeFile, env: OWN_NPM }), JSON.parse(lines.at(-1)).probe.verdict], [0, 'pass']);
+  check('cli: probe with nothing to probe -> 1', () => runCli(['probe', '--main', fresh('none'), '--worktree', fourth], { write, storeFile, env: OWN_NPM }), 1);
+  check('cli: install of a non-project -> 1', () => runCli(['install', '--main', fresh('none'), '--worktree', fourth], { write, storeFile, env: OWN_NPM }), 1);
+  check('cli: provision of a non-project -> 1', () => runCli(['provision', '--main', fresh('none'), '--worktree', fourth], { write, storeFile, env: OWN_NPM }), 1);
 
   const sixth = project.worktree('wt-6');
 
   // The CLI runs the REAL npm, which cannot install the fixture's fake lockfile: a failed install is exit 1, no receipt.
-  check('cli: a failing install exits 1, no receipt', () => [runCli(['install', '--main', project.main, '--worktree', sixth], { write, storeFile }), existsSync(path.join(sixth, 'node_modules', RECEIPT)), JSON.parse(lines.at(-1)).ok], [1, false, false]);
+  check('cli: a failing install exits 1, no receipt', () => [runCli(['install', '--main', project.main, '--worktree', sixth], { write, storeFile, env: OWN_NPM }), existsSync(path.join(sixth, 'node_modules', RECEIPT)), JSON.parse(lines.at(-1)).ok], [1, false, false]);
 
   const seventh = project.worktree('wt-7');
 
-  check('cli: provision exits 0', () => runCli(['provision', '--main', project.main, '--worktree', seventh], { write, storeFile }), 0);
+  check('cli: provision exits 0', () => runCli(['provision', '--main', project.main, '--worktree', seventh], { write, storeFile, env: OWN_NPM }), 0);
 
-  const program = spawnSync(process.execPath, [path.join(HERE, 'worktree-install.mjs'), 'decide', '--main', project.main], { encoding: 'utf8', env: { ...process.env } });
+  const program = spawnSync(process.execPath, [path.join(HERE, 'worktree-install.mjs'), 'decide', '--main', project.main], { encoding: 'utf8', env: OWN_NPM });
 
   check('cli process: runs as a program', () => [program.status, JSON.parse(program.stdout || '{}').decision?.strategy !== undefined], [0, true]);
   check('cli process: importing it runs nothing', () => spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(path.join(HERE, 'worktree-install.mjs')).href)});`], { encoding: 'utf8' }).stdout, '');

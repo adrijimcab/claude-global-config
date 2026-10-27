@@ -98,12 +98,12 @@ export function probeAndRecord({ mainTop, worktreeTop, storeFile = defaultStoreF
  * The own install in the worktree, in the directory that holds the project's lockfile.
  * @es La instalación propia en el worktree, en el directorio del lockfile del proyecto.
  */
-export function installOwn({ mainTop, worktreeTop, situation = situationOf(mainTop, { worktreeTop }), spawn, cli }) {
+export function installOwn({ mainTop, worktreeTop, situation = situationOf(mainTop, { worktreeTop }), spawn, cli, env }) {
   if (situation.identity === undefined) return { ok: false, reason: situation.profile === undefined ? 'no JS/TS project' : 'the project has no lockfile, so nothing reproducible can be installed' };
 
   const lockfile = mapped(situation.identity.lockfile, mainTop, worktreeTop);
 
-  return ownInstall({ installDir: path.dirname(lockfile), lockfile, command: situation.install, ...(spawn === undefined ? {} : { spawn }), ...(cli === undefined ? {} : { cli }) });
+  return ownInstall({ installDir: path.dirname(lockfile), lockfile, command: situation.install, ...(spawn === undefined ? {} : { spawn }), ...(cli === undefined ? {} : { cli }), ...(env === undefined ? {} : { env }) });
 }
 
 /**
@@ -111,7 +111,7 @@ export function installOwn({ mainTop, worktreeTop, situation = situationOf(mainT
  * kit's junction form, probe it, and keep it only on a PASS; otherwise remove it and install.
  * @es El aprovisionamiento completo para un repositorio sin aprovisionador propio.
  */
-export function provision({ mainTop, worktreeTop, storeFile = defaultStoreFile(), timeoutMs = DEFAULT_PROBE_TIMEOUT_MS, spawn, cli }) {
+export function provision({ mainTop, worktreeTop, storeFile = defaultStoreFile(), timeoutMs = DEFAULT_PROBE_TIMEOUT_MS, spawn, cli, env }) {
   let situation = situationOf(mainTop, { storeFile, worktreeTop });
 
   if (situation.profile === undefined) return { ok: false, strategy: undefined, reason: 'no JS/TS project' };
@@ -141,7 +141,7 @@ export function provision({ mainTop, worktreeTop, storeFile = defaultStoreFile()
     steps.push('junction form removed');
   }
 
-  const installed = installOwn({ mainTop, worktreeTop, situation, spawn, cli });
+  const installed = installOwn({ mainTop, worktreeTop, situation, spawn, cli, env });
 
   return { ok: installed.ok, strategy: INSTALL_STRATEGY.OWN, decision: situation.decision, steps, install: installed };
 }
@@ -167,7 +167,7 @@ const USAGE = 'Usage: node worktree-install.mjs <decide|probe|install|provision>
  * The CLI; returns the exit code and writes one JSON object (or the usage line).
  * @es La CLI; devuelve el código de salida y escribe un objeto JSON (o el uso).
  */
-export function runCli(argv, { write = (line) => process.stdout.write(`${line}\n`), storeFile = defaultStoreFile() } = {}) {
+export function runCli(argv, { write = (line) => process.stdout.write(`${line}\n`), storeFile = defaultStoreFile(), env } = {}) {
   const [step, ...rest] = argv;
   const options = optionsOf(rest);
   const known = new Set(['main', 'worktree', 'timeout-ms']);
@@ -201,14 +201,14 @@ export function runCli(argv, { write = (line) => process.stdout.write(`${line}\n
   }
 
   if (step === 'install') {
-    const installed = installOwn({ mainTop, worktreeTop, situation: situationOf(mainTop, { storeFile, worktreeTop }) });
+    const installed = installOwn({ mainTop, worktreeTop, situation: situationOf(mainTop, { storeFile, worktreeTop }), env });
 
     print(installed);
 
     return installed.ok ? 0 : 1;
   }
 
-  const provisioned = provision({ mainTop, worktreeTop, storeFile, timeoutMs });
+  const provisioned = provision({ mainTop, worktreeTop, storeFile, timeoutMs, env });
 
   print(provisioned);
 

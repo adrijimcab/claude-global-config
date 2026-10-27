@@ -54,10 +54,12 @@ export function npmCli({ env = process.env, execPath = process.execPath, exists 
  * @param options.lockfile The lockfile's absolute path in that directory.
  * @param options.command `ownInstallFor(profile)`.
  * @param options.spawn Injectable `spawnSync`; options.cli injectable npm CLI path.
+ * @param options.env The install's environment: the user's own by default, so production keeps the user's npm
+ *   cache; a selftest names a cache of its own here (`npm_config_cache`) and never writes the real one.
  * @returns `{ ok: true, receipt }` or `{ ok: false, reason, tail? }`.
  * @es Corre la instalación propia en `installDir` y la verifica.
  */
-export function ownInstall({ installDir, lockfile, command, spawn = spawnSync, cli = npmCli() }) {
+export function ownInstall({ installDir, lockfile, command, spawn = spawnSync, cli = npmCli(), env = process.env }) {
   if (command?.ok !== true) {
     return { ok: false, reason: command?.advice === undefined ? `no own install for package manager ${String(command?.manager)}` : `run \`${command.advice}\` in ${installDir} (only npm is automated)` };
   }
@@ -68,7 +70,7 @@ export function ownInstall({ installDir, lockfile, command, spawn = spawnSync, c
 
   if (lockfileHash === undefined) return { ok: false, reason: `the lockfile ${lockfile} cannot be read` };
 
-  const result = spawn(process.execPath, [cli, ...command.args], { cwd: installDir, encoding: 'utf8', windowsHide: true });
+  const result = spawn(process.execPath, [cli, ...command.args], { cwd: installDir, encoding: 'utf8', windowsHide: true, env });
   const tail = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.split('\n').filter((line) => line.trim() !== '').slice(-TAIL_LINES);
 
   if (result.error !== undefined) return { ok: false, reason: `the install could not start: ${String(result.error.code ?? result.error.message)}`, tail };

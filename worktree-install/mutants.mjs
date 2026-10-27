@@ -85,6 +85,8 @@ const MUTANTS = [
   ['the tree is not verified', O, "  if (tenancy.state !== TENANCY.OWN) return", '  if (false) return'],
   ['a failing install is a success', O, 'if (result.status !== 0) return', 'if (false) return'],
   ['no receipt is written', O, "  writeFileSync(path.join(installDir, 'node_modules', RECEIPT), `${JSON.stringify(receipt, null, 2)}\\n`, 'utf8');\n", ''],
+  ['the install ignores its environment, so a selftest writes the user\'s npm cache', O, "windowsHide: true, env });", 'windowsHide: true });'],
+  ['the command line drops the environment of its install', W, '    const installed = installOwn({ mainTop, worktreeTop, situation: situationOf(mainTop, { storeFile, worktreeTop }), env });', '    const installed = installOwn({ mainTop, worktreeTop, situation: situationOf(mainTop, { storeFile, worktreeTop }) });'],
   ['npm_execpath of another tool is used', O, "env.npm_execpath.endsWith('npm-cli.js')", 'true'],
   // --- the provisioning ---
   ['a refused junction is kept', W, '    const removed = unlinkFarm(worktreeProject);\n', '    return { ok: true, strategy: INSTALL_STRATEGY.JUNCTION, decision: situation.decision, steps };\n    const removed = unlinkFarm(worktreeProject);\n'],

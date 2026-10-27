@@ -36,6 +36,7 @@ const MUTANTS = [
   ['the ledger lock is not a lock', R, "['failure-capture', 'ledger.lock', LOCK, 'the ledger writers']", "['failure-capture', 'ledger.lock', KEEP, 'the ledger writers']"],
   ['the breaker of a stale ledger lock is not a lock', R, "['failure-capture', 'ledger.lock.breaker', LOCK, 'the writer breaking a stale ledger lock']", "['failure-capture', 'ledger.lock.breaker', KEEP, 'the writer breaking a stale ledger lock']"],
   ['the stamps of the sessions are archived instead of pruned by age', R, "['failure-capture', 'stamps/*', PRUNE,", "['failure-capture', 'stamps/*', ARCHIVE,"],
+  ['the probe verdicts of the install strategy are archived', R, "['worktree-install', 'verdicts.json', KEEP,", "['worktree-install', 'verdicts.json', ARCHIVE,"],
   ['the cooldowns of the sessions are kept forever', R, "['failure-capture', 'guard-state/*', PRUNE,", "['failure-capture', 'guard-state/*', KEEP,"],
 
   // --- J-3: pruning by age and removing the obsolete ---
