@@ -18,7 +18,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { lstatSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -54,6 +54,34 @@ export function treeStatus(tree) {
   const entries = result.stdout.split('\0').filter((entry) => entry !== '');
 
   return new Map(entries.map((entry) => [entry.slice(3), `${entry.slice(0, 2)}|${signatureOf(path.join(tree, entry.slice(3)))}`]));
+}
+
+/** The prefix git writes before each worktree's path in `worktree list --porcelain`. @es El prefijo que git escribe antes de la ruta de cada worktree. */
+const WORKTREE_RECORD = 'worktree ';
+
+/**
+ * The MAIN checkout of `tree` when `tree` is a LINKED worktree, else `undefined`. A selftest run in a linked worktree
+ * can still write the main checkout (a module that finds "the main checkout" through the shared git dir, a fixture
+ * that resolves its repository from there), and that checkout is not the tree under test, so the runner watches its
+ * `git status` too. Git names the main worktree first in `git worktree list --porcelain`; a bare repository has no
+ * working tree to watch, and the tree that IS the main checkout is already watched as the tree itself.
+ * @es El checkout PRINCIPAL de `tree` cuando `tree` es un worktree ENLAZADO; si no, `undefined`. Un selftest que corre
+ * en un worktree enlazado aún puede escribir el checkout principal, que no es el árbol bajo prueba, así que el runner
+ * vigila también su `git status`. Git nombra primero el worktree principal; un repositorio bare no tiene árbol que
+ * vigilar, y el árbol que ES el checkout principal ya se vigila como árbol.
+ */
+export function mainCheckoutOf(tree) {
+  const listed = spawnSync('git', ['-C', tree, 'worktree', 'list', '--porcelain'], { encoding: 'utf8', windowsHide: true });
+
+  if (listed.error || listed.status !== 0) throw new TreeStatusError(tree, (listed.error?.message ?? listed.stderr ?? '').trim());
+
+  const [first = ''] = listed.stdout.split('\n\n');
+  const lines = first.split('\n');
+  const main = lines[0].startsWith(WORKTREE_RECORD) ? lines[0].slice(WORKTREE_RECORD.length) : undefined;
+
+  if (main === undefined || lines.includes('bare')) return undefined;
+
+  return realpathSync.native(main) === realpathSync.native(tree) ? undefined : main;
 }
 
 /**

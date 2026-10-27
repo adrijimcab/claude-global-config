@@ -12,6 +12,9 @@
  *   - THE HOME: a write under `~/.claude` (through `homedir()` or `HOOK_CLAUDE_HOME`), a write elsewhere in the
  *     home, an empty directory, and `~/.claude` removed are each RED and named; a write into `HOOK_STATE_DIR` is not.
  *   - THE TEMP: a file and a file in a subdirectory left behind are RED, named file by file.
+ *   - THE MAIN CHECKOUT of a linked worktree under test: a tracked file changed and a file created there are RED and
+ *     named; the main checkout run as the tree has no second area; a bare repository's worktree has none either; a
+ *     directory git cannot list worktrees of is a `TreeStatusError`.
  *   - THE TREE: a path `git status` did not list (added), lists differently (a tracked file changed, a dirty file
  *     touched again, a tracked file deleted), or no longer lists (removed) is RED and named; an ignored path is not
  *     watched. A tree git cannot read after a selftest stops the run, exit 2, with nothing later run.
@@ -25,16 +28,19 @@
  * reemplaza); el home (escrituras bajo `~/.claude` o fuera, un directorio vacío y `~/.claude` borrado son ROJO; el
  * estado en `HOOK_STATE_DIR` no); el temporal (cada resto, fichero a fichero); el árbol (añadido, cambiado o ya no
  * listado por `git status`; lo ignorado no se vigila; un árbol ilegible detiene la corrida con 2); de quién es la
- * escritura (otro proceso que escribe el home y el temporal REALES nunca lo pone rojo); y el informe.
+ * escritura (otro proceso que escribe el home y el temporal REALES nunca lo pone rojo); el checkout principal de un
+ * worktree enlazado (un fichero seguido cambiado y uno creado ahí son ROJO; ni el principal como árbol ni el worktree
+ * de un repo bare tienen segunda área; un directorio sin worktrees legibles es `TreeStatusError`); y el informe.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { RUN, fixtureKit } from './fixtures.mjs';
+import { RUN, fixtureKit, git } from './fixtures.mjs';
 import { runSelftests } from './run.mjs';
 import { createSandbox, removeSandbox, sandboxEnv } from './sandbox.mjs';
+import { TreeStatusError, mainCheckoutOf } from './tree-status.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
 /** The fleet this selftest belongs to, computed here and not from the module under test. @es La flota a la que pertenece este selftest. */
@@ -200,6 +206,34 @@ const inIndexTree = (relative) => path.join(indexTree, relative);
 check(indexRun.status === 1 && indexRun.stdout.includes(`    ${inIndexTree('a/old.txt')} added to the tree`) && indexRun.stdout.includes(`    ${inIndexTree('a/renamed.txt')} added to the tree`), `a staged rename names both paths: ${indexRun.stdout}`);
 check(indexRun.stdout.includes(`    ${inIndexTree('a/staged.txt')} changed in the tree`), `staging an untouched file is a change: ${indexRun.stdout}`);
 
+// ── The main checkout of a linked worktree under test (measured 2026-10-27: GREEN before this area existed) ──────
+// @es ── El checkout principal de un worktree enlazado bajo prueba (medido el 2026-10-27: VERDE antes de esta área) ──
+const mainBody = "import { spawnSync } from 'node:child_process';\nconst common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).stdout.trim();\nconst main = path.dirname(common);\nappendFileSync(path.join(main, 'a', 'kept.txt'), 'more');\nwriteFileSync(path.join(main, 'a', 'main-residue.txt'), 'x');\nwriteFileSync('own.txt', 'x');";
+const mainRepo = repo({ tracked: { 'a/selftest.mjs': script(mainBody), 'a/kept.txt': 'one' }, commit: true });
+const linkedTree = path.join(bareDir(), 'linked');
+git(mainRepo, 'worktree', 'add', '-q', linkedTree);
+const linkedRun = runIn(linkedTree, realWorld());
+check(linkedRun.status === 1 && linkedRun.stdout.includes('RED    a/selftest.mjs (exit 0)') && linkedRun.stdout.includes('escaped its sandbox: 3 path(s)'), `a selftest of a linked worktree that writes its main checkout is RED: ${linkedRun.stdout}${quoted(linkedRun.stderr)}`);
+check(linkedRun.stdout.includes(`    ${path.join(mainRepo, 'a', 'kept.txt')} added to the main checkout of the worktree under test: the selftest wrote outside its own tree @es `), `a tracked file of the main checkout it changed is named: ${linkedRun.stdout}`);
+check(linkedRun.stdout.includes(`    ${path.join(mainRepo, 'a', 'main-residue.txt')} added to the main checkout`), `a file it created in the main checkout is named: ${linkedRun.stdout}`);
+check(linkedRun.stdout.indexOf(path.join(linkedTree, 'a', 'own.txt')) > 0 && linkedRun.stdout.indexOf(path.join(linkedTree, 'a', 'own.txt')) < linkedRun.stdout.indexOf(path.join(mainRepo, 'a', 'kept.txt')), `the tree's own escapes come before the main checkout's: ${linkedRun.stdout}`);
+check(mainCheckoutOf(linkedTree) === mainRepo, `the main checkout of a linked worktree is the first worktree git lists: ${mainCheckoutOf(linkedTree)}`);
+check(mainCheckoutOf(mainRepo) === undefined, 'the main checkout itself has no other checkout to watch');
+const bareRepo = bareDir();
+git(bareRepo, 'init', '-q', '--bare');
+const bareLinked = path.join(bareDir(), 'from-bare');
+git(bareRepo, 'worktree', 'add', '-q', '--orphan', '-b', 'orphan', bareLinked);
+check(existsSync(bareLinked) && mainCheckoutOf(bareLinked) === undefined, `a worktree of a bare repository has no main checkout to watch: ${existsSync(bareLinked)} ${mainCheckoutOf(bareLinked)}`);
+let unlistable;
+try {
+  mainCheckoutOf(bareDir());
+} catch (error) {
+  unlistable = error;
+}
+check(unlistable instanceof TreeStatusError, 'a directory git cannot list worktrees of is a TreeStatusError, never a silent nothing');
+const mainRun = runIn(mainRepo, realWorld());
+check(mainRun.status === 1 && !mainRun.stdout.includes('main checkout'), `the main checkout run as the tree names its changes as the tree's: ${mainRun.stdout}`);
+
 // ── Whose write: a concurrent writer to the REAL home and temp ──────────────────────────────────────
 const concurrentWorld = realWorld();
 const concurrent = repo({
@@ -234,13 +268,17 @@ check(raced.wrote && raced.code === 0 && raced.stdout.includes('1/1 green'), `a 
 
 // ── The report ───────────────────────────────────────────────────────────────────────────────────
 // `Z.txt` sorts before `a.txt` by code unit, after it in a case-insensitive listing; a removal sorts before an
-// addition but is found after it. Only real sorting lists them right.
+// addition but is found after it. Six temp names written out of order make a disk listing that happens to be
+// sorted (two names in hash order were, on ext4, measured 2026-10-27) a 1-in-720 chance. Only real sorting lists
+// them right.
 // @es `Z.txt` va antes que `a.txt` por unidad de código y después en un listado sin mayúsculas; un borrado va
-// antes que una adición pero se encuentra después. Solo un orden real los lista bien.
-const orderedBody = "writeFileSync('z-new.txt', 'x');\nrmSync('b-old.txt');\nwriteFileSync(path.join(os.tmpdir(), 'a.txt'), 'x');\nwriteFileSync(path.join(os.tmpdir(), 'Z.txt'), 'x');\nwriteFileSync(path.join(os.homedir(), '.claude', 'b.txt'), 'x');\nconsole.log('BOOM-MARK');\nprocess.exit(1);";
+// antes que una adición pero se encuentra después. Seis nombres escritos desordenados hacen que un listado del disco
+// ordenado por azar (con dos nombres en orden hash lo estaba, en ext4, medido el 2026-10-27) sea 1 entre 720. Solo
+// un orden real los lista bien.
+const orderedBody = "writeFileSync('z-new.txt', 'x');\nrmSync('b-old.txt');\nfor (const name of ['m.txt', 'a.txt', 'Z.txt', 'q.txt', 'c.txt', 'X.txt']) writeFileSync(path.join(os.tmpdir(), name), 'x');\nwriteFileSync(path.join(os.homedir(), '.claude', 'b.txt'), 'x');\nconsole.log('BOOM-MARK');\nprocess.exit(1);";
 const ordered = caseOf(orderedBody, { loose: { 'a/b-old.txt': 'x' } });
 const at = (text) => ordered.stdout.indexOf(text);
-const positions = [at('~/.claude/b.txt'), at('$TMP/Z.txt'), at('$TMP/a.txt'), at(path.join(ordered.tree, 'a', 'b-old.txt')), at(path.join(ordered.tree, 'a', 'z-new.txt'))];
+const positions = [at('~/.claude/b.txt'), ...['X.txt', 'Z.txt', 'a.txt', 'c.txt', 'm.txt', 'q.txt'].map((name) => at(`$TMP/${name}`)), at(path.join(ordered.tree, 'a', 'b-old.txt')), at(path.join(ordered.tree, 'a', 'z-new.txt'))];
 check(ordered.stdout.includes('RED    a/selftest.mjs (exit 1)') && ordered.stdout.includes('BOOM-MARK'), `a red selftest that also escaped reports its exit and output: ${ordered.stdout}`);
 check(positions.every((position, index) => position > 0 && (index === 0 || position > positions[index - 1])), `escapes are listed home, temp, tree, each sorted: ${positions}`);
 

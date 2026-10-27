@@ -25,8 +25,12 @@ const REMOTE_POLICY = 'worktree-landing/remote-policy.mjs';
 const TEST_COMMAND = 'worktree-landing/test-command.mjs';
 const VERIFICATION = 'worktree-landing/verification.mjs';
 const WORKING_TREE = 'worktree-landing/working-tree.mjs';
+const SELFTEST = 'worktree-landing/selftest.mjs';
 
 const MUTANTS = [
+  // The selftest's own seams: a real npm never writes the user's ~/.npm / Las costuras del selftest: npm real nunca escribe el ~/.npm del usuario
+  ['the suite\'s npm writes its debug logs and stamp into the user\'s cache', SELFTEST, 'process.env.npm_config_cache = NPM_CACHE;', ''],
+  ['the suite\'s npm runs its update notifier against the registry', SELFTEST, "process.env.npm_config_update_notifier = 'false';", ''],
   // Which two checkouts / Qué dos checkouts
   ['the same checkout passed twice is accepted', PRECONDITIONS, 'if (topOf(worktree) === topOf(main)) {', 'if (false) {'],
   ['a separate clone is accepted as the worktree', PRECONDITIONS, 'if (commonOf(worktree) !== commonOf(main)) {', 'if (false) {'],

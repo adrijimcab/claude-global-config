@@ -99,6 +99,21 @@ process.env.GIT_AUTHOR_EMAIL = 'fixture@example.invalid';
 process.env.GIT_COMMITTER_NAME = 'fixture';
 process.env.GIT_COMMITTER_EMAIL = 'fixture@example.invalid';
 
+/**
+ * Every REAL npm this selftest starts (the declared unit suite runs `npm run test:all` through `land.mjs`) inherits a
+ * cache inside the scratch: npm keeps its debug logs (`<cache>/_logs`) and its update-notifier stamp
+ * (`<cache>/_update-notifier-last-checked`) under the cache, so this one seam keeps both out of the user's `~/.npm`
+ * (measured 2026-10-27: nine debug logs and the stamp in the runner's sandbox home). The notifier is off as well, so
+ * a run never asks the registry for a newer npm. Production sets nothing and keeps the user's cache.
+ * @es Todo npm REAL que arranca este selftest hereda una caché dentro del scratch: npm guarda bajo ella sus logs de
+ * depuración y la marca del aviso de actualización, así esta única costura los saca del `~/.npm` del usuario (medido
+ * el 2026-10-27: nueve logs y la marca en el home del sandbox del runner). El aviso va apagado, así ninguna corrida
+ * consulta el registro. Producción no fija nada y conserva la caché del usuario.
+ */
+const NPM_CACHE = path.join(scratchRoot, 'npm-cache');
+process.env.npm_config_cache = NPM_CACHE;
+process.env.npm_config_update_notifier = 'false';
+
 let failures = 0;
 let assertions = 0;
 let fixtures = 0;
@@ -457,6 +472,9 @@ try {
   };
   const suiteGreenReport = expectLanded('declared unit suite green, no selftest runner', suiteLayout(0));
   check(suiteGreenReport.includes('SUITE-GREEN-MARK') && suiteGreenReport.includes('npm run test:all'), `declared unit suite green: the report names the suite and its last line: ${suiteGreenReport}`);
+  const npmLogs = path.join(NPM_CACHE, '_logs');
+  check(existsSync(npmLogs) && readdirSync(npmLogs).length > 0, `the suite's npm writes its debug logs under the selftest's own cache, never the user's ~/.npm: ${npmLogs}`);
+  check(!existsSync(path.join(NPM_CACHE, '_update-notifier-last-checked')), "the suite's npm never runs its update notifier, so a run never asks the registry");
   // A suite's failure exit is any non-zero code: 3 here, so a check that knew only exit 1 would miss it.
   // @es La salida de fallo de una suite es cualquier código distinto de cero: aquí 3.
   const suiteRedReport = expectRefused('declared unit suite red', suiteLayout(3), { exitCode: 1, label: 'RED', reason: 'verification-red', text: 'SUITE-RED-MARK' });
