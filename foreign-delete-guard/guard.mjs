@@ -42,18 +42,20 @@ import { fileURLToPath } from 'node:url';
 
 import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
 import { dialectOfTool } from '../shell-command/shell-command.mjs';
-import { agentKeyOf, confirmCall, recordCall } from './authored-journal.mjs';
+import { agentKeyOf, confirmCall, fileSystemNow, recordCall } from './authored-journal.mjs';
 import { pendingCreations } from './authorship.mjs';
 import { judgeDeletion } from './judge.mjs';
 import { refusalText } from './refusal.mjs';
 
 /**
  * The hook output for a raw `PreToolUse` payload, or `undefined` to let the call run. Exported so the dispatcher
- * can run it in its own process. `deps.judge` is injectable so a selftest can make the decision fail.
- * @es La salida de hook para un payload crudo, o `undefined` para dejar correr la llamada.
+ * can run it in its own process. `deps.judge` is injectable so a selftest can make the decision fail, and
+ * `deps.platform` so it can read the deleting line as another platform would (the Git Bash spellings exist only on
+ * win32). @es La salida de hook para un payload crudo, o `undefined` para dejar correr la llamada. `deps.platform`
+ * permite leer la línea que borra como lo haría otra plataforma (las grafías de Git Bash solo existen en win32).
  */
 export function evaluate(raw, deps = {}) {
-  const { judge = judgeDeletion } = deps;
+  const { judge = judgeDeletion, platform = process.platform } = deps;
   let payload;
 
   try {
@@ -66,15 +68,16 @@ export function evaluate(raw, deps = {}) {
 
   try {
     if (payload?.hook_event_name === 'PostToolUse') {
-      // The call completed: confirm what it really created. @es La llamada se completó: confirmar lo que creó de verdad.
-      confirmCall(agentKeyOf(payload), payload.tool_use_id, Date.now());
+      // The call completed: confirm what it really created, its end stamped on the clock that stamps births.
+      // @es La llamada se completó: confirmar lo que creó de verdad, con el fin sellado en el reloj de los nacimientos.
+      confirmCall(agentKeyOf(payload), payload.tool_use_id, fileSystemNow(agentKeyOf(payload)));
 
       return undefined;
     }
 
     const dialect = dialectOfTool(payload?.tool_name);
     const command = payload?.tool_input?.command;
-    const verdict = dialect === undefined || typeof command !== 'string' ? undefined : judge(payload, dialect, command, deps);
+    const verdict = dialect === undefined || typeof command !== 'string' ? undefined : judge(payload, dialect, command, { ...deps, platform });
 
     if (verdict !== undefined) return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: refusalText(verdict) } };
 
@@ -82,7 +85,7 @@ export function evaluate(raw, deps = {}) {
     // authorize its own line. An agent that cannot be told apart has no safe key and nothing is written.
     // @es La llamada se permite: se anota su inicio y lo que va a crear, DESPUÉS de decidir, para que nunca
     // autorice su propia línea. Un agente que no se distingue no tiene clave segura y no se escribe nada.
-    recordCall(agentKeyOf(payload), payload.tool_use_id ?? `pre-${Date.now()}-${process.pid}`, Date.now(), pendingCreations(payload));
+    recordCall(agentKeyOf(payload), payload.tool_use_id ?? `pre-${Date.now()}-${process.pid}`, fileSystemNow(agentKeyOf(payload)), pendingCreations(payload));
 
     return undefined;
   } catch {

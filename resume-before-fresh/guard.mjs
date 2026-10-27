@@ -43,37 +43,26 @@
  * ha movido bajo el transcript y un agente fresco sí es lo correcto.
  */
 
-import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync, statSync } from 'node:fs';
 
+import { EXHAUSTED_TRANSCRIPT_BYTES, SIZE_RULE_LEDGER_KEY, holderOf, resumabilityOf, sessionOf, takeoverDeclaration } from '../agent-liveness/holder.mjs';
+import { readLifecycle } from '../agent-liveness/lifecycle-log.mjs';
 import { agentRecords } from '../agent-liveness/liveness.mjs';
 import { advise, deny, hookMain, runWhenMain, tryParsePayload } from '../hook-io/hook-io.mjs';
 import { declaredWorktrees, recordWorktrees, sameErrand } from './worktree-identity.mjs';
 
 const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 
-/**
- * How recent a stopped agent must be for resuming it to beat starting over. Beyond this the trunk has
- * moved, the measurements inside its transcript have expired, and a fresh agent is the honest choice.
- * @es Cuán reciente debe ser un agente parado para que reanudarlo gane a empezar de cero.
- */
-export const RESUMABLE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Size past which a stopped agent's transcript is no longer resumed. SOURCE: the global lessons ledger,
- * key `resumed-giant-transcripts-exhausted-quota` («once a worker's transcript passes ~2 MB, do not resume
- * it: launch a fresh agent with a narrow scope that reads the state from the files»); the ledger writes
- * "~2 MB", read here as 2,000,000 bytes. The one place this number lives: the decision and the printed
- * rule both read it.
- * @es Tamaño a partir del cual el transcript de un agente parado ya no se reanuda. FUENTE: el ledger
- * global de lecciones, clave `resumed-giant-transcripts-exhausted-quota` («pasados ~2 MB no se reanuda:
- * agente fresco con alcance acotado que lee el estado de los ficheros»); "~2 MB" se lee como 2.000.000
- * bytes. Es el único sitio donde vive el número: la decisión y la regla impresa lo leen.
+ * Whether an agent can be resumed from here — context-length stop, transcript past the ledger size, last
+ * write outside the resume window, another session — lives in the shared holder decision,
+ * `../agent-liveness/holder.mjs`, so this guard and `orphan-work` read ONE answer to "can the agent that
+ * holds this worktree continue". Re-exported for the callers that read them from here.
+ * @es La clasificación de agotamiento vive en la decisión compartida de titular, `holder.mjs`, para que este
+ * guard y `orphan-work` lean UNA sola respuesta. Se reexporta para quien la lee desde aquí.
  */
-export const EXHAUSTED_TRANSCRIPT_BYTES = 2_000_000;
-
-/** The ledger key the size rule comes from. @es La clave del ledger de la que sale la regla de tamaño. */
-const SIZE_RULE_LEDGER_KEY = 'resumed-giant-transcripts-exhausted-quota';
+export { CONTEXT_EXHAUSTED_ERROR_CLASS, CONTEXT_EXHAUSTED_TEXT, EXHAUSTED_TRANSCRIPT_BYTES, RESUMABLE_WINDOW_MS, sessionOf, stoppedOnContextLength } from '../agent-liveness/holder.mjs';
 
 /**
  * Share of the SMALLER errand's identifying words that must appear in the other before this refuses: all
@@ -279,60 +268,6 @@ export function projectSlug(repoPath) {
   return key;
 }
 
-/** How much of a transcript's tail is read to find its last record. @es Cuánto se lee del final del transcript. */
-const TAIL_BYTES = 64 * 1024;
-
-/** The API error text a context-length stop leaves as the transcript's last record (measured). @es El texto que deja una parada por longitud de contexto. */
-export const CONTEXT_EXHAUSTED_TEXT = 'Prompt is too long';
-
-/** The structured `error` class of that record (measured; a rate limit is `rate_limit`). @es La clase `error` estructurada de ese registro. */
-export const CONTEXT_EXHAUSTED_ERROR_CLASS = 'invalid_request';
-
-/**
- * Whether the agent STOPPED because its context ran out — the one terminal state a resume cannot leave.
- *
- * MEASURED 2026-09-30 on `aa3437bf9bf7832a9` (the coordinator, live, then this transcript read): its task
- * notification said `failed`, «Agent terminated early due to an API error: Prompt is too long», and the
- * transcript's LAST record is a synthetic assistant message with `isApiErrorMessage: true` and exactly
- * that text. A resume replays that same oversized transcript, so this guard's own recipe — "resume it by
- * its id" — cannot work there, and refusing a fresh replacement pointed at a door that will not open.
- * Other API errors are NOT this state: agents stopped by a rate limit were resumed by id successfully
- * (the incident behind this guard), so only the context-length text disqualifies.
- * @es Si el agente PARÓ porque se le acabó el contexto: el único estado del que no saca un resume. Medido
- * el 2026-09-30: el último registro del transcript es un mensaje sintético con `isApiErrorMessage` y
- * «Prompt is too long». Otros errores de API NO: los agentes parados por límite de tasa sí se reanudaron.
- */
-export function stoppedOnContextLength(transcript) {
-  let descriptor;
-
-  try {
-    descriptor = openSync(transcript, 'r');
-
-    const size = fstatSync(descriptor).size;
-    const length = Math.min(size, TAIL_BYTES);
-    const tail = Buffer.alloc(length);
-
-    readSync(descriptor, tail, 0, length, size - length);
-
-    const lines = tail.toString('utf8').split('\n').filter((line) => line.trim().length > 0);
-    const last = JSON.parse(lines.at(-1) ?? '{}');
-    const text = Array.isArray(last?.message?.content) ? last.message.content.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('') : '';
-
-    // The structured fields decide the class: a harness-synthesised API error record whose `error` is
-    // `invalid_request`. That class is broader than context length, and the record carries nothing finer
-    // (measured on aa3437bf9bf7832a9 and aad6e241f1cc53532: `diagnostics` and `stop_details` are null), so
-    // the API's own message is compared by EQUALITY — never searched for — to pick context length out of it.
-    // @es Los campos estructurados deciden la clase: un error de API sintetizado con `error`
-    // `invalid_request`. Esa clase es más amplia que la longitud de contexto y el registro no trae nada más
-    // fino, así que el mensaje de la API se compara por IGUALDAD, nunca se busca dentro.
-    return last?.isApiErrorMessage === true && last.error === CONTEXT_EXHAUSTED_ERROR_CLASS && text === CONTEXT_EXHAUSTED_TEXT;
-  } catch {
-    return false; // an unreadable tail is not evidence of this state
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
-  }
-}
-
 /** Whether two labels carry exactly the same significant words. @es Si dos etiquetas llevan exactamente las mismas palabras. */
 function sameLabel(left, right) {
   return left.size > 0 && left.size === right.size && [...left].every((word) => right.has(word));
@@ -345,7 +280,7 @@ function sameLabel(left, right) {
  * @es Agentes recientes de ESTE proyecto cuyo encargo ya cubre el que se va a despachar, del más
  * reciente al más antiguo. Se devuelven TODOS: nombrar solo uno esconde los demás.
  */
-function matchingAgents(description, repoPath, records, now, prompt = '') {
+function matchingAgents(description, repoPath, records, now, prompt = '', session = undefined, lifecycle = readLifecycle()) {
   const wanted = errandWords(description);
   const label = significantWords(description);
   const wantedTrees = declaredWorktrees(prompt);
@@ -410,8 +345,6 @@ function matchingAgents(description, repoPath, records, now, prompt = '') {
       continue; // no transcript is nothing to resume
     }
 
-    if (now - lastWrite > RESUMABLE_WINDOW_MS) continue;
-
     // The worktree the two dispatches NAME decides the errand when both name one: the same worktree is the
     // same errand whatever the wording, a different one is a different errand whatever the wording. Only
     // when either side names no linked worktree does the wording rule above decide, unchanged.
@@ -422,59 +355,68 @@ function matchingAgents(description, repoPath, records, now, prompt = '') {
 
     if (identity === 'different' || (identity === 'unknown' && !wordingMatches)) continue;
 
-    // Exhausted: either the context ran out (a resume replays the transcript that was already too long) or the
-    // transcript passed the ledger size (a resume pays that whole history again). Either way the agent is
-    // UNRESUMABLE. It is still returned — marked — because the author must be told where its worktree is.
-    // @es Agotado: o se acabó el contexto (un resume reproduce el transcript ya demasiado largo) o el
-    // transcript pasó el tamaño del ledger (un resume paga de nuevo todo ese historial). En ambos casos NO se
-    // puede reanudar. Se devuelve marcado, porque al autor hay que decirle dónde está su worktree.
-    const oversized = bytes > EXHAUSTED_TRANSCRIPT_BYTES;
+    // Whether it can be resumed FROM HERE is the shared per-record answer (`resumabilityOf`): context, size,
+    // window and session. An unresumable match is still returned — marked — because the author must be told
+    // where its worktree is.
+    // @es Si se puede reanudar DESDE AQUÍ es la respuesta compartida por registro (`resumabilityOf`): contexto,
+    // tamaño, ventana y sesión. Un candidato irreanudable se devuelve igual, marcado, para nombrar su worktree.
+    const resumability = resumabilityOf(record, { now, session, bytes, lastWrite });
 
-    matches.push({ id: record.id, description: record.description, lastWrite, ratio, worktreePath: recordedWorktree, bytes, oversized, exhausted: stoppedOnContextLength(record.transcript) || oversized });
+    matches.push({ id: record.id, description: record.description, lastWrite, ratio, worktreePath: recordedWorktree, bytes, ...resumability });
+  }
+
+  // An agent with a worktree is offered for resume only while it IS that worktree's holder: the holder
+  // decision reads the NEWEST record of the worktree, and offering an older one would resume a state a later
+  // agent has already moved past — and contradict what `orphan-work` reads for the same worktree.
+  // @es Un agente con worktree solo se ofrece para reanudar mientras ES el titular de ese worktree: la decisión
+  // de titular lee el registro MÁS NUEVO, y ofrecer uno anterior contradiría lo que lee `orphan-work`.
+  for (const match of matches) {
+    if (!match.resumable || match.worktreePath === '') continue;
+
+    const holder = holderOf(match.worktreePath, { records, now, lifecycle, session });
+
+    if (holder.agentId === match.id) continue;
+
+    match.resumable = false;
+    match.causes = [...match.causes, 'superseded'];
+    match.en = `a newer agent (${holder.agentId === undefined ? 'none' : address(holder.agentId)}, ${holder.state}) holds its worktree`;
+    match.es = `un agente más nuevo (${holder.agentId === undefined ? 'ninguno' : address(holder.agentId)}, ${holder.state}) tiene su worktree`;
   }
 
   return matches.sort((left, right) => right.lastWrite - left.lastWrite);
 }
 
 /**
- * The session that spawned an agent, read from where the harness put its transcript:
- * `<store>/<project>/<session>/subagents/<id>.jsonl`. Derived here from the record's own `transcript`
- * rather than added to the shared liveness record, which is byte-pinned from the reference fleet.
- * @es La sesión que lanzó a un agente, leída de dónde el harness puso su transcript. Se deriva aquí del
- * `transcript` del propio registro y no se añade al registro compartido de liveness, que está fijado por
- * hash desde la flota de referencia.
+ * Agents that hold the errand AND can be resumed from the dispatching session — the ones a fresh delegation
+ * is refused over. "Can be resumed" is the shared per-record answer (`resumabilityOf`): not exhausted, inside
+ * the resume window, spawned by THIS session (a subagent resumes only from the session that spawned it, so
+ * with no session id nothing is a candidate and the guard fails open), and, for an agent with a worktree,
+ * still that worktree's latest holder.
+ * @es Agentes que tienen el encargo Y se pueden reanudar desde la sesión que despacha: por ellos se rechaza.
+ * «Se pueden reanudar» es la respuesta compartida por registro: sin agotar, dentro de la ventana, lanzados por
+ * ESTA sesión (sin id de sesión no hay candidato) y, si tienen worktree, siendo aún su titular más reciente.
  */
-export function sessionOf(record) {
-  return path.basename(path.dirname(path.dirname(record.transcript)));
+export function priorAgents(description, repoPath, records = agentRecords(), now = Date.now(), session = undefined, prompt = '', lifecycle = readLifecycle()) {
+  return matchingAgents(description, repoPath, records, now, prompt, session, lifecycle).filter((match) => match.resumable);
 }
 
 /**
- * Recent agents of the DISPATCHING SESSION that already hold the errand AND can be resumed — the ones a
- * fresh delegation is refused over. A subagent can be resumed (SendMessage to its id) only from the
- * session that spawned it, so a record of another session is never a candidate: counting it is a
- * guaranteed false refusal that points at a door that will not open. With no session id there is no
- * candidate, because the guard cannot tell whose door it would be pointing at.
- * @es Agentes recientes de la SESIÓN que despacha que ya tienen el encargo Y se pueden reanudar: por
- * ellos se rechaza. Un subagente solo se reanuda desde la sesión que lo lanzó, así que el registro de otra
- * sesión nunca es candidato: contarlo es un rechazo falso garantizado. Sin id de sesión no hay candidato.
+ * Whether an unresumable errand holder is worth naming: one with a worktree always (its worktree may be taken
+ * over), one with none only when it is exhausted inside the window — the advice this guard gave before the
+ * window and the session joined the decision, so an old or foreign main-checkout agent stays silent.
+ * @es Si vale la pena nombrar a un titular irreanudable: con worktree siempre (se puede relevar); sin worktree
+ * solo si está agotado dentro de la ventana, como antes, para que un agente viejo o ajeno del checkout calle.
  */
-export function priorAgents(description, repoPath, records = agentRecords(), now = Date.now(), session = undefined, prompt = '') {
-  // An absent or empty session matches no record: the fail-open case needs no branch of its own.
-  // @es Una sesión ausente o vacía no casa con ningún registro: el caso de fallo abierto no necesita rama.
-  const own = records.filter((record) => sessionOf(record) === session);
-
-  return matchingAgents(description, repoPath, own, now, prompt).filter((match) => !match.exhausted);
-}
+const worthNaming = (match) => match.worktreePath !== '' || (match.exhausted && !match.causes.includes('stale'));
 
 /**
- * Recent agents that hold the errand but stopped on a context-length failure: never a refusal, since
- * their resume cannot work, but always named, so the fresh replacement inherits their worktree.
- * @es Agentes que tienen el encargo pero pararon por longitud de contexto: nunca rechazan, siempre se nombran.
+ * Agents that hold the errand but cannot be resumed from here: never a refusal, since their resume cannot
+ * work, but named, so the fresh replacement inherits their worktree.
+ * @es Agentes que tienen el encargo pero no se pueden reanudar desde aquí: nunca rechazan, se nombran.
  */
-export function exhaustedAgents(description, repoPath, records = agentRecords(), now = Date.now(), prompt = '') {
-  return matchingAgents(description, repoPath, records, now, prompt).filter((match) => match.exhausted);
+export function exhaustedAgents(description, repoPath, records = agentRecords(), now = Date.now(), prompt = '', session = undefined, lifecycle = readLifecycle()) {
+  return matchingAgents(description, repoPath, records, now, prompt, session, lifecycle).filter((match) => !match.resumable && worthNaming(match));
 }
-
 /**
  * Agents of ANY age whose worktree is still on disk and whose whole errand appears inside the new
  * brief — surfaced to the author, never refused.
@@ -590,7 +532,7 @@ function reason(description, matches, now) {
  * `~/.claude/hook-dispatch/dispatch.mjs` la corra en su propio proceso; ejecutada directamente, la
  * misma función corre como hook propio (`main`, abajo). `records` y `now` se inyectan solo en el selftest.
  */
-export function evaluate(raw, { records = undefined, now = Date.now() } = {}) {
+export function evaluate(raw, { records = undefined, now = Date.now(), lifecycle = undefined } = {}) {
   // The port tolerates the UTF-8 BOM a PowerShell writer adds; an unreadable payload fails open.
   // @es El puerto tolera el BOM de UTF-8 que añade PowerShell; un payload ilegible falla abierto.
   const payload = tryParsePayload(raw);
@@ -604,7 +546,7 @@ export function evaluate(raw, { records = undefined, now = Date.now() } = {}) {
     // it fails open, like every other malfunction of this guard.
     // @es Un payload sin `session_id` llega a `decide` como `undefined`, que no tiene candidato por el que
     // rechazar: falla abierto, como cualquier otro fallo de este guard.
-    return decide(payload?.tool_input?.description ?? '', payload?.tool_input?.prompt ?? '', repoPath, records ?? agentRecords(), now, payload?.session_id);
+    return decide(payload?.tool_input?.description ?? '', payload?.tool_input?.prompt ?? '', repoPath, records ?? agentRecords(), now, payload?.session_id, lifecycle ?? readLifecycle());
   } catch {
     return; // fail open
   }
@@ -613,20 +555,20 @@ export function evaluate(raw, { records = undefined, now = Date.now() } = {}) {
 /**
  * The hook output for one delegation, as a pure function of the records and the clock:
  *   - a RESUMABLE agent holds the errand       -> refuse, with the resume call;
- *   - only CONTEXT-EXHAUSTED agents hold it    -> allow, naming them unresumable and their worktree;
+ *   - only UNRESUMABLE agents hold it          -> allow, naming them, why, and their worktree;
  *   - a live worktree's errand is in the brief -> allow, with advice;
  *   - otherwise                                -> nothing.
  * @es La salida para una delegación, función pura de los registros y el reloj: reanudable -> rechaza;
  * solo agotados -> permite nombrándolos irreanudables; worktree vivo -> aviso; si no, nada.
  */
-export function decide(description, prompt, repoPath, records, now, session = undefined) {
-  const resumable = priorAgents(description, repoPath, records, now, session, prompt);
+export function decide(description, prompt, repoPath, records, now, session = undefined, lifecycle = readLifecycle()) {
+  const resumable = priorAgents(description, repoPath, records, now, session, prompt, lifecycle);
 
   if (resumable.length > 0) {
     return deny(reason(description, resumable, now));
   }
 
-  const advice = [unresumableNotice(exhaustedAgents(description, repoPath, records, now, prompt)), relatedNotice(relatedLiveAgents(description, prompt, repoPath, records))].filter((text) => text !== undefined);
+  const advice = [unresumableNotice(exhaustedAgents(description, repoPath, records, now, prompt, session, lifecycle), { records, now, lifecycle, session }), relatedNotice(relatedLiveAgents(description, prompt, repoPath, records))].filter((text) => text !== undefined);
 
   return advice.length === 0 ? undefined : advise(advice.join('\n\n'));
 }
@@ -646,25 +588,72 @@ function sizeRule(oversized) {
   ];
 }
 
+/**
+ * Whether the replacement of `agent` may be told to take its worktree over: only when the shared holder
+ * decision (`holderOf`) agrees the worktree's holder is unresumable — the very state `orphan-work` accepts a
+ * declared takeover for. A worktree read as `live` counts as long as the live owner IS that same agent (its
+ * last write is still inside the window, or nothing recorded its stop); a worktree another agent is working
+ * in, or whose newer holder can be resumed, is NOT advised for takeover: that advice would be refused.
+ * @es Si al reemplazo de `agent` se le puede decir que tome su worktree: solo cuando la decisión compartida
+ * de titular (`holderOf`) dice que su titular es irreanudable, el mismo estado en que `orphan-work` acepta un
+ * relevo declarado. Un worktree `live` cuenta solo si el dueño vivo ES ese mismo agente; uno en el que
+ * trabaja otro agente, o cuyo titular más reciente se puede reanudar, NO se aconseja: ese consejo se rechazaría.
+ */
+function takeoverOf(agent, holderContext) {
+  if (agent.worktreePath === '') return { advised: false };
+
+  const holder = holderOf(agent.worktreePath, holderContext);
+  const advised = holder.state === 'unresumable' || (holder.state === 'live' && holder.agentId === agent.id);
+
+  return { advised, holder };
+}
+
+/** The holder's address in parentheses, or nothing when no agent holds it. @es La dirección del titular entre paréntesis, o nada. */
+const heldBy = (holder) => (holder.agentId === undefined ? '' : ` (${address(holder.agentId)})`);
+
+/** How one unresumable agent is named, with what its worktree allows. @es Cómo se nombra a un agente irreanudable y qué permite su worktree. */
+function namedAgent(agent, takeover) {
+  const head = `  ${address(agent.id)}  —  "${agent.description}"`;
+  const why = [`    why: ${agent.en}`, `    @es por qué: ${agent.es}`];
+
+  if (agent.worktreePath === '') return [`${head}  (ran in the main checkout)`, ...why].join('\n');
+  if (takeover.advised) return [`${head}\n    worktree: ${agent.worktreePath}`, ...why].join('\n');
+
+  return [
+    `${head}\n    worktree: ${agent.worktreePath}`,
+    ...why,
+    `    NOT for takeover: its holder${heldBy(takeover.holder)} is ${takeover.holder.state}, so a takeover would be refused; resume or ask that holder instead.`,
+    `    @es NO se releva: su titular${heldBy(takeover.holder)} es ${takeover.holder.state}, así que el relevo se rechazaría; reanuda o consulta a ese titular.`
+  ].join('\n');
+}
+
 /** The advice for errand holders whose context ran out, or `undefined`. @es El aviso para quienes agotaron el contexto. */
-function unresumableNotice(exhausted) {
+function unresumableNotice(exhausted, holderContext) {
   if (exhausted.length === 0) return undefined;
 
   const oversized = exhausted.filter((agent) => agent.oversized);
+  const takeovers = exhausted.map((agent) => ({ agent, takeover: takeoverOf(agent, holderContext) }));
+  const advised = [...new Set(takeovers.filter(({ takeover }) => takeover.advised).map(({ agent }) => agent.worktreePath))];
+  // The line is written for each worktree a takeover is advised for, in the one format `orphan-work` accepts;
+  // with none, the template shows its shape. @es La línea se escribe por cada worktree que se aconseja relevar,
+  // en el único formato que acepta `orphan-work`; sin ninguno, la plantilla muestra su forma.
+  const lines = advised.length === 0 ? [takeoverDeclaration('<that worktree folder>')] : advised.map((worktree) => takeoverDeclaration(worktree));
 
   return [
-    'RESUME-BEFORE-FRESH — NOT refused: the agent(s) that hold this errand are UNRESUMABLE.',
-    'Each stopped on a context-length failure ("Prompt is too long") or holds a transcript past the ledger',
-    'size, and a resume replays that same oversized transcript, so a fresh replacement is the right dispatch.',
-    '@es Ninguno se puede reanudar: pararon por longitud de contexto o su transcript pasa el tamaño del ledger.',
+    'RESUME-BEFORE-FRESH — NOT refused: the agent(s) that hold this errand are UNRESUMABLE from this session.',
+    'Each stopped on a context-length failure ("Prompt is too long"), holds a transcript past the ledger size,',
+    'was last written outside the resume window, belongs to another session, or no longer holds its worktree;',
+    'a resume cannot continue it from here, so a fresh replacement is the right dispatch.',
+    '@es Ninguno se puede reanudar desde aquí: paró por longitud de contexto, su transcript pasa el tamaño del',
+    '@es ledger, quedó fuera de la ventana, es de otra sesión o ya no es el titular de su worktree.',
     '',
-    ...exhausted.map((agent) => `  ${address(agent.id)}  —  "${agent.description}"${agent.worktreePath === '' ? '  (ran in the main checkout)' : `\n    worktree: ${agent.worktreePath}`}`),
+    ...takeovers.map(({ agent, takeover }) => namedAgent(agent, takeover)),
     ...(oversized.length === 0 ? [] : sizeRule(oversized)),
     '',
     'Its worktree may hold uncommitted or unlanded work. Give the replacement a line naming it, e.g.:',
-    '  TENANCY: <that worktree folder> — taking over from an unresumable agent (context failure or oversized transcript); read its diff first.',
+    ...lines.map((line) => `  ${line.en}`),
     '@es Su worktree puede tener trabajo sin commitear o sin aterrizar; dale al reemplazo una línea que lo nombre:',
-    '@es   TENANCY: <esa carpeta de worktree> — relevo de un agente irreanudable (fallo de contexto o transcript demasiado grande); leé primero su diff.'
+    ...lines.map((line) => `@es   ${line.es}`)
   ].join('\n');
 }
 

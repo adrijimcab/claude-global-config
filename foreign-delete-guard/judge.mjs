@@ -31,13 +31,13 @@ import { tenancyWorktree } from './own-tree.mjs';
  * @param {object} payload The parsed `PreToolUse` payload of a delegated agent's shell call.
  * @param {string} dialect `bash` or `powershell`.
  * @param {string} command The shell line.
- * @param {{ cleanPreview?: Function, journalOf?: Function, identify?: Function, records?: Function, limit?: number }} [seams] Injectable git, journal, fleet-record and walk edges.
+ * @param {{ cleanPreview?: Function, journalOf?: Function, identify?: Function, records?: Function, limit?: number, platform?: string }} [seams] Injectable git, journal, fleet-record and walk edges, and the platform the line is read as.
  * @returns {{ kind: 'foreign', via: string, files: string[] } | { kind: 'unresolved', code: string, via: string } | undefined} `undefined` lets the call run.
  * @es `undefined` deja correr la llamada.
  */
-export function judgeDeletion(payload, dialect, command, { cleanPreview = gitCleanPreview, journalOf = readJournal, identify = identityOf, records, limit = MAX_ENTRIES } = {}) {
+export function judgeDeletion(payload, dialect, command, { cleanPreview = gitCleanPreview, journalOf = readJournal, identify = identityOf, records, limit = MAX_ENTRIES, platform = process.platform } = {}) {
   const cwd = callDirectory(payload);
-  const targets = deletionTargets(command, dialect, cwd, { cleanPreview });
+  const targets = deletionTargets(command, dialect, cwd, { cleanPreview, platform });
 
   if (targets.length === 0) return undefined;
 

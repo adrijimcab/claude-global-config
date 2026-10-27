@@ -31,7 +31,13 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+import { worktreeName } from '../agent-liveness/liveness.mjs';
+import { isolateState } from '../hook-state/locations.mjs';
 import { EXHAUSTED_TRANSCRIPT_BYTES, exhaustedAgents, priorAgents, relatedLiveAgents, significantWords, canonicalWord, coverage, projectSlug, address, decide, evaluate, sessionOf } from './guard.mjs';
+
+// The holder decision reads the agent lifecycle; a selftest never reads the live one.
+// @es La decisión de titular lee el ciclo de vida de agentes; un selftest nunca lee el vivo.
+isolateState('resume-before-fresh');
 
 const NOW = Date.parse('2026-09-09T21:00:00Z');
 const MINUTE = 60 * 1000;
@@ -125,7 +131,9 @@ function record({ id, description, project = SLUG, session = SESSION, ageMs = 5 
     utimesSync(path, seconds, seconds);
   }
 
-  return { id, description, project, worktree: '', worktreePath, transcript: path };
+  // The SHAPE `agentRecords()` returns: `worktree` is the directory name of `worktreePath`, never blank beside it.
+  // @es La FORMA que devuelve `agentRecords()`: `worktree` es el nombre de directorio de `worktreePath`.
+  return { id, description, project, worktree: worktreeName(worktreePath), worktreePath, transcript: path };
 }
 
 const records = [
@@ -285,9 +293,94 @@ for (const [expected, description, label] of cases) {
     [context.includes('UNRESUMABLE') && context.includes('aa3437bf9bf7832a9'), 'the advice names the old agent as unresumable'],
     [context.includes(EXHAUSTED_TREE) && context.includes('TENANCY:'), 'the advice names its worktree and asks for a TENANCY line'],
     [!context.includes('SendMessage'), 'the advice never prints a resume recipe that cannot work'],
-    [context.includes('  TENANCY: <that worktree folder>') && context.includes('context failure or oversized transcript') && context.includes('@es   TENANCY: <esa carpeta de worktree>') && context.includes('irreanudable'), 'the closing TENANCY line names both causes, in both languages'],
+    [context.includes(`  TENANCY: ${EXHAUSTED_TREE} — taking over`) && context.includes('context failure or oversized transcript') && context.includes(`@es   TENANCY: ${EXHAUSTED_TREE} — relevo`) && context.includes('irreanudable'), 'the closing TENANCY line names the worktree itself and both causes, in both languages'],
+    [!context.includes('<that worktree folder>'), 'with a worktree to name, the template placeholder is not printed'],
     [decide('Measure the storybook render budget', '', REPO, records, NOW, SESSION)?.hookSpecificOutput?.permissionDecision === 'deny', 'a rate-limited agent still gets the resume-first refusal'],
     [decide('Extract the reorder state machine into its own controller', '', REPO, records, NOW, SESSION) === undefined, 'unrelated work gets no output at all']
+  ];
+
+  for (const [ok, label] of checks) {
+    checked += 1; if (!ok) failures += 1;
+
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  }
+}
+
+// --- THE TAKEOVER ADVICE FOLLOWS THE SHARED HOLDER DECISION, added 2026-10-26 (P1-5). The advice to take a
+//     worktree over is given only when `holderOf` reads its holder as unresumable — the state `orphan-work`
+//     accepts a declared takeover for. An older exhausted agent does not make a worktree takeable when a
+//     NEWER resumable agent, or another LIVE one, holds it: that advice would be refused.
+// @es EL CONSEJO DE RELEVO SIGUE LA DECISIÓN COMPARTIDA DE TITULAR: solo se aconseja relevar un worktree si
+//     `holderOf` lee su titular como irreanudable. Un agente agotado más viejo no lo hace relevable cuando lo
+//     tiene un agente MÁS NUEVO reanudable, u otro VIVO.
+{
+  const newerTree = join(scratch, 'wt-newer-resumable');
+  const liveTree = join(scratch, 'wt-live-other');
+
+  mkdirSync(newerTree);
+  mkdirSync(liveTree);
+
+  const population = [
+    record({ id: 'agent-aOLDEXHAUSTED00', description: 'Shard the chart legend renderer', lastRecord: EXHAUSTED_RECORD, worktreePath: newerTree, ageMs: 3 * HOUR }),
+    // The newer holder is of THIS session: only then can it be resumed from here (another session's is unresumable).
+    // @es El titular más nuevo es de ESTA sesión: solo así se reanuda desde aquí.
+    record({ id: 'agent-aNEWERRESUME000', description: 'Unrelated follow-up wording here', worktreePath: newerTree, ageMs: 2 * HOUR }),
+    record({ id: 'agent-aEXHAUSTEDLIVE0', description: 'Split the gauge needle animation', lastRecord: EXHAUSTED_RECORD, worktreePath: liveTree, ageMs: 3 * HOUR }),
+    record({ id: 'agent-aLIVEOTHER00000', description: 'Another live errand entirely', worktreePath: liveTree, ageMs: 1 * MINUTE, session: OTHER_SESSION })
+  ];
+  const adviceFor = (description) => decide(description, '', REPO, population, NOW, SESSION)?.hookSpecificOutput?.additionalContext ?? '';
+  const newer = adviceFor('Shard the chart legend renderer');
+  const live = adviceFor('Split the gauge needle animation');
+  const checks = [
+    [newer.includes('aOLDEXHAUSTED00') && !newer.includes(`TENANCY: ${newerTree}`), 'a NEWER resumable holder: the worktree is not advised for takeover'],
+    [newer.includes('NOT for takeover') && newer.includes('aNEWERRESUME000') && newer.includes('@es NO se releva'), 'and the advice says why, naming the newer holder, in both languages'],
+    [newer.includes('TENANCY: <that worktree folder>'), 'with no worktree to advise, the template shape is printed'],
+    [live.includes('aEXHAUSTEDLIVE0') && !live.includes(`TENANCY: ${liveTree}`) && live.includes('aLIVEOTHER00000'), 'another LIVE agent in the worktree: not advised for takeover, the live one named']
+  ];
+
+  for (const [ok, label] of checks) {
+    checked += 1; if (!ok) failures += 1;
+
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  }
+}
+
+// --- RESUMABLE FROM HERE IS ONE ANSWER, added 2026-10-26: the resume window and the dispatching session joined
+//     the shared per-record decision (`resumabilityOf`), so the refusal and the holder decision `orphan-work`
+//     reads can never differ. A holder outside the window, or of another session, cannot be resumed from here:
+//     it is never offered, and with a worktree its takeover is advised; without one it stays silent, as before.
+//     An older agent of a worktree whose NEWER holder is another agent is not offered either.
+// @es REANUDABLE DESDE AQUÍ ES UNA SOLA RESPUESTA: la ventana y la sesión que despacha entraron en la decisión
+//     compartida. Un titular fuera de la ventana o de otra sesión nunca se ofrece; con worktree se aconseja
+//     relevarlo, sin worktree calla, como antes. Tampoco se ofrece el agente viejo de un worktree cuyo titular
+//     más nuevo es otro.
+{
+  const staleTree = join(scratch, 'wt-stale-holder');
+  const foreignTree = join(scratch, 'wt-foreign-holder');
+  const supersededTree = join(scratch, 'wt-superseded-holder');
+
+  for (const tree of [staleTree, foreignTree, supersededTree]) mkdirSync(tree);
+
+  const population = [
+    record({ id: 'agent-aSTALEHOLDER000', description: 'Carve the minimap tile cache', worktreePath: staleTree, ageMs: 30 * HOUR }),
+    record({ id: 'agent-aFOREIGNHOLDER0', description: 'Carve the radar sweep shader', worktreePath: foreignTree, session: OTHER_SESSION }),
+    record({ id: 'agent-aSUPERSEDEDOLD0', description: 'Carve the compass rose glyphs', worktreePath: supersededTree, ageMs: 3 * HOUR }),
+    record({ id: 'agent-aSUPERSEDEDNEW0', description: 'Different later wording here', worktreePath: supersededTree, ageMs: 2 * HOUR })
+  ];
+  const outcome = (description) => decide(description, '', REPO, population, NOW, SESSION);
+  const context = (description) => outcome(description)?.hookSpecificOutput?.additionalContext ?? '';
+  const stale = context('Carve the minimap tile cache');
+  const foreign = context('Carve the radar sweep shader');
+  const superseded = context('Carve the compass rose glyphs');
+  const checks = [
+    [outcome('Carve the minimap tile cache')?.hookSpecificOutput?.permissionDecision === undefined && stale.includes(`TENANCY: ${staleTree} — taking over`), 'a holder outside the resume window is never offered; its worktree is advised for takeover'],
+    [stale.includes('outside the 24 h resume window') && stale.includes('fuera de la ventana de 24 h'), 'and the advice says it is outside the window, in both languages'],
+    [outcome('Carve the radar sweep shader')?.hookSpecificOutput?.permissionDecision === undefined && foreign.includes(`TENANCY: ${foreignTree} — taking over`), 'a holder of ANOTHER session is never offered; its worktree is advised for takeover'],
+    [foreign.includes(`belongs to session ${OTHER_SESSION}`) && foreign.includes('solo se reanuda desde la sesión que lo lanzó'), 'and the advice names its session, in both languages'],
+    [outcome('Carve the compass rose glyphs')?.hookSpecificOutput?.permissionDecision === undefined && superseded.includes('a newer agent (aSUPERSEDEDNEW0, resumable) holds its worktree'), 'an older agent whose worktree a newer agent holds is not offered, and the advice says who holds it'],
+    [!superseded.includes(`TENANCY: ${supersededTree}`) && superseded.includes('NOT for takeover'), 'and that worktree is not advised for takeover: its holder can be resumed'],
+    [decide('Rotate the registry credential', '', REPO, records, NOW, SESSION) === undefined, 'a holder outside the window with NO worktree stays silent, as before'],
+    [decide('Compile the typography scale report', '', REPO, records, NOW, SESSION) === undefined, 'a holder of another session with NO worktree stays silent, as before']
   ];
 
   for (const [ok, label] of checks) {
@@ -305,7 +398,7 @@ for (const [expected, description, label] of cases) {
   const reason = pair?.hookSpecificOutput?.permissionDecisionReason ?? '';
   const checks = [
     [huge?.hookSpecificOutput?.permissionDecision === undefined && context.length > 0, 'the fresh launch beside an oversized match is allowed, with the rule'],
-    [context.includes('aHUGE00000000000') && context.includes('2500'), 'the rule names the old agent and its size'],
+    [context.includes('aHUGE00000000000: 2.50 MB (2500000 bytes) > 2000000 bytes'), 'the rule names the old agent and its size'],
     [context.includes('resumed-giant-transcripts-exhausted-quota') && context.includes('narrow scope') && context.includes('@es') && context.includes('alcance acotado'), 'the ledger rule is printed in English and in Spanish'],
     [!context.includes('SendMessage'), 'the oversized advice never prints a resume recipe'],
     [pair?.hookSpecificOutput?.permissionDecision === 'deny' && reason.includes('aPAIRSMALL000000') && !reason.includes('aPAIRHUGE0000000'), 'beside a small similar match the refusal points at the small one only'],
@@ -342,6 +435,12 @@ for (const [expected, description, label] of cases) {
   const ALPHA = tree('wt-alpha');
   const BETA = tree('wt-beta');
   const GAMMA = tree('wt-gamma');
+  // The same worktree NAME in capitals and in lower case, as two folders, so the case fold is observable on a
+  // case-sensitive filesystem too: worktrees are compared by directory name (`worktreeName`), case folded.
+  // @es El mismo NOMBRE de worktree en mayúsculas y en minúsculas, en dos carpetas, para que el plegado se vea
+  // también en un sistema que distingue mayúsculas: se comparan por nombre de directorio, sin mayúsculas.
+  const DELTA_UPPER = tree('upper/WT-DELTA');
+  const DELTA_LOWER = tree('lower/wt-delta');
   const MAIN = tree('main-checkout', false);
   // Never created: a path that names no worktree on disk.
   // @es Nunca se crea: una ruta que no nombra ningún worktree en disco.
@@ -352,10 +451,11 @@ for (const [expected, description, label] of cases) {
     record({ id: 'agent-aTENBETA0000000', description: 'Rework dashboard grid spacing', worktreePath: BETA }),
     record({ id: 'agent-aTENPLAIN000000', description: 'Compile the icon sprite', brief: 'MEASURED: none.\nGOAL: compile.' }),
     record({ id: 'agent-aTENMAIN0000000', description: 'Tune the legend marker weights', brief: brief(MAIN) }),
-    record({ id: 'agent-aTENHARNESS0000', description: 'Polish the toolbar overflow menu', worktreePath: BETA, brief: brief(ALPHA) }),
+    record({ id: 'agent-aTENHARNESS0000', description: 'Polish the toolbar overflow menu', worktreePath: BETA, brief: brief(ALPHA), ageMs: 6 * MINUTE }),
     record({ id: 'agent-aTENGHOST0000000', description: 'Polish the icon gutter', brief: brief(GHOST) }),
     // An oversized agent: unresumable, so it never refuses, but a fresh launch into ITS worktree is told so.
     // @es Un agente sobredimensionado: irreanudable, no rechaza, pero un lanzamiento fresco en SU worktree se entera.
+    record({ id: 'agent-aTENDELTA000000', description: 'Delta tune the chip ripple', worktreePath: DELTA_UPPER }),
     record({ id: 'agent-aTENHUGE00000000', description: 'Zzz quux bar baz', worktreePath: GAMMA, sizeBytes: EXHAUSTED_TRANSCRIPT_BYTES + 1000 })
   ];
   const names = (description, prompt) => priorAgents(description, REPO, population, NOW, SESSION, prompt).map((match) => address(match.id)).sort();
@@ -363,12 +463,18 @@ for (const [expected, description, label] of cases) {
     [['aTENALPHA000000'], names('', brief(ALPHA)), 'an empty description still matches by the worktree it names'],
     [[], names('Unrelated phrase three', brief(GHOST)), 'a path that is not a worktree on disk is no identity: the wording rule decides, and the words differ'],
     [['aTENALPHA000000'], names('Completely different words entirely', brief(ALPHA)), 'the SAME worktree is the same errand whatever the words'],
-    [['aTENALPHA000000'], names('Completely different words entirely', brief(ALPHA.toUpperCase().split('/').join('\\'))), 'the same worktree written with backslashes and capitals is still the same'],
+    // Capitals name the same folder only where the filesystem folds case (Windows); on POSIX an upper-cased
+    // path is another, absent, folder, so only the separators change there.
+    // @es Las mayúsculas nombran la misma carpeta solo donde el sistema pliega mayúsculas (Windows); en POSIX
+    // una ruta en mayúsculas es otra carpeta, inexistente, así que allí solo cambian los separadores.
+    [['aTENALPHA000000'], names('Completely different words entirely', brief((process.platform === 'win32' ? ALPHA.toUpperCase() : ALPHA).split('/').join('\\'))), 'the same worktree written with backslashes (and capitals, on Windows) is still the same'],
+    [['aTENDELTA000000'], names('Unrelated phrase four', brief(DELTA_LOWER)), 'a worktree recorded in capitals is the same name named in lower case'],
     [[], names('Alpha migrate sidebar tokens', brief(GAMMA)), 'a DIFFERENT worktree is a different errand even with identical words'],
     [['aTENPLAIN000000'], names('Compile the icon sprite', brief(GAMMA)), 'a stopped agent that names no worktree falls back to wording'],
     [['aTENALPHA000000'], names('Alpha migrate sidebar tokens', 'GOAL: no tenancy line here.'), 'a new brief that names no worktree falls back to wording'],
     [[], names('Something else altogether', 'GOAL: no tenancy line here.'), 'no worktree and no wording overlap: nothing'],
-    [['aTENBETA0000000', 'aTENHARNESS0000'], names('Unrelated phrase one', brief(BETA)), 'a harness-recorded worktree is an identity too, and wins over the brief of the same agent'],
+    [['aTENBETA0000000'], names('Unrelated phrase one', brief(BETA)), 'a harness-recorded worktree is an identity too, and wins over the brief of the same agent; only its LATEST holder is offered'],
+    [['aTENALPHA000000'], names('Unrelated phrase five', brief(ALPHA)), 'the older agent of BETA claims ALPHA only in its brief: the harness worktree wins, so it is not ALPHA\'s errand'],
     [[], names('Unrelated phrase two', brief(MAIN)), 'a main checkout (.git directory) is shared by everyone: never an identity, so the wording rule decides and nothing here overlaps the words'],
   ];
 

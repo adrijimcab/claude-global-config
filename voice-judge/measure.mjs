@@ -7,7 +7,8 @@
  * nondeterminism), so no selftest runs a model through it; the selftest pins its pure parts (the rubric it loads,
  * the summary it prints). Usage:
  * `node voice-judge/measure.mjs [--runs N] [--model haiku] [--only id,id] [--rubric v7|v8f|path/to/rubric.mjs]
- * [--rates [--prefix held-] [--parallel 6] [--record]]`. Every output starts with the path of the rubric it ran.
+ * [--rates [--prefix held-] [--parallel 6] [--record]] [--packet <path> [--size 10] [--seed 1]]`. Every output starts
+ * with the path of the rubric it ran.
  * `--record` writes the ship-bar verdict of the run, with the sha256 of the rubric text, to `ship-bar.json`, the
  * record that alone allows a rubric other than v7 to go live (`prompt.mjs`).
  * @es `--rubric` toma un nombre (v7, v8f) o una ruta; `--record` escribe el veredicto de la barra, con el sha256 del
@@ -21,9 +22,17 @@
  * `OWNER_LABELS_NEEDED` fixtures. A fixture with `pinsRule4` (the second-person forms rule 4 must read as voseo) pins
  * rule 4: a block whose reason cites tuteo or usted, or quotes one of those forms alone, is a rule-4 false positive.
  *
+ * THE OWNER PACKET (`--packet <path>`) is the out-of-sample measurement `DECISION.md` decides on: `--size` replies
+ * drawn AT RANDOM (a shuffle seeded by `--seed`, so the same seed draws the same packet) from the unadjudicated
+ * fixtures, each judged ONCE, as the live gate judges a stop once, and written with its whole message, the verdict
+ * and the reason, for the owner to label. The draw ignores the verdict on purpose: a packet chosen as five blocked
+ * and five passed would fix the share of blocks by construction, and the false-block rate read from it would be the
+ * packet's choice, not the judge's. `--rates` prints, per run, the owner set's false-block rate with its Wilson
+ * interval and the decision rule of `DECISION.md` applied to it (`decisionOf`).
+ *
  * Exit 1 in the matrix view when a scored fixture did not get its label in every run, or a pinned fixture got a
  * rule-4 reason; in the `--rates` view when the ship bar is not met or cannot be computed; exit 2 for a wrong
- * `--rubric`. A `?` is an answer that is no rubric verdict: the gate would pass it as a malfunction.
+ * `--rubric` or a wrong `--packet` option; `--packet` exits 0 once the packet is written. A `?` is an answer that is no rubric verdict: the gate would pass it as a malfunction.
  *
  * @es Mide el juez de voz contra un modelo real: cada fixture de `fixtures/` pasa N veces por una rúbrica, con la
  * misma llamada al modelo y el mismo lector de veredictos que usa la compuerta, y se imprime la matriz pasa/falla
@@ -36,7 +45,13 @@
  * `OWNER_LABELS_NEEDED` fixtures. Un fixture con `pinsRule4` (las formas que la regla 4 debe leer como voseo) fija la
  * regla 4: un bloqueo cuyo motivo cita tuteo o usted, o cita sola una de esas formas, es un falso positivo de la
  * regla 4. Sale con 1 si un fixture puntuado no recibió su etiqueta, si un fijado recibió un motivo de la regla 4, o
- * si la barra no se alcanza o no se puede calcular; con 2 si `--rubric` es incorrecto.
+ * si la barra no se alcanza o no se puede calcular; con 2 si `--rubric` o una opción de `--packet` es incorrecta.
+ * EL PAQUETE DEL DUEÑO (`--packet <ruta>`) es la medición fuera de muestra sobre la que decide `DECISION.md`: `--size`
+ * respuestas sacadas AL AZAR (barajado con la semilla `--seed`) de los fixtures sin adjudicar, cada una juzgada UNA
+ * vez, como el gate en vivo juzga una parada, y escritas con su mensaje entero, el veredicto y el motivo, para que el
+ * dueño las etiquete. El sorteo ignora el veredicto a propósito: un paquete de cinco bloqueadas y cinco pasadas
+ * fijaría la proporción de bloqueos por construcción. `--rates` imprime por corrida la tasa de falsos bloqueos del
+ * conjunto del dueño con su intervalo de Wilson y la regla de `DECISION.md` aplicada.
  */
 
 import { createHash } from 'node:crypto';
@@ -46,6 +61,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { askModel, spawnAsync } from '../judge-gate/model.mjs';
 import { readVerdict } from '../judge-gate/verdict.mjs';
+import { describeRate, wilson } from '../judge-gate/wilson.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -76,7 +92,7 @@ export function rubricPathOf(argv) {
 }
 
 /** The rubrics `--rubric` takes by name: the live v7 and the v8f and v8g candidates. @es Las rúbricas que `--rubric` toma por nombre. */
-export const RUBRICS = { v7: path.join(HERE, 'rubrics', 'v7.mjs'), v8f: path.join(HERE, 'rubrics', 'v8f.mjs'), v8g: path.join(HERE, 'rubrics', 'v8g.mjs') };
+export const RUBRICS = { v7: path.join(HERE, 'rubrics', 'v7.mjs'), v8f: path.join(HERE, 'rubrics', 'v8f.mjs'), v8g: path.join(HERE, 'rubrics', 'v8g.mjs'), v8h: path.join(HERE, 'rubrics', 'v8h.mjs') };
 
 /** Where `--record` writes the ship-bar verdict that promotion reads. @es Donde `--record` escribe el veredicto de la barra que lee la promoción. */
 export const SHIP_BAR_RECORD = path.join(HERE, 'ship-bar.json');
@@ -190,15 +206,21 @@ export function judgedOf(answer, marker) {
  * of a bilingual reason is read: the `@es` half mirrors it and names tú and the quoted forms in its own words.
  * @es Solo se lee la mitad inglesa de un motivo bilingüe: la mitad `@es` la repite con sus propias palabras.
  * It is read sentence by sentence: a sentence that calls the forms voseo or says rule 4 passes is praise, so its
- * quoted forms and its rule number do not count; tuteo, usted and a tú form count wherever they appear.
+ * quoted forms and its rule number do not count; tuteo, usted and a tú form count wherever they appear, except where
+ * the sentence denies them ("there is no tú or usted word"), which names them only to say they are absent.
  * @es Se lee oración por oración: una oración que llama voseo a las formas o dice que la regla 4 pasa es un elogio,
- * así que sus formas citadas y su número de regla no cuentan; tuteo, usted y una forma de tú cuentan siempre.
+ * así que sus formas citadas y su número de regla no cuentan; tuteo, usted y una forma de tú cuentan siempre, salvo
+ * donde la oración los niega («no hay palabra de tú ni de usted»), que los nombra solo para decir que no están.
+ * MEASURED 2026-10-26: under the v8h candidate, 4 of the pinned blocks this function counted were praise of this kind
+ * ("passes rule 4", "rule 4 is not violated: there is no tú or usted word", "(a) passes: voseo aimed at the owner in
+ * 'sepas'"), each pinned verbatim in the selftest. @es MEDIDO el 2026-10-26: con la candidata v8h, 4 de los bloqueos
+ * fijados que esta función contaba eran elogios de esa clase, cada uno fijado literal en el selftest.
  */
 export function citesRule4(bilingualReason, forms = []) {
   const reason = bilingualReason.split(' @es ')[0];
 
   return reason.split(/(?<=[.;!?])\s+/u).some((sentence) => {
-    if (RULE4_WORDS.test(sentence)) return true;
+    if (RULE4_WORDS.test(sentence.replace(DENIED_RULE4_WORDS, ''))) return true;
     if (PRAISES_VOSEO.test(sentence)) return false;
 
     return RULE4_NUMBER.test(sentence) || forms.some((form) => new RegExp(`["“«'‘]${form}["”»'’]`, 'iu').test(sentence));
@@ -208,11 +230,17 @@ export function citesRule4(bilingualReason, forms = []) {
 /** The words that name tuteo or usted. @es Las palabras que nombran el tuteo o el usted. */
 const RULE4_WORDS = /tuteo|usted|(^|[^\p{L}])t[uú][ -]forms?([^\p{L}]|$)|(^|[^\p{L}])tú([^\p{L}]|$)/iu;
 
+/**
+ * Tuteo, tú or usted named only to deny them: "no tú or usted word", "neither tú nor usted".
+ * @es Tuteo, tú o usted nombrados solo para negarlos.
+ */
+const DENIED_RULE4_WORDS = /(?:^|[^\p{L}])(?:no|neither|nor) (?:tuteo|tú|usted)(?: (?:or|nor) (?:tuteo|tú|usted))*(?: (?:words?|forms?|verbs?))?(?=[^\p{L}]|$)/giu;
+
 /** Rule 4 named by its number. @es La regla 4 nombrada por su número. */
 const RULE4_NUMBER = /rule 4\b|regla 4\b/iu;
 
 /** A sentence that calls the voseo correct. @es Una oración que da el voseo por correcto. */
-const PRAISES_VOSEO = /\b(?:is|are) voseo\b|\bvoseo forms?\b|\bin (?:Rioplatense )?voseo\b|\bvoseo\b[^.;]*\bis correct\b|\brule 4 (?:passes|holds|is met|does not apply)\b/iu;
+const PRAISES_VOSEO = /\b(?:is|are) voseo\b|\bvoseo forms?\b|\bin (?:Rioplatense )?voseo\b|\bvoseo\b[^.;]*\bis correct\b|\brule 4 (?:passes|holds|is met|does not apply)\b|\bpasses rule 4\b|\brule 4 is not violated\b|\bcorrect voseo\b|(?<!\bno )\bvoseo aimed at\b/iu;
 
 /** The share of `part` in `whole`, as a percentage with one decimal. @es La proporción de `part` en `whole`, en porcentaje. */
 const percent = (part, whole) => (whole === 0 ? 'n/a' : `${((100 * part) / whole).toFixed(1)}%`);
@@ -266,11 +294,53 @@ export function summarise(fixtures, judgedFor) {
   };
 }
 
+/** The ship bar: recall on the owner's fails, precision on his passes. @es La barra: recall sobre sus fallos, precisión sobre sus pases. */
+export const SHIP_BAR = Object.freeze({ recall: 0.9, precision: 0.95 });
+
+/**
+ * The false-block rate the ship bar tolerates, derived from its precision (an owner pass the judge does not let
+ * through is a false block): 5%. @es La tasa de falsos bloqueos que tolera la barra, derivada de su precisión: 5%.
+ */
+export const FALSE_BLOCK_BAR = Number((1 - SHIP_BAR.precision).toFixed(10));
+
 /** Whether a scored set meets recall 90% and precision 95%; an empty side scores 0. @es Si un conjunto alcanza recall 90% y precisión 95%. */
 export function meetsShipBar(set) {
   const share = (part, whole) => (whole === 0 ? 0 : part / whole);
 
-  return share(set.red - set.missedRed.length, set.red) >= 0.9 && share(set.green - set.blockedGreen.length, set.green) >= 0.95;
+  return share(set.red - set.missedRed.length, set.red) >= SHIP_BAR.recall && share(set.green - set.blockedGreen.length, set.green) >= SHIP_BAR.precision;
+}
+
+/**
+ * THE DECISION RULE of `DECISION.md`, fixed before the packet it decides on is measured, over one run's owner set.
+ * The false blocks are the owner's passes the judge BLOCKED (a non-verdict passes live, so it is no false block), and
+ * their Wilson 95% interval decides: `shadow` when even its low end is above `FALSE_BLOCK_BAR` (the bar is missed
+ * beyond sampling doubt), `within-bar` when even its high end is at or below it, `undecided` otherwise, and
+ * `not measured` with no owner passes.
+ * @es LA REGLA DE DECISIÓN de `DECISION.md`, fijada antes de medir el paquete que decide, sobre el conjunto del dueño de
+ * una corrida. Los falsos bloqueos son los pases del dueño que el juez BLOQUEÓ (un no-veredicto pasa en vivo), y
+ * decide su intervalo de Wilson del 95%: `shadow` si hasta su extremo bajo supera `FALSE_BLOCK_BAR`, `within-bar` si
+ * hasta su extremo alto queda en o bajo ella, `undecided` si no, y `not measured` sin pases del dueño.
+ */
+export function decisionOf(set) {
+  const falseBlocks = set.blockedGreen.filter(({ verdict }) => verdict === false).length;
+  const interval = wilson(falseBlocks, set.green);
+
+  if (interval === undefined) return { falseBlocks, green: set.green, decision: 'not measured' };
+  if (interval.low > FALSE_BLOCK_BAR) return { falseBlocks, green: set.green, decision: 'shadow' };
+
+  return { falseBlocks, green: set.green, decision: interval.high <= FALSE_BLOCK_BAR ? 'within-bar' : 'undecided' };
+}
+
+/** A decision in Spanish. @es Una decisión en español. */
+const DECISION_ES = Object.freeze({ shadow: 'sombra', 'within-bar': 'dentro-de-la-barra', undecided: 'indecisa', 'not measured': 'no medida' });
+
+/** The line `--rates` prints for one run's decision. @es La línea que imprime `--rates` para la decisión de una corrida. */
+export function decisionLine(run, set) {
+  const { falseBlocks, green, decision } = decisionOf(set);
+  const rate = describeRate(falseBlocks, green);
+  const bar = `${FALSE_BLOCK_BAR * 100}%`;
+
+  return `run ${run} owner false-block ${rate.en}, bar ${bar}: decision=${decision} @es corrida ${run} falsos bloqueos del dueño ${rate.es}, barra ${bar}: decisión=${DECISION_ES[decision]}`;
 }
 
 /**
@@ -379,6 +449,7 @@ async function rates(fixtures, runs, model, parallel, rubric, ask, record) {
     const summary = summarise(fixtures, (fixture) => results.get(`${fixture.id}#${run}`));
 
     for (const text of ratesLines(run + 1, summary)) console.log(text);
+    console.log(decisionLine(run + 1, summary.owner));
     ownerSets.push(summary.owner);
   }
 
@@ -390,13 +461,123 @@ async function rates(fixtures, runs, model, parallel, rubric, ask, record) {
   return bar.met ? 0 : 1;
 }
 
+/** The replies a packet holds when `--size` is absent. @es Las respuestas de un paquete si falta `--size`. */
+export const PACKET_SIZE = 10;
+
 /**
- * The command line: exit 0, 1 (a label or the ship bar missed) or 2 (a wrong `--rubric`). `ask` is the model call,
- * injected only by the selftest, like `writeRecord`, what `--record` does with the ship-bar record.
- * @es La línea de comandos; `ask` es la llamada al modelo y `writeRecord` lo que `--record` hace con el registro de
- * la barra, y solo el selftest los inyecta.
+ * `items` in an order fixed by `seed`: a Fisher-Yates shuffle driven by mulberry32, so one seed always draws the same
+ * packet from the same fixtures. @es `items` en un orden fijado por `seed`, para que una semilla saque siempre el
+ * mismo paquete de los mismos fixtures.
  */
-export async function main(argv, { ask = askTheModel, writeRecord = writeShipBarRecord } = {}) {
+export function seededShuffle(items, seed) {
+  let state = seed >>> 0;
+  const next = () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+
+    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(next() * (index + 1));
+
+    [shuffled[index], shuffled[other]] = [shuffled[other], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+/**
+ * The fixtures a packet draws: `size` unadjudicated ones, at random by `seed`, from the set in id order (so the draw
+ * does not depend on the order the directory lists them). @es Los fixtures que saca un paquete: `size` sin adjudicar,
+ * al azar por `seed`, del conjunto ordenado por id.
+ */
+export const packetFixtures = (fixtures, size, seed) => seededShuffle(fixtures.filter((fixture) => fixture.expect === 'unadjudicated').sort((left, right) => left.id.localeCompare(right.id)), seed).slice(0, size);
+
+/**
+ * The owner packet as Markdown: what it is and how a label is recorded, then one case per reply with its whole
+ * message quoted, the judge's verdict and reason, and a blank label. @es El paquete del dueño en Markdown: qué es y
+ * cómo se registra una etiqueta, y un caso por respuesta con su mensaje entero citado, el veredicto, el motivo y una
+ * etiqueta en blanco.
+ */
+export function ownerPacket(judged, { rubric, seed, generatedAt, model }) {
+  const name = path.relative(HERE, rubric).split(path.sep).join('/');
+  const quoted = (text) => text.split('\n').map((line) => `> ${line}`).join('\n');
+
+  return [
+    '# Voice judge owner packet @es Paquete del dueño del juez de voz',
+    '',
+    `Rubric ${name}, model ${model}, seed ${seed}, generated ${generatedAt}: ${judged.length} replies drawn at random from the unadjudicated fixtures, each judged once. Label each pass or fail by your own ear. Each label is stored in its fixture as "expect": "pass" or "fail", "labelledBy": "owner" and "labelledOn": "<date>", and \`node voice-judge/measure.mjs --rates --runs 1 --prefix ''\` applies DECISION.md to the owner set.`,
+    '',
+    `@es Rúbrica ${name}, modelo ${model}, semilla ${seed}, generado ${generatedAt}: ${judged.length} respuestas sacadas al azar de los fixtures sin adjudicar, cada una juzgada una vez. Etiquetá cada una pasa o falla a tu oído. Cada etiqueta se guarda en su fixture como "expect": "pass" o "fail", "labelledBy": "owner" y "labelledOn": "<fecha>", y \`node voice-judge/measure.mjs --rates --runs 1 --prefix ''\` le aplica DECISION.md al conjunto del dueño.`,
+    ...judged.flatMap(({ fixture, verdict, reason }, index) => [
+      '',
+      `## ${index + 1}. ${fixture.id}`,
+      '',
+      quoted(fixture.message),
+      '',
+      `- judge: ${shown(verdict)}${reason === '' ? '' : `: ${reason}`} @es juez: ${mostrado(verdict)}`,
+      '- Owner label: ____ (pass / fail) @es Etiqueta del dueño: ____ (pasa / falla)',
+    ]),
+    '',
+  ].join('\n');
+}
+
+/** The positive integer after `name`, or `fallback` when absent; throws for anything else. @es El entero positivo tras `name`. */
+function positiveOption(argv, name, fallback) {
+  if (!argv.includes(name)) return fallback;
+
+  const value = Number(argv[argv.indexOf(name) + 1]);
+
+  if (!Number.isInteger(value) || value <= 0) throw new Error(`${name} needs a positive integer @es ${name} necesita un entero positivo`);
+
+  return value;
+}
+
+/**
+ * The `--packet` view: draws the packet, judges each reply once, writes it with `writePacket` and returns 0, or 2
+ * for a wrong option. @es La vista `--packet`: saca el paquete, juzga cada respuesta una vez, lo escribe y devuelve
+ * 0, o 2 ante una opción incorrecta.
+ */
+async function packet(argv, fixtures, model, rubric, ask, writePacket) {
+  let file;
+  let size;
+  let seed;
+
+  try {
+    file = argv[argv.indexOf('--packet') + 1];
+    if (file === undefined || file === '' || file.startsWith('--')) throw new Error('--packet needs the path of the packet to write @es --packet necesita la ruta del paquete a escribir');
+    size = positiveOption(argv, '--size', PACKET_SIZE);
+    seed = positiveOption(argv, '--seed', 1);
+  } catch (error) {
+    console.error(error.message);
+
+    return 2;
+  }
+
+  const judged = [];
+
+  for (const fixture of packetFixtures(fixtures, size, seed)) judged.push({ fixture, ...(await judge(fixture.message, model, rubric, ask)) });
+  writePacket(file, ownerPacket(judged, { rubric: rubric.path, seed, generatedAt: isoWithOffset(new Date()), model }));
+
+  const blocked = judged.filter(({ verdict }) => verdict === false).length;
+
+  console.log(`packet=${file} replies=${judged.length} blocked=${blocked} seed=${seed} @es paquete=${file} respuestas=${judged.length} bloqueadas=${blocked} semilla=${seed}`);
+
+  return 0;
+}
+
+/**
+ * The command line: exit 0, 1 (a label or the ship bar missed) or 2 (a wrong `--rubric` or `--packet` option). `ask`
+ * is the model call, injected only by the selftest, like `writeRecord`, what `--record` does with the ship-bar
+ * record, and `writePacket`, what `--packet` does with the packet.
+ * @es La línea de comandos; `ask` es la llamada al modelo, `writeRecord` lo que `--record` hace con el registro de
+ * la barra y `writePacket` lo que `--packet` hace con el paquete, y solo el selftest los inyecta.
+ */
+export async function main(argv, { ask = askTheModel, writeRecord = writeShipBarRecord, writePacket = (file, text) => writeFileSync(file, text) } = {}) {
   const option = (name, fallback) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : fallback);
   let rubric;
 
@@ -414,6 +595,7 @@ export async function main(argv, { ask = askTheModel, writeRecord = writeShipBar
   const only = option('--only', '')?.split(',').filter(Boolean);
   const fixtures = readdirSync(path.join(HERE, 'fixtures')).filter((name) => name.endsWith('.json')).map((name) => JSON.parse(readFileSync(path.join(HERE, 'fixtures', name), 'utf8'))).filter((fixture) => only.length === 0 || only.includes(fixture.id));
 
+  if (argv.includes('--packet')) return packet(argv, fixtures, model, rubric, ask, writePacket);
   if (argv.includes('--rates')) return rates(ratesFixtures(fixtures, option('--prefix', DEFAULT_PREFIX)), runs, model, Number(option('--parallel', '6')), rubric, ask, argv.includes('--record') ? writeRecord : undefined);
 
   let wrong = 0;

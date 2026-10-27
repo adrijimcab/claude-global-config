@@ -7,6 +7,21 @@ const G = 'orphan-work/guard.mjs';
 const R = 'orphan-work/role-access.mjs';
 
 runCampaign('orphan-work/selftest.mjs', [
+  ['a declared takeover clears nothing (the 2026-10-26 refusal of the advised replacement)', G, "    .filter(({ holder }) => holder?.state !== 'unresumable');", ';'],
+  ['any declared takeover clears, a resumable holder included', G, "holder?.state !== 'unresumable'", 'holder === undefined'],
+  ['a declared takeover clears when the holder is not resumable, none included', G, "holder?.state !== 'unresumable'", "holder?.state === 'resumable' || holder === undefined"],
+  ['a declaration of any worktree clears every unresumable one', G, 'declared.has(canonicalPath(entry.worktree.path))', 'declared.size > 0'],
+  ['a TENANCY line with no colon declares', G, "    if (colon === -1) continue;\n\n    for (const named", "    for (const named"],
+  ['any line of the brief declares, not only a line that heads the marker', G, 'for (const rest of tenancyLines(prompt)) {', "for (const rest of prompt.split('\\n')) {"],
+  ['the declared paths are never collected', G, 'for (const named of absolutePathsIn(rest.slice(colon + 1), platform)) declared.add(named);', ''],
+  ['the holder is never told to the declaring brief', G, ", ...declaredButHeld(holder)].join('\\n');", "].join('\\n');"],
+  ['a resumable holder is told the unresumable advice', G, "const instead = holder.state === 'resumable'", 'const instead = false'],
+  ['every declared holder is told to resume', G, "const instead = holder.state === 'resumable'", 'const instead = true'],
+  ['the holder line loses its Spanish half', G, "    `      @es TENANCY declara este worktree, pero su titular${who} es ${holder.state}: ${instead[1]}`\n", ''],
+  ['the holder is judged without the payload session', G, 'withDeclaredHolder(entry, declared, { records, now, session: payload.session_id })', 'withDeclaredHolder(entry, declared, { records, now })'],
+  ['the holder is judged from the holder\'s own session', G, 'withDeclaredHolder(entry, declared, { records, now, session: payload.session_id })', "withDeclaredHolder(entry, declared, { records, now, session: 'session-2' })"],
+  ['the declaring brief is not told which agent holds the worktree', G, "const who = holder.agentId === undefined ? '' : ` ${holder.agentId}`;", "const who = '';"],
+  ['the injected options are dropped by the hook decision', G, 'const parked = parkedWork(payload, options);', 'const parked = parkedWork(payload);'],
   ['a live agent\'s worktree is parked', G, '.filter((worktree) => activeOwner(worktree.path, records, now) === undefined)', '.filter((worktree) => true)'],
   ['a vanished worktree folder is measured', G, ' && existsSync(worktree.path))', ')'],
   ['uncommitted work is not work', G, 'work.dirty > 0 || ', ''],
