@@ -12,9 +12,17 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os';
 import path from 'node:path';
 
-/** An assertion collector: `check(label, actual, expected)`, then `finish(name)` sets the exit code. @es Un colector de aserciones. */
+/**
+ * An assertion collector: `check(label, actual, expected)`, then `finish(name)` prints the tally and sets the exit
+ * code. A failed check is printed THE MOMENT it fails, not at `finish`: the mutation runner stops a mutant's selftest
+ * at its first failed check, and a failure printed only at the end saves nothing (orphan-work, 65 s per run, measured
+ * 2026-11-03). It never throws, so one failed case does not hide the rest.
+ * @es Un colector de aserciones: `check(label, actual, expected)` y luego `finish(name)` imprime el recuento y fija el
+ * código de salida. Un check fallido se imprime EN EL MOMENTO en que falla, no en `finish`: el runner de mutación corta
+ * el selftest de un mutante en su primer check fallido, y un fallo impreso solo al final no ahorra nada. Nunca lanza.
+ */
 export function suite() {
-  const failures = [];
+  let failed = 0;
   let passed = 0;
 
   const check = (label, actual, expected) => {
@@ -22,13 +30,15 @@ export function suite() {
     const expectedText = JSON.stringify(expected);
 
     if (actualText === expectedText) passed += 1;
-    else failures.push(`${label}: expected ${expectedText}, got ${actualText}`);
+    else {
+      failed += 1;
+      process.stdout.write(`FAIL ${label}: expected ${expectedText}, got ${actualText}\n`);
+    }
   };
 
   const finish = (name) => {
-    for (const failure of failures) process.stdout.write(`FAIL ${failure}\n`);
-    process.stdout.write(`${name}: ${passed}/${passed + failures.length} passed\n`);
-    process.exitCode = failures.length === 0 ? 0 : 1;
+    process.stdout.write(`${name}: ${passed}/${passed + failed} passed\n`);
+    process.exitCode = failed === 0 ? 0 : 1;
   };
 
   return { check, finish };
