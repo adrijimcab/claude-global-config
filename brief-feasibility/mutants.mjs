@@ -90,7 +90,14 @@ const PREFLIGHT_MUTANTS = [
 ];
 
 const fleetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const paths = ['brief-feasibility', 'brief-provenance', 'hook-io', 'hook-payloads', 'shell-command', 'hook-dispatch', 'hook-state', 'bilingual-output'];
+// The guard imports worker-git.mjs and shell-less-role.mjs, so the copy this campaign mutates carries the folders
+// worker-git.mutants.mjs lists (worker-git guard, toolset check, agent definitions and what they read) plus the
+// dispatcher the preflight selftest drives, and judge-gate plus brief-tenancy, which brief-provenance imports (its
+// guard stayed silent without them, so the preflight selftest read no provenance objection inside the copy).
+// @es El guard importa worker-git.mjs y shell-less-role.mjs, así que la copia que muta esta campaña lleva las
+// carpetas de worker-git.mutants.mjs, el despachador del selftest del preflight, y judge-gate y brief-tenancy, que
+// importa brief-provenance (sin ellas su guard callaba y el preflight no veía la objeción de procedencia).
+const paths = ['brief-feasibility', 'brief-provenance', 'hook-io', 'hook-payloads', 'shell-command', 'hook-dispatch', 'hook-state', 'bilingual-output', 'mutation-proof', 'worker-git-guard', 'agent-toolset-check', 'agents', 'cherry-pick-guard', 'company-remote', 'hook-caller', 'write-targets', 'judge-gate', 'brief-tenancy'];
 const survivors =
   runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/selftest.mjs', mutants: MUTANTS, crashKills: 'fail' }) +
   runMutants({ fleetRoot, paths, selftest: 'brief-feasibility/preflight.selftest.mjs', mutants: PREFLIGHT_MUTANTS, crashKills: 'fail' });

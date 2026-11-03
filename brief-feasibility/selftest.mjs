@@ -13,7 +13,8 @@
  *   `SendMessage` payload). The recorded `Agent` payload carries no `cwd`/`transcript_path`; the captured
  *   `SendMessage` envelope shows the harness sends both, so they are added from that capture's shape;
  * - `isolation: "worktree"` is the value 210 real delegations of session c45d798b carry;
- * - the deny list is read at run time from the real `b100-am-ui/.claude/settings.local.json`;
+ * - the deny list is `fixtures/project-settings.local.json`, the deny array of the real
+ *   `b100-am-ui/.claude/settings.local.json` copied verbatim (a selftest never reads a live file);
  * - the recipient metas and the incident briefs are `fixtures/incidents.json`, copied verbatim from that
  *   session's transcripts, and the last block REPLAYS the incidents.
  *
@@ -43,7 +44,7 @@ isolateState('brief-feasibility');
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GUARD = join(HERE, 'guard.mjs');
 const DECLARATION = join(HERE, 'guard.mjs.hook-registration.json');
-const REAL_PROJECT_SETTINGS = '/home/user/b100-am-ui-claude-tooling/settings.local.json';
+const PROJECT_SETTINGS = join(HERE, 'fixtures', 'project-settings.local.json');
 const FIXTURES = JSON.parse(readFileSync(join(HERE, 'fixtures', 'incidents.json'), 'utf8'));
 const INCIDENTS = FIXTURES.incidents;
 const CWD_ONLY = FIXTURES.recipients.cwdOnly;
@@ -73,7 +74,7 @@ writeFileSync(join(repo, '.gitignore'), '/.claude/*\n!/.claude/tracked-tool.mjs\
 writeFileSync(join(repo, TOOL), 'export {};\n');
 writeFileSync(join(repo, '.claude', 'tracked-tool.mjs'), 'export {};\n');
 writeFileSync(join(repo, '.claude', 'AGENT-LEDGER.md'), '# contract\n');
-writeFileSync(join(repo, '.claude', 'settings.local.json'), JSON.stringify({ permissions: { deny: JSON.parse(readFileSync(REAL_PROJECT_SETTINGS, 'utf8')).permissions.deny } }));
+writeFileSync(join(repo, '.claude', 'settings.local.json'), readFileSync(PROJECT_SETTINGS, 'utf8'));
 
 // A recipient located by `worktreePath` ALONE, so that source is proven by itself (a7793255's meta also
 // carries a worktree `cwd`, which would locate it even if `worktreePath` were ignored).
@@ -113,7 +114,7 @@ const cases = [
   ['allow', agent('Never run `git rebase`; branch off develop instead.'), 'NEAR MISS: "never run" before the span'],
   ['allow', agent('Rebase and reset are denied to you.'), 'NEAR MISS: prose, no code span, no imperative opening'],
   ['allow', agent('A brief told a worker to `git rebase`, which is in the permissions deny list.'), 'NEAR MISS: a description whose prohibition follows a comma'],
-  ['allow', agent("Don't `git push`; I push."), "NEAR MISS: n't is read as not"],
+  ['allow', agent("Then don't `git push`; I push."), "NEAR MISS: n't is read as not (an order cue stands before the span, so only the contraction keeps it a mention)"],
   ['allow', agent('These are refused to you:\n```\ngit push origin develop\n```'), 'NEAR MISS: a fence introduced by a prohibition'],
   ['allow', agent('Run `git -C C:/x push origin master`.'), 'the permission prefix does not reach past git global options, so neither does the guard'],
   ['allow', agent('Run `git status` and `npm run lint`.'), 'permitted commands'],
@@ -124,6 +125,8 @@ const cases = [
   ['deny', agent('Two steps: `git status`, then `git push origin develop`.'), 'a colon-introduced list with no prohibition stays an order', 'DENIED COMMAND'],
   ['allow', agent('The old brief said "Run `git rebase develop` now." and it was wrong.'), 'NEAR MISS: an order inside straight double quotes is quoted DATA'],
   ['allow', agent('The old brief said “Run `git rebase develop`.” and it was wrong.'), 'NEAR MISS: an order inside typographic quotes is quoted DATA'],
+  ['allow', agent('Then the old brief said "`git rebase develop`" and it was wrong.'), 'NEAR MISS: a span inside quotes is quoted DATA even with an order cue outside the quotation'],
+  ['deny', agent('Then the old brief said `git rebase develop` and it was wrong.'), 'the same sentence without the quotation: the cue makes the span an order', 'git rebase'],
   ['allow', agent('El brief viejo decía «ejecuta `git rebase develop`» y estaba mal.'), 'NEAR MISS: an order inside guillemets is quoted DATA'],
   ['deny', agent('The old brief said "never `git push`" — now run `git rebase develop`.'), 'the scan RESUMES after the closing quote, and a quoted "never" governs nothing', 'git rebase develop` falls under'],
   ['deny', agent('Finish with `git commit -m "no more"` and `git push origin develop`.'), 'a quoted phrase INSIDE a code span governs nothing', 'Bash(git push:*)'],
