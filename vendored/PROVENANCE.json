@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-11-03T13:43:03.754Z",
+  "syncedAt": "2026-11-03T15:51:48.717Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -69,6 +69,10 @@
     {
       "path": "mutation-proof/run-mutants.mjs",
       "sha256": "f3237e3fcaa0a9ea10de1569268a7a6cd8debee872d3153e4200854e22ae71ea"
+    },
+    {
+      "path": "mutation-proof/mutant-pool.mjs",
+      "sha256": "ff0a04d067be95f4347757274eeb36c6252a2d1185d45af58b148ab51acf53d7"
     },
     {
       "path": "mutation-proof/kill-kind.mjs",

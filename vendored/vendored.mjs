@@ -71,6 +71,7 @@ export const VENDORED = Object.freeze([
   'diff-coverage/lib/lcov-parse.mjs',
   'diff-coverage/lib/grade.mjs',
   'mutation-proof/run-mutants.mjs',
+  'mutation-proof/mutant-pool.mjs',
   'mutation-proof/kill-kind.mjs',
   'mutation-proof/selftest.mjs',
   'mutation-proof/mutants.mjs',
