@@ -329,6 +329,10 @@ try {
   check('with no session id no holder is the dispatcher\'s own: a declared takeover is cleared', parkedWork({ tool_name: 'Agent', cwd: repository, tool_input: { prompt: tenancy('take-a') } }, { records: harness([{ id: 'aSMALL0000000000', worktree: 'take-a' }]), lastWorked: () => 0 }).map(({ worktree }) => path.basename(worktree.path)).filter((name) => name.startsWith('take-')), ['take-b']);
   check('the declaration is read by its path, never its wording', taken(unresumableA, `TENANCY: you write ONLY in ${worktreeOf('take-a')} now.`), ['take-b']);
   check('a TENANCY line with no colon declares nothing', taken(unresumableA, `TENANCY ${worktreeOf('take-a')}`), ['take-a', 'take-b']);
+  // A drive letter carries a colon: the marker colon must be the one after the word, on every platform.
+  // @es La letra de unidad lleva dos puntos: el del marcador debe ser el que sigue a la palabra, en toda plataforma.
+  check('a TENANCY line with no marker colon declares none of its Windows paths', [...declaredTenancies({ tool_input: { prompt: 'TENANCY C:\\work\\take-a and C:\\work\\take-b' } }, 'win32')], []);
+  check('a TENANCY line with a marker colon still declares its Windows paths', [...declaredTenancies({ tool_input: { prompt: 'TENANCY : C:\\work\\take-a and C:\\work\\take-b' } }, 'win32')], ['c:/work/take-a', 'c:/work/take-b']);
   check('a TENANCY inside a sentence declares nothing', taken(unresumableA, `See the TENANCY: ${worktreeOf('take-a')} line.`), ['take-a', 'take-b']);
   check('a TENANCY of a folder INSIDE the worktree is not that worktree', taken(unresumableA, `TENANCY: ${worktreeOf('take-a')}/src`), ['take-a', 'take-b']);
   check('the declared tenancies are the canonical paths on the marker lines', [...declaredTenancies({ tool_input: { prompt: `x\n- TENANCY: ${worktreeOf('take-a')}, and ${worktreeOf('take-b')}.\nTENANCYWISE: /nope` } })], [worktreeOf('take-a'), worktreeOf('take-b')].map((folder) => canonicalPath(folder)));

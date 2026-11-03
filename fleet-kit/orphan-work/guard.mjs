@@ -282,11 +282,15 @@ export function declaredTenancies(payload, platform = process.platform) {
   if (typeof prompt !== 'string') return declared;
 
   for (const rest of tenancyLines(prompt)) {
-    const colon = rest.indexOf(':');
+    // The marker colon is the one right after the word (spaces aside), never any colon on the line: a Windows
+    // drive letter carries one, so `TENANCY C:\a and C:\b` used to cut at `C:` and declare C:\b (measured 2026-11-03).
+    // @es Los dos puntos del marcador son los que siguen a la palabra (salvo espacios), nunca cualquiera de la línea:
+    // la letra de unidad de Windows lleva unos, así `TENANCY C:\a and C:\b` cortaba en `C:` y declaraba C:\b.
+    const marker = rest.trimStart();
 
-    if (colon === -1) continue;
+    if (!marker.startsWith(':')) continue;
 
-    for (const named of absolutePathsIn(rest.slice(colon + 1), platform)) declared.add(named);
+    for (const named of absolutePathsIn(marker.slice(1), platform)) declared.add(named);
   }
 
   return declared;
