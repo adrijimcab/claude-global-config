@@ -962,7 +962,11 @@ try {
   const manyForeignText = reasonOf(bash(`rm ${p('*.mjs')}`));
 
   check('refusal caps a long list and counts it', manyForeignText.includes('(showing 5)') && manyForeignText.includes('(se muestran 5)'), manyForeignText);
-  check('refusal: the count is the files reached, not the files listed', manyForeignText.includes('7 file(s)') && manyForeignText.includes('7 fichero(s)'), manyForeignText);
+  // The files the glob reaches are counted on disk: drive-foreign.mjs lands in the scratchpad on win32 and under Q: elsewhere.
+  // @es Los ficheros que alcanza el glob se cuentan en disco: drive-foreign.mjs cae en el scratchpad en win32 y bajo Q: en el resto.
+  const reached = readdirSync(SCRATCH).filter((name) => name.endsWith('.mjs') && !['mine.mjs', 'mine-too.mjs'].includes(name)).length;
+
+  check('refusal: the count is the files reached, not the files listed', reached > 5 && manyForeignText.includes(`${reached} file(s)`) && manyForeignText.includes(`${reached} fichero(s)`), `${reached} reached\n${manyForeignText}`);
   check('refusal: git quoted names are read as they are (quotePath off)', reasonOf(inRepo('git clean -f', repo)).includes('ñandú.tmp'));
   check('unresolvable refusal says why, in both languages', reasonOf(bash('rm "$X/a"')).includes('cannot tell') && reasonOf(bash('rm "$X/a"')).includes('no se puede saber') && reasonOf(bash('rm "$X/a"')).includes('depends on a variable') && reasonOf(bash('rm "$X/a"')).includes('depende de una variable'));
   check('unresolvable refusal for stdin says why', reasonOf(bash('ls | xargs rm')).includes('standard input') && reasonOf(bash('ls | xargs rm')).includes('entrada estándar'));
