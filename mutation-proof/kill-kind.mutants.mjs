@@ -42,7 +42,7 @@ const MUTANTS = [
   ['the crash count is dropped from the tally', RUNNER, "if (kind === 'assertion' || kind === 'crash') tally[kind] += 1;", "if (kind === 'assertion') tally[kind] += 1;"],
   ['the weak-proof notice is never printed', RUNNER, 'if (tally.crash > 0) console.log(', 'if (false) console.log('],
   ['the weak-proof notice is printed for every campaign', RUNNER, 'if (tally.crash > 0) console.log(', 'if (tally.crash >= 0) console.log('],
-  ['the default policy fails on a crash', RUNNER, "crashKills = 'report' }", "crashKills = 'fail' }"],
+  ['the default policy fails on a crash', RUNNER, "crashKills = 'report', concurrency }", "crashKills = 'fail', concurrency }"],
   ['the fail policy never counts a crash as a survivor', RUNNER, "(crashKills === 'fail' ? tally.crash : 0)", '0'],
   ['an unknown policy is accepted', RUNNER, 'if (!CRASH_POLICIES.has(crashKills)) throw', 'if (false) throw'],
 ];

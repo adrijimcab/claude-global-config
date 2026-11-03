@@ -29,20 +29,20 @@
 /** @typedef {{ file: string, line: number }} UncoveredEntry */
 
 /**
- * One changed line's verdict: `null` when fully covered, otherwise the reason it is not.
- * @es El veredicto de una línea cambiada: `null` si está totalmente cubierta, si no la razón por la que
- * no lo está.
+ * One changed line's verdict: every way it is uncovered, in the order `line`, `function`, `branch`; an
+ * empty list when it is fully covered. A function is graded by the line it is DECLARED on.
+ * @es El veredicto de una línea cambiada: cada forma en que está sin cubrir, en el orden `line`,
+ * `function`, `branch`; lista vacía si está totalmente cubierta. Una función se gradúa por la línea en
+ * que se DECLARA.
  */
 const gradeLine = (fileCoverage, lineNumber) => {
-  if (fileCoverage === undefined) return null;
+  const reasons = [];
 
-  const lineHits = fileCoverage.lines.get(lineNumber);
-  if (lineHits !== undefined && lineHits === 0) return 'line';
+  if (fileCoverage.lines.get(lineNumber) === 0) reasons.push('line');
+  if (fileCoverage.functions.get(lineNumber)?.includes(0) === true) reasons.push('function');
+  if (fileCoverage.branches.get(lineNumber)?.includes(0) === true) reasons.push('branch');
 
-  const branchHits = fileCoverage.branches.get(lineNumber);
-  if (branchHits !== undefined && branchHits.some((hits) => hits === 0)) return 'branch';
-
-  return null;
+  return reasons;
 };
 
 /**
@@ -72,8 +72,9 @@ export const gradeChangedFiles = (changedLinesByFile, coverageByFile) => {
 
     const uniqueLines = [...new Set(lineNumbers)].sort((a, b) => a - b);
     for (const lineNumber of uniqueLines) {
-      const reason = gradeLine(fileCoverage, lineNumber);
-      if (reason !== null) uncovered.push({ file, line: lineNumber, reason });
+      const reasons = gradeLine(fileCoverage, lineNumber);
+      if (reasons.length > 0)
+        uncovered.push({ file, line: lineNumber, reason: reasons[0], reasons });
     }
   }
 

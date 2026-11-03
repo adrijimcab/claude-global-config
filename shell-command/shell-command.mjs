@@ -11,11 +11,28 @@
  * are not words at all, and `$(...)` / `bash -c "..."` run commands of their own.
  *
  * WHAT IT RETURNS. `simpleCommands(script, dialect)` yields, in execution order:
- *   { words, text, separator, depth }
- *   - `words`     the command's words, quoting resolved, redirections and their targets removed;
- *   - `text`      the command's raw source slice, redirections included (for verbatim execution);
- *   - `separator` the control operator that ended it (`&&`, `||`, `;`, `|`, `&`, `\n`, `(`, `)`, `end`);
- *   - `depth`     how many bash `(` subshells enclose it, so `(cd x); git ...` does not leak `cd x`.
+ *   { words, text, separator, depth, dialect, shell, start, quoting, redirections }
+ *   - `words`        the command's words, quoting resolved, redirections and their targets removed;
+ *   - `text`         the command's raw source slice, redirections included (for verbatim execution);
+ *   - `separator`    the control operator that ended it (`&&`, `||`, `;`, `|`, `&`, `\n`, `(`, `)`, `end`);
+ *   - `depth`        how many bash `(` subshells enclose it, so `(cd x); git ...` does not leak `cd x`;
+ *   - `dialect`      the grammar the command was READ in: the line's own for its own commands, the nested
+ *                    shell's for what `bash -c`, `powershell -Command` or `cmd /c` runs. A consumer reads a
+ *                    command's words in THIS dialect, never in the line's: `del -WhatIf x` is a dry run of
+ *                    PowerShell's `del` alias and a real deletion by cmd's `del`;
+ *   - `shell`        the shell process that runs it, `{ dialect, script, parent, parentDepth }`, one frozen object
+ *                    shared by every command of one script: the line's own (`parent` undefined) or a nested one
+ *                    (a substitution, `bash -c`, ...), whose `parent` is the shell of the command that started
+ *                    it and `parentDepth` that command's `depth`. What a nested shell does to its own state (a
+ *                    `cd`) ends with it, which `cherry-pick-guard/working-directory.mjs` reads from here;
+ *   - `start`        where `text` begins in `shell.script`;
+ *   - `quoting`      per word (parallel to `words`), the source spans it was written in, `{ quote, start, end }`
+ *                    with offsets into `shell.script` and `quote` one of `QUOTES`: which characters came from
+ *                    single quotes, double quotes, bash `$'…'`, a substitution, or no quoting at all. Quote
+ *                    delimiters belong to their span; a line continuation belongs to none;
+ *   - `redirections` every redirection, `{ operator, target, quoting, start, end }`: `operator` its source
+ *                    (`>`, `2>&`, `&>>`, `<<`), `target` the target word's value (`undefined` for a heredoc
+ *                    or a target that never came) and `quoting` that word's spans.
  * Commands inside `$(...)`, backticks, `bash -c`, `powershell -Command` and `cmd /c` are emitted BEFORE
  * the command that contains them, because a substitution runs first.
  *
@@ -28,9 +45,12 @@
  *     (read with the CMD dialect, where a backslash is literal), `$(...)`, backticks and the carried scripts
  *     above are listed before their container when `includeNested` is true (the default), and not at all
  *     when it is false. A launcher or runner never adds a second entry for its program by any other road.
+ *   - A NESTED SCRIPT IS WHAT THE NESTED SHELL RECEIVES. It is built from the container's words after the line's
+ *     own shell has expanded them, so a substitution the line runs itself (`bash -c "rm $(ls)"`) reaches it as
+ *     `SUBSTITUTION_OUTPUT`, never as command text read a second time in another grammar.
  *
- * WHAT IT IS NOT, stated so nobody relies on it for more: a full shell grammar. Parameter expansion and
- * aliases are not evaluated; a word holding `$` (bash, PowerShell) or `%` (cmd `%VAR%`) stays literal, and
+ * WHAT IT IS NOT, stated so nobody relies on it for more: a full shell grammar. Bash ANSI-C quoting (`$'…'`) IS
+ * decoded, because bash decodes it before the command runs; parameter expansion and aliases are not evaluated; a word holding `$` (bash, PowerShell) or `%` (cmd `%VAR%`) stays literal, and
  * callers treat it as UNRESOLVABLE rather than guessing its value. `isUnresolvableWord(word)` is the ONE
  * shared answer to that question: a consumer that resolves a word as a path or a program asks it, and fails
  * closed when it says yes, instead of re-deriving the test. `cmd //c` (Git Bash spelling of `cmd /c`, since
@@ -49,11 +69,17 @@
  * Se modelan `cmd //c` (grafía de Git Bash de `cmd /c`, porque MSYS reescribe un `/c` suelto como ruta) y los
  * grupos `( )` del dialecto CMD.
  *
+ * CADA ENTRADA dice en qué gramática se LEYÓ (`dialect`: la de la línea o la de la shell anidada; un consumidor lee
+ * sus palabras en ESA, nunca en la de la línea), qué shell la corre (`shell`: la de la línea o una anidada, cuyo
+ * `cd` muere con ella), con qué entrecomillado se escribió cada carácter de cada palabra (`quoting`: comillas
+ * simples, dobles, `$'…'` de bash, sustitución o ninguno) y sus redirecciones con su destino (`redirections`).
  * EL CONTRATO: UNA ENTRADA POR COMANDO ESCRITO, una sola vez. El PROGRAMA EFECTIVO sale de `resolveCommand`
  * sobre esa entrada; un comando que lleva su trabajo como cadena (`env -S`, `iex`, `Start-Process`) no tiene
  * programa propio (`index` -1) y devuelve su `script` y su `dialect`. Los SCRIPTS ANIDADOS (`bash -c`,
  * `powershell -Command`, `cmd /c` con el dialecto CMD, donde la barra invertida es literal, `$(...)` y los
- * scripts anteriores) salen solo por la vía de anidados, antes de su contenedor, con `includeNested` activo.
+ * scripts anteriores) salen solo por la vía de anidados, antes de su contenedor, con `includeNested` activo. UN
+ * SCRIPT ANIDADO ES LO QUE RECIBE LA SHELL ANIDADA: una sustitución que corre la propia línea le llega como
+ * `SUBSTITUTION_OUTPUT`, nunca como texto de comando leído dos veces. El `$'…'` ANSI-C de bash SÍ se decodifica.
  */
 
 import { launcherNamed, unwrapLauncher } from './launchers.mjs';
@@ -65,6 +91,21 @@ import { powershellRunnerScript } from './powershell-runners.mjs';
  * script de `cmd /c`.
  */
 export const DIALECTS = Object.freeze({ BASH: 'bash', POWERSHELL: 'powershell', CMD: 'cmd' });
+
+/**
+ * The quoting a span of a word was written in: no quoting (`BARE`, an escape included), `'…'` (`SINGLE`), `"…"`
+ * (`DOUBLE`), bash ANSI-C `$'…'` (`ANSI`, whose backslashes bash reads as escapes) and a `$(…)` or backtick
+ * substitution (`SUBSTITUTION`, whose text is another script). @es El entrecomillado de un tramo de palabra: ninguno
+ * (`BARE`, escape incluido), simples, dobles, `$'…'` ANSI-C de bash (`ANSI`, cuyas barras invertidas bash lee como
+ * escapes) y una sustitución `$(…)` o con comillas invertidas (`SUBSTITUTION`, cuyo texto es otro script).
+ */
+export const QUOTES = Object.freeze({
+  BARE: 'bare',
+  SINGLE: 'single',
+  DOUBLE: 'double',
+  ANSI: 'ansi',
+  SUBSTITUTION: 'substitution'
+});
 
 /** The dialect of a harness tool, or `undefined` for a tool that runs no shell. @es El dialecto de una herramienta. */
 export function dialectOfTool(toolName) {
@@ -139,6 +180,30 @@ export function isUnresolvableWord(word) {
 }
 
 const BLANKS = ' \t\r';
+
+/**
+ * The one-letter escapes of bash `$'…'` and what each stands for; an escape bash does not know keeps its
+ * backslash. @es Los escapes de una letra de `$'…'` en bash; uno que bash no conoce conserva su barra invertida.
+ */
+const ANSI_ESCAPES = Object.freeze({
+  a: '\u0007',
+  b: '\b',
+  e: '\u001B',
+  E: '\u001B',
+  f: '\f',
+  n: '\n',
+  r: '\r',
+  t: '\t',
+  v: '\v',
+  '\\': '\\',
+  "'": "'",
+  '"': '"',
+  '?': '?'
+});
+/** How many hex digits each numeric `$'…'` escape reads at most. @es Cuántas cifras hexadecimales lee como máximo cada escape numérico. */
+const ANSI_HEX_WIDTHS = Object.freeze({ x: 2, u: 4, U: 8 });
+const OCTAL_DIGITS = '01234567';
+const HEX_DIGITS = '0123456789abcdefABCDEF';
 const WORD_BREAKERS = ' \t\r\n;&|<>()';
 /** The CMD words whose header may be followed by a `( ... )` group. @es Las palabras de CMD cuya cabecera admite un grupo `( ... )`. */
 const GROUP_HEADERS = ['if', 'else', 'for'];
@@ -335,14 +400,40 @@ class Lexer {
 
     this.startWord();
 
+    const start = cursor.index;
+    const valueStart = this.word.value.length;
+
     if (cursor.startsWith(`${grammar.escape}\n`)) return void cursor.take(2);
-    if (cursor.startsWith(grammar.escape)) return this.appendEscaped();
-    if (grammar.singleQuotes && cursor.startsWith("'")) return this.readSingleQuoted();
+
+    if (cursor.startsWith(grammar.escape)) {
+      this.appendEscaped();
+      return this.mark(QUOTES.BARE, start, cursor.index, valueStart);
+    }
+
+    if (this.dialect === DIALECTS.BASH && cursor.startsWith("$'")) {
+      this.readAnsiQuoted();
+      return this.mark(QUOTES.ANSI, start, cursor.index, valueStart);
+    }
+
+    if (grammar.singleQuotes && cursor.startsWith("'")) {
+      this.readSingleQuoted();
+      return this.mark(QUOTES.SINGLE, start, cursor.index, valueStart);
+    }
+
     if (cursor.startsWith('"')) return this.readDoubleQuoted();
-    if (grammar.substitutions && cursor.startsWith('$(')) return this.readSubstitution();
-    if (this.dialect === DIALECTS.BASH && cursor.startsWith('`')) return this.readBacktick();
+
+    if (grammar.substitutions && cursor.startsWith('$(')) {
+      this.readSubstitution();
+      return this.mark(QUOTES.SUBSTITUTION, start, cursor.index, valueStart);
+    }
+
+    if (this.dialect === DIALECTS.BASH && cursor.startsWith('`')) {
+      this.readBacktick();
+      return this.mark(QUOTES.SUBSTITUTION, start, cursor.index, valueStart);
+    }
 
     this.word.value += cursor.take();
+    this.mark(QUOTES.BARE, start, cursor.index, valueStart);
   }
 
   /**
@@ -410,8 +501,23 @@ class Lexer {
       start: this.cursor.index,
       end: this.cursor.index,
       nested: [],
-      data: false
+      data: false,
+      spans: []
     };
+  }
+
+  /**
+   * Records that the source from `start` to `end` belongs to the current word in `quote`, and produced its value
+   * from `valueStart` to where the value now ends: one span per run of one quoting.
+   * @es Anota que el fuente de `start` a `end` pertenece a la palabra en curso con `quote` y produjo su valor desde
+   * `valueStart` hasta donde acaba ahora: un tramo por cada racha de un mismo entrecomillado.
+   */
+  mark(quote, start, end, valueStart) {
+    const last = this.word.spans.at(-1);
+    const valueEnd = this.word.value.length;
+
+    if (last !== undefined && last.quote === quote && last.end === start) Object.assign(last, { end, valueEnd });
+    else this.word.spans.push({ quote, start, end, valueStart, valueEnd });
   }
 
   endWord() {
@@ -472,6 +578,7 @@ class Lexer {
 
     if (cursor.startsWith('&')) cursor.take();
 
+    const operatorEnd = cursor.index;
     const isHeredoc = operator === '<<' || operator === '<<-';
 
     if (isHeredoc)
@@ -482,6 +589,7 @@ class Lexer {
       value: operator,
       start,
       end: cursor.index,
+      operatorEnd,
       consumesTarget: !isHeredoc
     });
   }
@@ -562,8 +670,54 @@ class Lexer {
     }
   }
 
+  /**
+   * Bash ANSI-C quoting, `$'…'`: the text between the quotes with its backslash escapes decoded, the way bash
+   * decodes them before the command receives the word (`$'C:\\x'` is `C:\x`, `$'a\tb'` holds a tab).
+   * @es El entrecomillado ANSI-C de bash, `$'…'`: el texto entre comillas con sus escapes de barra invertida
+   * decodificados, como los decodifica bash antes de que el comando reciba la palabra.
+   */
+  readAnsiQuoted() {
+    const { cursor } = this;
+
+    cursor.take(2);
+
+    while (!cursor.done) {
+      const character = cursor.take();
+
+      if (character === "'") return;
+
+      this.word.value += character === '\\' && !cursor.done ? this.ansiEscape() : character;
+    }
+  }
+
+  /** The character one `$'…'` escape stands for; the backslash is already consumed. @es El carácter de un escape de `$'…'`. */
+  ansiEscape() {
+    const { cursor } = this;
+    const letter = cursor.take();
+
+    if (Object.hasOwn(ANSI_ESCAPES, letter)) return ANSI_ESCAPES[letter];
+    if (OCTAL_DIGITS.includes(letter)) return String.fromCodePoint(Number.parseInt(letter + this.digits(OCTAL_DIGITS, 2), 8));
+    if (letter === 'c' && !cursor.done) return String.fromCodePoint(cursor.take().codePointAt(0) % 32);
+
+    const width = ANSI_HEX_WIDTHS[letter];
+    const hex = width === undefined ? '' : this.digits(HEX_DIGITS, width);
+
+    return hex.length > 0 ? String.fromCodePoint(Number.parseInt(hex, 16)) : `\\${letter}`;
+  }
+
+  /** Up to `limit` characters of `alphabet` at the cursor, consumed. @es Hasta `limit` caracteres de `alphabet`, consumidos. */
+  digits(alphabet, limit) {
+    let taken = '';
+
+    while (taken.length < limit && !this.cursor.done && alphabet.includes(this.cursor.peek())) taken += this.cursor.take();
+
+    return taken;
+  }
+
   readDoubleQuoted() {
     const { cursor, grammar } = this;
+    let runStart = cursor.index;
+    let runValueStart = this.word.value.length;
 
     cursor.take();
 
@@ -579,17 +733,29 @@ class Lexer {
         continue;
       }
 
-      if (grammar.substitutions && cursor.startsWith('$(')) {
-        this.readSubstitution();
+      const opensBacktick = this.dialect === DIALECTS.BASH && cursor.startsWith('`');
+
+      if ((grammar.substitutions && cursor.startsWith('$(')) || opensBacktick) {
+        const substitutionStart = cursor.index;
+        const substitutionValueStart = this.word.value.length;
+
+        if (substitutionStart > runStart) this.mark(QUOTES.DOUBLE, runStart, substitutionStart, runValueStart);
+        if (opensBacktick) this.readBacktick();
+        else this.readSubstitution();
+        this.mark(QUOTES.SUBSTITUTION, substitutionStart, cursor.index, substitutionValueStart);
+        runStart = cursor.index;
+        runValueStart = this.word.value.length;
         continue;
       }
 
       const character = cursor.take();
 
-      if (character === '"') return;
+      if (character === '"') break;
 
       this.word.value += character;
     }
+
+    if (cursor.index > runStart) this.mark(QUOTES.DOUBLE, runStart, cursor.index, runValueStart);
   }
 
   /**
@@ -725,8 +891,34 @@ function nestedShellScript(words) {
   return { script: scriptOfWords(words.slice(flagAt + 1), shell.dialect), dialect: shell.dialect };
 }
 
+/**
+ * What a substitution the line's own shell expanded stands for in the words a command RECEIVES: output nobody can
+ * know before it runs. It holds a `$`, so it is unresolvable in every dialect (`isUnresolvableWord`), and it is
+ * no command text a nested shell could read. @es Lo que representa, en las palabras que RECIBE un comando, una
+ * sustitución que expandió la propia shell de la línea: una salida que nadie conoce antes de correr. Lleva `$`,
+ * así que es no resoluble en todo dialecto, y no es texto de comando que una shell anidada pueda leer.
+ */
+export const SUBSTITUTION_OUTPUT = '$SUBSTITUTION_OUTPUT';
+
+/**
+ * The words as the program receives them: the text of every substitution the line's shell runs itself (`$(...)`,
+ * backticks, a PowerShell `"$(...)"`) replaced by `SUBSTITUTION_OUTPUT`. The substitution's own commands are
+ * listed once, as the line's nested commands; reading its text again inside the script of `bash -c "$(x)"` would
+ * list them a second time, in a shell that never sees them. @es Las palabras tal como las recibe el programa: el
+ * texto de cada sustitución que corre la propia shell de la línea se sustituye por `SUBSTITUTION_OUTPUT`. Sus
+ * comandos se listan una vez, como anidados de la línea; leer su texto otra vez dentro del script de `bash -c "$(x)"`
+ * los listaría por segunda vez, en una shell que nunca los ve.
+ */
+function receivedWords(words, quoting) {
+  return words.map((word, index) =>
+    quoting[index]
+      .map((span) => (span.quote === QUOTES.SUBSTITUTION ? SUBSTITUTION_OUTPUT : word.slice(span.valueStart, span.valueEnd)))
+      .join('')
+  );
+}
+
 function emptyCommand() {
-  return { words: [], nested: [], start: undefined, end: undefined };
+  return { words: [], quoting: [], redirections: [], nested: [], start: undefined, end: undefined };
 }
 
 /**
@@ -743,20 +935,32 @@ function emptyCommand() {
 export function simpleCommands(script, dialect = DIALECTS.BASH, { includeNested = true } = {}) {
   if (typeof script !== 'string' || GRAMMAR[dialect] === undefined) return [];
 
+  return commandsOfShell(Object.freeze({ dialect, script, parent: undefined, parentDepth: 0 }), includeNested);
+}
+
+/**
+ * The commands one shell runs: its own, each preceded by the commands of the shells it starts, each of those
+ * read in ITS dialect and tagged with its own `shell`. @es Los comandos que corre una shell: los suyos, cada uno
+ * precedido por los de las shells que arranca, leídos en SU dialecto y con su propio `shell`.
+ */
+function commandsOfShell(shell, includeNested) {
+  const { dialect, script } = shell;
   const tokens = new Lexer(script, dialect).tokenize();
   const commands = [];
   let depth = 0;
   let current = emptyCommand();
-  let targetPending = false;
+  let pendingRedirection;
+
+  const nestedShell = (nested) =>
+    commandsOfShell(Object.freeze({ dialect: nested.dialect, script: nested.script, parent: shell, parentDepth: depth }), true);
 
   const flush = (separator) => {
     if (includeNested) {
-      for (const nested of current.nested)
-        commands.push(...simpleCommands(nested.script, nested.dialect));
+      for (const nested of current.nested) commands.push(...nestedShell(nested));
 
-      const inner = nestedShellScript(current.words);
+      const inner = nestedShellScript(receivedWords(current.words, current.quoting));
 
-      if (inner !== undefined) commands.push(...simpleCommands(inner.script, inner.dialect));
+      if (inner !== undefined) commands.push(...nestedShell(inner));
     }
 
     if (current.words.length > 0)
@@ -764,11 +968,16 @@ export function simpleCommands(script, dialect = DIALECTS.BASH, { includeNested 
         words: current.words,
         text: script.slice(current.start, current.end),
         separator,
-        depth
+        depth,
+        dialect,
+        shell,
+        start: current.start,
+        quoting: current.quoting,
+        redirections: current.redirections
       });
 
     current = emptyCommand();
-    targetPending = false;
+    pendingRedirection = undefined;
   };
 
   for (const token of tokens) {
@@ -783,18 +992,28 @@ export function simpleCommands(script, dialect = DIALECTS.BASH, { includeNested 
     current.end = token.end;
 
     if (token.kind === 'redirection') {
-      targetPending = token.consumesTarget;
+      const redirection = { operator: script.slice(token.start, token.operatorEnd), target: undefined, quoting: [], start: token.start, end: token.end };
+
+      current.redirections.push(redirection);
+      pendingRedirection = token.consumesTarget ? redirection : undefined;
       continue;
     }
 
     current.nested.push(...token.nested);
 
-    if (targetPending || token.data) {
-      targetPending = false;
+    if (token.data) {
+      pendingRedirection = undefined;
+      continue;
+    }
+
+    if (pendingRedirection !== undefined) {
+      Object.assign(pendingRedirection, { target: token.value, quoting: token.spans, end: token.end });
+      pendingRedirection = undefined;
       continue;
     }
 
     current.words.push(token.value);
+    current.quoting.push(token.spans);
   }
 
   flush('end');

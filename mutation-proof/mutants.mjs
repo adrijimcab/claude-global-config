@@ -15,11 +15,36 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from './run-mutants.mjs';
 
 const RUNNER = 'mutation-proof/run-mutants.mjs';
+const POOL = 'mutation-proof/mutant-pool.mjs';
 
+// Not attacked here, on purpose: the pool's width (Math.min(concurrency, plans)) is a speed property that no verdict
+// shows, measured by timing instead; and a parse check failing without a SyntaxError has no fixture on either path.
+// @es No se atacan aquí, a propósito: el ancho del pool es una propiedad de velocidad que ningún veredicto muestra (se
+// mide con tiempos), y un parse check que falla sin SyntaxError no tiene fixture en ninguno de los dos caminos.
 const MUTANTS = [
+  // ── parallel mutants (concurrencyOf, mutant-pool.mjs) ────────────────────────────────────────────────────
+  ['the pool is never used, so every campaign stays sequential', RUNNER, 'const outcomes = parallel > 1 ? pooledOutcomes(', 'const outcomes = false ? pooledOutcomes('],
+  ['a concurrency of 1 still starts a pool', RUNNER, 'parallel > 1 ?', 'parallel >= 1 ?'],
+  ['the default ignores the cap of 8', RUNNER, 'Math.min(8, cores - 2)', '(cores - 2)'],
+  ['the default takes every core', RUNNER, 'cores - 2)', 'cores)'],
+  ['a concurrency below 1 is kept', RUNNER, 'return Math.max(1, value);', 'return value;'],
+  ['a concurrency that is not a whole number is accepted', RUNNER, 'if (!Number.isInteger(value)) throw', 'if (false) throw'],
+  ['the environment wins over the campaign value', RUNNER, 'const value = requested ??', 'const value = undefined ??'],
+  ['the pool never applies the mutation', POOL, 'await writeFile(target, source.slice(0, at) + replacement + source.slice(at + original.length));', ''],
+  ['the pool never parse-checks, so a broken mutant runs and reads as a crash', POOL, 'if (check.status !== 0) {', 'if (false) {'],
+  ['parallel mutants share the system temp folder', POOL, '{ ...process.env, SELFTEST_FLEET: job.fleet, TEMP: temp, TMP: temp, TMPDIR: temp }', '{ ...process.env, SELFTEST_FLEET: job.fleet }'],
+  ['outcomes land in completion order, not plan order', POOL, 'results[index] = await measureOne(job.plans[index]);', 'results[done] = await measureOne(job.plans[index]);'],
+  ['the pool does not hand the fleet to the selftest', POOL, 'SELFTEST_FLEET: job.fleet, TEMP', 'TEMP'],
+  // ── stop at the first failed check ───────────────────────────────────────────────────────────────────────
+  ['the pool never stops at a failed check', POOL, 'if (failureLine.test(line)) {', 'if (false) {'],
+  ['a run stopped at a failed check reads as a survivor', POOL, "resolve({ status: 1, signal: null, stdout: out.stdout, stderr: out.stderr, stoppedAt });", "resolve({ status: 0, signal: null, stdout: out.stdout, stderr: out.stderr, stoppedAt });"],
+  ['the calibration is skipped, so a failure-looking green baseline still cuts and invents a kill', RUNNER, 'if (FAILURE_LINE.test(`${baseline.stdout', 'if (false && FAILURE_LINE.test(`${baseline.stdout'],
+  ['MUTATION_FAIL_FAST=0 is ignored', RUNNER, "if (env.MUTATION_FAIL_FAST === '0') return", 'if (false) return'],
+  ['the pool is always told the stop is off', RUNNER, 'failFast: failFast.on,', 'failFast: false,'],
+  ['the failure line forgets the RED form', RUNNER, 'FAIL\\w*|RED|not ok', 'FAIL\\w*|not ok'],
   // ── the three hardening fixes, each reverted ─────────────────────────────────────────────────────────
   ['a target occurring more than once is mutated at its first occurrence', RUNNER, 'if (count > 1) return', 'if (false) return'],
-  ['the selftest is never run unmutated, so a red baseline reads as every mutant killed', RUNNER, '    requireGreenBaseline(sandboxes, selftest, timeoutMs);\n', ''],
+  ['the selftest is never run unmutated, so a red baseline reads as every mutant killed', RUNNER, '    const baseline = requireGreenBaseline(sandboxes, selftest, timeoutMs);\n', "    const baseline = { stdout: '', stderr: '' };\n"],
   ['a mutated file is never parse-checked, so a syntax error reads as a kill', RUNNER, 'const syntaxError = syntaxErrorOf(path.join(sandbox, file));', 'const syntaxError = undefined;'],
 
   // ── the refusals that keep those fixes honest ───────────────────────────────────────────────────────
@@ -28,7 +53,13 @@ const MUTANTS = [
   ['a path outside the copied paths is not refused, so a mutant can climb out of its sandbox and write a live file', RUNNER, 'if (!copied.some((needed) => isInside(needed, file))) return', 'if (false) return'],
   ['an unparseable original is accepted, so BROKEN no longer means the mutation broke it', RUNNER, '    requireParseableOriginals(plans, snapshot);\n', ''],
   ['the mutation is applied with String.replace, which rewrites $& in the replacement', RUNNER, 'return source.slice(0, at) + replacement + source.slice(at + original.length);', 'return source.replace(original, replacement);'],
-  ['a refused mutant is counted as killed', RUNNER, 'runMutant(plan, sandboxes, selftest, timeoutMs) : undefined;', "runMutant(plan, sandboxes, selftest, timeoutMs) : 'assertion';"],
+  ['a refused mutant no longer stops the run, so a stale campaign runs its whole baseline first', RUNNER, '    requireNoRefusal(plans);\n', ''],
+  ['a refusal stops the run only after the baseline', RUNNER, '    requireNoRefusal(plans);\n    requireParseableOriginals(plans, snapshot);\n    const baseline = requireGreenBaseline(sandboxes, selftest, timeoutMs);\n', '    requireParseableOriginals(plans, snapshot);\n    const baseline = requireGreenBaseline(sandboxes, selftest, timeoutMs);\n    requireNoRefusal(plans);\n'],
+  ['a refused mutant is not printed with its reason', RUNNER, "  for (const { label, refusal } of refused) console.log(`REFUSED  ${label} — ${refusal}`);\n", ''],
+  ['every plan counts as refused', RUNNER, "plans.filter(({ refusal }) => refusal !== undefined);", "plans.filter(() => true);"],
+  ['the stop does not count the refused mutants', RUNNER, 'throw new NotMeasured(`${refused.length} planned', 'throw new NotMeasured(`planned'],
+  ['the stop drops the Spanish half of its count', RUNNER, '@es ${refused.length} mutante(s)', 'mutante(s)'],
+  ['the stop does not name the refused mutants', RUNNER, 'no se corre la línea base:\\n${labels}`);', 'no se corre la línea base`);'],
   ['an empty campaign reports 0/0 killed and exits clean', RUNNER, "if (mutants.length === 0) throw new NotMeasured(", "if (false) throw new NotMeasured("],
   ['overlapping occurrences are not counted, so "aa" in "aaa" reads as exactly once', RUNNER, 'text.indexOf(needle, at + 1)', 'text.indexOf(needle, at + needle.length)'],
 

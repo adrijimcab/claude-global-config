@@ -5,7 +5,13 @@
  * WHAT COUNTS AS A WRITE: an output redirection (`>`, `>>`, `&>`, …, via `redirect-targets.mjs`),
  * `sed -i`/`sed --in-place`, `tee`, the DESTINATION of `cp`/`mv` and of the PowerShell
  * `Copy-Item`/`Move-Item` family (by `-Destination` or position), and the PowerShell content cmdlets
- * `Set-Content`/`Out-File`/`Add-Content` (by `-Path`/`-FilePath` or their first positional argument).
+ * `Set-Content`/`Out-File`/`Add-Content` (by `-Path`/`-FilePath` or their first positional argument), and the
+ * destination of cmd's `copy`/`move`.
+ *
+ * EACH COMMAND IN ITS OWN DIALECT. A name can mean a different program in another shell: `cp` and `mv` are
+ * Copy-Item and Move-Item in PowerShell, and `copy` and `move` are cmd's own builtins in a `cmd /c` script,
+ * whose switches are `/y`, not `-Destination`. So each command's writer is chosen by the dialect the shared parser
+ * READ it in (`command.dialect`), never by the line's, and its redirections are the ones the parser listed.
  *
  * WHAT IS NOT LEXED, stated: a write made by a CHILD PROCESS (`npm run api:update`, a `node script.mjs`
  * that writes files) and deletions or creations (`rm`, `mkdir`, `touch`, `New-Item`, `Remove-Item`). The
@@ -24,7 +30,8 @@
  * WHERE THE PARTS COME FROM: `simpleCommands`/`commandWordIndex`/`executableName` (`shell-command.mjs`,
  * the shared parser), `withWorkingDirectories`/`nativeSpelling` (`cherry-pick-guard/working-directory.mjs`,
  * already reused across folders by `toolchain-guard/package-manager-mutations.mjs` — read, never
- * modified), and `outputRedirectionTargets` (this directory's own `redirect-targets.mjs`).
+ * modified), and `outputRedirectionTargets` (this directory's own `redirect-targets.mjs`, which decides on the
+ * redirections the parser lists).
  *
  * @es Cada fichero al que ESCRIBE una línea de shell: la mitad de shell de «¿qué ficheros escribe una
  * llamada de herramienta?», que leen el guard de goldens y la frontera de aislamiento. CUENTA COMO
@@ -33,20 +40,20 @@
  * escribe un PROCESO HIJO (`npm run api:update`, un `node script.mjs`) ni las borraduras/creaciones
  * (`rm`, `mkdir`, `touch`, `New-Item`, `Remove-Item`). LOS DESTINOS NO RESOLUBLES SE REPORTAN, no se
  * adivinan; ambos llamadores los PERMITEN — tradeoff declarado: el caso peligroso es una ruta escrita a
- * mano LITERALMENTE, no calculada desde una variable de shell.
+ * mano LITERALMENTE, no calculada desde una variable de shell. CADA COMANDO EN SU DIALECTO: `cp`/`mv` son Copy-Item
+ * y Move-Item en PowerShell, y `copy`/`move` son órdenes propias de cmd dentro de `cmd /c`; el escritor se elige por
+ * el dialecto en que el parser LEYÓ el comando, nunca por el de la línea.
  */
 
 import path from 'node:path';
 
 import { nativeSpelling, withWorkingDirectories } from '../cherry-pick-guard/working-directory.mjs';
-import { commandWordIndex, executableName, simpleCommands } from '../shell-command/shell-command.mjs';
+import { commandWordIndex, DIALECTS, executableName, isUnresolvableWord, simpleCommands } from '../shell-command/shell-command.mjs';
 import { outputRedirectionTargets } from './redirect-targets.mjs';
 
 /** A word that is an option rather than an operand. A bare `-` is an operand (stdin/stdout). @es Palabra que es opción, no operando. */
 const isFlag = (word) => word.startsWith('-') && word !== '-';
 
-/** True when a word's value depends on an expansion this module does not perform. @es Verdadero si la palabra depende de una expansión. */
-const isUnresolvable = (word) => typeof word !== 'string' || word.length === 0 || word.includes('$') || word.includes('%');
 
 const SED_INPLACE_TOKENS = new Set(['-i', '--in-place']);
 
@@ -206,9 +213,50 @@ const WORD_BASED_WRITERS = new Map([
   ['add-content', { label: 'PowerShell Add-Content', targetsOf: powershellContentTarget }]
 ]);
 
+/** A cmd switch (`/y`, `/-y`, `/b`): a slash and at most two characters, never a path. @es Un switch de cmd: barra y como mucho dos caracteres. */
+const isCmdSwitch = (word) => word.startsWith('/') && word.length <= 3 && !word.slice(1).includes('/');
+
+/**
+ * cmd `copy`/`move`'s destination: the LAST operand that is no switch, or, with one operand only, the file of
+ * that name in the directory it runs in (`copy C:\x\a.txt` writes `.\a.txt`).
+ * @es El destino de `copy`/`move` de cmd: el ÚLTIMO operando que no es switch o, con un solo operando, el fichero de
+ * ese nombre en el directorio en que corre.
+ */
+function cmdCopyTarget(words) {
+  const operands = words.filter((word) => !isCmdSwitch(word));
+
+  if (operands.length === 1) return [path.win32.basename(operands[0])];
+
+  return operands.length > 0 ? [operands.at(-1)] : [];
+}
+
+/**
+ * The writers whose name means another program in one dialect, which win over `WORD_BASED_WRITERS` there.
+ * @es Los escritores cuyo nombre significa otro programa en un dialecto, que allí ganan a `WORD_BASED_WRITERS`.
+ */
+const DIALECT_WRITERS = new Map([
+  [
+    DIALECTS.POWERSHELL,
+    new Map([
+      ['cp', { label: 'PowerShell Copy-Item', targetsOf: powershellCopyTarget }],
+      ['mv', { label: 'PowerShell Move-Item', targetsOf: powershellCopyTarget }]
+    ])
+  ],
+  [
+    DIALECTS.CMD,
+    new Map([
+      ['copy', { label: 'cmd copy', targetsOf: cmdCopyTarget }],
+      ['move', { label: 'cmd move', targetsOf: cmdCopyTarget }]
+    ])
+  ]
+]);
+
+/** The writer a program name is in the dialect its command was read in, or `undefined`. @es El escritor que es un nombre en el dialecto de su comando. */
+const writerOf = (name, dialect) => DIALECT_WRITERS.get(dialect)?.get(name) ?? WORD_BASED_WRITERS.get(name);
+
 /** One candidate write target, resolved against the directory it runs in, or marked `unresolvable`. @es Un destino candidato, resuelto contra su directorio, o marcado `unresolvable`. */
 function resolvedTarget(raw, directory, platform, via) {
-  if (isUnresolvable(raw)) return { path: undefined, unresolvable: `the ${via} target depends on a variable`, via };
+  if (isUnresolvableWord(raw)) return { path: undefined, unresolvable: `the ${via} target depends on a variable`, via };
   if (directory === undefined) return { path: undefined, unresolvable: `the directory this ${via} runs in is unknowable`, via };
 
   return { path: path.resolve(directory, nativeSpelling(raw, platform)), unresolvable: undefined, via };
@@ -233,14 +281,14 @@ export function shellWriteTargets(script, dialect, cwd, platform = process.platf
 
     if (at !== -1) {
       const words = command.words.slice(at);
-      const writer = WORD_BASED_WRITERS.get(executableName(words[0]));
+      const writer = writerOf(executableName(words[0]), command.dialect);
 
       if (writer !== undefined) {
         for (const raw of writer.targetsOf(words.slice(1))) found.push(resolvedTarget(raw, directory, platform, writer.label));
       }
     }
 
-    for (const redirect of outputRedirectionTargets(command.text, dialect)) {
+    for (const redirect of outputRedirectionTargets(command)) {
       found.push(
         'unresolvable' in redirect
           ? { path: undefined, unresolvable: redirect.unresolvable, via: 'a shell redirection' }

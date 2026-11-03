@@ -17,6 +17,8 @@
 const SOURCE_FILE_TAG = 'SF:';
 const LINE_DATA_TAG = 'DA:';
 const BRANCH_DATA_TAG = 'BRDA:';
+const FUNCTION_TAG = 'FN:';
+const FUNCTION_HITS_TAG = 'FNDA:';
 const END_OF_RECORD_TAG = 'end_of_record';
 const NOT_TAKEN_MARKER = '-';
 
@@ -60,17 +62,36 @@ const parseBranchRecord = (body) => {
 export const parseLcov = (text, toRepoRelative) => {
   const coverageByFile = new Map();
   let current = null;
+  let functionLineByName = new Map();
 
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim();
 
     if (line.startsWith(SOURCE_FILE_TAG)) {
       const path = toRepoRelative(toForwardSlashes(line.slice(SOURCE_FILE_TAG.length)));
-      current = { lines: new Map(), branches: new Map() };
+      current = { lines: new Map(), branches: new Map(), functions: new Map() };
+      functionLineByName = new Map();
       coverageByFile.set(path, current);
       continue;
     }
     if (current === null) continue;
+
+    if (line.startsWith(FUNCTION_TAG)) {
+      const body = line.slice(FUNCTION_TAG.length);
+      const comma = body.indexOf(',');
+      functionLineByName.set(body.slice(comma + 1), Number(body.slice(0, comma)));
+      continue;
+    }
+    if (line.startsWith(FUNCTION_HITS_TAG)) {
+      const body = line.slice(FUNCTION_HITS_TAG.length);
+      const comma = body.indexOf(',');
+      const declaredAt = functionLineByName.get(body.slice(comma + 1));
+      if (declaredAt !== undefined) {
+        const existing = current.functions.get(declaredAt) ?? [];
+        current.functions.set(declaredAt, existing.concat(Number(body.slice(0, comma))));
+      }
+      continue;
+    }
 
     if (line.startsWith(LINE_DATA_TAG)) {
       const { line: lineNumber, hits } = parseLineRecord(line.slice(LINE_DATA_TAG.length));

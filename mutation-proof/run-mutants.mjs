@@ -21,7 +21,11 @@
  *    nothing; text that occurs twice mutates whichever copy comes first, which may be a different decision
  *    from the one the label names. Both are REFUSED before anything runs, and the label says which and how
  *    many. So is a file outside the copied paths, a replacement identical to the original, and a
- *    file with no parse check (below). A refused mutant counts as a survivor: it proved nothing.
+ *    file with no parse check (below). Every refusal is known when the campaign is PLANNED, before the
+ *    baseline runs, and a refused mutant can never prove anything, so ONE refusal stops the whole run with
+ *    exit 2 (`EXIT_NOT_MEASURED`), naming every refused mutant, before the baseline. MEASURED: a campaign gone
+ *    stale (its target text edited away) used to run a 25-minute baseline and every other mutant, only to
+ *    fail at the end on a verdict the plan already held.
  *
  * 2. THE BASELINE IS NOT GREEN. If the unmutated selftest already fails, every mutant "kills". So the
  *    selftest runs once, unmutated, before any mutant; anything but exit 0 stops the run with exit 2
@@ -64,7 +68,8 @@
  * A selftest killed by a timeout is a survivor too — a kill signal is not a verdict.
  *
  * @es Prueba que un selftest DISCRIMINA. Se rechaza lo que haría falsa la cifra: un texto a mutar que no
- * aparece EXACTAMENTE una vez (REFUSED), una línea base que no está en verde (sale con 2, nada medido), un
+ * aparece EXACTAMENTE una vez (REFUSED; todo rechazo se conoce al PLANIFICAR, así que uno solo detiene la corrida
+ * con 2 antes de la línea base, nombrando cada mutante rechazado), una línea base que no está en verde (sale con 2, nada medido), un
  * mutante que no parsea (BROKEN, superviviente) y una instantánea que se mueve (se copia una sola vez). Un
  * crash en ejecución es una muerte DÉBIL: se informa aparte (CRASHED) y `crashKills` decide si falla. Lo que
  * se copia se DERIVA del cierre de imports relativos del selftest y de cada fichero mutado; `paths` se SUMA
@@ -73,13 +78,53 @@
 
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { copiedPaths, importClosure } from './import-closure.mjs';
 import { classifyKill } from './kill-kind.mjs';
 
 /** What a kill by crash does to the verdict. @es Qué hace al veredicto una muerte por crash. */
 const CRASH_POLICIES = new Set(['report', 'fail']);
+
+/**
+ * How many mutants run at once: the campaign's `concurrency`, else MUTATION_CONCURRENCY, else the free cores
+ * (all but two) up to 8. MEASURED 2026-11-03: one mutant is one full selftest run (65 s for orphan-work on Windows),
+ * and a campaign of 83 mutants took about 90 min on 1 of 32 cores. 1 keeps the sequential path exactly as before.
+ * @es Cuántos mutantes corren a la vez: el `concurrency` de la campaña, si no MUTATION_CONCURRENCY, si no los núcleos
+ * libres (todos menos dos) hasta 8. MEDIDO: una campaña de 83 mutantes tardaba unos 90 min en 1 de 32 núcleos.
+ * 1 deja el camino secuencial exactamente como antes.
+ */
+export function concurrencyOf(requested, env = process.env, cores = availableParallelism()) {
+  const value = requested ?? (env.MUTATION_CONCURRENCY === undefined ? Math.min(8, cores - 2) : Number(env.MUTATION_CONCURRENCY));
+
+  if (!Number.isInteger(value)) throw new NotMeasured(`concurrency must be a whole number, got ${JSON.stringify(requested ?? env.MUTATION_CONCURRENCY)} @es concurrency debe ser un número entero`);
+
+  return Math.max(1, value);
+}
+
+/**
+ * A line a selftest prints when one of its checks failed: `FAIL…`, `RED`, `not ok`, `✘` or `✗` at the start of the
+ * line (after spaces). MEASURED 2026-11-03 over 204 selftests: 139 print `FAIL`, 56 `  FAIL`, 23 `RED`, 9 `FAILED`, 2 `✘`.
+ * @es Una línea que imprime un selftest cuando falló uno de sus checks, al principio de la línea.
+ */
+export const FAILURE_LINE = /^\s*(?:FAIL\w*|RED|not ok|✘|✗)(?=[\s:-]|$)/m;
+
+/**
+ * Whether the pool may stop a mutant's selftest at its first failed check. Only when the GREEN baseline printed no
+ * line that looks like a failure: some selftests print such lines on purpose (a runner's selftest shows the RED of the
+ * fixtures it drives), and there a failure-looking line would invent a kill. MUTATION_FAIL_FAST=0 turns it off.
+ * @es Si el pool puede cortar el selftest de un mutante en su primer check fallido. Solo cuando la línea base EN VERDE
+ * no imprimió ninguna línea con pinta de fallo: algunos selftests las imprimen a propósito, y ahí una línea así
+ * inventaría una muerte. MUTATION_FAIL_FAST=0 lo apaga.
+ */
+export function failFastOf(baseline, env = process.env) {
+  if (env.MUTATION_FAIL_FAST === '0') return { on: false, why: 'MUTATION_FAIL_FAST=0' };
+  if (FAILURE_LINE.test(`${baseline.stdout ?? ''}\n${baseline.stderr ?? ''}`)) return { on: false, why: 'the green baseline prints failure-looking lines' };
+
+  return { on: true, why: 'the green baseline prints no failure-looking line' };
+}
 
 /** Directories that hold a run's output rather than the mechanism, never copied into a sandbox. @es Directorios de salida de corridas, nunca copiados. */
 export const RUN_OUTPUT = new Set(['state', 'scratch']);
@@ -113,6 +158,8 @@ export function occurrencesOf(text, needle) {
  * @param options.selftest The selftest path, relative to `fleetRoot`.
  * @param options.mutants `[label, file relative to fleetRoot, original text, replacement]`.
  * @param options.timeoutMs Per-run selftest timeout.
+ * @param options.concurrency Optional. Mutants run at once (see `concurrencyOf`); 1 is the sequential path.
+ *   @es Mutantes que corren a la vez (ver `concurrencyOf`); 1 es el camino secuencial.
  * @returns the number of survivors; each result is printed as it lands. A run that cannot measure exits
  *   the process with `EXIT_NOT_MEASURED` instead of returning.
  * @es Corre cada mutante y devuelve cuántos sobrevivieron; si no puede medir, sale con `EXIT_NOT_MEASURED`.
@@ -128,8 +175,9 @@ export function runMutants(options) {
   }
 }
 
-function measure({ fleetRoot, paths = [], selftest, mutants, timeoutMs = 900_000, crashKills = 'report' }) {
+function measure({ fleetRoot, paths = [], selftest, mutants, timeoutMs = 900_000, crashKills = 'report', concurrency }) {
   if (!CRASH_POLICIES.has(crashKills)) throw new NotMeasured(`crashKills must be 'report' or 'fail', got ${JSON.stringify(crashKills)}; no policy is picked on the caller's behalf`);
+  const parallel = concurrencyOf(concurrency);
   if (mutants.length === 0) throw new NotMeasured('the campaign holds no mutant, and 0/0 killed is not a proof');
 
   const fleet = fleetOf(fleetRoot);
@@ -143,18 +191,18 @@ function measure({ fleetRoot, paths = [], selftest, mutants, timeoutMs = 900_000
 
     const plans = mutants.map((mutant) => planOf(mutant, snapshot, copied));
 
-    for (const { label, refusal } of plans) if (refusal !== undefined) console.log(`REFUSED  ${label} — ${refusal}`);
-
+    requireNoRefusal(plans);
     requireParseableOriginals(plans, snapshot);
-    requireGreenBaseline(sandboxes, selftest, timeoutMs);
+    const baseline = requireGreenBaseline(sandboxes, selftest, timeoutMs);
 
     const tally = { assertion: 0, crash: 0 };
+    const outcomes = parallel > 1 ? pooledOutcomes(plans, sandboxes, selftest, timeoutMs, parallel, failFastOf(baseline)) : undefined;
 
-    for (const plan of plans) {
-      const kind = plan.refusal === undefined ? runMutant(plan, sandboxes, selftest, timeoutMs) : undefined;
+    plans.forEach((plan, index) => {
+      const kind = reportOf(plan, outcomes === undefined ? sequentialOutcome(plan, sandboxes, selftest, timeoutMs) : outcomes[index]);
 
       if (kind === 'assertion' || kind === 'crash') tally[kind] += 1;
-    }
+    });
 
     const killed = tally.assertion + tally.crash;
 
@@ -249,9 +297,28 @@ function sourceOf(file) {
   }
 }
 
+/**
+ * Stops the run when the plan refused any mutant: a refusal is decided from the snapshot alone, so it is
+ * known before the baseline, and a campaign holding one can end in no verdict but a failure. Each refused
+ * mutant is printed with its reason, and the stop names them all.
+ * @es Detiene la corrida si el plan rechazó algún mutante: el rechazo se decide sobre la instantánea, así que se
+ * conoce antes de la línea base, y una campaña que lo contiene no puede acabar en otro veredicto que un fallo.
+ */
+function requireNoRefusal(plans) {
+  const refused = plans.filter(({ refusal }) => refusal !== undefined);
+
+  for (const { label, refusal } of refused) console.log(`REFUSED  ${label} — ${refusal}`);
+
+  if (refused.length > 0) {
+    const labels = refused.map(({ label }) => `  - ${label}`).join('\n');
+
+    throw new NotMeasured(`${refused.length} planned mutant(s) are refused, so the campaign is stale or wrong and no baseline is run @es ${refused.length} mutante(s) planificado(s) rechazado(s): la campaña está desfasada o mal escrita y no se corre la línea base:\n${labels}`);
+  }
+}
+
 /** A BROKEN verdict only means something when the unmutated file parses. @es BROKEN solo significa algo si el original parsea. */
 function requireParseableOriginals(plans, snapshot) {
-  const files = new Set(plans.filter(({ refusal }) => refusal === undefined).map(({ file }) => file));
+  const files = new Set(plans.map(({ file }) => file));
 
   for (const file of files) {
     const failure = syntaxErrorOf(path.join(snapshot, file));
@@ -266,6 +333,8 @@ function requireGreenBaseline(sandboxes, selftest, timeoutMs) {
   if (run.status !== 0 || run.signal !== null) throw new NotMeasured(`the UNMUTATED selftest is not green (${outcomeOf(run)}), so every mutant would read as killed`);
 
   console.log(`BASELINE ${selftest} is green (${tallyOf(run)})`);
+
+  return run;
 }
 
 /** Where the crash was thrown, as the first frames of its trace. @es Dónde se lanzó el crash. */
@@ -288,8 +357,8 @@ function weakProofNotice(crashes, crashKills) {
  * @returns `'assertion'` or `'crash'` for a kill, `'survived'` or `'broken'` otherwise, after printing the
  * verdict. @es `'assertion'` o `'crash'` si murió; `'survived'` o `'broken'` si no.
  */
-function runMutant({ label, file, original, replacement }, sandboxes, selftest, timeoutMs) {
-  const verdict = inSandbox(
+function sequentialOutcome({ file, original, replacement }, sandboxes, selftest, timeoutMs) {
+  return inSandbox(
     sandboxes,
     (sandbox) => {
       const target = path.join(sandbox, file);
@@ -302,7 +371,45 @@ function runMutant({ label, file, original, replacement }, sandboxes, selftest, 
       return syntaxError === undefined ? { run: selftestIn(sandbox, selftest, timeoutMs, sandboxes.fleet) } : { syntaxError };
     }
   );
+}
 
+/**
+ * Runs every planned mutant through `mutant-pool.mjs`, `parallel` at a time, and returns their raw outcomes in plan
+ * order. The pool decides nothing: a parse check that failed without a SyntaxError stops the run here, exactly as
+ * the sequential path does, and every verdict is still printed by `reportOf`.
+ * @es Corre cada mutante planificado con `mutant-pool.mjs`, `parallel` a la vez, y devuelve sus resultados crudos en
+ * el orden del plan. El pool no decide nada: un parse check que falla sin SyntaxError detiene la corrida aquí, igual
+ * que en el camino secuencial, y cada veredicto lo sigue imprimiendo `reportOf`.
+ */
+function pooledOutcomes(plans, { root, snapshot, copied, fleet }, selftest, timeoutMs, parallel, failFast) {
+  const jobDir = mkdtempSync(path.join(root, 'pool-'));
+  const job = path.join(jobDir, 'job.json');
+  const output = path.join(jobDir, 'outcomes.json');
+
+  try {
+    writeFileSync(job, JSON.stringify({ selftest, fleet, timeoutMs, concurrency: parallel, root, snapshot, copied, output, failFast: failFast.on, failureLine: FAILURE_LINE.source, plans: plans.map(({ label, file, original, replacement }) => ({ label, file, original, replacement })) }));
+    console.log(`RUNNING  ${plans.length} mutants, ${parallel} at a time; stop at the first failed check: ${failFast.on ? 'on' : 'off'} (${failFast.why})`);
+
+    const pool = spawnSync(process.execPath, [fileURLToPath(new URL('./mutant-pool.mjs', import.meta.url)), job], { stdio: ['ignore', 'inherit', 'inherit'] });
+
+    if (pool.status !== 0 || !existsSync(output)) throw new NotMeasured(`the mutant pool did not finish (${outcomeOf({ ...pool, stdout: '' })}), so no mutant was measured @es el pool de mutantes no terminó, así que no se midió ningún mutante`);
+
+    const outcomes = JSON.parse(readFileSync(output, 'utf8'));
+    const failed = outcomes.findIndex((outcome) => outcome.checkFailure !== undefined);
+
+    if (failed !== -1) throw new NotMeasured(`the parse check of ${plans[failed].file} failed without a SyntaxError (${outcomes[failed].checkFailure}); it decided nothing`);
+
+    return outcomes.map((outcome) => (outcome.run === undefined ? outcome : { run: { ...outcome.run, error: outcome.run.error === undefined ? undefined : new Error(outcome.run.error) } }));
+  } finally {
+    rmSync(jobDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Prints the verdict of one mutant from its outcome, the same way for both paths.
+ * @es Imprime el veredicto de un mutante a partir de su resultado, igual para los dos caminos.
+ */
+function reportOf({ label, file }, verdict) {
   if (verdict.syntaxError !== undefined) {
     console.log(`BROKEN   ${label} — the mutated ${file} does not parse (${verdict.syntaxError}); a red from it proves nothing`);
 
@@ -397,6 +504,7 @@ function syntaxErrorOf(file) {
 }
 
 function outcomeOf(run) {
+  if (run.stoppedAt !== undefined) return `exit 1: stopped at its first failed check: ${run.stoppedAt}`;
   if (run.error !== undefined && run.signal === null) return `could not run: ${run.error.message}`;
   if (run.signal !== null) return `killed by ${run.signal}, not a verdict`;
 

@@ -1,10 +1,10 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-10-26T09:28:23.679Z",
+  "syncedAt": "2026-11-03T13:43:03.754Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
-      "sha256": "e4a0bdb70d93f8702bbfb2387946880467364048bb58a30097bd8093287a2e7f"
+      "sha256": "5c1a7aaf65056575eeb2a5b2706e2fad39b7d6e7d829af373c7056bd969e288b"
     },
     {
       "path": "shell-command/git-invocations.mjs",
@@ -28,7 +28,7 @@
     },
     {
       "path": "cherry-pick-guard/working-directory.mjs",
-      "sha256": "5f347be6ff2ddb410157099a9c2b00c14e0b56796e1505b4d5c3321f4afc5f1e"
+      "sha256": "7290198e1660d908a6957dc21eeb00a0edaa753f98df0ce424af0b8938ef975b"
     },
     {
       "path": "agent-liveness/liveness.mjs",
@@ -60,15 +60,15 @@
     },
     {
       "path": "diff-coverage/lib/lcov-parse.mjs",
-      "sha256": "f0c98a60346935e7d2fd43df1249daf22319b19b20292155204927e595bcf365"
+      "sha256": "ce47de7c0889c9b09de2de5797d4bc47d6beea7bedefda306fc9c3c731db6183"
     },
     {
       "path": "diff-coverage/lib/grade.mjs",
-      "sha256": "8d0521f551b21f75be2b149f86437f72d808e4b7db50b2f6548b474c809de6c9"
+      "sha256": "ac32a741e14cd1753ce6a9f50c2fa7befb92e786384dcf31626b7270d7bbf1ba"
     },
     {
       "path": "mutation-proof/run-mutants.mjs",
-      "sha256": "0054c86ea2d5aa7c6c862bde5e9a69c7603b8adea1c12df8db575c2f1fdd7dc7"
+      "sha256": "f3237e3fcaa0a9ea10de1569268a7a6cd8debee872d3153e4200854e22ae71ea"
     },
     {
       "path": "mutation-proof/kill-kind.mjs",
@@ -76,11 +76,11 @@
     },
     {
       "path": "mutation-proof/selftest.mjs",
-      "sha256": "5d2450b5328174f65ebc59301a53b5c5eeb48c331277e8464ebd7de60f3db2f6"
+      "sha256": "b5ec2ceda1fcb91a9974ee4430d64a08c62ea4a381d813b51a1daebc2b0954dc"
     },
     {
       "path": "mutation-proof/mutants.mjs",
-      "sha256": "cf418b829ae51826a877e4a3d9a03246d417dfeb0500d30b030ab00e2ca47f24"
+      "sha256": "3a56fe1e8c4e11c7aeb7429952f2c3c3e1844c2de248455e610a95e2c421600f"
     },
     {
       "path": "mutation-proof/kill-kind.selftest.mjs",
@@ -88,7 +88,7 @@
     },
     {
       "path": "mutation-proof/kill-kind.mutants.mjs",
-      "sha256": "84788932652723f55f255b82c5d2515681dd9886dbe2c4d115fc21dc374ea773"
+      "sha256": "4c3c0af9f0fe124cbf8a1425c016696b982ec44de0c88aa46a0e0461cdb7e56e"
     },
     {
       "path": "mutation-proof/campaign-plan.mjs",
@@ -128,11 +128,11 @@
     },
     {
       "path": "write-targets/redirect-targets.mjs",
-      "sha256": "656f15a1a261f43490f662ed79910361769a3258d07550b37cc21b9114bfdc41"
+      "sha256": "3a2ba7ce4f84b624fe77d2970f424213d0ae3c4ff5dab4c262f0bec9179f2eb0"
     },
     {
       "path": "write-targets/shell-writes.mjs",
-      "sha256": "8697f3319924474346028dbe049790992eefb42d4d0ab32b838ca9657dae7888"
+      "sha256": "0db4dd8bd35250de85703691cd127b5ea50a031e07fb9bdc4f7691b46d02ccd7"
     },
     {
       "path": "write-targets/tool-call-writes.mjs",
