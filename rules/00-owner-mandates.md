@@ -193,6 +193,11 @@ la tarea sea auditar o revisar theming/tokens/a11y visual/estados de un componen
   las ramas de feature) en cada punto de control. Nunca sube una rama con nombre de agente.
 - El tooling (`~/.claude`, `.claude/`) se commitea y se sube igual que siempre; el trabajo de un actor
   vivo lo commitea ese actor, y el orquestador se lo pide en vez de esperar a que termine.
+- Commitear y SUBIR antes de verificar (directiva del dueño 2026-11-03, «eso es como regla lo de subir»): lo
+  terminado se commitea y se sube a su repo de respaldo ANTES de lanzar una corrida larga que lo verifica
+  (campaña de mutantes, cadena completa, suite e2e), también el orquestador. Si la corrida encuentra algo, el
+  arreglo va en un commit encima, nunca reescribiendo lo subido. Las ramas de integración de la empresa siguen
+  la regla de push solo por orden del dueño; esta regla habla del repo de respaldo propio.
 
 ## Solo los gates necesarios; la cadena completa, UNA vez y al final (directiva del dueño 2026-10-01)
 

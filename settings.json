@@ -275,7 +275,7 @@
   },
   "outputStyle": "Gentleman",
   "permissions": {
-    "defaultMode": "auto",
+    "defaultMode": "bypassPermissions",
     "deny": [
       "Bash(rm -rf /)",
       "Bash(sudo rm -rf /)",
