@@ -130,7 +130,10 @@ const until = async (condition, label, timeoutMs = 20_000) => {
 {
   const { worktree, backlog } = incidentRepository(path.join(SCRATCH, 'incident'));
   const claudeTemp = path.join(SCRATCH, 'TEMP', 'claude');
-  const chain = spawn(process.execPath, [RUN, '--chain', 'selftest-runner', '--project', 'claude-global', '--', process.execPath, CHILD, 'hold', path.join(SCRATCH, 'chain.log'), 'C', '120000'], { cwd: path.join(worktree, 'checklists'), env: { ...cleanEnv, CLAUDE_CODE_SESSION_ID: 'session-of-2026-10-26' }, stdio: 'ignore', windowsHide: true });
+  // The chain ends the normal way, when the test writes STOP: killing the runner from outside runs no cleanup on Windows.
+  // @es La cadena termina por su camino normal, cuando la prueba escribe STOP: matar el runner desde fuera no limpia nada en Windows.
+  const stop = path.join(SCRATCH, 'chain.stop');
+  const chain = spawn(process.execPath, [RUN, '--chain', 'selftest-runner', '--project', 'claude-global', '--', process.execPath, CHILD, 'until', path.join(SCRATCH, 'chain.log'), 'C', stop, '120000'], { cwd: path.join(worktree, 'checklists'), env: { ...cleanEnv, CLAUDE_CODE_SESSION_ID: 'session-of-2026-10-26' }, stdio: 'ignore', windowsHide: true });
   const ended = new Promise((resolve) => chain.once('close', resolve));
 
   try {
@@ -149,7 +152,7 @@ const until = async (condition, label, timeoutMs = 20_000) => {
     expect('allow', editCall('Write', path.join(claudeTemp, 'probe.mjs'), worktree), 'incident: the script under TEMP/claude (no detector reads it)');
     expect('allow', shellCall('Bash', 'git status && git log --oneline -3', worktree), 'incident: reading the tree');
   } finally {
-    chain.kill('SIGTERM');
+    writeFileSync(stop, '');
     await ended;
   }
 
@@ -208,19 +211,21 @@ mkdirSync(path.join(SCRATCH, 'measured-sibling'), { recursive: true });
 for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) expect('deny', editCall(tool, path.join(TREE, 'src', 'a.mjs'), SCRATCH), `${tool} inside the tree`, live);
 expect('deny', editCall('Edit', 'src/a.mjs', TREE), 'a relative Edit resolved against a cwd inside the tree', live);
 expect('deny', shellCall('Bash', 'echo x > src/a.mjs', TREE), 'a redirection inside the tree', live);
-expect('deny', shellCall('Bash', `cp /etc/hostname ${path.join(TREE, 'b.txt')}`, SCRATCH), 'cp onto the tree', live);
-expect('deny', shellCall('Bash', `echo x | tee ${path.join(TREE, 'c.txt')}`, SCRATCH), 'tee into the tree', live);
+// Paths in a Bash command go quoted: bash reads an unquoted backslash of a Windows path as an escape and drops it.
+// @es Las rutas de un comando Bash van entre comillas: bash lee una barra invertida sin comillas como escape y la quita.
+expect('deny', shellCall('Bash', `cp /etc/hostname '${path.join(TREE, 'b.txt')}'`, SCRATCH), 'cp onto the tree', live);
+expect('deny', shellCall('Bash', `echo x | tee '${path.join(TREE, 'c.txt')}'`, SCRATCH), 'tee into the tree', live);
 expect('deny', shellCall('Bash', "sed -i 's/a/b/' src/a.mjs", TREE), 'sed -i inside the tree', live);
 expect('deny', shellCall('PowerShell', `Set-Content -Path ${path.join(TREE, 'd.txt')} -Value y`, SCRATCH), 'PowerShell Set-Content into the tree', live);
-expect('deny', shellCall('Bash', `cd ${TREE} && echo x > e.txt`, SCRATCH), 'a redirection after cd into the tree', live);
+expect('deny', shellCall('Bash', `cd '${TREE}' && echo x > e.txt`, SCRATCH), 'a redirection after cd into the tree', live);
 expect('deny', editCall('Edit', path.join(TREE, '.claude', 'settings.json'), TREE), 'an ignored-looking path that is not a nested tree', live);
 
 for (const verb of ['add -A', 'commit -m x', 'reset --hard', 'checkout -- a', 'switch b', 'restore a', 'rm a', 'mv a b', 'stash', 'stash pop', 'merge b', 'cherry-pick abc', 'revert abc', 'rebase b', 'pull', 'apply p.diff', 'am p.mbox', 'clean -fd']) {
   expect('deny', shellCall('Bash', `git ${verb}`, TREE), `git ${verb} inside the tree`, live);
 }
 
-expect('deny', shellCall('Bash', `git -C ${TREE} commit -m x`, SCRATCH), 'git -C <tree> commit from outside', live);
-expect('deny', shellCall('Bash', `cd ${path.join(TREE, 'src')} && git add a.mjs`, SCRATCH), 'git add after cd into a subdirectory of the tree', live);
+expect('deny', shellCall('Bash', `git -C '${TREE}' commit -m x`, SCRATCH), 'git -C <tree> commit from outside', live);
+expect('deny', shellCall('Bash', `cd '${path.join(TREE, 'src')}' && git add a.mjs`, SCRATCH), 'git add after cd into a subdirectory of the tree', live);
 expect('deny', shellCall('PowerShell', 'git commit -m x', TREE), 'PowerShell git commit inside the tree', live);
 expect('deny', shellCall('Bash', 'bash -c "git commit -m x"', TREE), 'git commit inside bash -c', live);
 
@@ -234,11 +239,11 @@ expect('allow', editCall('Edit', path.join(SCRATCH, 'elsewhere.txt'), TREE), 'an
 expect('allow', editCall('Edit', path.join(SCRATCH, 'measured-sibling', 'a.txt'), TREE), 'a sibling whose name starts with the tree name', live);
 expect('allow', editCall('Edit', path.join(nested, 'src', 'x.mjs'), TREE), 'an Edit inside a NESTED worktree under the tree', live);
 expect('allow', shellCall('Bash', 'git commit -m x', nested), 'a git commit inside a nested worktree', live);
-expect('allow', shellCall('Bash', `git -C ${SCRATCH} commit -m x`, TREE), 'git -C elsewhere from a cwd inside the tree', live);
+expect('allow', shellCall('Bash', `git -C '${SCRATCH}' commit -m x`, TREE), 'git -C elsewhere from a cwd inside the tree', live);
 expect('allow', { ...editCall('Edit', path.join(TREE, 'a'), TREE), tool_name: 'Read' }, 'a tool that writes nothing', live);
 
 // --- THE OUTPUT -------------------------------------------------------------------------------------------------
-const denied = evaluate(JSON.stringify(shellCall('Bash', `echo x > ${path.join(TREE, 'one.txt')} && git commit -m x`, TREE)), live);
+const denied = evaluate(JSON.stringify(shellCall('Bash', `echo x > '${path.join(TREE, 'one.txt')}' && git commit -m x`, TREE)), live);
 const text = denied?.hookSpecificOutput?.permissionDecisionReason ?? '';
 const spanishStarts = text.indexOf(' @es ');
 
