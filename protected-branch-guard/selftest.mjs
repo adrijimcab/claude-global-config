@@ -166,9 +166,11 @@ expect('deny', 'git status; gh api -X DELETE repos/o/r/git/refs/heads/main', 'Po
 
   mkdirSync(repo);
   git(repo, 'init', '--quiet', '--initial-branch=develop');
-  expect('deny', `git -C ${repo} branch -m renamed`, 'renaming the current branch when it is develop');
+  // Paths go quoted: bash reads an unquoted backslash of a Windows path as an escape and drops it.
+  // @es Las rutas van entre comillas: bash lee una barra invertida sin comillas como escape y la quita.
+  expect('deny', `git -C '${repo}' branch -m renamed`, 'renaming the current branch when it is develop');
   git(repo, 'switch', '--quiet', '--orphan', 'feature/main');
-  expect('allow', `git -C ${repo} branch -m renamed`, 'renaming the current branch when it is feature/main');
+  expect('allow', `git -C '${repo}' branch -m renamed`,'renaming the current branch when it is feature/main');
   check('the current branch is asked of the directory git acts in', protectedBranchDeletions('git branch -m x', 'bash', '/a', { currentBranchOf: (directory) => (directory === '/a/b' ? 'main' : undefined) }).length === 0 && protectedBranchDeletions('git -C b branch -m x', 'bash', '/a', { currentBranchOf: (directory) => (directory === path.resolve('/a/b') ? 'main' : undefined) }).length === 1);
   check('a rename of the current branch in a directory that cannot be followed is unknowable', protectedBranchDeletions('cd "$D" && git branch -m x', 'bash', '/a', { currentBranchOf: () => undefined })[0]?.unknowable === 'current-branch');
 }
@@ -216,7 +218,7 @@ expect('deny', 'git status; gh api -X DELETE repos/o/r/git/refs/heads/main', 'Po
   check('deny: pushing the deletion of master to that origin', at(clone, 'git push origin --delete master') === 'deny');
   check('deny: an empty-source refspec onto refs/heads/master', at(clone, 'git push origin :refs/heads/master') === 'deny');
   check('deny: renaming master away', at(clone, 'git branch -m master trunk') === 'deny');
-  check('deny: git -C into that clone from elsewhere', at(SCRATCH, `git -C ${clone} branch -D master`) === 'deny');
+  check('deny: git -C into that clone from elsewhere', at(SCRATCH, `git -C '${clone}' branch -D master`) === 'deny');
   check('allow: deleting feature/master there', at(clone, 'git branch -D feature/master') === undefined);
   check('allow: deleting master-fix there', at(clone, 'git push origin --delete master-fix') === undefined);
   check('allow: deleting master where no origin HEAD can be read', at(bare, 'git branch -D master') === undefined);
@@ -233,7 +235,7 @@ expect('deny', 'git status; gh api -X DELETE repos/o/r/git/refs/heads/main', 'Po
   check('the default branch is asked once per directory and remote', asked.length === 1 && asked[0][1] === 'origin', JSON.stringify(asked));
   asked.length = 0;
   counting('git push upstream --delete feat/a');
-  check('a push asks the remote it pushes to', JSON.stringify(asked) === JSON.stringify([['/r', 'upstream']]), JSON.stringify(asked));
+  check('a push asks the remote it pushes to', JSON.stringify(asked) === JSON.stringify([[path.resolve('/r'), 'upstream']]), JSON.stringify(asked));
   asked.length = 0;
   counting('git push --repo=up --delete feat/a && git push --repo mirror :feat/b');
   check('--repo names the remote asked, fused or separate', JSON.stringify(asked.map(([, remote]) => remote)) === JSON.stringify(['up', 'mirror']), JSON.stringify(asked));
