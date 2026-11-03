@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { isolateState } from '../hook-state/locations.mjs';
 
@@ -138,7 +138,9 @@ writeFileSync(file, `${LOG.map((record) => JSON.stringify(record)).join('\n')}\n
 
 const cli = spawnSync(process.execPath, [path.join(HERE, 'rates.mjs'), '--judge', 'voice', '--log', file], { encoding: 'utf8' });
 const missing = spawnSync(process.execPath, [path.join(HERE, 'rates.mjs'), '--log', path.join(SCRATCH, 'none.jsonl')], { encoding: 'utf8' });
-const imported = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(path.join(HERE, 'rates.mjs'))});`], { encoding: 'utf8' });
+// A dynamic import takes a URL: a raw Windows path (`C:\...`) is refused with ERR_UNSUPPORTED_ESM_URL_SCHEME.
+// @es Un import dinámico recibe una URL: una ruta cruda de Windows se rechaza con ERR_UNSUPPORTED_ESM_URL_SCHEME.
+const imported = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(path.join(HERE, 'rates.mjs')).href)});`], { encoding: 'utf8' });
 
 check('cli: the real command prints the rate and exits 0', [cli.status, cli.stdout.includes('voice: first-stop block rate 2/3 = 66.7%')], [0, true]);
 check('cli: the real command exits 2 on a missing log', [missing.status, missing.stdout], [2, '']);
