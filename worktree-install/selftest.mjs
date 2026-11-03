@@ -181,9 +181,17 @@ check('source: an unknown kind throws, bilingual', () => probeSource({ style: 'g
   check('identity: hash of the governing lockfile', identityOf({ root: app, packageManager: 'yarn' }, 'k').lockfileHash, hashFile(path.join(app, 'yarn.lock')));
   check('identity: carries the plan key', identityOf({ root: app, packageManager: 'yarn' }, 'k').planKey, 'k');
   check('hash: unreadable -> undefined', hashFile(path.join(repo, 'absent')), undefined);
-  check('key: resolved and slashed', directoryKey(app), app.split(path.sep).join('/'));
-  check('key: lowercased on Windows', directoryKey('/A/B', 'win32'), '/a/b');
-  check('key: not lowercased elsewhere', directoryKey('/A/B', 'linux'), '/A/B');
+  // Expectations follow the contract on the host: a missing '/A/B' resolves with a drive on Windows, and the temp root
+  // may be an 8.3 spelling that only the real path turns into the long one.
+  // @es Las expectativas siguen el contrato en el host: '/A/B' inexistente se resuelve con unidad en Windows, y la raíz
+  // temporal puede ser una grafía 8.3 que solo la ruta real convierte en la larga.
+  const slashed = (value) => value.split('\\').join('/');
+  const hostCase = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
+  const missing = slashed(path.resolve('/A/B'));
+
+  check('key: resolved and slashed', directoryKey(app), hostCase(slashed(realpathSync.native(app))));
+  check('key: lowercased on Windows', directoryKey('/A/B', 'win32'), missing.toLowerCase());
+  check('key: not lowercased elsewhere', directoryKey('/A/B', 'linux'), missing);
 
   const store = path.join(repo, 'state', 'verdicts.json');
 
