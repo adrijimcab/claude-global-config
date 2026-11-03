@@ -5,12 +5,19 @@
  *   node chain-child.fixture.mjs hold <logFile> <label> <holdMs>   appends "<label> start <ms>", waits, appends "<label> end <ms>"
  *   node chain-child.fixture.mjs exit <code>                       prints a line and exits with <code>
  *   node chain-child.fixture.mjs signal                            ends itself with SIGTERM
+ *   node chain-child.fixture.mjs until <logFile> <label> <stopFile> <maxMs>
+ *                                                                  appends "<label> start <ms>", ends once <stopFile>
+ *                                                                  exists (or after <maxMs>), so a proof ends the chain the
+ *                                                                  normal way on every platform: a Windows process killed
+ *                                                                  from outside runs no cleanup of its own
  *
  * @es El comando que una prueba ejecuta BAJO el lock, como proceso hijo real: `hold` registra inicio y fin con una
- * espera en medio, `exit` sale con el código dado y `signal` se termina a sí mismo con SIGTERM.
+ * espera en medio, `exit` sale con el código dado, `signal` se termina a sí mismo con SIGTERM y `until` termina cuando
+ * existe <stopFile> (o tras <maxMs>), para que una prueba cierre la cadena por su camino normal en toda plataforma: un
+ * proceso de Windows matado desde fuera no ejecuta su propia limpieza.
  */
 
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync } from 'node:fs';
 
 const [mode, ...rest] = process.argv.slice(2);
 
@@ -19,6 +26,13 @@ if (mode === 'hold') {
 
   appendFileSync(logFile, `${label} start ${String(Date.now())}\n`);
   await new Promise((resolve) => setTimeout(resolve, Number(holdMs)));
+  appendFileSync(logFile, `${label} end ${String(Date.now())}\n`);
+} else if (mode === 'until') {
+  const [logFile, label, stopFile, maxMs] = rest;
+  const deadline = Date.now() + Number(maxMs);
+
+  appendFileSync(logFile, `${label} start ${String(Date.now())}\n`);
+  while (!existsSync(stopFile) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
   appendFileSync(logFile, `${label} end ${String(Date.now())}\n`);
 } else if (mode === 'exit') {
   console.log(`child exiting with ${rest[0]}`);
