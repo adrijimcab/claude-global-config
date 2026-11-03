@@ -322,7 +322,7 @@ export const MUTANTS = [
   ['the command a PowerShell assignment runs never writes (B)', WRITES, "  if (name !== 'git') return NON_WRITING.has(name);", "  if (name !== 'git') return true;"],
   ['the git a PowerShell assignment runs never writes (B)', WRITES, '  return invocation !== undefined && gitReadsOnly(invocation.subcommand, invocation.args);', '  return true;'],
   ['a fused PowerShell assignment loses its command (B)', WRITES, '[words[at].slice(fused + 1), ...words.slice(at + 1)]', 'words.slice(at + 1)'],
-  ['a PowerShell redirection to $null is a writer (R4)', WRITES, "found.target === undefined ? !text.toLowerCase().includes('$null')", 'found.target === undefined ? true'],
+  ['a PowerShell redirection to $null is a writer (R4)', WRITES, "found.target === undefined ? !command.text.toLowerCase().includes('$null')", 'found.target === undefined ? true'],
   ['a redirection to /dev/null is a writer (R4)', WRITES, "const NO_FILE = new Set(['/dev/null', 'nul']);", "const NO_FILE = new Set(['nul']);"],
   // R4: C-style quoted lines of a pathspec file
   ['a quoted pathspec line is not unquoted (R4)', MODULE, '(nul ? line : unquoted(line))', 'line'],
