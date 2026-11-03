@@ -13,7 +13,8 @@
  *   `SendMessage` payload). The recorded `Agent` payload carries no `cwd`/`transcript_path`; the captured
  *   `SendMessage` envelope shows the harness sends both, so they are added from that capture's shape;
  * - `isolation: "worktree"` is the value 210 real delegations of session c45d798b carry;
- * - the deny list is read at run time from the real `b100-am-ui/.claude/settings.local.json`;
+ * - the deny list is `fixtures/project-settings.local.json`, the deny array of the real
+ *   `b100-am-ui/.claude/settings.local.json` copied verbatim (a selftest never reads a live file);
  * - the recipient metas and the incident briefs are `fixtures/incidents.json`, copied verbatim from that
  *   session's transcripts, and the last block REPLAYS the incidents.
  *
@@ -43,7 +44,7 @@ isolateState('brief-feasibility');
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GUARD = join(HERE, 'guard.mjs');
 const DECLARATION = join(HERE, 'guard.mjs.hook-registration.json');
-const REAL_PROJECT_SETTINGS = '/home/user/b100-am-ui-claude-tooling/settings.local.json';
+const PROJECT_SETTINGS = join(HERE, 'fixtures', 'project-settings.local.json');
 const FIXTURES = JSON.parse(readFileSync(join(HERE, 'fixtures', 'incidents.json'), 'utf8'));
 const INCIDENTS = FIXTURES.incidents;
 const CWD_ONLY = FIXTURES.recipients.cwdOnly;
@@ -73,7 +74,7 @@ writeFileSync(join(repo, '.gitignore'), '/.claude/*\n!/.claude/tracked-tool.mjs\
 writeFileSync(join(repo, TOOL), 'export {};\n');
 writeFileSync(join(repo, '.claude', 'tracked-tool.mjs'), 'export {};\n');
 writeFileSync(join(repo, '.claude', 'AGENT-LEDGER.md'), '# contract\n');
-writeFileSync(join(repo, '.claude', 'settings.local.json'), JSON.stringify({ permissions: { deny: JSON.parse(readFileSync(REAL_PROJECT_SETTINGS, 'utf8')).permissions.deny } }));
+writeFileSync(join(repo, '.claude', 'settings.local.json'), readFileSync(PROJECT_SETTINGS, 'utf8'));
 
 // A recipient located by `worktreePath` ALONE, so that source is proven by itself (a7793255's meta also
 // carries a worktree `cwd`, which would locate it even if `worktreePath` were ignored).
