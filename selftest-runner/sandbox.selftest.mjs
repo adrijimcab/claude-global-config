@@ -34,7 +34,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { RUN, fixtureKit, git } from './fixtures.mjs';
@@ -217,7 +217,10 @@ check(linkedRun.status === 1 && linkedRun.stdout.includes('RED    a/selftest.mjs
 check(linkedRun.stdout.includes(`    ${path.join(mainRepo, 'a', 'kept.txt')} added to the main checkout of the worktree under test: the selftest wrote outside its own tree @es `), `a tracked file of the main checkout it changed is named: ${linkedRun.stdout}`);
 check(linkedRun.stdout.includes(`    ${path.join(mainRepo, 'a', 'main-residue.txt')} added to the main checkout`), `a file it created in the main checkout is named: ${linkedRun.stdout}`);
 check(linkedRun.stdout.indexOf(path.join(linkedTree, 'a', 'own.txt')) > 0 && linkedRun.stdout.indexOf(path.join(linkedTree, 'a', 'own.txt')) < linkedRun.stdout.indexOf(path.join(mainRepo, 'a', 'kept.txt')), `the tree's own escapes come before the main checkout's: ${linkedRun.stdout}`);
-check(mainCheckoutOf(linkedTree) === mainRepo, `the main checkout of a linked worktree is the first worktree git lists: ${mainCheckoutOf(linkedTree)}`);
+// The same folder, whatever its spelling: git lists the long form with forward slashes, the temp root may be an 8.3 form.
+// @es La misma carpeta, se escriba como se escriba: git lista la forma larga con barras normales y la raíz temporal puede ser 8.3.
+const listedMain = mainCheckoutOf(linkedTree);
+check(listedMain !== undefined && realpathSync.native(listedMain) === realpathSync.native(mainRepo), `the main checkout of a linked worktree is the first worktree git lists: ${String(listedMain)}`);
 check(mainCheckoutOf(mainRepo) === undefined, 'the main checkout itself has no other checkout to watch');
 const bareRepo = bareDir();
 git(bareRepo, 'init', '-q', '--bare');
