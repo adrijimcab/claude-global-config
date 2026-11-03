@@ -14,7 +14,7 @@ runCampaign('orphan-work/selftest.mjs', [
   ['a TENANCY line with no colon declares', G, "    if (!marker.startsWith(':')) continue;\n", ''],
   ['the marker colon is any colon on the line again (a drive letter cuts the line)', G, "if (!marker.startsWith(':')) continue;", "if (!marker.includes(':')) continue;"],
   ['any line of the brief declares, not only a line that heads the marker', G, 'for (const rest of tenancyLines(prompt)) {', "for (const rest of prompt.split('\\n')) {"],
-  ['the declared paths are never collected', G, 'for (const named of absolutePathsIn(rest.slice(colon + 1), platform)) declared.add(named);', ''],
+  ['the declared paths are never collected', G, 'for (const named of absolutePathsIn(marker.slice(1), platform)) declared.add(named);', ''],
   ['the holder is never told to the declaring brief', G, ", ...declaredButHeld(holder)].join('\\n');", "].join('\\n');"],
   ['a resumable holder is told the unresumable advice', G, "const instead = holder.state === 'resumable'", 'const instead = false'],
   ['every declared holder is told to resume', G, "const instead = holder.state === 'resumable'", 'const instead = true'],
