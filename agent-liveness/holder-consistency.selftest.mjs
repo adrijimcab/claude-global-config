@@ -39,7 +39,7 @@ import { mkdirSync, truncateSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { baseConfig, cleanup, commitFiles, git, makeRepository, tempDir, writeConfig } from '../fleet-kit/testing/fixtures.mjs';
-import { declaredTenancies, evaluateWith, parkedWork } from '../fleet-kit/orphan-work/guard.mjs';
+import { canonicalPath, declaredTenancies, evaluateWith, parkedWork } from '../fleet-kit/orphan-work/guard.mjs';
 import { evaluate as resumeEvaluate, projectSlug } from '../resume-before-fresh/guard.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 import { holderOf, takeoverDeclaration } from './holder.mjs';
@@ -136,7 +136,7 @@ try {
     'TENANCY same': `GOAL: ${ERRAND}.\n${takeoverDeclaration(W).en}`,
     'TENANCY other': `GOAL: ${ERRAND}.\n${takeoverDeclaration(O).en}`
   };
-  const canonical = (folder) => folder.split(path.sep).join('/');
+  const canonical = (folder) => canonicalPath(folder);
   const payload = (prompt) => ({ session_id: SESSION, tool_name: 'Agent', cwd: repository, tool_input: { description: ERRAND, prompt } });
   const refusedBecauseOf = (records, prompt) => parkedWork(payload(prompt), { records, now: NOW }).map(({ worktree }) => canonical(worktree.path));
   const advisedTakeovers = (records, prompt) => {

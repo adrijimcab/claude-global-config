@@ -13,7 +13,7 @@ import path from 'node:path';
 import { baseConfig, cleanup, commitFiles, git, makeRepository, suite, tempDir, writeConfig, writeFile } from '../testing/fixtures.mjs';
 import { agentRecords } from '../../agent-liveness/liveness.mjs';
 import { EXHAUSTED_TRANSCRIPT_BYTES, takeoverDeclaration } from '../../agent-liveness/holder.mjs';
-import { absolutePathsIn, declaredTenancies, delegationTouches, evaluate, evaluateWith, lastWorkedMs, parkedWork } from './guard.mjs';
+import { absolutePathsIn, canonicalPath, declaredTenancies, delegationTouches, evaluate, evaluateWith, lastWorkedMs, parkedWork } from './guard.mjs';
 import { agentDirectories } from './role-access.mjs';
 
 const { check, finish } = suite();
@@ -331,7 +331,7 @@ try {
   check('a TENANCY line with no colon declares nothing', taken(unresumableA, `TENANCY ${worktreeOf('take-a')}`), ['take-a', 'take-b']);
   check('a TENANCY inside a sentence declares nothing', taken(unresumableA, `See the TENANCY: ${worktreeOf('take-a')} line.`), ['take-a', 'take-b']);
   check('a TENANCY of a folder INSIDE the worktree is not that worktree', taken(unresumableA, `TENANCY: ${worktreeOf('take-a')}/src`), ['take-a', 'take-b']);
-  check('the declared tenancies are the canonical paths on the marker lines', [...declaredTenancies({ tool_input: { prompt: `x\n- TENANCY: ${worktreeOf('take-a')}, and ${worktreeOf('take-b')}.\nTENANCYWISE: /nope` } })], [worktreeOf('take-a'), worktreeOf('take-b')].map((folder) => folder.split(path.sep).join('/')));
+  check('the declared tenancies are the canonical paths on the marker lines', [...declaredTenancies({ tool_input: { prompt: `x\n- TENANCY: ${worktreeOf('take-a')}, and ${worktreeOf('take-b')}.\nTENANCYWISE: /nope` } })], [worktreeOf('take-a'), worktreeOf('take-b')].map((folder) => canonicalPath(folder)));
   check('a payload with no prompt declares nothing', declaredTenancies({ tool_input: {} }).size, 0);
 
   const refusedResumable = (await evaluateWith({ records: harness([{ id: 'aSMALL0000000000', worktree: 'take-a' }]), lastWorked: () => 0 })(JSON.stringify({ session_id: 'session-1', tool_name: 'Agent', cwd: repository, tool_input: { prompt: tenancy('take-a') } })))?.hookSpecificOutput?.permissionDecisionReason ?? '';
