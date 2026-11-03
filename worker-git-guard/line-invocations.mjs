@@ -220,7 +220,11 @@ export function lineInvocations(script, dialect, cwd) {
       found.push(...expanded({ ...invocation, environment, config, chain, separator: command.separator, selectorTouch: touch, before: [...before] }, aliasesOf(config), 0));
     }
 
-    before.push({ words: command.words, text: command.text, gitSubcommand, gitArgs });
+    // `redirections` and `dialect` travel with the command: the shared reader of output redirections
+    // (`write-targets/redirect-targets.mjs`) takes one parsed command, never its text.
+    // @es `redirections` y `dialect` viajan con el comando: el lector compartido de redirecciones de salida recibe
+    // un comando ya parseado, nunca su texto.
+    before.push({ words: command.words, text: command.text, gitSubcommand, gitArgs, redirections: command.redirections, dialect: command.dialect });
   }
 
   if (next !== invocations.length) throw new Error('the git invocations of the line do not match its commands @es las invocaciones de git de la línea no cuadran con sus comandos');

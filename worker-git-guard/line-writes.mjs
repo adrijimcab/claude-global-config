@@ -57,9 +57,15 @@ const LITERAL_STARTS = new Set(["'", '"', '$', '@', '(', '[', '0', '1', '2', '3'
 /** Redirection targets that are no file. @es Destinos de redirección que no son un fichero. */
 const NO_FILE = new Set(['/dev/null', 'nul']);
 
-/** Whether one command redirects output into a file. @es Si un comando redirige su salida a un fichero. */
-function redirectsToFile(text, dialect) {
-  return outputRedirectionTargets(text, dialect).some((found) => (found.target === undefined ? !text.toLowerCase().includes('$null') : !NO_FILE.has(found.target.toLowerCase())));
+/**
+ * Whether one parsed command redirects output into a file. The shared reader takes the parsed command (its
+ * `redirections` and `dialect`), never the text: given a string it returns nothing, and every redirection would read
+ * as no write (measured 2026-11-03 after the vendored sync: 4 R4 cases went green-to-red).
+ * @es Si un comando parseado redirige su salida a un fichero. El lector compartido recibe el comando parseado, nunca el
+ * texto: con un string no devuelve nada y ninguna redirección contaría como escritura.
+ */
+function redirectsToFile(command) {
+  return outputRedirectionTargets(command).some((found) => (found.target === undefined ? !command.text.toLowerCase().includes('$null') : !NO_FILE.has(found.target.toLowerCase())));
 }
 
 /** Whether git arguments send output to a file. @es Si los argumentos de git mandan la salida a un fichero. */
@@ -109,8 +115,10 @@ function assignmentReadsOnly(words, text, at) {
 }
 
 /** Whether one earlier command may write files. @es Si un comando anterior puede escribir ficheros. */
-function mayWrite({ words, text, gitSubcommand, gitArgs }, dialect) {
-  if (redirectsToFile(text, dialect)) return true;
+function mayWrite(command, dialect) {
+  const { words, text, gitSubcommand, gitArgs } = command;
+
+  if (redirectsToFile(command)) return true;
 
   const at = commandWordIndex(words);
 
@@ -129,7 +137,7 @@ function mayWrite({ words, text, gitSubcommand, gitArgs }, dialect) {
 }
 
 /**
- * @param {Array<{ words: string[], text: string, gitSubcommand?: string, gitArgs?: string[] }>} before The commands that ran earlier.
+ * @param {Array<{ words: string[], text: string, gitSubcommand?: string, gitArgs?: string[], redirections?: object[], dialect?: string }>} before The commands that ran earlier.
  * @param {string} dialect `bash` or `powershell`.
  * @returns {string | undefined} The text of the first earlier command that may write files, or `undefined`.
  * @es El texto del primer comando anterior que puede escribir ficheros, o `undefined`.
