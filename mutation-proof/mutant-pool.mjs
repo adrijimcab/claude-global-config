@@ -8,8 +8,9 @@
  * dozens of campaigns call. Running the pool as its own process keeps that contract unchanged.
  *
  * ISOLATION, the condition for a parallel verdict to mean what a sequential one means: each mutant gets its own
- * sandbox copy (as before) AND its own TEMP/TMP/TMPDIR inside that sandbox, so two selftests can never meet in a
- * shared temporary file. A collision would turn into a red selftest and read as a KILL the selftest never made.
+ * sandbox copy (as before) AND its own TEMP/TMP/TMPDIR, an `mkdtemp` under `os.tmpdir()` OUTSIDE every repository
+ * (`mutant-environment.mjs`, the same environment the baseline gets), so two selftests can never meet in a shared
+ * temporary file. A collision would turn into a red selftest and read as a KILL the selftest never made.
  *
  * TIMEOUT kills the whole process tree (`taskkill /T /F` on Windows, the process group elsewhere): a selftest
  * spawns children, and killing only its node process would leave them running.
@@ -27,8 +28,11 @@
  * @es provocó). El timeout mata el árbol entero de procesos, no solo el node del selftest.
  */
 import { spawn } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
+import { createMutantTemp, mutantEnvironment } from './mutant-environment.mjs';
+import { ownedPrefix, removeTreeAsync } from './sandbox-removal.mjs';
 
 const MAX_OUTPUT = 256 * 1024 * 1024;
 
@@ -49,10 +53,11 @@ async function worker() {
 }
 
 async function measureOne({ file, original, replacement }) {
-  const sandbox = await mkdtemp(path.join(job.root, 'mutant-'));
+  const sandbox = await mkdtemp(path.join(job.root, ownedPrefix('mutant')));
 
   try {
-    for (const needed of job.copied) await cp(path.join(job.snapshot, needed), path.join(sandbox, needed), { recursive: true });
+    for (const needed of job.copied)
+      await cp(path.join(job.snapshot, needed), path.join(sandbox, needed), { recursive: true });
 
     const target = path.join(sandbox, file);
     const source = await readFile(target, 'utf8');
@@ -65,20 +70,35 @@ async function measureOne({ file, original, replacement }) {
     const check = await run(process.execPath, ['--check', target], { ...process.env }, 0);
 
     if (check.status !== 0) {
-      const syntaxError = check.stderr.split('\n').map((line) => line.trimEnd()).find((line) => line.startsWith('SyntaxError'));
+      const syntaxError = check.stderr
+        .split('\n')
+        .map((line) => line.trimEnd())
+        .find((line) => line.startsWith('SyntaxError'));
 
-      return check.status === 1 && syntaxError !== undefined ? { syntaxError } : { checkFailure: `exit ${check.status}, signal ${check.signal}` };
+      return check.status === 1 && syntaxError !== undefined
+        ? { syntaxError }
+        : { checkFailure: `exit ${check.status}, signal ${check.signal}` };
     }
 
-    const temp = path.join(sandbox, '.tmp');
+    const temp = createMutantTemp();
 
-    await mkdir(temp, { recursive: true });
+    try {
+      const env = mutantEnvironment(process.env, job.fleet, temp);
 
-    const env = { ...process.env, SELFTEST_FLEET: job.fleet, TEMP: temp, TMP: temp, TMPDIR: temp };
-
-    return { run: await run(process.execPath, [path.join(sandbox, job.selftest)], env, job.timeoutMs, job.failFast ? new RegExp(job.failureLine) : undefined) };
+      return {
+        run: await run(
+          process.execPath,
+          [path.join(sandbox, job.selftest)],
+          env,
+          job.timeoutMs,
+          job.failFast ? new RegExp(job.failureLine) : undefined
+        )
+      };
+    } finally {
+      await removeTreeAsync(temp);
+    }
   } finally {
-    await rm(sandbox, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    await removeTreeAsync(sandbox);
   }
 }
 
@@ -92,12 +112,17 @@ async function measureOne({ file, original, replacement }) {
  */
 function run(command, args, env, timeoutMs, failureLine) {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { env, detached: process.platform !== 'win32', windowsHide: true });
+    const child = spawn(command, args, {
+      env,
+      detached: process.platform !== 'win32',
+      windowsHide: true
+    });
     const out = { stdout: '', stderr: '' };
     let signal = null;
     let stoppedAt;
     let scanned = 0;
     let timer;
+    let killed = Promise.resolve();
 
     for (const stream of ['stdout', 'stderr']) {
       child[stream].setEncoding('utf8');
@@ -110,7 +135,7 @@ function run(command, args, env, timeoutMs, failureLine) {
         for (const line of out.stdout.slice(scanned, end + 1).split('\n')) {
           if (failureLine.test(line)) {
             stoppedAt = line.trim();
-            killTree(child.pid);
+            killed = killTree(child.pid);
             break;
           }
         }
@@ -121,26 +146,66 @@ function run(command, args, env, timeoutMs, failureLine) {
     if (timeoutMs > 0) {
       timer = setTimeout(() => {
         signal = 'SIGTERM';
-        killTree(child.pid);
+        killed = killTree(child.pid);
       }, timeoutMs);
     }
 
-    child.on('error', (error) => { clearTimeout(timer); resolve({ status: null, signal, stdout: out.stdout, stderr: out.stderr, error: error.message }); });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      resolve({
+        status: null,
+        signal,
+        stdout: out.stdout,
+        stderr: out.stderr,
+        error: error.message
+      });
+    });
     child.on('close', (status, closeSignal) => {
       clearTimeout(timer);
-      if (stoppedAt !== undefined && signal === null) {
-        resolve({ status: 1, signal: null, stdout: out.stdout, stderr: out.stderr, stoppedAt });
-        return;
-      }
-      resolve({ status: signal === null ? status : null, signal: signal ?? closeSignal, stdout: out.stdout, stderr: out.stderr });
+      // Resolve only once the tree kill finished, so the sandbox is never removed under a dying tree.
+      // @es Se resuelve solo cuando terminó la muerte del árbol, así el sandbox nunca se borra bajo un árbol que muere.
+      void killed.then(() => {
+        if (stoppedAt !== undefined && signal === null) {
+          resolve({ status: 1, signal: null, stdout: out.stdout, stderr: out.stderr, stoppedAt });
+          return;
+        }
+        resolve({
+          status: signal === null ? status : null,
+          signal: signal ?? closeSignal,
+          stdout: out.stdout,
+          stderr: out.stderr
+        });
+      });
     });
   });
 }
 
+/**
+ * Kills the tree and returns a promise that settles when the kill finished. Asynchronous on purpose: this process
+ * serves the pipes and timeout timers of up to 8 selftests, and a synchronous wait here would delay every one of them,
+ * so a mutant near its timeout could flip to "killed by SIGTERM". The sandbox is removed only after the promise
+ * settles, so a tree still dying never holds the folder.
+ * @es Mata el árbol y devuelve una promesa que se cumple cuando terminó. Asíncrono a propósito: este proceso atiende
+ * las tuberías y los temporizadores de hasta 8 selftests, y una espera síncrona aquí retrasaría a todos. El sandbox se
+ * borra solo cuando la promesa se cumple.
+ */
 function killTree(pid) {
   if (process.platform === 'win32') {
-    spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
-    return;
+    return new Promise((resolve) => {
+      const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        windowsHide: true,
+        stdio: 'ignore'
+      });
+
+      killer.on('error', resolve);
+      killer.on('close', resolve);
+    });
   }
-  try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone @es ya terminó */ }
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    /* already gone @es ya terminó */
+  }
+
+  return Promise.resolve();
 }

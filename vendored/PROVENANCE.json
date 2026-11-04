@@ -1,6 +1,6 @@
 {
   "sourceRoot": "~/Desktop/Projects/b100-am-ui/.claude",
-  "syncedAt": "2026-11-03T15:51:48.717Z",
+  "syncedAt": "2026-11-04T19:22:48.164Z",
   "files": [
     {
       "path": "shell-command/shell-command.mjs",
@@ -68,11 +68,19 @@
     },
     {
       "path": "mutation-proof/run-mutants.mjs",
-      "sha256": "f3237e3fcaa0a9ea10de1569268a7a6cd8debee872d3153e4200854e22ae71ea"
+      "sha256": "4f2e5673fad6b6b27e5c5c5b87ad8a7fdcc712e3d108e532da76cd78da548224"
     },
     {
       "path": "mutation-proof/mutant-pool.mjs",
-      "sha256": "ff0a04d067be95f4347757274eeb36c6252a2d1185d45af58b148ab51acf53d7"
+      "sha256": "d8d5906f8767842f78c6f931ed13657c8be4283811fce69174e250f4764983fd"
+    },
+    {
+      "path": "mutation-proof/mutant-environment.mjs",
+      "sha256": "55c3b60dae1bc3d6e7c3d8b713c3db5517f0865d7e4f1d46a546f024989d09fc"
+    },
+    {
+      "path": "mutation-proof/sandbox-removal.mjs",
+      "sha256": "fccf36ef787a9bd78f422dd719f3fa7ebc737f9de2ad8d813cd49a25d6252c3d"
     },
     {
       "path": "mutation-proof/kill-kind.mjs",
@@ -80,11 +88,11 @@
     },
     {
       "path": "mutation-proof/selftest.mjs",
-      "sha256": "b5ec2ceda1fcb91a9974ee4430d64a08c62ea4a381d813b51a1daebc2b0954dc"
+      "sha256": "5230c15093b0535bcf2025436c961c25359629616eac533287da360838240bae"
     },
     {
       "path": "mutation-proof/mutants.mjs",
-      "sha256": "3a56fe1e8c4e11c7aeb7429952f2c3c3e1844c2de248455e610a95e2c421600f"
+      "sha256": "54170069a31645ab8267ef2692f112bedb50810f6cf1f4e323cd2b35d408758d"
     },
     {
       "path": "mutation-proof/kill-kind.selftest.mjs",
@@ -92,7 +100,7 @@
     },
     {
       "path": "mutation-proof/kill-kind.mutants.mjs",
-      "sha256": "4c3c0af9f0fe124cbf8a1425c016696b982ec44de0c88aa46a0e0461cdb7e56e"
+      "sha256": "2cb561534ba11dda9097a7b68bb2e10d0faf07600a98ee6ac8bfed2372ab79a4"
     },
     {
       "path": "mutation-proof/campaign-plan.mjs",

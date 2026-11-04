@@ -77,13 +77,15 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { availableParallelism, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { copiedPaths, importClosure } from './import-closure.mjs';
 import { classifyKill } from './kill-kind.mjs';
+import { createMutantTemp, mutantEnvironment, repositoryOfTemp } from './mutant-environment.mjs';
+import { ownedPrefix, removeTree, sweepOrphans } from './sandbox-removal.mjs';
 
 /** What a kill by crash does to the verdict. @es Qué hace al veredicto una muerte por crash. */
 const CRASH_POLICIES = new Set(['report', 'fail']);
@@ -97,9 +99,16 @@ const CRASH_POLICIES = new Set(['report', 'fail']);
  * 1 deja el camino secuencial exactamente como antes.
  */
 export function concurrencyOf(requested, env = process.env, cores = availableParallelism()) {
-  const value = requested ?? (env.MUTATION_CONCURRENCY === undefined ? Math.min(8, cores - 2) : Number(env.MUTATION_CONCURRENCY));
+  const value =
+    requested ??
+    (env.MUTATION_CONCURRENCY === undefined
+      ? Math.min(8, cores - 2)
+      : Number(env.MUTATION_CONCURRENCY));
 
-  if (!Number.isInteger(value)) throw new NotMeasured(`concurrency must be a whole number, got ${JSON.stringify(requested ?? env.MUTATION_CONCURRENCY)} @es concurrency debe ser un número entero`);
+  if (!Number.isInteger(value))
+    throw new NotMeasured(
+      `concurrency must be a whole number, got ${JSON.stringify(requested ?? env.MUTATION_CONCURRENCY)} @es concurrency debe ser un número entero`
+    );
 
   return Math.max(1, value);
 }
@@ -121,7 +130,8 @@ export const FAILURE_LINE = /^\s*(?:FAIL\w*|RED|not ok|✘|✗)(?=[\s:-]|$)/m;
  */
 export function failFastOf(baseline, env = process.env) {
   if (env.MUTATION_FAIL_FAST === '0') return { on: false, why: 'MUTATION_FAIL_FAST=0' };
-  if (FAILURE_LINE.test(`${baseline.stdout ?? ''}\n${baseline.stderr ?? ''}`)) return { on: false, why: 'the green baseline prints failure-looking lines' };
+  if (FAILURE_LINE.test(`${baseline.stdout ?? ''}\n${baseline.stderr ?? ''}`))
+    return { on: false, why: 'the green baseline prints failure-looking lines' };
 
   return { on: true, why: 'the green baseline prints no failure-looking line' };
 }
@@ -175,19 +185,38 @@ export function runMutants(options) {
   }
 }
 
-function measure({ fleetRoot, paths = [], selftest, mutants, timeoutMs = 900_000, crashKills = 'report', concurrency }) {
-  if (!CRASH_POLICIES.has(crashKills)) throw new NotMeasured(`crashKills must be 'report' or 'fail', got ${JSON.stringify(crashKills)}; no policy is picked on the caller's behalf`);
+function measure({
+  fleetRoot,
+  paths = [],
+  selftest,
+  mutants,
+  timeoutMs = 900_000,
+  crashKills = 'report',
+  concurrency
+}) {
+  if (!CRASH_POLICIES.has(crashKills))
+    throw new NotMeasured(
+      `crashKills must be 'report' or 'fail', got ${JSON.stringify(crashKills)}; no policy is picked on the caller's behalf`
+    );
   const parallel = concurrencyOf(concurrency);
-  if (mutants.length === 0) throw new NotMeasured('the campaign holds no mutant, and 0/0 killed is not a proof');
+  if (mutants.length === 0)
+    throw new NotMeasured('the campaign holds no mutant, and 0/0 killed is not a proof');
+
+  requireTempOutsideRepository();
+  sweepOrphans(tmpdir());
 
   const fleet = fleetOf(fleetRoot);
   const copied = copiedPathsOf(fleetRoot, paths, selftest, mutants);
   const sandboxRoot = sandboxRootOf(fleetRoot, copied);
-  const snapshot = mkdtempSync(path.join(sandboxRoot, 'snapshot-'));
+  const snapshot = mkdtempSync(path.join(sandboxRoot, ownedPrefix('snapshot')));
   const sandboxes = { root: sandboxRoot, snapshot, copied, fleet };
 
   try {
-    for (const needed of copied) cpSync(path.join(fleetRoot, needed), path.join(snapshot, needed), { recursive: true, filter: (source) => !RUN_OUTPUT.has(path.basename(source)) });
+    for (const needed of copied)
+      cpSync(path.join(fleetRoot, needed), path.join(snapshot, needed), {
+        recursive: true,
+        filter: (source) => !RUN_OUTPUT.has(path.basename(source))
+      });
 
     const plans = mutants.map((mutant) => planOf(mutant, snapshot, copied));
 
@@ -196,23 +225,49 @@ function measure({ fleetRoot, paths = [], selftest, mutants, timeoutMs = 900_000
     const baseline = requireGreenBaseline(sandboxes, selftest, timeoutMs);
 
     const tally = { assertion: 0, crash: 0 };
-    const outcomes = parallel > 1 ? pooledOutcomes(plans, sandboxes, selftest, timeoutMs, parallel, failFastOf(baseline)) : undefined;
+    const outcomes =
+      parallel > 1
+        ? pooledOutcomes(plans, sandboxes, selftest, timeoutMs, parallel, failFastOf(baseline))
+        : undefined;
 
     plans.forEach((plan, index) => {
-      const kind = reportOf(plan, outcomes === undefined ? sequentialOutcome(plan, sandboxes, selftest, timeoutMs) : outcomes[index]);
+      const kind = reportOf(
+        plan,
+        outcomes === undefined
+          ? sequentialOutcome(plan, sandboxes, selftest, timeoutMs)
+          : outcomes[index]
+      );
 
       if (kind === 'assertion' || kind === 'crash') tally[kind] += 1;
     });
 
     const killed = tally.assertion + tally.crash;
 
-    console.log(`\n${killed}/${mutants.length} mutants killed (${tally.assertion} by assertion, ${tally.crash} by crash)`);
+    console.log(
+      `\n${killed}/${mutants.length} mutants killed (${tally.assertion} by assertion, ${tally.crash} by crash)`
+    );
     if (tally.crash > 0) console.log(weakProofNotice(tally.crash, crashKills));
 
     return mutants.length - killed + (crashKills === 'fail' ? tally.crash : 0);
   } finally {
-    rmSync(snapshot, { recursive: true, force: true });
+    removeTree(snapshot);
   }
+}
+
+/**
+ * Stops the run when `os.tmpdir()` (TEMP/TMP/TMPDIR of the caller) lies inside a git repository: every selftest would
+ * get a temp folder inside it, the defect the temp folder exists to avoid, and a selftest that needs a directory
+ * outside any repository would misbehave for the baseline and every mutant alike.
+ * @es Detiene la corrida si `os.tmpdir()` (TEMP/TMP/TMPDIR de quien llama) está dentro de un repositorio git: cada
+ * selftest tendría su temporal dentro de él, el defecto que la carpeta temporal existe para evitar.
+ */
+function requireTempOutsideRepository() {
+  const repository = repositoryOfTemp();
+
+  if (repository !== undefined)
+    throw new NotMeasured(
+      `the system temp folder ${tmpdir()} is inside the git repository ${repository}, so no selftest could run outside every repository; set TEMP, TMP and TMPDIR to a folder outside it @es la carpeta temporal del sistema ${tmpdir()} está dentro del repositorio git ${repository}, así que ningún selftest podría correr fuera de todo repositorio; hay que fijar TEMP, TMP y TMPDIR a una carpeta fuera de él`
+    );
 }
 
 /**
@@ -223,11 +278,18 @@ function measure({ fleetRoot, paths = [], selftest, mutants, timeoutMs = 900_000
  * existe dentro de la flota, más `paths`. Un fichero mutado ausente o de fuera no se recorre: se rechaza su mutante.
  */
 function copiedPathsOf(fleetRoot, paths, selftest, mutants) {
-  const mutated = mutants.map(([, file]) => file).filter((file) => isInside(fleetRoot, path.join(fleetRoot, file)) && existsSync(path.join(fleetRoot, file)));
+  const mutated = mutants
+    .map(([, file]) => file)
+    .filter(
+      (file) =>
+        isInside(fleetRoot, path.join(fleetRoot, file)) && existsSync(path.join(fleetRoot, file))
+    );
   const closure = importClosure({ root: fleetRoot, entries: [selftest, ...mutated] });
 
   if (closure.problems.length > 0) {
-    throw new NotMeasured(`the imports of the selftest and its mutated files cannot all be copied, so a sandbox would not hold them @es los imports del selftest y de sus ficheros mutados no se pueden copiar todos, así que un sandbox no los tendría:\n${closure.problems.map((problem) => `  - ${problem}`).join('\n')}`);
+    throw new NotMeasured(
+      `the imports of the selftest and its mutated files cannot all be copied, so a sandbox would not hold them @es los imports del selftest y de sus ficheros mutados no se pueden copiar todos, así que un sandbox no los tendría:\n${closure.problems.map((problem) => `  - ${problem}`).join('\n')}`
+    );
   }
 
   return [...new Set([...copiedPaths(closure.files), ...paths])];
@@ -248,9 +310,13 @@ function sandboxRootOf(fleetRoot, copied) {
   const sandboxRoot = path.join(fleetRoot, 'scratch', 'mutation-proof');
   const enclosing = copied.find((needed) => isInside(path.join(fleetRoot, needed), sandboxRoot));
 
-  if (enclosing !== undefined) throw new NotMeasured(`the sandbox root ${sandboxRoot} lies inside the copied path ${enclosing}; no mutant can run`);
+  if (enclosing !== undefined)
+    throw new NotMeasured(
+      `the sandbox root ${sandboxRoot} lies inside the copied path ${enclosing}; no mutant can run`
+    );
 
   mkdirSync(sandboxRoot, { recursive: true });
+  sweepOrphans(sandboxRoot);
 
   return sandboxRoot;
 }
@@ -270,10 +336,13 @@ function planOf([label, file, original, replacement], snapshot, copied) {
 }
 
 function refusalOf({ file, original, replacement }, snapshot, copied) {
-  if (!copied.some((needed) => isInside(needed, file))) return `${file} is outside the copied paths (${copied.join(', ')})`;
-  if (!PARSE_CHECKED.has(path.extname(file))) return `${file} has no parse check, so a syntax-broken mutant could not be told from a kill`;
+  if (!copied.some((needed) => isInside(needed, file)))
+    return `${file} is outside the copied paths (${copied.join(', ')})`;
+  if (!PARSE_CHECKED.has(path.extname(file)))
+    return `${file} has no parse check, so a syntax-broken mutant could not be told from a kill`;
   if (original.length === 0) return 'the text to mutate is empty';
-  if (original === replacement) return 'the replacement is identical to the original, so nothing would change';
+  if (original === replacement)
+    return 'the replacement is identical to the original, so nothing would change';
 
   const source = sourceOf(path.join(snapshot, file));
 
@@ -282,7 +351,8 @@ function refusalOf({ file, original, replacement }, snapshot, copied) {
   const count = occurrencesOf(source, original);
 
   if (count === 0) return `ABSENT — the text to mutate occurs 0 times in ${file}`;
-  if (count > 1) return `AMBIGUOUS — the text to mutate occurs ${count} times in ${file}, so the mutation could land on a different decision`;
+  if (count > 1)
+    return `AMBIGUOUS — the text to mutate occurs ${count} times in ${file}, so the mutation could land on a different decision`;
 
   return undefined;
 }
@@ -312,7 +382,9 @@ function requireNoRefusal(plans) {
   if (refused.length > 0) {
     const labels = refused.map(({ label }) => `  - ${label}`).join('\n');
 
-    throw new NotMeasured(`${refused.length} planned mutant(s) are refused, so the campaign is stale or wrong and no baseline is run @es ${refused.length} mutante(s) planificado(s) rechazado(s): la campaña está desfasada o mal escrita y no se corre la línea base:\n${labels}`);
+    throw new NotMeasured(
+      `${refused.length} planned mutant(s) are refused, so the campaign is stale or wrong and no baseline is run @es ${refused.length} mutante(s) planificado(s) rechazado(s): la campaña está desfasada o mal escrita y no se corre la línea base:\n${labels}`
+    );
   }
 }
 
@@ -323,14 +395,24 @@ function requireParseableOriginals(plans, snapshot) {
   for (const file of files) {
     const failure = syntaxErrorOf(path.join(snapshot, file));
 
-    if (failure !== undefined) throw new NotMeasured(`the UNMUTATED ${file} does not parse (${failure}), so a syntax-broken mutant could not be told apart`);
+    if (failure !== undefined)
+      throw new NotMeasured(
+        `the UNMUTATED ${file} does not parse (${failure}), so a syntax-broken mutant could not be told apart`
+      );
   }
 }
 
 function requireGreenBaseline(sandboxes, selftest, timeoutMs) {
-  const run = inSandbox(sandboxes, () => undefined, (sandbox) => selftestIn(sandbox, selftest, timeoutMs, sandboxes.fleet));
+  const run = inSandbox(
+    sandboxes,
+    () => undefined,
+    (sandbox) => selftestIn(sandbox, selftest, timeoutMs, sandboxes.fleet)
+  );
 
-  if (run.status !== 0 || run.signal !== null) throw new NotMeasured(`the UNMUTATED selftest is not green (${outcomeOf(run)}), so every mutant would read as killed`);
+  if (run.status !== 0 || run.signal !== null)
+    throw new NotMeasured(
+      `the UNMUTATED selftest is not green (${outcomeOf(run)}), so every mutant would read as killed`
+    );
 
   console.log(`BASELINE ${selftest} is green (${tallyOf(run)})`);
 
@@ -348,7 +430,10 @@ function framesNote(frames) {
  * @es Se dice una vez por campaña con un crash: la decisión de si falla la corrida vive en `crashKills`.
  */
 function weakProofNotice(crashes, crashKills) {
-  const outcome = crashKills === 'fail' ? 'counted as survivors, so the campaign FAILS' : 'only reported, the campaign verdict is unchanged';
+  const outcome =
+    crashKills === 'fail'
+      ? 'counted as survivors, so the campaign FAILS'
+      : 'only reported, the campaign verdict is unchanged';
 
   return `WEAK PROOF — ${crashes} mutant(s) died by crash: the code ran, no check decided it (${outcome}). @es PRUEBA DÉBIL — ${crashes} mutante(s) murieron por crash: el código corrió, ningún check lo decidió.`;
 }
@@ -368,7 +453,9 @@ function sequentialOutcome({ file, original, replacement }, sandboxes, selftest,
     (sandbox) => {
       const syntaxError = syntaxErrorOf(path.join(sandbox, file));
 
-      return syntaxError === undefined ? { run: selftestIn(sandbox, selftest, timeoutMs, sandboxes.fleet) } : { syntaxError };
+      return syntaxError === undefined
+        ? { run: selftestIn(sandbox, selftest, timeoutMs, sandboxes.fleet) }
+        : { syntaxError };
     }
   );
 }
@@ -381,27 +468,75 @@ function sequentialOutcome({ file, original, replacement }, sandboxes, selftest,
  * el orden del plan. El pool no decide nada: un parse check que falla sin SyntaxError detiene la corrida aquí, igual
  * que en el camino secuencial, y cada veredicto lo sigue imprimiendo `reportOf`.
  */
-function pooledOutcomes(plans, { root, snapshot, copied, fleet }, selftest, timeoutMs, parallel, failFast) {
-  const jobDir = mkdtempSync(path.join(root, 'pool-'));
+function pooledOutcomes(
+  plans,
+  { root, snapshot, copied, fleet },
+  selftest,
+  timeoutMs,
+  parallel,
+  failFast
+) {
+  const jobDir = mkdtempSync(path.join(root, ownedPrefix('pool')));
   const job = path.join(jobDir, 'job.json');
   const output = path.join(jobDir, 'outcomes.json');
 
   try {
-    writeFileSync(job, JSON.stringify({ selftest, fleet, timeoutMs, concurrency: parallel, root, snapshot, copied, output, failFast: failFast.on, failureLine: FAILURE_LINE.source, plans: plans.map(({ label, file, original, replacement }) => ({ label, file, original, replacement })) }));
-    console.log(`RUNNING  ${plans.length} mutants, ${parallel} at a time; stop at the first failed check: ${failFast.on ? 'on' : 'off'} (${failFast.why})`);
+    writeFileSync(
+      job,
+      JSON.stringify({
+        selftest,
+        fleet,
+        timeoutMs,
+        concurrency: parallel,
+        root,
+        snapshot,
+        copied,
+        output,
+        failFast: failFast.on,
+        failureLine: FAILURE_LINE.source,
+        plans: plans.map(({ label, file, original, replacement }) => ({
+          label,
+          file,
+          original,
+          replacement
+        }))
+      })
+    );
+    console.log(
+      `RUNNING  ${plans.length} mutants, ${parallel} at a time; stop at the first failed check: ${failFast.on ? 'on' : 'off'} (${failFast.why})`
+    );
 
-    const pool = spawnSync(process.execPath, [fileURLToPath(new URL('./mutant-pool.mjs', import.meta.url)), job], { stdio: ['ignore', 'inherit', 'inherit'] });
+    const pool = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL('./mutant-pool.mjs', import.meta.url)), job],
+      { stdio: ['ignore', 'inherit', 'inherit'] }
+    );
 
-    if (pool.status !== 0 || !existsSync(output)) throw new NotMeasured(`the mutant pool did not finish (${outcomeOf({ ...pool, stdout: '' })}), so no mutant was measured @es el pool de mutantes no terminó, así que no se midió ningún mutante`);
+    if (pool.status !== 0 || !existsSync(output))
+      throw new NotMeasured(
+        `the mutant pool did not finish (${outcomeOf({ ...pool, stdout: '' })}), so no mutant was measured @es el pool de mutantes no terminó, así que no se midió ningún mutante`
+      );
 
     const outcomes = JSON.parse(readFileSync(output, 'utf8'));
     const failed = outcomes.findIndex((outcome) => outcome.checkFailure !== undefined);
 
-    if (failed !== -1) throw new NotMeasured(`the parse check of ${plans[failed].file} failed without a SyntaxError (${outcomes[failed].checkFailure}); it decided nothing`);
+    if (failed !== -1)
+      throw new NotMeasured(
+        `the parse check of ${plans[failed].file} failed without a SyntaxError (${outcomes[failed].checkFailure}); it decided nothing`
+      );
 
-    return outcomes.map((outcome) => (outcome.run === undefined ? outcome : { run: { ...outcome.run, error: outcome.run.error === undefined ? undefined : new Error(outcome.run.error) } }));
+    return outcomes.map((outcome) =>
+      outcome.run === undefined
+        ? outcome
+        : {
+            run: {
+              ...outcome.run,
+              error: outcome.run.error === undefined ? undefined : new Error(outcome.run.error)
+            }
+          }
+    );
   } finally {
-    rmSync(jobDir, { recursive: true, force: true });
+    removeTree(jobDir);
   }
 }
 
@@ -411,7 +546,9 @@ function pooledOutcomes(plans, { root, snapshot, copied, fleet }, selftest, time
  */
 function reportOf({ label, file }, verdict) {
   if (verdict.syntaxError !== undefined) {
-    console.log(`BROKEN   ${label} — the mutated ${file} does not parse (${verdict.syntaxError}); a red from it proves nothing`);
+    console.log(
+      `BROKEN   ${label} — the mutated ${file} does not parse (${verdict.syntaxError}); a red from it proves nothing`
+    );
 
     return 'broken';
   }
@@ -420,7 +557,9 @@ function reportOf({ label, file }, verdict) {
   const kill = killed ? classifyKill(verdict.run) : { kind: 'none' };
 
   if (kill.kind === 'crash') {
-    console.log(`CRASHED  ${label} — ${kill.firstLine}${framesNote(kill.frames)} (${outcomeOf(verdict.run)})`);
+    console.log(
+      `CRASHED  ${label} — ${kill.firstLine}${framesNote(kill.frames)} (${outcomeOf(verdict.run)})`
+    );
 
     return 'crash';
   }
@@ -443,16 +582,17 @@ function spliced(source, original, replacement) {
 
 /** Copies the snapshot into a fresh sandbox, prepares it, measures it, and always removes it. @es Copia, prepara, mide y borra un sandbox. */
 function inSandbox({ root, snapshot, copied }, prepare, measureIn) {
-  const sandbox = mkdtempSync(path.join(root, 'mutant-'));
+  const sandbox = mkdtempSync(path.join(root, ownedPrefix('mutant')));
 
   try {
-    for (const needed of copied) cpSync(path.join(snapshot, needed), path.join(sandbox, needed), { recursive: true });
+    for (const needed of copied)
+      cpSync(path.join(snapshot, needed), path.join(sandbox, needed), { recursive: true });
 
     prepare(sandbox);
 
     return measureIn(sandbox);
   } finally {
-    rmSync(sandbox, { recursive: true, force: true });
+    removeTree(sandbox);
   }
 }
 
@@ -482,8 +622,25 @@ function fleetOf(fleetRoot) {
   );
 }
 
+/**
+ * Runs the selftest of a sandbox under the environment every mutant gets (`mutantEnvironment`), with its own temporary
+ * folder outside every repository, removed here whatever the outcome.
+ * @es Corre el selftest de un sandbox con el entorno que recibe cada mutante, con su carpeta temporal fuera de todo
+ * repositorio, que se borra aquí pase lo que pase.
+ */
 function selftestIn(sandbox, selftest, timeoutMs, fleet) {
-  return spawnSync(process.execPath, [path.join(sandbox, selftest)], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 256 * 1024 * 1024, env: { ...process.env, SELFTEST_FLEET: fleet } });
+  const temp = createMutantTemp();
+
+  try {
+    return spawnSync(process.execPath, [path.join(sandbox, selftest)], {
+      encoding: 'utf8',
+      timeout: timeoutMs,
+      maxBuffer: 256 * 1024 * 1024,
+      env: mutantEnvironment(process.env, fleet, temp)
+    });
+  } finally {
+    removeTree(temp);
+  }
 }
 
 /**
@@ -500,11 +657,14 @@ function syntaxErrorOf(file) {
 
   if (check.status === 1 && syntaxError !== undefined) return syntaxError;
 
-  throw new NotMeasured(`the parse check of ${file} failed without a SyntaxError (${outcomeOf(check)}); it decided nothing`);
+  throw new NotMeasured(
+    `the parse check of ${file} failed without a SyntaxError (${outcomeOf(check)}); it decided nothing`
+  );
 }
 
 function outcomeOf(run) {
-  if (run.stoppedAt !== undefined) return `exit 1: stopped at its first failed check: ${run.stoppedAt}`;
+  if (run.stoppedAt !== undefined)
+    return `exit 1: stopped at its first failed check: ${run.stoppedAt}`;
   if (run.error !== undefined && run.signal === null) return `could not run: ${run.error.message}`;
   if (run.signal !== null) return `killed by ${run.signal}, not a verdict`;
 
