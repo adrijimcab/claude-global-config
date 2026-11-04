@@ -10,6 +10,20 @@
 
 import { makeSpeaker } from '../bilingual-output/speaker.mjs';
 
+/** The reason both refusals give. @es La razón que dan las dos negativas. */
+const REFUSAL_WHY = {
+  en: [
+    'WHY. Every full chain (build:ci-pr, the coverage suites, mutation, a11y, the whole selftest runner) is heavy on memory;',
+    'two at once starved the machine (a background gate run was reaped for low memory on 2026-10-05). The rule was kept by',
+    'hand, through messages between sessions; this lock keeps it by mechanism: one chain at a time on this machine.'
+  ],
+  es: [
+    'POR QUÉ. Toda cadena completa (build:ci-pr, las suites con cobertura, mutación, a11y, el runner de selftests entero) consume',
+    'mucha memoria; dos a la vez ahogaron la máquina (una corrida de gates en segundo plano fue cerrada por poca memoria el',
+    '2026-10-05). La regla se cumplía a mano, con mensajes entre sesiones; este lock la cumple por mecanismo: una cadena a la vez.'
+  ]
+};
+
 /** The messages. Placeholders are `{name}`. @es Los mensajes; los marcadores son `{name}`. */
 export const MESSAGES = {
   waiting: {
@@ -122,30 +136,54 @@ export const MESSAGES = {
     en: [
       'FULL-CHAIN GUARD REFUSED this command: {command} is a full chain ({chain}, project {project}) and runs only through the machine-wide lock.',
       '',
-      'WHY. Every full chain (build:ci-pr, the coverage suites, mutation, a11y, the whole selftest runner) is heavy on memory;',
-      'two at once starved the machine (a background gate run was reaped for low memory on 2026-10-05). The rule was kept by',
-      'hand, through messages between sessions; this lock keeps it by mechanism: one chain at a time on this machine.',
+      ...REFUSAL_WHY.en,
       '',
       'USE INSTEAD, replacing that command by:',
       '',
       '  {wrapped}',
       '',
+      '--tree names the tree the chain measures, so the lock records and protects the right one.',
       'It waits (bounded, --wait-seconds, default {defaultWaitSeconds}) while another chain runs, prints who holds the lock, runs your',
       'command with its exact exit code and releases the lock on every exit path.'
     ],
     es: [
       'FULL-CHAIN GUARD RECHAZÓ este comando: {command} es una cadena completa ({chain}, proyecto {project}) y corre solo por el lock de toda la máquina.',
       '',
-      'POR QUÉ. Toda cadena completa (build:ci-pr, las suites con cobertura, mutación, a11y, el runner de selftests entero) consume',
-      'mucha memoria; dos a la vez ahogaron la máquina (una corrida de gates en segundo plano fue cerrada por poca memoria el',
-      '2026-10-05). La regla se cumplía a mano, con mensajes entre sesiones; este lock la cumple por mecanismo: una cadena a la vez.',
+      ...REFUSAL_WHY.es,
       '',
       'USAR EN SU LUGAR, reemplazando ese comando por:',
       '',
       '  {wrapped}',
       '',
+      '--tree nombra el árbol que mide la cadena, para que el lock registre y proteja el correcto.',
       'Espera (acotado, --wait-seconds, por defecto {defaultWaitSeconds}) mientras otra cadena corre, muestra quién tiene el lock, ejecuta tu',
       'comando con su código de salida exacto y suelta el lock en toda salida.'
+    ]
+  },
+  'refusal-tree-unknown': {
+    en: [
+      'FULL-CHAIN GUARD REFUSED this command: {command} is a full chain ({chain}, project {project}) and runs only through the machine-wide lock.',
+      '',
+      ...REFUSAL_WHY.en,
+      '',
+      'NO COMMAND IS SUGGESTED: the tree this chain measures could not be determined (the call carried no directory, it changed',
+      'directory in a way that cannot be followed, the directory is in no git working tree, or a landing named no --worktree).',
+      'A guessed --tree would make the lock record, and the write guard protect, the wrong tree.',
+      '',
+      'Wrap the command yourself and name the tree explicitly: node <full-chain-lock>/run.mjs --chain {chain} --tree <the tree the chain',
+      'measures> -- {command}. It waits (bounded, --wait-seconds, default {defaultWaitSeconds}) while another chain runs.'
+    ],
+    es: [
+      'FULL-CHAIN GUARD RECHAZÓ este comando: {command} es una cadena completa ({chain}, proyecto {project}) y corre solo por el lock de toda la máquina.',
+      '',
+      ...REFUSAL_WHY.es,
+      '',
+      'NO SE SUGIERE NINGÚN COMANDO: no se pudo determinar el árbol que mide esta cadena (la llamada no traía directorio, cambió de',
+      'directorio de un modo que no se puede seguir, el directorio no está en ningún árbol de trabajo git, o un aterrizaje no nombró --worktree).',
+      'Un --tree adivinado haría que el lock registre, y el guard de escritura proteja, el árbol equivocado.',
+      '',
+      'Envuelve el comando tú mismo y nombra el árbol de forma explícita: node <full-chain-lock>/run.mjs --chain {chain} --tree <el árbol que',
+      'mide la cadena> -- {command}. Espera (acotado, --wait-seconds, por defecto {defaultWaitSeconds}) mientras otra cadena corre.'
     ]
   }
 };

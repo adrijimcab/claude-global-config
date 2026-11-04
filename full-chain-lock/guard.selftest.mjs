@@ -37,7 +37,7 @@ import { fullChainInvocations } from './chain-invocations.mjs';
 import { DECLARATION, loadChains } from './chains-config.mjs';
 import { evaluate as rawEvaluate } from './guard.mjs';
 import { MESSAGES } from './messages.mjs';
-import { wrappedCommand } from './refusal.mjs';
+import { refusalText, wrappedCommand } from './refusal.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -213,7 +213,7 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
 
 // ── The answer ──────────────────────────────────────────────────────────────────────────────────────────────
 {
-  const reason = decide(asMain('Bash', 'cd Discovery-FE && npm run build:ci-pr 2>&1 | tail -3'))?.hookSpecificOutput;
+  const reason = decide(asMain('Bash', 'cd full-chain-lock && npm run build:ci-pr 2>&1 | tail -3'))?.hookSpecificOutput;
   const text = reason?.permissionDecisionReason ?? '';
   const english = text.split(' @es ')[0] ?? '';
   const wrapped = `node "${RUNNER}" --chain build:ci-pr`;
@@ -222,9 +222,9 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
   check('the answer is a PreToolUse deny', reason?.hookEventName === 'PreToolUse' && reason.permissionDecision === 'deny');
   check('the answer is bilingual, English first, Spanish with its accents', english.includes('FULL-CHAIN GUARD REFUSED') && text.includes('@es FULL-CHAIN GUARD RECHAZÓ') && text.includes('ahogaron la máquina'), text.slice(0, 200));
   check('it names the offending command, the chain and every project that declares it', english.includes('npm run build:ci-pr 2>&1 is a full chain (build:ci-pr, project b100-am-ui / di_1700002_discovery_fe)'), english.slice(0, 200));
-  check('it names the exact runner command, with the session and the original command after --', text.includes(`${wrapped} --session sess-main -- npm run build:ci-pr 2>&1`), text);
+  check('it names the exact runner command, with the session and the original command after --', text.includes(`${wrapped} --session sess-main --tree "`) && text.includes('" -- npm run build:ci-pr 2>&1'), text);
   check('a chain declared by several projects gets no guessed --project: the runner records the directory', !text.includes('--project'), text);
-  check('a chain declared by ONE project names it in the command', unique.includes(`node "${RUNNER}" --chain check:mutation --project b100-am-ui --session sess-main -- npm run check:mutation`), unique);
+  check('a chain declared by ONE project names it in the command', unique.includes(`node "${RUNNER}" --chain check:mutation --project b100-am-ui --session sess-main --tree "`) && unique.includes('" -- npm run check:mutation'), unique);
   check('it names the memory incident as the reason', english.includes('2026-10-05') && english.includes('low memory'));
   check('it states the bounded wait', english.includes('--wait-seconds') && english.includes('3600'));
   check('the runner it names exists', existsSync(RUNNER));
@@ -237,6 +237,128 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
   }
 
   check('with no session the flag is left out rather than invented', !wrappedCommand({ chain: 'c', projects: ['p'], text: 't' }, undefined).includes('--session'));
+  check('with no tree the flag is left out rather than invented', !wrappedCommand({ chain: 'c', projects: ['p'], text: 't' }, undefined, undefined).includes('--tree'));
+  check('a tree is named quoted, before the command', wrappedCommand({ chain: 'c', projects: ['p'], text: 't' }, 's', 'D:/a b').endsWith(' --session s --tree "D:/a b" -- t'));
+}
+
+// ── The tree the suggested command names (T27, incident 2026-11-04) ────────────────────────────────────────
+{
+  const TOP = spawnSync('git', ['-C', ROOT, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', windowsHide: true }).stdout.trim().split('\\').join('/');
+  const reasonOf = (payload) => decide(payload)?.hookSpecificOutput?.permissionDecisionReason ?? '';
+  const offenderOf = (command) => fullChainInvocations(command, 'bash', chains)[0];
+  const forward = (value) => path.resolve(value).split('\\').join('/');
+  const echoTop = (directory) => directory; // a seam that says every directory is its own git top level
+  const bothLanguages = (text) => text.includes('FULL-CHAIN GUARD REFUSED') && text.includes(' @es FULL-CHAIN GUARD RECHAZÓ');
+  const LAND = 'node /x/worktree-landing/land.mjs';
+
+  check('the measured repository has a git top level', TOP !== '' && existsSync(TOP));
+  check('a plain chain suggests --tree with the git top level of the call directory', reasonOf(asMain('Bash', 'npm run build:ci-pr')).includes(` --tree "${TOP}" -- npm run build:ci-pr`), reasonOf(asMain('Bash', 'npm run build:ci-pr')));
+  check('a chain run from a subdirectory still names the top level', reasonOf({ ...asMain('Bash', 'npm run build:ci-pr'), cwd: HERE }).includes(` --tree "${TOP}" --`));
+  check('the PowerShell refusal names the tree too', reasonOf(asMain('PowerShell', 'npm run ci:test')).includes(` --tree "${TOP}" --`));
+  check('the tree is the one measuredTree answers for the directory, not the directory itself', refusalText(offenderOf('npm run build:ci-pr'), 's', { cwd: HERE, dialect: 'bash', script: 'npm run build:ci-pr' }, { topLevelOf: () => 'D:/top' }).includes(' --tree "D:/top" --'));
+
+  {
+    const text = refusalText(offenderOf('npm run build:ci-pr'), 's', { cwd: path.join(ROOT, 'sub'), dialect: 'bash', script: 'npm run build:ci-pr' }, { topLevelOf: echoTop });
+
+    check('the directory handed to the git question is the absolute call directory', text.includes(` --tree "${forward(path.join(ROOT, 'sub'))}" --`), text);
+  }
+
+  {
+    const script = `cd ${forward(path.join(ROOT, 'sub'))} && npm run build:ci-pr`;
+    const text = refusalText(offenderOf(script), 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('a cd before the chain moves the directory the tree is measured from', text.includes(` --tree "${forward(path.join(ROOT, 'sub'))}" --`), text);
+  }
+
+  {
+    const script = 'cd sub && cd deeper && npm run build:ci-pr';
+    const text = refusalText(offenderOf(script), 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('relative cd commands accumulate', text.includes(` --tree "${forward(path.join(ROOT, 'sub', 'deeper'))}" --`), text);
+  }
+
+  {
+    const script = 'pushd sub && npm run build:ci-pr';
+    const text = refusalText(offenderOf(script), 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('pushd moves the directory too', text.includes(` --tree "${forward(path.join(ROOT, 'sub'))}" --`), text);
+  }
+
+  {
+    const script = 'cd "$OTHER" && npm run build:ci-pr';
+    const text = refusalText(offenderOf(script), 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('a cd whose target cannot be resolved leaves the tree unknown, in both languages', bothLanguages(text) && text.includes('NO COMMAND IS SUGGESTED') && text.includes('NO SE SUGIERE NINGÚN COMANDO') && !text.includes('--tree "'), text);
+  }
+
+  {
+    const script = 'cd && npm run build:ci-pr';
+    const text = refusalText(offenderOf(script), 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('a cd with no target leaves the tree unknown', text.includes('NO COMMAND IS SUGGESTED'), text);
+  }
+
+  {
+    const script = 'echo cd elsewhere && npm run build:ci-pr';
+    const text = refusalText(offenderOf(script), 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('a word cd that is not in command position does not move the directory', text.includes(` --tree "${forward(ROOT)}" --`), text);
+  }
+
+  {
+    const script = 'cd -P sub && npm run build:ci-pr';
+    const text = refusalText(offenderOf(script), 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('an option of cd is not taken for its target', text.includes(` --tree "${forward(path.join(ROOT, 'sub'))}" --`), text);
+  }
+
+  {
+    const script = 'cd sub && npm run build:ci-pr';
+    const text = refusalText(offenderOf(script), 's', { cwd: undefined, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('a cd with no known starting directory leaves the tree unknown', text.includes('NO COMMAND IS SUGGESTED'), text);
+  }
+
+  {
+    const noCwd = JSON.stringify({ ...asMain('Bash', 'npm run build:ci-pr'), cwd: undefined });
+    const text = evaluate(noCwd)?.hookSpecificOutput?.permissionDecisionReason ?? '';
+
+    check('a payload with no cwd explains in both languages that the tree is unknown and suggests no guessed command', bothLanguages(text) && text.includes('NO COMMAND IS SUGGESTED') && text.includes('NO SE SUGIERE NINGÚN COMANDO') && !text.includes('--tree "') && !text.includes('USE INSTEAD'), text);
+    check('the unknown-tree answer keeps the offending command, chain and projects', text.includes('npm run build:ci-pr is a full chain (build:ci-pr, project'));
+    check('the unknown-tree answer points at --tree', text.includes('--chain build:ci-pr --tree <the tree the chain'));
+  }
+
+  {
+    const text = refusalText(offenderOf('npm run build:ci-pr'), 's', { cwd: ROOT, dialect: 'bash', script: 'npm run build:ci-pr' }, { topLevelOf: () => undefined });
+
+    check('a directory in no git working tree leaves the tree unknown', text.includes('NO COMMAND IS SUGGESTED') && !text.includes('--tree "'), text);
+  }
+
+  {
+    const landing = (args, cwd = ROOT) => {
+      const script = `${LAND} ${args}`;
+
+      return refusalText({ chain: 'worktree-landing/land.mjs', projects: [], text: script }, 's', { cwd: cwd === null ? undefined : cwd, dialect: 'bash', script }, { topLevelOf: echoTop });
+    };
+
+    check('a landing wrapped from another checkout names its --worktree, not the call directory', landing('--worktree D:/other/wt --main D:/main').includes(' --tree "D:/other/wt" --') && !landing('--worktree D:/other/wt --main D:/main').includes(`--tree "${forward(ROOT)}"`));
+    check('--worktree=<dir> is read too', landing('--worktree=D:/other/wt --main D:/main').includes(' --tree "D:/other/wt" --'));
+    check('a relative --worktree is resolved against the call directory', landing('--worktree rel/wt --main m', ROOT).includes(` --tree "${forward(path.join(ROOT, 'rel/wt'))}" --`));
+    check('a landing with no --worktree leaves the tree unknown', landing('--main D:/main').includes('NO COMMAND IS SUGGESTED'));
+    check('a --worktree with no value leaves the tree unknown', landing('--main D:/main --worktree').includes('NO COMMAND IS SUGGESTED'));
+    check('an empty --worktree= leaves the tree unknown', landing('--worktree= --main m').includes('NO COMMAND IS SUGGESTED'));
+    check('a relative --worktree with no call directory leaves the tree unknown', landing('--worktree rel/wt', null).includes('NO COMMAND IS SUGGESTED'));
+    check('an absolute --worktree needs no call directory', landing('--worktree D:/other/wt', null).includes(' --tree "D:/other/wt" --'));
+    check('a --worktree that is a shell variable leaves the tree unknown', landing('--worktree "$WT" --main m').includes('NO COMMAND IS SUGGESTED'));
+    check('a landing refusal stays bilingual', bothLanguages(landing('--worktree D:/other/wt --main D:/main')));
+  }
+
+  for (const [tool, command] of [['Bash', 'npm run build:ci-pr'], ['PowerShell', 'npm run ci:test']]) {
+    const reason = reasonOf(asMain(tool, command));
+    const suggested = reason.split('\n').find((line) => line.trim().startsWith('node "'))?.trim() ?? 'no suggested command found';
+
+    check(`the suggested command, with its --tree, passes the guard itself: ${command}`, suggested.includes(' --tree "') && verdictOf(asMain(tool, suggested)) === undefined, suggested);
+  }
 }
 
 // ── Failing open ────────────────────────────────────────────────────────────────────────────────────────────

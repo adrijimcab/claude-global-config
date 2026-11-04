@@ -21,7 +21,7 @@ const GIT_TIMEOUT_MS = 20_000;
  * The top level of the git working tree holding `directory`, or `undefined` when git says it is in none.
  * @es El nivel superior del árbol de trabajo git que contiene `directory`, o `undefined` si git dice que no hay.
  */
-function gitTopLevel(directory) {
+export function gitTopLevel(directory) {
   const run = spawnSync('git', ['-C', directory, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', windowsHide: true, timeout: GIT_TIMEOUT_MS });
   const top = run.status === 0 ? run.stdout.trim() : '';
 
