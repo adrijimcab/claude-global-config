@@ -22,7 +22,12 @@
  * Two rules decide before anything is written: the requested --branch must be the FIRST integration branch
  * the project declares (`integration-branch.mjs`: `.claude/fleet-kit.json` `integrationBranches`, else
  * `.claude/integrate/integration-branches.mjs`; a repository declaring neither is not governed and the
- * report says the check did not apply), and an unreadable declaration refuses.
+ * report says the check did not apply), and an unreadable declaration refuses. A third rule keeps the live
+ * ledger (`live-ledger.mjs`, `ledger-retention.mjs`; closes `live-ledger-lines-dropped-by-landing`): a landing
+ * whose tree would leave the main checkout's working-tree ledgers, uncommitted lines included, with a lesson key
+ * missing or at a lower count is refused, in both preconditions passes, naming each key and the route (carry the
+ * live ledger files and their evidence files into the branch, commit, land again); a repository with no ledger
+ * is not governed and the report says so.
  * Exit 0 landed (or ready, with `--check`), 1 verification red, 2 refused precondition or git failure.
  *
  * Usage: node land.mjs --worktree <dir> --main <dir> --branch <shared branch> --remote <remote> [--check] [--reap]
@@ -43,7 +48,13 @@
  * la --branch pedida debe ser la PRIMERA rama de integración que declara el proyecto
  * (`integration-branch.mjs`: `integrationBranches` de `.claude/fleet-kit.json`, o si no
  * `.claude/integrate/integration-branches.mjs`; un repositorio sin ninguna declaración no está gobernado y
- * el informe dice que la comprobación no aplicó), y una declaración ilegible rechaza. Salida 0
+ * el informe dice que la comprobación no aplicó), y una declaración ilegible rechaza. Una tercera regla
+ * protege el ledger vivo (`live-ledger.mjs`, `ledger-retention.mjs`; cierra
+ * `live-ledger-lines-dropped-by-landing`): se rechaza, en las dos pasadas de precondiciones, un aterrizaje cuyo
+ * árbol dejaría los ledgers del árbol de trabajo del principal, con las líneas sin commitear, con una clave de
+ * lección ausente o con un recuento menor, nombrando cada clave y la ruta (llevar los ficheros del ledger vivo y
+ * sus ficheros de evidencia a la rama, commitear y aterrizar otra vez); un repositorio sin ledger no está
+ * gobernado y el informe lo dice. Salida 0
  * aterrizado (o listo, con `--check`), 1 verificación en rojo, 2 precondición rechazada o fallo de git.
  */
 
@@ -101,6 +112,7 @@ export function land({ worktree, main, branch, remote, check = false, reap = fal
             ? `Publication: would publish to ${remote}. @es Publicación: publicaría en ${remote}.`
             : `Publication: would land locally only, not published (${remote} is not an owner backup remote). @es Publicación: aterrizaría solo en local, sin publicar (${remote} no es un remoto de respaldo del dueño).`,
           after.integration,
+          after.ledger,
         ],
       };
     }
@@ -111,7 +123,7 @@ export function land({ worktree, main, branch, remote, check = false, reap = fal
         : `LANDED LOCALLY ${range} on ${branch} (${commits.length} commit(s)); verification: ${summary}. NOT published: ${remote} is not an owner backup remote, so nothing was pushed; the owner publishes with: @es ATERRIZADO EN LOCAL ${range} en ${branch} (${commits.length} commit(s)); verificación: ${summary}. NO publicado: ${remote} no es un remoto de respaldo del dueño, así que no se empujó nada; el dueño publica con:`;
     return {
       exitCode: EXIT_LANDED,
-      lines: [headline, ...(pushCommand === undefined ? [] : [`    ${pushCommand}`]), ...commits.map((line) => `    ${line}`), after.integration, ...(reap ? reaper({ worktree }).lines : [])],
+      lines: [headline, ...(pushCommand === undefined ? [] : [`    ${pushCommand}`]), ...commits.map((line) => `    ${line}`), after.integration, after.ledger,...(reap ? reaper({ worktree }).lines : [])],
     };
   } catch (error) {
     if (error instanceof Refusal) return stoppedBy(error);

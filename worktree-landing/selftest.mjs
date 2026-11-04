@@ -69,6 +69,10 @@ else if (verdict === 'commit') {
   spawnSync('git', ['-C', root, 'add', 'late.txt']);
   spawnSync('git', ['-C', root, 'commit', '-q', '-m', 'late']);
   green();
+} else if (verdict === 'raise-live') {
+  const ledger = path.join(root, '..', '.claude', 'lessons-ledger.md');
+  writeFileSync(ledger, readFileSync(ledger, 'utf8') + '- [global] 2026-11-04 — RULE: late live line <!--fc:late-live-line#1-->\\n');
+  green();
 } else if (verdict === '0') green();
 else {
   console.log('GREEN  other/selftest.mjs (exit 0)\\nRED    fake/selftest.mjs (exit 1)\\n    BOOM-MARK\\n1/2 green');
@@ -188,12 +192,12 @@ const seed = (() => {
  * @es Copia la semilla y le añade un worktree en la rama `work`. Los ficheros de `work` se commitean en el
  * worktree; los `forced` con `add -f` (ignorados en el principal).
  */
-function layout({ work = {}, forced = {}, removed = [], remoteUrl = OWNER_URL } = {}) {
+function layout({ work = {}, forced = {}, removed = [], remoteUrl = OWNER_URL, mainName = 'main', baseFiles = {} } = {}) {
   fixtures += 1;
   const base = path.join(scratchRoot, `f${fixtures}`);
   mkdirSync(base);
   const remote = path.join(base, 'remote.git');
-  const main = path.join(base, 'main');
+  const main = path.join(base, mainName);
   const worktree = path.join(base, 'work');
   cpSync(seed.remote, remote, { recursive: true });
   cpSync(seed.main, main, { recursive: true });
@@ -202,6 +206,12 @@ function layout({ work = {}, forced = {}, removed = [], remoteUrl = OWNER_URL } 
   // `insteadOf` la encamina al remoto bare construido para poder observar el ref empujado.
   must(main, 'remote', 'set-url', 'origin', remoteUrl);
   must(main, 'config', `url.${remote}.insteadOf`, remoteUrl);
+  if (Object.keys(baseFiles).length > 0) {
+    for (const [name, content] of Object.entries(baseFiles)) put(main, name, content);
+    must(main, 'add', '-A');
+    must(main, 'commit', '-q', '-m', 'base files');
+    must(main, 'push', '-q', 'origin', 'master');
+  }
   must(main, 'worktree', 'add', '-q', '-b', 'work', worktree, 'master');
   for (const [name, content] of Object.entries(work)) put(worktree, name, content);
   for (const [name, content] of Object.entries(forced)) put(worktree, name, content);
@@ -315,6 +325,59 @@ try {
   const atTip = layout();
   const atTipReport = expectLanded('exactly at the tip', atTip);
   check(atTipReport.includes('(0 commit(s))'), `exactly at the tip: zero commits land: ${atTipReport}`);
+
+  // ── The live ledger: a landing never leaves it with fewer keys or lower counts than it holds now ──
+  check(happyReport.includes('Live-ledger check did not apply') && happyReport.includes('@es La comprobación del ledger vivo no aplicó'), `no ledger: the report says the live-ledger check did not apply, in both languages: ${happyReport}`);
+  const ledgerText = (counts) => Object.entries(counts).map(([key, count]) => `- [global] 2026-11-04 — RULE: ${key} <!--fc:${key}#${count}-->\n`).join('');
+  const keyed = (from, to) => Object.fromEntries(Array.from({ length: to - from + 1 }, (_, at) => [`lesson-key-${String(from + at).padStart(2, '0')}`, 1]));
+  const LEDGER = 'lessons-ledger.md';
+  const PROJECT_LEDGER = '.claude/lessons-ledger.md';
+
+  const incident = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText(keyed(1, 50)) }, work: { 'b.txt': 'b\n' } });
+  put(incident.main, LEDGER, ledgerText(keyed(1, 54)));
+  const incidentReport = expectRefused('the 2026-11-04 incident: 54 live keys, 50 in the tree', incident, { reason: 'live-ledger-would-shrink', text: 'lesson-key-54: live 1, tree absent' });
+  for (const missing of ['lesson-key-51', 'lesson-key-52', 'lesson-key-53', 'lesson-key-54']) check(incidentReport.includes(`${missing}: live 1, tree absent @es ${missing}: vivo 1, árbol ausente`), `the incident: ${missing} is named with its counts in both languages: ${incidentReport}`);
+  check(!incidentReport.includes('lesson-key-50:') && incidentReport.includes('4 lesson key(s)'), `the incident: only the four missing keys are named, counted as four: ${incidentReport}`);
+  check(incidentReport.includes('byte-identical') && incidentReport.includes('lessons/evidence/<key>.md') && incidentReport.includes('land again'), `the incident: the report states the route: ${incidentReport}`);
+
+  const lowered = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText({ 'counted-lesson': 1 }) }, work: { 'b.txt': 'b\n' } });
+  put(lowered.main, LEDGER, ledgerText({ 'counted-lesson': 3 }));
+  expectRefused('a lowered count: live 3, tree 1', lowered, { reason: 'live-ledger-would-shrink', text: 'counted-lesson: live 3, tree 1 @es counted-lesson: vivo 3, árbol 1' });
+
+  const equal = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText(keyed(1, 5)) }, work: { 'b.txt': 'b\n' } });
+  const equalReport = expectLanded('equal live and tree ledgers', equal);
+  check(equalReport.includes('Live-ledger check passed: 5 key(s)'), `equal ledgers: the report says the check passed with the key count: ${equalReport}`);
+
+  const richer = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText({ 'counted-lesson': 1 }) }, work: { [LEDGER]: ledgerText({ 'counted-lesson': 2, 'new-lesson-only-in-tree': 1 }) } });
+  expectLanded('a tree with more keys and a higher count', richer);
+
+  const checkOnly = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText(keyed(1, 3)) }, work: { 'b.txt': 'b\n' } });
+  put(checkOnly.main, LEDGER, ledgerText(keyed(1, 4)));
+  const shrunkCheck = cli(...argsOf(checkOnly), '--check');
+  check(shrunkCheck.status === 2 && shrunkCheck.stderr.startsWith('REFUSED [live-ledger-would-shrink]'), `--check refuses a shrinking landing too: ${shrunkCheck.status} ${shrunkCheck.stderr}`);
+
+  const areaLedger = layout({ mainName: '.claude', baseFiles: { 'rules/lessons-guards.md': ledgerText({ 'area-lesson': 2 }) }, work: { 'b.txt': 'b\n' } });
+  put(areaLedger.main, 'rules/lessons-guards.md', ledgerText({ 'area-lesson': 4 }));
+  expectRefused('a lowered count in an area ledger of the home', areaLedger, { reason: 'live-ledger-would-shrink', text: 'area-lesson: live 4, tree 2' });
+
+  const movedLesson = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText({ 'moving-lesson': 2 }) }, work: { [LEDGER]: '', 'rules/lessons-guards.md': ledgerText({ 'moving-lesson': 2 }) } });
+  expectLanded('a lesson moved from one ledger to another keeps its count', movedLesson);
+
+  const project = layout({ baseFiles: { '.claude/CLAUDE.md': '# project\n', [PROJECT_LEDGER]: ledgerText({ 'project-lesson': 2 }) }, work: { 'b.txt': 'b\n' } });
+  put(project.main, PROJECT_LEDGER, ledgerText({ 'project-lesson': 2, 'project-live-only': 1 }));
+  expectRefused('a project ledger is governed like the home one', project, { reason: 'live-ledger-would-shrink', text: 'project-live-only: live 1, tree absent' });
+
+  const unreadable = layout({ baseFiles: { '.claude/CLAUDE.md': '# project\n', '.claude/failure-capture.json': '{ not json' }, work: { 'b.txt': 'b\n' } });
+  expectRefused('an unreadable ledger configuration fails closed', unreadable, { reason: 'ledger-configuration-unreadable', text: 'cannot be resolved' });
+
+  const raisedDuringVerification = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText({ 'counted-lesson': 1 }) }, work: { verdict: 'raise-live\n' } });
+  // The stand-in runner itself writes the main checkout's ledger, so the generic "nothing moved" snapshot does not apply: assert the refusal and both tips.
+  // @es El runner sustituto escribe el ledger del principal, así que el snapshot genérico no aplica: se comprueba el rechazo y ambas puntas.
+  const tipsBefore = [refOf(path.join(raisedDuringVerification.main, '.git'), 'refs/heads/master'), refOf(raisedDuringVerification.remote, 'refs/heads/master')];
+  const raisedResult = landFixture(raisedDuringVerification);
+  const raisedReport = raisedResult.lines.join('\n');
+  check(raisedResult.exitCode === 2 && raisedResult.lines[0] === 'REFUSED [live-ledger-would-shrink]' && raisedReport.includes('late-live-line: live 1, tree absent'), `the live ledger gains a line while the verification runs: the second pass refuses: ${raisedReport}`);
+  check(tipsBefore[0] === refOf(path.join(raisedDuringVerification.main, '.git'), 'refs/heads/master') && tipsBefore[1] === refOf(raisedDuringVerification.remote, 'refs/heads/master'), 'the second-pass refusal moved neither the shared branch nor the remote');
 
   // ── The worktree ──────────────────────────────────────────────────────────────────────────────
   const modified = layout({ work: { 'b.txt': 'b\n' } });

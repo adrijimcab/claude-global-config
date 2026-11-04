@@ -19,6 +19,8 @@ import path from 'node:path';
 import { collisionsOf } from './collisions.mjs';
 import { git, GitFailure, gitOutput } from './git.mjs';
 import { requireIntegrationBranch } from './integration-branch.mjs';
+import { ledgerShortfalls } from './ledger-retention.mjs';
+import { ledgersOf } from './live-ledger.mjs';
 import { Refusal } from './outcome.mjs';
 import { uncommittedPaths } from './working-tree.mjs';
 
@@ -148,9 +150,34 @@ function requireNoCollision({ main, tip, head }) {
 }
 
 /**
+ * The landed tree keeps every lesson key of the main checkout's live ledgers, at no lower count: the live
+ * files are read from the working tree NOW, uncommitted lines included. A repository with no ledger is not
+ * governed and the report says so.
+ * @es El árbol aterrizado conserva cada clave de lección de los ledgers vivos del principal, sin recuento
+ * menor: los ficheros vivos se leen del árbol de trabajo AHORA, con las líneas sin commitear. Un repositorio
+ * sin ledger no está gobernado y el informe lo dice.
+ * @returns {string} what the check found, for the report @es lo que encontró la comprobación, para el informe
+ */
+function requireLiveLedgerKept({ worktree, main, head }) {
+  const { governed, files, live, tree } = ledgersOf({ worktree, main, head });
+  if (!governed) {
+    return `Live-ledger check did not apply: ${main} holds no lesson ledger. @es La comprobación del ledger vivo no aplicó: ${main} no tiene ledger de lecciones.`;
+  }
+  const shortfalls = ledgerShortfalls(live, tree);
+  if (shortfalls.length > 0) {
+    const lines = shortfalls.map(({ key, live: liveCount, tree: treeCount }) => `${key}: live ${liveCount}, tree ${treeCount ?? 'absent'} @es ${key}: vivo ${liveCount}, árbol ${treeCount ?? 'ausente'}`);
+    throw new Refusal('live-ledger-would-shrink', [
+      `The landed tree would leave the live ledger of ${main} (${files.join(', ')}) with ${shortfalls.length} lesson key(s) missing or at a lower count than it holds now; carry the live ledger files and their lessons/evidence/<key>.md files byte-identical into the work branch, commit, and land again: @es El árbol aterrizado dejaría el ledger vivo de ${main} (${files.join(', ')}) con ${shortfalls.length} clave(s) de lección ausentes o con un recuento menor al que tiene ahora; lleva los ficheros del ledger vivo y sus lessons/evidence/<clave>.md byte a byte a la rama de trabajo, commitea y aterriza otra vez:`,
+      ...listed(lines),
+    ]);
+  }
+  return `Live-ledger check passed: ${live.size} key(s) of ${files.join(', ')} kept at their live counts. @es Comprobación del ledger vivo superada: ${live.size} clave(s) de ${files.join(', ')} conservadas con sus recuentos vivos.`;
+}
+
+/**
  * @param {{ worktree: string, main: string, branch: string, remote: string }} inputs
- * @returns {{ head: string, tip: string, remoteTip: string, landed: string[], integration: string }}
- * @es Devuelve el HEAD que aterriza, la punta compartida, la punta remota y las rutas aterrizadas.
+ * @returns {{ head: string, tip: string, remoteTip: string, landed: string[], integration: string, ledger: string }}
+ * @es Devuelve el HEAD que aterriza, la punta compartida, la punta remota, las rutas aterrizadas y lo que halló cada comprobación.
  */
 export function landingRangeOf({ worktree, main, branch, remote }) {
   requireOneRepositoryTwoCheckouts(worktree, main);
@@ -162,5 +189,6 @@ export function landingRangeOf({ worktree, main, branch, remote }) {
   requireSharedTipContained({ worktree, main, branch, head, tip });
   const remoteTip = requireRemoteTipContained({ main, branch, remote, head });
   const landed = requireNoCollision({ main, tip, head });
-  return { head, tip, remoteTip, landed, integration };
+  const ledger = requireLiveLedgerKept({ worktree, main, head });
+  return { head, tip, remoteTip, landed, integration, ledger };
 }
