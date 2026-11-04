@@ -5,3 +5,7 @@ Ledger lines archived verbatim, append-only: each block is one original line, by
 ## Ledger line archived 2026-11-03 (captured)
 
 - [global] 2026-11-03 — On 2026-11-03 the same command read the content of fuentes/discovery-api/.env of the back through git show, although the owner rule is never to read the PROD .env -> root cause: I treated reading a file through git history as different from reading the file. RULE: A .env file is never read in any form (cat, git show, git diff, grep with output); only its path and whether it is tracked may be measured. <!--fc:prod-env-read-through-git#1-->
+
+## Ledger line archived 2026-11-04 (captured)
+
+- [global] 2026-11-04 — Restored ledger line, originally captured 2026-11-03: the 2026-11-04 master landing (99ac083) reset the live ledger to the landed tree, which did not hold this capture -> root cause: capture output written to the live ledger after the branch point was replayed after alignment instead of carried into the branch before landing RULE: A .env file is never read in any form (cat, git show, git diff, grep with output); only its path and whether it is tracked may be measured. <!--fc:prod-env-read-through-git#1-->
