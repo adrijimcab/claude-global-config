@@ -428,11 +428,18 @@ const asyncSpawn = async (command, argv, options) => {
 check('model: an asynchronous spawn is awaited, and its run directory lives until it ends', [(await askModel('x', { spawn: asyncSpawn, timeoutMs: 5000 }).catch((error) => ({ answer: error.message }))).answer, cwdAliveDuringRun], ['{"ok": true}', true]);
 
 const echoAfter = (ms) => [process.execPath, ['-e', `setTimeout(() => process.stdout.write(require('fs').readFileSync(0, 'utf8')), ${ms})`]];
-const parallelStarted = Date.now();
-const parallelRuns = await Promise.all(['one', 'two', 'three'].map((input) => spawnAsync(...echoAfter(400), { input, encoding: 'utf8', timeout: 10000, env: process.env })));
-const parallelMs = Date.now() - parallelStarted;
+// Overlap is proved by a meeting, never by a clock: each child leaves its mark and waits for the other two, so all
+// three exit 0 only when they really run at once; one at a time, the first waits in vain and exits 1. A wall-time
+// bound failed under a loaded machine (the parallel selftest runner) although the children did overlap.
+// @es El solapamiento se prueba con una cita, nunca con un reloj: cada hijo deja su marca y espera las otras dos, así
+// los tres salen con 0 solo si corren a la vez de verdad; de a uno, el primero espera en vano y sale con 1. Un tope de
+// tiempo falló con la máquina cargada (el runner paralelo de selftests) aunque los hijos sí se solapaban.
+const meetDir = mkdtempSync(path.join(tmpdir(), 'judge-gate-meet-'));
+const meetAll = [process.execPath, ['-e', `const fs = require('fs'), p = require('path'); const d = ${JSON.stringify(meetDir)}; const input = fs.readFileSync(0, 'utf8'); fs.writeFileSync(p.join(d, input), ''); const met = () => ['one', 'two', 'three'].every((name) => fs.existsSync(p.join(d, name))); const deadline = Date.now() + 8000; const wait = () => { if (met() || Date.now() > deadline) { process.stdout.write(input); process.exit(met() ? 0 : 1); } setTimeout(wait, 20); }; wait();`]];
+const parallelRuns = await Promise.all(['one', 'two', 'three'].map((input) => spawnAsync(...meetAll, { input, encoding: 'utf8', timeout: 10000, env: process.env })));
+rmSync(meetDir, { recursive: true, force: true });
 
-check('spawnAsync: children run at the same time, each with its own stdin and stdout', [parallelRuns.map((run) => [run.status, run.stdout, run.error]), parallelMs < 1100], [[[0, 'one', undefined], [0, 'two', undefined], [0, 'three', undefined]], true]);
+check('spawnAsync: children run at the same time, each with its own stdin and stdout', parallelRuns.map((run) => [run.status, run.stdout, run.error]), [[0, 'one', undefined], [0, 'two', undefined], [0, 'three', undefined]]);
 
 const timedOut = await spawnAsync(...echoAfter(5000), { input: 'x', encoding: 'utf8', timeout: 200, env: process.env });
 
