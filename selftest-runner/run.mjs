@@ -13,13 +13,21 @@
  * qué selftests existen.
  *
  * IN PARALLEL (`parallel-mandate.md`). The selftests run at once through a bounded pool: `SELFTEST_CONCURRENCY` when
- * it is a whole number of at least 1, else `min(8, cores - 2)`, at least 1. Each selftest's GREEN or RED line (and,
- * for a RED one, why) is printed as soon as it and every selftest listed before it have ended, so the report keeps
- * the discovery order whatever finishes first; the summary line comes last. Streaming changes WHEN lines appear,
- * never which lines, their order, or the exit code.
+ * it is a whole number of at least 1, else `min(cores - 2, floor(free memory * 0.5 / PEAK_BYTES_PER_SUITE))`, at
+ * least 1, further capped by `CONCURRENCY_BUDGET` when the runner was given one. Each child gets a
+ * `CONCURRENCY_BUDGET` of its own, `max(1, floor(the runner's budget / its concurrency))`, so a selftest that runs a
+ * pool of its own (the runner's own selftest calls `runSelftests`) never multiplies the processes. The command line
+ * first prints which concurrency it chose and why. Each selftest's GREEN or RED line (and, for a RED one, why) is
+ * printed as soon as it and every selftest listed before it have ended, so the report keeps the discovery order
+ * whatever finishes first; the summary line comes last. Streaming changes WHEN lines appear, never which lines,
+ * their order, or the exit code.
  * @es EN PARALELO: los selftests corren a la vez con un pool acotado (`SELFTEST_CONCURRENCY` si es un entero de al
- * menos 1; si no, `min(8, núcleos - 2)`, mínimo 1). La línea de cada uno se imprime cuando terminaron él y todos los
- * anteriores, así el informe conserva el orden de descubrimiento; el resumen va al final.
+ * menos 1; si no, `min(núcleos - 2, floor(memoria libre * 0.5 / PEAK_BYTES_PER_SUITE))`, mínimo 1, acotado además por
+ * `CONCURRENCY_BUDGET` si el runner recibió uno). Cada hijo recibe su propio `CONCURRENCY_BUDGET`,
+ * `max(1, floor(presupuesto del runner / su concurrencia))`, así un selftest que corre un pool propio (el selftest del
+ * runner llama a `runSelftests`) nunca multiplica los procesos. La línea de órdenes imprime primero qué concurrencia
+ * eligió y por qué. La línea de cada uno se imprime cuando terminaron él y todos los anteriores, así el informe
+ * conserva el orden de descubrimiento; el resumen va al final.
  *
  * ISOLATION BY CONSTRUCTION. Each selftest runs in a private sandbox of its own (`sandbox.mjs`), removed when it
  * ends: `HOME` and `USERPROFILE` are an empty sandbox home, `HOOK_CLAUDE_HOME` its empty `.claude`,
@@ -60,7 +68,7 @@
  */
 
 import { statSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
+import { availableParallelism, freemem } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -82,29 +90,106 @@ const OUTPUT_LIMIT_BYTES = 64 * 1024 * 1024;
 /** The variable that sets how many selftests run at once. @es La variable que fija cuántos selftests corren a la vez. */
 export const CONCURRENCY_VARIABLE = 'SELFTEST_CONCURRENCY';
 
-/** The most selftests the default runs at once. @es El máximo de selftests a la vez por defecto. */
-const DEFAULT_CONCURRENCY_CAP = 8;
+/**
+ * The variable through which a runner hands its children how many processes they may fan out to: the same name the
+ * other pool runners of this repository read. @es La variable con la que un runner da a sus hijos a cuántos
+ * procesos pueden abrirse: el mismo nombre que leen los demás runners con pool de este repositorio.
+ */
+export const CONCURRENCY_BUDGET_VARIABLE = 'CONCURRENCY_BUDGET';
 
 /** The cores the default leaves to the rest of the machine. @es Los núcleos que el valor por defecto deja libres. */
 const CORES_LEFT_FREE = 2;
+
+/**
+ * The peak memory of ONE selftest, in bytes, with every process of its tree summed (working set). Measured on
+ * 2026-11-04 on a 32-core machine with 64 GiB of memory: the whole runner ran at `SELFTEST_CONCURRENCY=1` while a
+ * script sampled every ~400 ms the working set of each selftest's process tree (2174 samples, 137 selftests seen);
+ * the highest was `process-reaper/reaper.selftest.mjs` at 741154816 bytes (707 MiB, 22 processes). Rounded up to
+ * 768 MiB. Never guessed: re-measure it when the heaviest selftest changes.
+ * @es El pico de memoria de UN selftest, en bytes, con todos los procesos de su árbol sumados (working set). Medido
+ * el 2026-11-04 en una máquina de 32 núcleos y 64 GiB: el runner entero corrió con `SELFTEST_CONCURRENCY=1` mientras
+ * un script muestreaba cada ~400 ms el working set del árbol de cada selftest (2174 muestras, 137 selftests vistos);
+ * el mayor fue `process-reaper/reaper.selftest.mjs` con 741154816 bytes (707 MiB, 22 procesos). Redondeado hacia
+ * arriba a 768 MiB. Nunca adivinado: se vuelve a medir cuando cambia el selftest más pesado.
+ */
+export const PEAK_BYTES_PER_SUITE = 768 * 1024 * 1024;
+
+/**
+ * The share of the free memory the default may spend: half, so the other sessions of the machine keep room.
+ * @es La parte de la memoria libre que el valor por defecto puede gastar: la mitad, para que las demás sesiones de
+ * la máquina conserven espacio.
+ */
+const MEMORY_SHARE = 0.5;
 
 /** What a batch-level stop names instead of one selftest. @es Lo que nombra una parada de tanda en vez de un selftest. */
 const PARALLEL_BATCH = '(parallel batch)';
 
 const speaker = makeSpeaker(MESSAGES);
 
+/** @param {unknown} value @es Si `value` es un entero de al menos 1. */
+const isWholeCount = (value) => Number.isInteger(value) && value >= 1;
+
 /**
- * How many selftests run at once: `SELFTEST_CONCURRENCY` when it is a whole number of at least 1, else
- * `min(8, cores - 2)`, at least 1.
- * @es Cuántos selftests corren a la vez: `SELFTEST_CONCURRENCY` si es un entero de al menos 1; si no,
- * `min(8, núcleos - 2)`, mínimo 1.
+ * How many selftests run at once, why, and the budget the runner owns. `SELFTEST_CONCURRENCY` (a whole number of at
+ * least 1) wins over everything. Else the machine value is `min(cores - 2, floor(free * 0.5 / peak))`, at least 1;
+ * a `CONCURRENCY_BUDGET` below it caps it. `bound` names what decided: `override`, `budget`, `cores` (a tie with the
+ * memory included) or `memory`. `budget` is the `CONCURRENCY_BUDGET` the runner was given, else the machine value.
+ * @es Cuántos selftests corren a la vez, por qué, y el presupuesto que posee el runner. `SELFTEST_CONCURRENCY` (un
+ * entero de al menos 1) gana a todo. Si no, el valor de la máquina es `min(núcleos - 2, floor(libre * 0.5 / pico))`,
+ * mínimo 1; un `CONCURRENCY_BUDGET` por debajo lo acota. `bound` nombra lo que decidió: `override`, `budget`,
+ * `cores` (incluido el empate con la memoria) o `memory`. `budget` es el `CONCURRENCY_BUDGET` recibido, si no el
+ * valor de la máquina.
+ * @param {Record<string, string | undefined>} env
+ * @param {number} cores
+ * @param {number} freeBytes
  */
-export function concurrencyOf(env = process.env, cores = availableParallelism()) {
+export function concurrencyPlan(env = process.env, cores = availableParallelism(), freeBytes = freemem()) {
+  const byCores = Math.max(1, cores - CORES_LEFT_FREE);
+  const byMemory = Math.max(1, Math.floor((freeBytes * MEMORY_SHARE) / PEAK_BYTES_PER_SUITE));
+  const machine = Math.min(byCores, byMemory);
+  const given = Number(env[CONCURRENCY_BUDGET_VARIABLE]);
+  const budget = isWholeCount(given) ? given : machine;
   const requested = Number(env[CONCURRENCY_VARIABLE]);
+  const base = { budget, cores, freeBytes };
 
-  if (Number.isInteger(requested) && requested >= 1) return requested;
+  if (isWholeCount(requested)) return { ...base, concurrency: requested, bound: 'override' };
+  if (budget < machine) return { ...base, concurrency: budget, bound: 'budget' };
 
-  return Math.max(1, Math.min(DEFAULT_CONCURRENCY_CAP, cores - CORES_LEFT_FREE));
+  return { ...base, concurrency: machine, bound: byCores <= byMemory ? 'cores' : 'memory' };
+}
+
+/**
+ * How many selftests run at once; see `concurrencyPlan`.
+ * @es Cuántos selftests corren a la vez; ver `concurrencyPlan`.
+ */
+export function concurrencyOf(env = process.env, cores = availableParallelism(), freeBytes = freemem()) {
+  return concurrencyPlan(env, cores, freeBytes).concurrency;
+}
+
+/**
+ * The `CONCURRENCY_BUDGET` of each child: the runner's budget shared among the selftests it runs at once, at least 1.
+ * @es El `CONCURRENCY_BUDGET` de cada hijo: el presupuesto del runner repartido entre los selftests que corren a la
+ * vez, mínimo 1.
+ */
+export function childBudgetOf(budget, concurrency) {
+  return Math.max(1, Math.floor(budget / concurrency));
+}
+
+/**
+ * The sentence that says which concurrency was chosen and why, in both languages.
+ * @es La frase que dice qué concurrencia se eligió y por qué, en los dos idiomas.
+ */
+export function describeConcurrency({ concurrency, bound, budget, cores, freeBytes }, childBudget) {
+  return speaker.line(`concurrency-${bound}`, {
+    concurrency,
+    childBudget,
+    budget,
+    cores,
+    left: CORES_LEFT_FREE,
+    freeMib: Math.round(freeBytes / 1048576),
+    sharePercent: MEMORY_SHARE * 100,
+    peakMib: Math.round(PEAK_BYTES_PER_SUITE / 1048576),
+  });
 }
 
 /**
@@ -116,11 +201,12 @@ export function concurrencyOf(env = process.env, cores = availableParallelism())
  * fuera de sus costuras. Con `watchTree` (concurrencia 1) el árbol y su checkout principal se leen alrededor de él;
  * sin él, aquí solo se juzga su propio sandbox. Lanza `TreeStatusError` si git no puede leer el árbol.
  */
-async function runOne({ root, gitDir, entry, timeoutMs, spawn, watchTree }) {
+async function runOne({ root, gitDir, entry, timeoutMs, spawn, watchTree, childBudget }) {
   const sandbox = createSandbox();
 
   try {
     const env = sandboxEnv(sandbox, { base: process.env, tree: root, gitDir });
+    env[CONCURRENCY_BUDGET_VARIABLE] = String(childBudget);
 
     if (!watchTree) return { failure: await exitOf({ root, entry, timeoutMs, spawn, env }), escapes: sandboxEscapes(sandbox) };
 
@@ -219,15 +305,20 @@ function batchEscapes(root, before, after) {
  * demanda; puede responder directo o con una promesa, y por defecto es `runChild`.
  * `onLine` receives each report line as it is produced, in report order; the returned `report` is the same
  * lines. `notMeasured`, present only with exit 2, is why nothing (more) was measured. `concurrency` defaults to
- * `concurrencyOf()`.
+ * the plan's (`concurrencyPlan()`); `childBudget`, the `CONCURRENCY_BUDGET` every selftest receives, defaults to the
+ * plan's budget shared among `concurrency`.
  * @es `onLine` recibe cada línea del informe al producirse, en el orden del informe; el `report` devuelto son las
- * mismas líneas. `notMeasured`, solo con salida 2, dice por qué no se midió (más). `concurrency` por defecto es
- * `concurrencyOf()`.
- * @param {{ root: string, gitDir?: string, timeoutMs?: number, spawn?: Function, onLine?: (line: string) => void, concurrency?: number }} options
+ * mismas líneas. `notMeasured`, solo con salida 2, dice por qué no se midió (más). `concurrency` por defecto es la
+ * del plan (`concurrencyPlan()`); `childBudget`, el `CONCURRENCY_BUDGET` que recibe cada selftest, es por defecto el
+ * presupuesto del plan repartido entre `concurrency`.
+ * @param {{ root: string, gitDir?: string, timeoutMs?: number, spawn?: Function, onLine?: (line: string) => void, concurrency?: number, childBudget?: number }} options
  * @returns {Promise<{ exitCode: number, report: string[], notMeasured?: string }>}
  * @es Devuelve el código de salida y las líneas del informe.
  */
-export async function runSelftests({ root, gitDir, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = runChild, onLine = () => {}, concurrency = concurrencyOf() }) {
+export async function runSelftests({ root, gitDir, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = runChild, onLine = () => {}, concurrency, childBudget }) {
+  const plan = concurrencyPlan();
+  concurrency ??= plan.concurrency;
+  childBudget ??= childBudgetOf(plan.budget, concurrency);
   let discovered;
   try {
     discovered = discoverSelftests(root, { gitDir });
@@ -290,7 +381,7 @@ export async function runSelftests({ root, gitDir, timeoutMs = DEFAULT_TIMEOUT_M
     for (let index = next++; index < discovered.entries.length && unreadable === undefined; index = next++) {
       const entry = discovered.entries[index];
       try {
-        outcomes[index] = await runOne({ root: discovered.root, gitDir, entry, timeoutMs, spawn, watchTree });
+        outcomes[index] = await runOne({ root: discovered.root, gitDir, entry, timeoutMs, spawn, watchTree, childBudget });
       } catch (error) {
         if (!(error instanceof TreeStatusError)) throw error;
         unreadable ??= { error, entry };
@@ -345,7 +436,10 @@ async function main() {
     speaker.complain('usage');
     return EXIT_NOT_MEASURED;
   }
-  const { exitCode, notMeasured } = await runSelftests({ root: parsed.root, gitDir: parsed.gitDir, onLine: writeLineSync });
+  const plan = concurrencyPlan();
+  const childBudget = childBudgetOf(plan.budget, plan.concurrency);
+  writeLineSync(describeConcurrency(plan, childBudget));
+  const { exitCode, notMeasured } = await runSelftests({ root: parsed.root, gitDir: parsed.gitDir, onLine: writeLineSync, concurrency: plan.concurrency, childBudget });
   // Why nothing (more) was measured goes to stderr; the lines already streamed are not repeated.
   // @es Por qué no se midió (más) va a stderr; las líneas ya emitidas no se repiten.
   if (notMeasured !== undefined) speaker.dataError(notMeasured);

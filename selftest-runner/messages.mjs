@@ -12,6 +12,22 @@ export const MESSAGES = {
     en: '{green}/{total} green',
     es: '{green}/{total} en verde'
   },
+  'concurrency-override': {
+    en: 'Running {concurrency} selftests at once: SELFTEST_CONCURRENCY says so. Each selftest gets a concurrency budget of {childBudget}.',
+    es: 'Corren {concurrency} selftests a la vez: lo dice SELFTEST_CONCURRENCY. Cada selftest recibe un presupuesto de concurrencia de {childBudget}.'
+  },
+  'concurrency-budget': {
+    en: 'Running {concurrency} selftests at once: bound by CONCURRENCY_BUDGET={budget}, below what the machine allows. Each selftest gets a concurrency budget of {childBudget}.',
+    es: 'Corren {concurrency} selftests a la vez: acotado por CONCURRENCY_BUDGET={budget}, por debajo de lo que admite la máquina. Cada selftest recibe un presupuesto de concurrencia de {childBudget}.'
+  },
+  'concurrency-cores': {
+    en: 'Running {concurrency} selftests at once: bound by the cores ({cores} cores, {left} left free). Each selftest gets a concurrency budget of {childBudget}.',
+    es: 'Corren {concurrency} selftests a la vez: acotado por los núcleos ({cores} núcleos, {left} libres). Cada selftest recibe un presupuesto de concurrencia de {childBudget}.'
+  },
+  'concurrency-memory': {
+    en: 'Running {concurrency} selftests at once: bound by free memory ({freeMib} MiB free, {sharePercent}% usable, {peakMib} MiB peak per selftest). Each selftest gets a concurrency budget of {childBudget}.',
+    es: 'Corren {concurrency} selftests a la vez: acotado por la memoria libre ({freeMib} MiB libres, {sharePercent}% utilizable, {peakMib} MiB de pico por selftest). Cada selftest recibe un presupuesto de concurrencia de {childBudget}.'
+  },
   'nothing-found': {
     en: 'No selftest found in {root}; nothing was measured.',
     es: 'No se encontró ningún selftest en {root}; no se midió nada.'
