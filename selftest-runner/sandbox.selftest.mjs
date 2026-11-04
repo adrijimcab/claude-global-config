@@ -64,9 +64,14 @@ function realWorld() {
 /** Every path under `directory`, relative, sorted. @es Cada ruta bajo `directory`, relativa y ordenada. */
 const everything = (directory) => readdirSync(directory, { recursive: true }).map(String).sort();
 
-/** The runner's environment pointed at `world`, with no state root of its own. @es El entorno del runner apuntado a `world`. */
+/**
+ * The runner's environment pointed at `world`, with no state root of its own, running one selftest at a time: this
+ * file proves the PER-SELFTEST leak verdict; the batch verdict of a parallel run is proved in `selftest.mjs`.
+ * @es El entorno del runner apuntado a `world`, de a un selftest: este fichero prueba el veredicto de fugas POR
+ * SELFTEST; el de la tanda de una corrida paralela se prueba en `selftest.mjs`.
+ */
 function envOf(world) {
-  const env = { ...process.env, HOME: world.home, USERPROFILE: world.home, HOOK_CLAUDE_HOME: path.join(world.home, '.claude'), TMP: world.temp, TEMP: world.temp, TMPDIR: world.temp };
+  const env = { ...process.env, HOME: world.home, USERPROFILE: world.home, HOOK_CLAUDE_HOME: path.join(world.home, '.claude'), TMP: world.temp, TEMP: world.temp, TMPDIR: world.temp, SELFTEST_CONCURRENCY: '1' };
 
   delete env.HOOK_STATE_DIR;
 
@@ -295,13 +300,17 @@ const unreadable = repo({
 const stopped = runIn(unreadable, realWorld());
 check(stopped.status === 2 && stopped.stderr.includes('Cannot read git status of the tree') && stopped.stderr.includes('a/selftest.mjs') && stopped.stderr.includes('@es '), `a tree git cannot read stops the run, not measured: ${stopped.status} ${quoted(stopped.stderr)}`);
 check(!existsSync(path.join(unreadable, 'b', 'ran')) && !stopped.stdout.includes('green'), `nothing after it runs and no summary is printed: ${stopped.stdout}`);
-const inProcess = (() => {
+const inProcess = await (async () => {
   try {
-    return runSelftests({ root: repo({ tracked: { 'a/selftest.mjs': script("renameSync(path.join('..', '.git'), path.join('..', 'moved-git'));") } }) });
+    return await runSelftests({ root: repo({ tracked: { 'a/selftest.mjs': script("renameSync(path.join('..', '.git'), path.join('..', 'moved-git'));") } }), concurrency: 1 });
   } catch (error) {
     return { threw: error.message };
   }
 })();
+// In parallel the tree is read around the batch, so the run stops as not measured once the batch ends.
+// @es En paralelo el árbol se lee alrededor de la tanda, así la corrida se detiene como no medida al acabar la tanda.
+const inBatch = await runSelftests({ root: repo({ tracked: { 'a/selftest.mjs': script("renameSync(path.join('..', '.git'), path.join('..', 'moved-git'));"), 'b/selftest.mjs': script('') } }), concurrency: 2 });
+check(inBatch.exitCode === 2 && inBatch.notMeasured?.startsWith('Cannot read git status') && inBatch.notMeasured.includes('(parallel batch)'), `in parallel an unreadable tree also stops the run as not measured, naming the batch: ${JSON.stringify(inBatch)}`);
 check(inProcess.exitCode === 2 && inProcess.notMeasured?.startsWith('Cannot read git status') && inProcess.report.at(-1) === inProcess.notMeasured, `in process the reason is returned and closes the report: ${JSON.stringify(inProcess)}`);
 
 finish();

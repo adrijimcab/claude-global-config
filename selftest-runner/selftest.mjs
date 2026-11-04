@@ -31,7 +31,7 @@ import path from 'node:path';
 
 import { discoverSelftests } from './discovery.mjs';
 import { RUN, cli, fixtureKit } from './fixtures.mjs';
-import { runSelftests } from './run.mjs';
+import { concurrencyOf, runSelftests } from './run.mjs';
 import { writeLineSync } from './stream.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
@@ -189,12 +189,12 @@ check(cli(killed, '--root', killed).status === 1, 'a selftest killed by a signal
 // @es El durmiente está ACOTADO (4 s) frente a un timeout de 700 ms: si un mutante ignora el timeout, el
 // selftest termina en verde a los 4 s y la aserción falla, en vez de colgar la campaña con un hijo eterno.
 const slow = repo({ tracked: { 'a/selftest.mjs': 'setTimeout(() => {}, 4000);\n' } });
-const timedOut = runSelftests({ root: slow, timeoutMs: 700 });
+const timedOut = await runSelftests({ root: slow, timeoutMs: 700 });
 check(timedOut.exitCode === 1 && timedOut.report.join('\n').includes('timed out'), 'a selftest that outlives the timeout is RED');
 check(timedOut.report.some((line) => /^RED\s+a\/selftest\.mjs \(exit timeout\)/.test(line)), 'the timed-out selftest is named RED with the timeout status');
 
 const signalDeath = { status: null, signal: 'SIGKILL', stdout: '', stderr: '' };
-const signalled = runSelftests({ root: allGreen, spawn: () => signalDeath });
+const signalled = await runSelftests({ root: allGreen, spawn: () => signalDeath });
 check(signalled.exitCode === 1 && signalled.report.join('\n').includes('killed by SIGKILL'), 'a death by signal with no exit status is RED on every host');
 
 const missing = repo({ tracked: { 'a/selftest.mjs': GREEN, 'b/selftest.mjs': GREEN } });
@@ -204,11 +204,14 @@ check(gone.status === 1 && /RED\s+a\/selftest\.mjs/.test(gone.stdout), 'a tracke
 check(gone.stdout.includes('file missing on disk'), 'a deleted selftest is reported as missing, not run and failed by accident');
 
 // ── Streaming: a line is delivered when its selftest ends, not when the whole run ends ─────────────
+// One at a time, so "before the next one starts" is a property of the run; the parallel order is proved below.
+// @es De a uno, así «antes de que arranque el siguiente» es una propiedad de la corrida; el orden en paralelo se prueba abajo.
 const streamed = repo({ tracked: { 'a/selftest.mjs': GREEN, 'b/selftest.mjs': RED, 'c/selftest.mjs': GREEN } });
 const lines = [];
 const linesSeenAtSpawn = [];
-const watched = runSelftests({
+const watched = await runSelftests({
   root: streamed,
+  concurrency: 1,
   onLine: (line) => lines.push(line),
   spawn: (...args) => {
     linesSeenAtSpawn.push(lines.length);
@@ -221,8 +224,56 @@ check(linesSeenAtSpawn.length === 3 && linesSeenAtSpawn[0] === 0 && linesSeenAtS
 check(linesSeenAtSpawn[2] > linesSeenAtSpawn[1] && /^RED\s+b\/selftest\.mjs/.test(lines[1]), `a red selftest's line and its output are delivered before the third starts: ${linesSeenAtSpawn}`);
 check(lines.at(-1) === '2/3 green @es 2/3 en verde' && watched.exitCode === 1, 'the summary line stays last and the exit status stays 1');
 
-const quiet = runSelftests({ root: streamed });
+const quiet = await runSelftests({ root: streamed });
 check(quiet.report.join('\n') === watched.report.join('\n'), 'without a hook the report is the same, so existing callers are unaffected');
+
+// ── In parallel: really at once, same report order, same verdict, shared tree judged for the batch ─────
+// @es ── En paralelo: de verdad a la vez, mismo orden de informe, mismo veredicto, árbol compartido juzgado por tanda ──
+// Two selftests that each wait for the other's mark (outside the tree, so no leak): green only when they overlap.
+// @es Dos selftests que esperan cada uno la marca del otro (fuera del árbol, sin fuga): verdes solo si se solapan.
+const meeting = bareDir();
+const waitFor = (mine, theirs) => `import { existsSync, writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(path.join(meeting, mine))}, '');\nconst deadline = Date.now() + 3000;\nwhile (!existsSync(${JSON.stringify(path.join(meeting, theirs))}) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));\nprocess.exit(existsSync(${JSON.stringify(path.join(meeting, theirs))}) ? 0 : 1);\n`;
+const pair = repo({ tracked: { 'a/selftest.mjs': waitFor('a', 'b'), 'b/selftest.mjs': waitFor('b', 'a') } });
+const together = await runSelftests({ root: pair, concurrency: 2 });
+check(together.exitCode === 0, `concurrency 2 runs two selftests at the same time: ${together.report.join(' | ')}`);
+rmSync(path.join(meeting, 'a'), { force: true });
+rmSync(path.join(meeting, 'b'), { force: true });
+const oneByOne = await runSelftests({ root: pair, concurrency: 1 });
+check(oneByOne.exitCode === 1, `near miss: concurrency 1 runs them one after the other, so the first waits in vain: ${oneByOne.report.join(' | ')}`);
+
+// The first listed selftest ends LAST; its line still comes first, and the verdict is the serial one.
+// @es El primer selftest listado termina el ÚLTIMO; su línea igual va primero y el veredicto es el de la serie.
+const late = repo({ tracked: { 'a/selftest.mjs': "await new Promise((resolve) => setTimeout(resolve, 800));\nprocess.exit(1);\n", 'b/selftest.mjs': GREEN, 'c/selftest.mjs': RED } });
+const parallelLines = [];
+const parallel = await runSelftests({ root: late, concurrency: 3, onLine: (line) => parallelLines.push(line) });
+const serial = await runSelftests({ root: late, concurrency: 1 });
+check(/^RED\s+a\/selftest\.mjs/.test(parallel.report[0]) && parallel.report.findIndex((line) => line.startsWith('GREEN  b/')) > 0, `the report keeps the discovery order in parallel: ${parallel.report.join(' | ')}`);
+check(JSON.stringify(parallel.report) === JSON.stringify(serial.report) && parallel.exitCode === serial.exitCode, `the parallel report and verdict equal the serial ones: ${parallel.report.join(' | ')}`);
+check(JSON.stringify(parallelLines) === JSON.stringify(parallel.report), 'in parallel the lines delivered one by one are exactly the returned report');
+
+// A selftest that writes into the tree: per selftest when one at a time, for the batch in parallel; red both ways.
+// @es Un selftest que escribe en el árbol: por selftest cuando van de a uno, por tanda en paralelo; rojo de las dos formas.
+const writer = repo({ tracked: { 'a/selftest.mjs': "import { writeFileSync } from 'node:fs';\nwriteFileSync('leak.txt', 'x');\n", 'b/selftest.mjs': GREEN } });
+const batchLeak = await runSelftests({ root: writer, concurrency: 2 });
+const batchText = batchLeak.report.join('\n');
+check(batchLeak.exitCode === 1 && batchText.includes('the tree changed during the parallel run: 1 path(s)') && batchText.includes(path.join(writer, 'a', 'leak.txt')), `in parallel a write into the tree turns the run RED and names the path: ${batchText}`);
+check(batchText.includes('SELFTEST_CONCURRENCY=1') && batchText.includes('@es el árbol cambió durante la corrida paralela'), 'the batch refusal says how to name the selftest, in both languages');
+check(batchLeak.report.at(-1) === '2/2 green @es 2/2 en verde', `the selftests themselves stay green, the batch line carries the red: ${batchLeak.report.at(-1)}`);
+rmSync(path.join(writer, 'a', 'leak.txt'));
+const serialLeak = await runSelftests({ root: writer, concurrency: 1 });
+check(serialLeak.exitCode === 1 && /^RED\s+a\/selftest\.mjs/.test(serialLeak.report[0]) && !serialLeak.report.join('\n').includes('parallel run'), `one at a time the same write is named on its selftest: ${serialLeak.report.join(' | ')}`);
+rmSync(path.join(writer, 'a', 'leak.txt'));
+const cleanBatch = await runSelftests({ root: allGreen, concurrency: 4 });
+check(cleanBatch.exitCode === 0 && !cleanBatch.report.join('\n').includes('parallel run'), 'near miss: a parallel run that leaves the tree alone has no batch line and is green');
+const tempWriter = repo({ tracked: { 'a/selftest.mjs': "import { writeFileSync } from 'node:fs';\nimport { tmpdir } from 'node:os';\nimport path from 'node:path';\nwriteFileSync(path.join(tmpdir(), 'left.txt'), 'x');\n", 'b/selftest.mjs': GREEN } });
+const tempLeak = await runSelftests({ root: tempWriter, concurrency: 2 });
+check(tempLeak.exitCode === 1 && /^RED\s+a\/selftest\.mjs \(exit 0\)/.test(tempLeak.report[0]) && tempLeak.report.join('\n').includes('$TMP/left.txt') && tempLeak.report.some((line) => line.startsWith('GREEN  b/')), `in parallel a selftest's own temp leak is still named on that selftest alone: ${tempLeak.report.join(' | ')}`);
+
+// How many at once. @es Cuántos a la vez.
+check(concurrencyOf({ SELFTEST_CONCURRENCY: '3' }, 16) === 3, 'SELFTEST_CONCURRENCY sets the concurrency');
+check(concurrencyOf({ SELFTEST_CONCURRENCY: '1' }, 16) === 1, 'SELFTEST_CONCURRENCY=1 runs one at a time');
+check(concurrencyOf({ SELFTEST_CONCURRENCY: '0' }, 16) === 8 && concurrencyOf({ SELFTEST_CONCURRENCY: 'x' }, 16) === 8 && concurrencyOf({ SELFTEST_CONCURRENCY: '2.5' }, 16) === 8, 'a value that is not a whole number of at least 1 falls back to the default');
+check(concurrencyOf({}, 16) === 8 && concurrencyOf({}, 6) === 4 && concurrencyOf({}, 2) === 1 && concurrencyOf({}, 1) === 1, 'the default is min(8, cores - 2), at least 1');
 
 // The same through the real command line. The second selftest only passes once the PARENT has seen the
 // first one's GREEN line on stdout; a runner that prints at the end would never let it pass.

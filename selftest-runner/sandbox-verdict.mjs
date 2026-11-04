@@ -84,7 +84,27 @@ const statusEscapes = (area, top, before, after) => treeChanges(before, after).m
  * y cada área ordenada por ruta. `checkout` solo existe si el árbol tiene un checkout principal propio.
  */
 export function escapesOf({ sandbox, tree, treeBefore, treeAfter, checkout }) {
+  return [...sandboxEscapes(sandbox), ...treeEscapes({ tree, treeBefore, treeAfter, checkout })];
+}
+
+/**
+ * What a child left in its own sandbox (home, then temp): attributable to that child alone, even when other selftests
+ * run at the same time, because no other process writes there.
+ * @es Lo que un hijo dejó en su propio sandbox (home y luego temp): atribuible solo a ese hijo aunque otros selftests
+ * corran a la vez, porque ningún otro proceso escribe ahí.
+ */
+export function sandboxEscapes(sandbox) {
+  return [...homeEscapes(sandbox), ...tempEscapes(sandbox)];
+}
+
+/**
+ * The `git status` changes of the tree and of its main checkout between two readings: shared state, so a parallel run
+ * reads them around the whole batch, never per selftest.
+ * @es Los cambios de `git status` del árbol y de su checkout principal entre dos lecturas: estado compartido, así que una
+ * corrida paralela los lee alrededor de toda la tanda, nunca por selftest.
+ */
+export function treeEscapes({ tree, treeBefore, treeAfter, checkout }) {
   const inCheckout = checkout === undefined ? [] : statusEscapes('checkout', checkout.top, checkout.before, checkout.after);
 
-  return [...homeEscapes(sandbox), ...tempEscapes(sandbox), ...statusEscapes('tree', tree, treeBefore, treeAfter), ...inCheckout];
+  return [...statusEscapes('tree', tree, treeBefore, treeAfter), ...inCheckout];
 }

@@ -36,6 +36,10 @@ export const MESSAGES = {
     en: 'killed by {signal}',
     es: 'terminado por {signal}'
   },
+  'batch-escaped': {
+    en: 'the tree changed during the parallel run: {count} path(s), not attributable to one selftest; run with SELFTEST_CONCURRENCY=1 to name it',
+    es: 'el árbol cambió durante la corrida paralela: {count} ruta(s), no atribuibles a un selftest; correr con SELFTEST_CONCURRENCY=1 para nombrarlo'
+  },
   escaped: {
     en: 'escaped its sandbox: {count} path(s) written outside its seams',
     es: 'se escapó de su sandbox: {count} ruta(s) escritas fuera de sus costuras'
