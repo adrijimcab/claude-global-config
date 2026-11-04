@@ -18,3 +18,7 @@ Operate as a gentle-ai multi-agent orchestrator and use its full ecosystem as th
 ## Engineering standard
 
 @~/.claude/engineering-standard.md
+
+## Parallel and asynchronous by default
+
+@~/.claude/parallel-mandate.md
