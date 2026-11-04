@@ -259,10 +259,12 @@ const batchText = batchLeak.report.join('\n');
 check(batchLeak.exitCode === 1 && batchText.includes('the tree changed during the parallel run: 1 path(s)') && batchText.includes(path.join(writer, 'a', 'leak.txt')), `in parallel a write into the tree turns the run RED and names the path: ${batchText}`);
 check(batchText.includes('SELFTEST_CONCURRENCY=1') && batchText.includes('@es el árbol cambió durante la corrida paralela'), 'the batch refusal says how to name the selftest, in both languages');
 check(batchLeak.report.at(-1) === '2/2 green @es 2/2 en verde', `the selftests themselves stay green, the batch line carries the red: ${batchLeak.report.at(-1)}`);
-rmSync(path.join(writer, 'a', 'leak.txt'));
+// force: when a broken runner never ran the writer there is no file, and the checks, not this cleanup, decide.
+// @es force: si un runner roto nunca corrió al escritor no hay fichero, y deciden los checks, no esta limpieza.
+rmSync(path.join(writer, 'a', 'leak.txt'), { force: true });
 const serialLeak = await runSelftests({ root: writer, concurrency: 1 });
 check(serialLeak.exitCode === 1 && /^RED\s+a\/selftest\.mjs/.test(serialLeak.report[0]) && !serialLeak.report.join('\n').includes('parallel run'), `one at a time the same write is named on its selftest: ${serialLeak.report.join(' | ')}`);
-rmSync(path.join(writer, 'a', 'leak.txt'));
+rmSync(path.join(writer, 'a', 'leak.txt'), { force: true });
 const cleanBatch = await runSelftests({ root: allGreen, concurrency: 4 });
 check(cleanBatch.exitCode === 0 && !cleanBatch.report.join('\n').includes('parallel run'), 'near miss: a parallel run that leaves the tree alone has no batch line and is green');
 const tempWriter = repo({ tracked: { 'a/selftest.mjs': "import { writeFileSync } from 'node:fs';\nimport { tmpdir } from 'node:os';\nimport path from 'node:path';\nwriteFileSync(path.join(tmpdir(), 'left.txt'), 'x');\n", 'b/selftest.mjs': GREEN } });

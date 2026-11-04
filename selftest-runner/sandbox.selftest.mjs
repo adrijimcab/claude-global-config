@@ -312,7 +312,13 @@ const inProcess = await (async () => {
 })();
 // In parallel the tree is read around the batch, so the run stops as not measured once the batch ends.
 // @es En paralelo el árbol se lee alrededor de la tanda, así la corrida se detiene como no medida al acabar la tanda.
-const inBatch = await runSelftests({ root: repo({ tracked: { 'a/selftest.mjs': script("renameSync(path.join('..', '.git'), path.join('..', 'moved-git'));"), 'b/selftest.mjs': script('') } }), concurrency: 2 });
+const inBatch = await (async () => {
+  try {
+    return await runSelftests({ root: repo({ tracked: { 'a/selftest.mjs': script("renameSync(path.join('..', '.git'), path.join('..', 'moved-git'));"), 'b/selftest.mjs': script('') } }), concurrency: 2 });
+  } catch (error) {
+    return { threw: error.message };
+  }
+})();
 check(inBatch.exitCode === 2 && inBatch.notMeasured?.startsWith('Cannot read git status') && inBatch.notMeasured.includes('(parallel batch)'), `in parallel an unreadable tree also stops the run as not measured, naming the batch: ${JSON.stringify(inBatch)}`);
 check(inProcess.exitCode === 2 && inProcess.notMeasured?.startsWith('Cannot read git status') && inProcess.report.at(-1) === inProcess.notMeasured, `in process the reason is returned and closes the report: ${JSON.stringify(inProcess)}`);
 
