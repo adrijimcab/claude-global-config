@@ -47,7 +47,7 @@ function worktreeArgument(words) {
 
   const value = words[at] === '--worktree' ? words[at + 1] : words[at].slice('--worktree='.length);
 
-  return value === undefined || value === '' || isUnresolvableWord(value) ? undefined : value;
+  return !value || isUnresolvableWord(value) ? undefined : value;
 }
 
 /**
@@ -81,8 +81,7 @@ function directoryOf(offenderText, { cwd, dialect, script }) {
  */
 export function wrappedTree(offender, context, seams = {}) {
   const directory = directoryOf(offender.text, context);
-  const command = simpleCommands(offender.text, context.dialect).find((candidate) => commandWordIndex(candidate.words) !== -1);
-  const words = command?.words ?? [];
+  const words = simpleCommands(offender.text, context.dialect)[0]?.words ?? [];
   const isLanding = words.some((word) => forwardSlashes(word).endsWith(LANDING_SUFFIX));
 
   if (isLanding) {

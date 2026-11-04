@@ -313,6 +313,41 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
   }
 
   {
+    const script = 'npm run build:ci-pr && cd sub';
+    const text = refusalText(offenderOf(script), 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('a cd AFTER the chain does not move the directory the chain runs in', text.includes(` --tree "${forward(ROOT)}" --`), text);
+  }
+
+  {
+    const script = 'FOO=bar; npm run build:ci-pr';
+    const text = refusalText(offenderOf(script), 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop });
+
+    check('an assignment with no program is not a directory change', text.includes(` --tree "${forward(ROOT)}" --`), text);
+  }
+
+  for (const [dialect, changer] of [['bash', 'chdir'], ['powershell', 'Set-Location'], ['powershell', 'sl'], ['powershell', 'cd']]) {
+    const script = `${changer} sub; npm run build:ci-pr`;
+    const offender = fullChainInvocations(script, dialect, chains)[0];
+    const text = offender === undefined ? 'no full chain was found in the line' : refusalText(offender, 's', { cwd: ROOT, dialect, script }, { topLevelOf: echoTop });
+
+    check(`${changer} (${dialect}) moves the directory the tree is measured from`, text.includes(` --tree "${forward(path.join(ROOT, 'sub'))}" --`), text);
+  }
+
+  {
+    const missing = forward(path.join(ROOT, 'no-such-directory-t27'));
+
+    check('through the guard, a cd into a directory that is in no git tree leaves the tree unknown', reasonOf(asMain('Bash', `cd ${missing} && npm run build:ci-pr`)).includes('NO COMMAND IS SUGGESTED'));
+    check('through the guard, a PowerShell Set-Location into such a directory leaves the tree unknown', reasonOf(asMain('PowerShell', `Set-Location ${missing}; npm run ci:test`)).includes('NO COMMAND IS SUGGESTED'));
+  }
+
+  {
+    const text = reasonOf(asMain('Bash', 'npm run build:ci-pr'));
+
+    check('the suggestion explains what --tree is for, in both languages', text.includes('--tree names the tree the chain measures') && text.includes('--tree nombra el árbol que mide la cadena'), text);
+  }
+
+  {
     const script = 'cd sub && npm run build:ci-pr';
     const text = refusalText(offenderOf(script), 's', { cwd: undefined, dialect: 'bash', script }, { topLevelOf: echoTop });
 
@@ -350,6 +385,12 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
     check('a relative --worktree with no call directory leaves the tree unknown', landing('--worktree rel/wt', null).includes('NO COMMAND IS SUGGESTED'));
     check('an absolute --worktree needs no call directory', landing('--worktree D:/other/wt', null).includes(' --tree "D:/other/wt" --'));
     check('a --worktree that is a shell variable leaves the tree unknown', landing('--worktree "$WT" --main m').includes('NO COMMAND IS SUGGESTED'));
+    check('a landing spelled with Windows backslashes is still a landing', (() => {
+      const script = 'node C:\\x\\worktree-landing\\land.mjs --worktree D:\\other\\wt --main D:\\main';
+      const offender = { chain: 'worktree-landing/land.mjs', projects: [], text: script };
+
+      return refusalText(offender, 's', { cwd: ROOT, dialect: 'powershell', script }, { topLevelOf: echoTop }).includes(' --tree "D:/other/wt" --');
+    })());
     check('a landing refusal stays bilingual', bothLanguages(landing('--worktree D:/other/wt --main D:/main')));
   }
 
