@@ -10,14 +10,18 @@
 
 import { makeSpeaker } from '../bilingual-output/speaker.mjs';
 
-/** The reason both refusals give. @es La razón que dan las dos negativas. */
-const REFUSAL_WHY = {
+/** The heading and the reason both refusals give. @es El encabezado y la razón que dan las dos negativas. */
+const REFUSAL_OPENING = {
   en: [
+    'FULL-CHAIN GUARD REFUSED this command: {command} is a full chain ({chain}, project {project}) and runs only through the machine-wide lock.',
+    '',
     'WHY. Every full chain (build:ci-pr, the coverage suites, mutation, a11y, the whole selftest runner) is heavy on memory;',
     'two at once starved the machine (a background gate run was reaped for low memory on 2026-10-05). The rule was kept by',
     'hand, through messages between sessions; this lock keeps it by mechanism: one chain at a time on this machine.'
   ],
   es: [
+    'FULL-CHAIN GUARD RECHAZÓ este comando: {command} es una cadena completa ({chain}, proyecto {project}) y corre solo por el lock de toda la máquina.',
+    '',
     'POR QUÉ. Toda cadena completa (build:ci-pr, las suites con cobertura, mutación, a11y, el runner de selftests entero) consume',
     'mucha memoria; dos a la vez ahogaron la máquina (una corrida de gates en segundo plano fue cerrada por poca memoria el',
     '2026-10-05). La regla se cumplía a mano, con mensajes entre sesiones; este lock la cumple por mecanismo: una cadena a la vez.'
@@ -134,9 +138,7 @@ export const MESSAGES = {
   },
   refusal: {
     en: [
-      'FULL-CHAIN GUARD REFUSED this command: {command} is a full chain ({chain}, project {project}) and runs only through the machine-wide lock.',
-      '',
-      ...REFUSAL_WHY.en,
+      ...REFUSAL_OPENING.en,
       '',
       'USE INSTEAD, replacing that command by:',
       '',
@@ -147,9 +149,7 @@ export const MESSAGES = {
       'command with its exact exit code and releases the lock on every exit path.'
     ],
     es: [
-      'FULL-CHAIN GUARD RECHAZÓ este comando: {command} es una cadena completa ({chain}, proyecto {project}) y corre solo por el lock de toda la máquina.',
-      '',
-      ...REFUSAL_WHY.es,
+      ...REFUSAL_OPENING.es,
       '',
       'USAR EN SU LUGAR, reemplazando ese comando por:',
       '',
@@ -162,9 +162,7 @@ export const MESSAGES = {
   },
   'refusal-tree-unknown': {
     en: [
-      'FULL-CHAIN GUARD REFUSED this command: {command} is a full chain ({chain}, project {project}) and runs only through the machine-wide lock.',
-      '',
-      ...REFUSAL_WHY.en,
+      ...REFUSAL_OPENING.en,
       '',
       'NO COMMAND IS SUGGESTED: the tree this chain measures could not be determined (the call carried no directory, it changed',
       'directory in a way that cannot be followed, the directory is in no git working tree, or a landing named no --worktree).',
@@ -174,9 +172,7 @@ export const MESSAGES = {
       'measures> -- {command}. It waits (bounded, --wait-seconds, default {defaultWaitSeconds}) while another chain runs.'
     ],
     es: [
-      'FULL-CHAIN GUARD RECHAZÓ este comando: {command} es una cadena completa ({chain}, proyecto {project}) y corre solo por el lock de toda la máquina.',
-      '',
-      ...REFUSAL_WHY.es,
+      ...REFUSAL_OPENING.es,
       '',
       'NO SE SUGIERE NINGÚN COMANDO: no se pudo determinar el árbol que mide esta cadena (la llamada no traía directorio, cambió de',
       'directorio de un modo que no se puede seguir, el directorio no está en ningún árbol de trabajo git, o un aterrizaje no nombró --worktree).',
