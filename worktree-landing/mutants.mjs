@@ -18,6 +18,8 @@ const ARGUMENTS = 'worktree-landing/arguments.mjs';
 const COLLISIONS = 'worktree-landing/collisions.mjs';
 const INTEGRATION = 'worktree-landing/integration-branch.mjs';
 const LAND = 'worktree-landing/land.mjs';
+const LEDGER_RETENTION = 'worktree-landing/ledger-retention.mjs';
+const LIVE_LEDGER = 'worktree-landing/live-ledger.mjs';
 const PRECONDITIONS = 'worktree-landing/preconditions.mjs';
 const PUBLICATION = 'worktree-landing/publication.mjs';
 const RED_REPORT = 'worktree-landing/red-report.mjs';
@@ -109,6 +111,30 @@ const MUTANTS = [
   ['check mode names the wrong remote when it would publish', LAND, 'would publish to ${remote}.', 'would publish to origin.'],
   ['a repository with no source is refused', INTEGRATION, 'if (declaration === undefined) {', 'if (false) {'],
   ['an unreadable declaration is not turned into a refusal', INTEGRATION, 'if (error instanceof DeclarationUnreadable) throw', 'if (false) throw'],
+  // The live ledger / El ledger vivo
+  ['a lesson key missing from the tree is accepted', LEDGER_RETENTION, 'if (treeCount === undefined || treeCount < liveCount)', 'if (treeCount < liveCount)'],
+  ['a lowered count is accepted', LEDGER_RETENTION, 'if (treeCount === undefined || treeCount < liveCount)', 'if (treeCount === undefined)'],
+  ['an equal count is refused', LEDGER_RETENTION, '|| treeCount < liveCount)', '|| treeCount <= liveCount)'],
+  ['a higher count in the tree is refused', LEDGER_RETENTION, '|| treeCount < liveCount)', '|| treeCount !== liveCount)'],
+  ['a key written twice keeps its last count, not its highest', LEDGER_RETENTION, 'marker.count > (keys.get(marker.key) ?? 0)', 'true'],
+  ['a line with no marker is read as a key', LEDGER_RETENTION, 'if (marker !== undefined && marker.count', 'if (marker.count'],
+  ['an absent ledger file is read as a failure', LEDGER_RETENTION, "(text ?? '').split", '(text).split'],
+  ['the ledgers are resolved for the wrong home', LIVE_LEDGER, 'home: path.dirname(real) }', 'home: real }'],
+  ['an unreadable ledger configuration is not refused', LIVE_LEDGER, "throw new Refusal('ledger-configuration-unreadable'", "return [] || new Refusal('ledger-configuration-unreadable'"],
+  ['a ledger outside the main checkout is read', LIVE_LEDGER, ".filter((relative) => !relative.startsWith('..'))", '.filter(() => true)'],
+  ['a repository with no ledger file is governed', LIVE_LEDGER, "governed: files.some((relative) => existsSync(path.join(main, ...relative.split('/')))),", 'governed: true,'],
+  ['a repository whose ledgers resolve is governed even with no ledger file', LIVE_LEDGER, "governed: files.some((relative) => existsSync(path.join(main, ...relative.split('/')))),", 'governed: files.length > 0,'],
+  ['the live ledger is read from the tree, not the working copy', LIVE_LEDGER, 'live: keysOfLedgerTexts(files.map((relative) => liveText(main, relative))),', 'live: keysOfLedgerTexts(files.map((relative) => treeText(worktree, head, relative))),'],
+  ['the tree ledger is read from the working copy, not the landed head', LIVE_LEDGER, 'tree: keysOfLedgerTexts(files.map((relative) => treeText(worktree, head, relative))),', 'tree: keysOfLedgerTexts(files.map((relative) => liveText(main, relative))),'],
+  ['the ledger paths keep the platform separator in the git object name', LIVE_LEDGER, ".map((relative) => relative.split(path.sep).join('/'));", '.map((relative) => relative);'],
+  ['a shrinking landing is accepted', PRECONDITIONS, 'if (shortfalls.length > 0) {', 'if (false) {'],
+  ['a repository with no ledger is checked as governed', PRECONDITIONS, 'if (!governed) {', 'if (false) {'],
+  ['the live-ledger check is not run', PRECONDITIONS, 'const ledger = requireLiveLedgerKept({ worktree, main, head });', "const ledger = '';"],
+  ['the refusal does not name the keys', PRECONDITIONS, '      ...listed(lines),', '      ...listed([]),'],
+  ['an absent tree count is printed as undefined', PRECONDITIONS, "tree ${treeCount ?? 'absent'} @es", 'tree ${treeCount} @es'],
+  ['the second preconditions pass is not run', LAND, 'const after = landingRangeOf(inputs);', 'const after = before;'],
+  ['the check report omits the live-ledger line', LAND, '          after.integration,\n          after.ledger,', '          after.integration,'],
+  ['the landed report omits the live-ledger line', LAND, 'after.integration, after.ledger, ...(reap', 'after.integration, ...(reap'],
   // Where it publishes / Dónde publica
   ['every remote is published to', PUBLICATION, 'const publishes = mayPublishTo({ main, remote });', 'const publishes = true;'],
   ['the push runs whatever the policy says', PUBLICATION, 'if (publishes) {', 'if (true) {'],

@@ -17,12 +17,12 @@
  * el principal no está gobernado.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import { resolveLoopContext } from '../failure-capture/loop-context.mjs';
 import { git } from './git.mjs';
-import { keysOfLedgerText } from './ledger-retention.mjs';
+import { keysOfLedgerTexts } from './ledger-retention.mjs';
 import { Refusal } from './outcome.mjs';
 
 /**
@@ -34,17 +34,24 @@ import { Refusal } from './outcome.mjs';
  * inválida rechaza (falla cerrado), con el motivo.
  */
 function ledgerPathsInside(main) {
+  // The loop resolves a project through real paths, so `main` is compared to them in its real spelling.
+  // @es El bucle resuelve un proyecto por rutas reales, así que `main` se compara con ellas en su grafía real.
+  const real = realpathSync.native(main);
   let ledgers;
   try {
-    ({ ledgers } = resolveLoopContext({ directory: main, home: path.dirname(main) }));
+    ({ ledgers } = resolveLoopContext({ directory: real, home: path.dirname(real) }));
   } catch (error) {
     throw new Refusal('ledger-configuration-unreadable', [
       `The ledgers of ${main} cannot be resolved, so a landing cannot be checked against them: ${error.message} @es No se pueden resolver los ledgers de ${main}, así que un aterrizaje no se puede comprobar contra ellos: ${error.message}`,
     ]);
   }
+  // Every resolved file sits under the same drive as `main` (the home is its parent, a project root is one of its
+  // ancestors), so a file outside it relates to it by a leading `..`. @es Todo fichero resuelto está en la misma
+  // unidad que `main` (el home es su padre, la raíz de un proyecto uno de sus ancestros), así que uno fuera de él
+  // se relaciona con un `..` inicial.
   return Object.values(ledgers)
-    .map(({ file }) => path.relative(main, file))
-    .filter((relative) => relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative))
+    .map(({ file }) => path.relative(real, file))
+    .filter((relative) => !relative.startsWith('..'))
     .map((relative) => relative.split(path.sep).join('/'));
 }
 
@@ -60,15 +67,6 @@ function treeText(worktree, head, relative) {
   return shown.status === 0 ? shown.stdout : undefined;
 }
 
-/** The highest count per key over several texts. @es El mayor recuento por clave sobre varios textos. */
-function mergedKeys(texts) {
-  const merged = new Map();
-  for (const text of texts) {
-    for (const [key, count] of keysOfLedgerText(text)) if (count > (merged.get(key) ?? 0)) merged.set(key, count);
-  }
-  return merged;
-}
-
 /**
  * What the main checkout's live ledgers hold now and what the landed tree would hold.
  * @es Lo que tienen ahora los ledgers vivos del principal y lo que tendría el árbol aterrizado.
@@ -80,7 +78,7 @@ export function ledgersOf({ worktree, main, head }) {
   return {
     governed: files.some((relative) => existsSync(path.join(main, ...relative.split('/')))),
     files,
-    live: mergedKeys(files.map((relative) => liveText(main, relative))),
-    tree: mergedKeys(files.map((relative) => treeText(worktree, head, relative))),
+    live: keysOfLedgerTexts(files.map((relative) => liveText(main, relative))),
+    tree: keysOfLedgerTexts(files.map((relative) => treeText(worktree, head, relative))),
   };
 }

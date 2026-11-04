@@ -20,16 +20,20 @@
 import { readMarker } from '../failure-capture/ledger-line.mjs';
 
 /**
- * Every key a ledger text carries, with the highest count written for it.
- * @es Cada clave que lleva un texto de ledger, con el mayor recuento escrito para ella.
- * @param {string | undefined} text the ledger file's text, or undefined when the file is absent
+ * Every key the ledger texts carry, with the highest count written for it over all of them (a key lives in
+ * one ledger line, but a lesson moved between ledger files must not lose its count).
+ * @es Cada clave que llevan los textos de ledger, con el mayor recuento escrito para ella entre todos (una
+ * clave vive en una línea de ledger, pero una lección movida entre ficheros de ledger no debe perder su recuento).
+ * @param {(string | undefined)[]} texts the ledger files' texts, undefined for an absent file
  * @returns {Map<string, number>}
  */
-export function keysOfLedgerText(text) {
+export function keysOfLedgerTexts(texts) {
   const keys = new Map();
-  for (const line of (text ?? '').split('\n')) {
-    const marker = readMarker(line);
-    if (marker !== undefined && marker.count > (keys.get(marker.key) ?? 0)) keys.set(marker.key, marker.count);
+  for (const text of texts) {
+    for (const line of (text ?? '').split('\n')) {
+      const marker = readMarker(line);
+      if (marker !== undefined && marker.count > (keys.get(marker.key) ?? 0)) keys.set(marker.key, marker.count);
+    }
   }
   return keys;
 }

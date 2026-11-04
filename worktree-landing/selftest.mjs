@@ -370,6 +370,27 @@ try {
   const unreadable = layout({ baseFiles: { '.claude/CLAUDE.md': '# project\n', '.claude/failure-capture.json': '{ not json' }, work: { 'b.txt': 'b\n' } });
   expectRefused('an unreadable ledger configuration fails closed', unreadable, { reason: 'ledger-configuration-unreadable', text: 'cannot be resolved' });
 
+  const noLedgerHome = layout({ mainName: '.claude', work: { 'b.txt': 'b\n' } });
+  const noLedgerReport = expectLanded('a home with no ledger file is not governed', noLedgerHome);
+  check(noLedgerReport.includes('Live-ledger check did not apply'), `a home with no ledger file: the report says the check did not apply: ${noLedgerReport}`);
+
+  const readyCheck = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText(keyed(1, 3)) }, work: { 'b.txt': 'b\n' } });
+  const ready = cli(...argsOf(readyCheck), '--check');
+  check(ready.status === 0 && ready.stdout.includes('Live-ledger check passed: 3 key(s)'), `--check on a keeping landing reports the passed check: ${ready.status} ${ready.stdout}`);
+
+  const twiceInOneFile = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText({ 'dup-lesson': 2 }) }, work: { 'b.txt': 'b\n' } });
+  put(twiceInOneFile.main, LEDGER, `${ledgerText({ 'dup-lesson': 4 })}${ledgerText({ 'dup-lesson': 1 })}`);
+  expectRefused('a key written twice in the live ledger counts at its highest count', twiceInOneFile, { reason: 'live-ledger-would-shrink', text: 'dup-lesson: live 4, tree 2' });
+
+  const twiceInTwoFiles = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText({ 'dup-lesson': 2 }) }, work: { 'b.txt': 'b\n' } });
+  put(twiceInTwoFiles.main, LEDGER, ledgerText({ 'dup-lesson': 4 }));
+  put(twiceInTwoFiles.main, 'rules/lessons-guards.md', ledgerText({ 'dup-lesson': 1 }));
+  expectRefused('a key in two live ledger files counts at its highest count', twiceInTwoFiles, { reason: 'live-ledger-would-shrink', text: 'dup-lesson: live 4, tree 2' });
+
+  const outsideProject = layout({ baseFiles: { '.claude/CLAUDE.md': '# project\n', [PROJECT_LEDGER]: ledgerText({ 'project-lesson': 1 }) }, work: { 'b.txt': 'b\n' } });
+  put(path.dirname(outsideProject.main), '.claude/lessons-ledger.md', ledgerText({ 'lesson-of-another-home': 9 }));
+  expectLanded('a project landing ignores a ledger outside the project', outsideProject);
+
   const raisedDuringVerification = layout({ mainName: '.claude', baseFiles: { [LEDGER]: ledgerText({ 'counted-lesson': 1 }) }, work: { verdict: 'raise-live\n' } });
   // The stand-in runner itself writes the main checkout's ledger, so the generic "nothing moved" snapshot does not apply: assert the refusal and both tips.
   // @es El runner sustituto escribe el ledger del principal, así que el snapshot genérico no aplica: se comprueba el rechazo y ambas puntas.
