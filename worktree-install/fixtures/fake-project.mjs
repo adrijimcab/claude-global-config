@@ -91,6 +91,13 @@ export function buildFakeProject(root, runner = {}) {
   cpSync(templates, path.join(main, 'node_modules'), { recursive: true });
 
   git(main, 'init', '-q', '-b', 'main');
+  // The fixture owns its line endings: without this, a host whose system config turns core.autocrlf on (Git for
+  // Windows does, and the selftest runner's empty HOME drops the user's override) checks the worktree out with CRLF,
+  // and its lockfile hash differs from the LF file written here.
+  // @es El fixture fija sus finales de línea: sin esto, un host cuyo config de sistema activa core.autocrlf (Git for
+  // Windows lo hace, y el HOME vacío del runner quita la anulación del usuario) saca el worktree con CRLF y el hash de su
+  // lockfile difiere del fichero LF escrito aquí.
+  git(main, 'config', 'core.autocrlf', 'false');
   git(main, 'add', '-A');
   git(main, 'commit', '-q', '-m', 'fixture');
 
