@@ -56,6 +56,10 @@ export const MESSAGES = {
     en: '{path} left behind in its private temp directory',
     es: '{path} quedó en su directorio temporal privado'
   },
+  'escape-temp-removed': {
+    en: '{path} removed: the selftest deleted its private temp directory',
+    es: '{path} borrado: el selftest eliminó su directorio temporal privado'
+  },
   'escape-tree-added': {
     en: '{path} added to the tree under test',
     es: '{path} añadido al árbol bajo prueba'

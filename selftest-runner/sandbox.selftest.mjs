@@ -171,6 +171,9 @@ check(outsideClaude.status === 1 && outsideClaude.stdout.includes('    ~/notes.t
 const claudeRemoved = caseOf("rmSync(process.env.HOOK_CLAUDE_HOME, { recursive: true });");
 check(claudeRemoved.status === 1 && claudeRemoved.stdout.includes('    ~/.claude removed from its sandbox home'), `removing the empty ~/.claude is named: ${claudeRemoved.stdout}`);
 
+const tempRemoved = caseOf("rmSync(os.tmpdir(), { recursive: true });");
+check(tempRemoved.status === 1 && tempRemoved.stdout.includes('RED    a/selftest.mjs (exit 0)') && tempRemoved.stdout.includes('    $TMP removed: the selftest deleted its private temp directory @es $TMP borrado'), `deleting the private temp is RED and named, never a crash: ${tempRemoved.status} ${tempRemoved.stdout}`);
+
 const throughSeam = caseOf("const target = path.join(process.env.HOOK_STATE_DIR, 'guard-x', 'journal.jsonl');\nmkdirSync(path.dirname(target), { recursive: true });\nwriteFileSync(target, 'x');");
 check(throughSeam.status === 0 && throughSeam.stdout.includes('1/1 green'), `a write through HOOK_STATE_DIR is no escape: ${throughSeam.stdout}`);
 

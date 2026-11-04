@@ -69,8 +69,15 @@ function homeEscapes(sandbox) {
     .map((relative) => ({ area: 'home', change: 'created', path: `~/${relative}` }));
 }
 
-/** What the child left in its private temp directory. @es Lo que el hijo dejó en su temporal privado. */
+/**
+ * What the child left in its private temp directory; a temp the child deleted is an escape too, never a crash.
+ * @es Lo que el hijo dejó en su temporal privado; un temporal que el hijo borró también es una fuga, nunca un crash.
+ */
 function tempEscapes(sandbox) {
+  if (lstatSync(sandbox.temp, { throwIfNoEntry: false })?.isDirectory() !== true) {
+    return [{ area: 'temp', change: 'removed', path: '$TMP' }];
+  }
+
   return leavesUnder(sandbox.temp).map((relative) => ({ area: 'temp', change: 'created', path: `$TMP/${relative}` }));
 }
 
