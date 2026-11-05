@@ -69,6 +69,9 @@ const MUTANTS = [
   ['the launcher is not told the node binary', D, 'nodePath: process.execPath', "nodePath: 'node'"],
   ['the run record loses the pid', D, 'JSON.stringify({ pid, chain', 'JSON.stringify({ pid: 0, chain'],
   ['the run record loses the arguments of the command', D, "command: [request.command, ...request.args].join(' '), startedAt", 'command: request.command, startedAt'],
+  ['the read command is not given', D, 'readCommand: `node "${RUN}" --read "${runDir}"`', "readCommand: ''"],
+  ['the finished message gives another exit code', D, 'exitCode: verdict.exitCode, endedAt', 'exitCode: 0, endedAt'],
+  ['the failed-launch message drops the reason', D, '{ detail: detailOf(error) }', "{ detail: '' }"],
   ['the read command does not quote the directory', D, '--read "${runDir}"', '--read ${runDir}'],
   ['the read command points at another script', D, 'node "${RUN}" --read', 'node "${DETACHED_RUNNER}" --read'],
   ['a failed launch leaves the job file with the environment', D, '    rmSync(jobFile, { force: true });\n', ''],
@@ -130,11 +133,8 @@ const MUTANTS = [
   ['the documented running code changes', R, 'running: 76,', 'running: 77,'],
 
   // --- the words
-  ['the detach message stops giving the read command', M, "'  {readCommand}'\n    ],\n    es: [", "''\n    ],\n    es: ["],
   ['the English running message stops saying RUNNING', M, 'FULL-CHAIN LOCK: RUNNING.', 'FULL-CHAIN LOCK: busy.'],
   ['the English lost message stops saying LOST', M, 'FULL-CHAIN LOCK: LOST.', 'FULL-CHAIN LOCK: gone.'],
-  ['the finished message stops giving the exit code', M, 'FINISHED with exit {exitCode} at', 'FINISHED at'],
-  ['the failed-launch message drops the reason', M, 'started detached: {detail} Nothing runs', 'started detached. Nothing runs'],
   ['the usage synopsis forgets --read', M, "      '                       node run.mjs --read <run dir>'\n", ''],
   ['the usage synopsis forgets --detach', M, '[--detach [--run-dir <dir>]] -- <command>', '-- <command>']
 ];

@@ -42,6 +42,8 @@ if (mode === 'hold') {
   await new Promise((resolve) => setTimeout(resolve, Number(sleepMs)));
   console.log('sleep-exit end');
   process.exit(Number(code));
+} else if (mode === 'cwd') {
+  console.log(`cwd ${process.cwd()}`);
 } else if (mode === 'exit') {
   console.log(`child exiting with ${rest[0]}`);
   process.exit(Number(rest[0]));

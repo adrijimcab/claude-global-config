@@ -29,7 +29,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { isolateState } from '../hook-state/locations.mjs';
+import { isolateState, stateDir } from '../hook-state/locations.mjs';
 import { EXIT } from './chain-runner.mjs';
 import { parseArguments, parseReadArguments } from './cli-arguments.mjs';
 import { detachChain, readChain } from './detach-chain.mjs';
@@ -118,7 +118,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   const middle = parseArguments(['--chain', 'c', '--detach', '--run-dir', '/r', '--', 'x'], defaults);
 
   check('a run without --detach is not detached and has no run directory', plain.request.detach === false && plain.request.runDir === undefined);
-  check('--detach before the separator marks the request detached and leaves the command words alone', detached.request.detach === true && detached.request.chain === 'c' && detached.request.args.join(',') === '--detach', JSON.stringify(detached));
+  check('--detach before the separator marks the request detached and leaves the command words alone', detached.request?.detach === true && detached.request.chain === 'c' && detached.request.args.join(',') === '--detach', JSON.stringify(detached));
   check('--detach between pairs keeps the pairs aligned and --run-dir is read', middle.request?.detach === true && middle.request.runDir === '/r' && middle.request.chain === 'c', JSON.stringify(middle));
   check('--run-dir without --detach is a usage problem', parseArguments(['--chain', 'c', '--run-dir', '/r', '--', 'x'], defaults).problem?.id === 'usage-run-dir-without-detach');
   check('--read takes exactly one directory', parseReadArguments(['--read', '/d']).runDir === '/d');
@@ -171,6 +171,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   const running = read(() => true);
 
   check('a live runner is reported running, bilingual, with its own exit code', running.code === EXIT.running && isBilingual(running.text) && running.text.includes('RUNNING'), running.text);
+  check('the pid probe handed to the read decides: a pid it calls dead is lost, not running', read(() => false).code === EXIT.usage);
   writeFileSync(path.join(dir, RUN_FILES.verdict), JSON.stringify({ exitCode: 7, signal: null, startedAt: 'a', endedAt: 'b', command: 'c' }));
 
   const finished = read(() => true);
@@ -355,6 +356,17 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   check('the verdict appears with the chain\'s exit code', await until(() => existsSync(path.join(dir, RUN_FILES.verdict))) && readJson(path.join(dir, RUN_FILES.verdict)).exitCode === 5);
   check('--read then exits with the chain\'s code and says finished', (() => { const r = cli(['--read', dir]); return r.status === 5 && r.stdout.includes('exit 5'); })());
   check('the output of the chain is in output.log', readFileSync(path.join(dir, RUN_FILES.output), 'utf8').includes('sleep-exit end'));
+
+  const workDir = path.join(SCRATCH, 'caller-directory');
+
+  mkdirSync(workDir, { recursive: true });
+
+  const byDefault = spawnSync(process.execPath, [RUN, '--detach', '--chain', 'cli-default', '--tree', SCRATCH, '--', process.execPath, CHILD, 'cwd'], { encoding: 'utf8', windowsHide: true, cwd: workDir });
+  const printedDir = /Run directory: (.+)/.exec(byDefault.stdout)?.[1]?.trim() ?? '';
+
+  spawned.add(readJson(path.join(printedDir, RUN_FILES.run)).pid);
+  check('with no --run-dir the run directory is under the runs folder of the lock\'s state', printedDir !== '' && path.relative(path.join(stateDir('full-chain-lock'), 'runs'), printedDir).split(path.sep).length === 1 && !path.relative(path.join(stateDir('full-chain-lock'), 'runs'), printedDir).startsWith('..'), byDefault.stdout);
+  check('the chain runs in the directory its caller was in', await until(() => existsSync(path.join(printedDir, RUN_FILES.verdict))) && readFileSync(path.join(printedDir, RUN_FILES.output), 'utf8').includes(`cwd ${workDir}`), printedDir);
 }
 
 // ── THE KILL: the caller's whole tree dies, the chain does not ──────────────────────────────────────────────
