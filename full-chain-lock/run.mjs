@@ -48,6 +48,9 @@ import { fileLockAdapter } from './file-lock-adapter.mjs';
 import { measuredTree } from './measured-tree.mjs';
 import { speak } from './messages.mjs';
 
+/** The word that asks for the state of a detached run. @es La palabra que pide el estado de una corrida desacoplada. */
+const READ_FLAG = '--read';
+
 /** The real clock. @es El reloj real. */
 const realClock = { now: () => Date.now(), sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) };
 
@@ -66,22 +69,14 @@ export async function main(argv) {
   // los registros escritos sin --session nombraban la sesión 'unknown'.
   const parsed = parseArguments(argv, { cwd: process.cwd(), cwdName: path.basename(process.cwd()), sessionFromEnvironment: process.env.CLAUDE_CODE_SESSION_ID });
 
-  if (parsed.problem !== undefined) {
-    say.complain(parsed.problem.id, parsed.problem.params);
-    say.complain('usage');
-
-    return EXIT.usage;
-  }
+  if (parsed.problem !== undefined) return refuse(parsed.problem, say);
 
   // The shared state mechanism of the lock, named as a literal so the state census can see it.
   // @es El mecanismo de estado compartido del lock, con su nombre literal para que el censo de estado lo vea.
   const stateDirectory = stateDir('full-chain-lock');
+  const request = { ...parsed.request, tree: measuredTree(parsed.request.tree) };
 
-  if (parsed.request.detach) {
-    const request = { ...parsed.request, tree: measuredTree(parsed.request.tree) };
-
-    return detachChain(request, { launcher: detachedLauncher(), say, runsRoot: path.join(stateDirectory, RUNS_FOLDER), environment: process.env, cwd: process.cwd() });
-  }
+  if (request.detach) return detachChain(request, { launcher: detachedLauncher(), say, runsRoot: path.join(stateDirectory, RUNS_FOLDER), environment: process.env, cwd: process.cwd() });
 
   const lock = fileLockAdapter(stateDirectory);
 
@@ -95,13 +90,19 @@ export async function main(argv) {
     }
   });
 
-  const request = { ...parsed.request, tree: measuredTree(parsed.request.tree) };
-
   return runChain(request, { lock, child: childProcessAdapter(), clock: realClock, say, processId: process.pid });
 }
 
-/** The word that asks for the state of a detached run. @es La palabra que pide el estado de una corrida desacoplada. */
-const READ_FLAG = '--read';
+/**
+ * Tells a usage problem and the synopsis, bilingual, and answers the usage code.
+ * @es Cuenta un problema de uso y la sinopsis, bilingües, y responde el código de uso.
+ */
+function refuse(problem, say) {
+  say.complain(problem.id, problem.params);
+  say.complain('usage');
+
+  return EXIT.usage;
+}
 
 /**
  * `--read <run dir>`: says what became of a detached run and answers its exit code.
@@ -110,12 +111,7 @@ const READ_FLAG = '--read';
 function readRun(argv, say) {
   const parsed = parseReadArguments(argv);
 
-  if (parsed.problem !== undefined) {
-    say.complain(parsed.problem.id, parsed.problem.params);
-    say.complain('usage');
-
-    return EXIT.usage;
-  }
+  if (parsed.problem !== undefined) return refuse(parsed.problem, say);
 
   return readChain(path.resolve(parsed.runDir), { say });
 }

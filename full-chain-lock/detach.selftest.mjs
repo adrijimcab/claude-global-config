@@ -23,6 +23,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -128,7 +129,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
 
 // ── The run directory ───────────────────────────────────────────────────────────────────────────────────────
 {
-  const named = defaultRunDirectory('/root', 'my chain/x', new Date(Date.UTC(2026, 10, 5, 12, 3, 4, 56)));
+  const named = defaultRunDirectory('/root', 'my chain//x', new Date(Date.UTC(2026, 10, 5, 12, 3, 4, 56)));
 
   check('the default run directory is named by timestamp and chain, under the runs root', path.relative('/root', named) === '20261105-120304056-my-chain-x', named);
 
@@ -136,6 +137,11 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
 
   mkdirSync(dir, { recursive: true });
   check('a directory with no run record is lost', runStatus(dir).state === 'lost');
+  writeFileSync(path.join(dir, RUN_FILES.run), '{}');
+  check('a run record with no pid is lost even if the probe says alive', runStatus(dir, { isAlive: () => true }).state === 'lost');
+  writeFileSync(path.join(dir, RUN_FILES.verdict), 'not json {');
+  check('a verdict that is not JSON is no verdict', runStatus(dir, { isAlive: () => false }).state === 'lost');
+  rmSync(path.join(dir, RUN_FILES.verdict));
   writeFileSync(path.join(dir, RUN_FILES.run), JSON.stringify({ pid: process.pid }));
   check('a live pid with no verdict is running', runStatus(dir).state === 'running');
   check('a pid the probe calls dead with no verdict is lost', runStatus(dir, { isAlive: () => false }).state === 'lost');
@@ -243,7 +249,9 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
 
   check('a non-zero WMI return value is a failure naming it', throws(() => wmiLauncher({ runPowershell: () => ({ status: 0, stdout: '9 0', stderr: '' }) }).launch(base)).includes('9'));
   check('a failing PowerShell is a failure naming its output', throws(() => wmiLauncher({ runPowershell: () => ({ status: 1, stdout: '', stderr: 'denied here' }) }).launch(base)).includes('denied here'));
-  check('an unreadable answer is a failure', throws(() => wmiLauncher({ runPowershell: () => ({ status: 0, stdout: 'nonsense', stderr: '' }) }).launch(base)) !== '');
+  check('an unreadable answer is a failure naming it', throws(() => wmiLauncher({ runPowershell: () => ({ status: 0, stdout: 'nonsense', stderr: '' }) }).launch(base)).includes('nonsense'));
+  check('the script calls the Create method of Win32_Process', WMI_SCRIPT.includes('Win32_Process -MethodName Create'));
+  check('the documented exit codes of detach and read are 71 and 76', EXIT.detachFailed === 71 && EXIT.running === 76);
   check('a path with a double quote is refused before PowerShell runs', throws(() => wmiLauncher({ runPowershell: () => { throw new Error('must not run'); } }).launch({ ...base, runDir: 'a"b' })).includes('"'));
 
   const spawnCalls = [];
@@ -278,6 +286,31 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   await runJob(envDir);
   check('the environment of the job reaches the chain', readFileSync(path.join(envDir, RUN_FILES.output), 'utf8').includes('reached-the-chain'));
 
+  const fakeDir = freshDir();
+  const calls = [];
+  const fakeJob = { command: 'cmd', args: ['a', 'b'], cwd: SCRATCH, environment: { ONLY_THIS: '1' }, chain: 'runner-proof', project: 'p', session: 's', tree: '/the/tree', waitSeconds: 30, pollMs: 100 };
+
+  mkdirSync(fakeDir, { recursive: true });
+  writeFileSync(path.join(fakeDir, RUN_FILES.job), JSON.stringify(fakeJob));
+
+  const instants = [new Date('2026-01-01T00:00:00.000Z'), new Date('2026-01-01T00:00:09.000Z')];
+  const faked = await runJob(fakeDir, {
+    now: () => instants.shift(),
+    spawnProcess: (...call) => {
+      const child = new EventEmitter();
+
+      calls.push(call);
+      setImmediate(() => child.emit('close', null, 'SIGTERM'));
+
+      return child;
+    }
+  });
+
+  check('the chain is started as the normal locked run with every setting of the job', JSON.stringify(calls[0][1].slice(1)) === JSON.stringify(['--chain', 'runner-proof', '--project', 'p', '--session', 's', '--tree', '/the/tree', '--wait-seconds', '30', '--poll-ms', '100', '--', 'cmd', 'a', 'b']) && calls[0][1][0] === RUN && calls[0][0] === process.execPath, JSON.stringify(calls[0][1]));
+  check('it runs in the job\'s directory with the job\'s environment, stdin closed and output on a file', calls[0][2].cwd === SCRATCH && JSON.stringify(calls[0][2].env) === '{"ONLY_THIS":"1"}' && calls[0][2].stdio[0] === 'ignore' && typeof calls[0][2].stdio[1] === 'number' && calls[0][2].stdio[1] === calls[0][2].stdio[2]);
+  check('a chain ended by a signal is a verdict with the signal and no code', faked.exitCode === null && faked.signal === 'SIGTERM' && readJson(path.join(fakeDir, RUN_FILES.verdict)).signal === 'SIGTERM');
+  check('the verdict carries the instants the clock gave, start first and end last', faked.startedAt === '2026-01-01T00:00:00.000Z' && faked.endedAt === '2026-01-01T00:00:09.000Z', JSON.stringify(faked));
+
   const brokenDir = freshDir();
 
   mkdirSync(brokenDir, { recursive: true });
@@ -302,8 +335,12 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   const usage = cli(['--run-dir', '/r', '--chain', 'c', '--', 'x']);
   const readUsage = cli(['--read']);
 
+  const errorLines = (result) => result.stderr.split('\n').map((line) => line.trim());
+
   check('--run-dir without --detach exits 2 and says so in two languages', usage.status === 2 && isBilingual(usage.stderr), usage.stderr);
-  check('--read with no directory exits 2 and prints the synopsis in two languages', readUsage.status === 2 && isBilingual(readUsage.stderr) && readUsage.stderr.includes('--read'), readUsage.stderr);
+  check('the synopsis names --detach with its --run-dir', errorLines(usage).some((line) => line.startsWith('FULL-CHAIN LOCK usage') && line.includes('[--detach [--run-dir <dir>]]')), usage.stderr);
+  check('--read with no directory exits 2 and prints the synopsis in two languages', readUsage.status === 2 && isBilingual(readUsage.stderr), readUsage.stderr);
+  check('the synopsis has the --read line', errorLines(readUsage).some((line) => line.startsWith('node run.mjs --read <run dir>')), readUsage.stderr);
 
   const dir = freshDir();
   const started = Date.now();
