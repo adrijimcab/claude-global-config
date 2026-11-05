@@ -428,7 +428,10 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
 
       return noTree(text);
     })());
-    check('the guard reads the line as the dialect of the tool: a PowerShell backslash cd is followed', reasonOf(asMain('PowerShell', 'Set-Location full-chain-lock\\..; npm run ci:test')).includes(` --tree "${TOP}" --`), reasonOf(asMain('PowerShell', 'Set-Location full-chain-lock\\..; npm run ci:test')).slice(-400));
+    // Read as bash, the backslashes are escapes and the target is the non-existent `full-chain-lock..full-chain-lock`; (a trailing `..` would be normalised away by Windows and prove nothing).
+    const powershell = reasonOf(asMain('PowerShell', 'Set-Location full-chain-lock\\..\\full-chain-lock; npm run ci:test'));
+
+    check('the guard reads the line as the dialect of the tool: a PowerShell backslash cd is followed', powershell.includes(` --tree "${TOP}" --`), powershell.slice(-400));
   }
 
   for (const [tool, command] of [['Bash', 'npm run build:ci-pr'], ['PowerShell', 'npm run ci:test']]) {
