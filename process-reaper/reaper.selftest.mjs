@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { isolateState } from '../hook-state/locations.mjs';
+import { gitBash } from '../selftest-fixtures/git-bash.mjs';
 import { createGitSandbox } from '../selftest-fixtures/git-sandbox.mjs';
 
 isolateState('process-reaper');
@@ -238,7 +239,7 @@ const launch = (command, args) => {
 const GRANDCHILD_PARENT = "const { spawn } = require('node:child_process'); spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); setInterval(() => {}, 1000);";
 
 try {
-  const loop = launch('bash', ['-c', `until [ -f "${forward(target)}/reports/mutation.json" ]; do sleep 15; done`]);
+  const loop = launch(gitBash(), ['-c', `until [ -f "${forward(target)}/reports/mutation.json" ]; do sleep 15; done`]);
   const holder = launch(process.execPath, ['-e', GRANDCHILD_PARENT, target]);
   const other = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', siblingOther]);
   const prefix = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', siblingPrefix]);
