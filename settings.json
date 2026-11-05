@@ -143,6 +143,16 @@
           }
         ],
         "matcher": "startup|resume|clear|compact"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/session-temp/start.mjs\"",
+            "timeout": 10
+          }
+        ],
+        "matcher": "startup|resume|clear|compact"
       }
     ],
     "Stop": [
@@ -270,6 +280,17 @@
           }
         ],
         "matcher": ""
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/session-temp/end.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ]
   },
