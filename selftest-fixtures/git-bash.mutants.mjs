@@ -15,7 +15,7 @@ const MUTANTS = [
   ['Windows gets plain bash', M, "if (platform !== 'win32') return 'bash';", "if (platform !== 'linux') return 'bash';"],
   ['backslashes are not turned forward', M, ".trim().split('\\\\').join('/')", '.trim()'],
   ['the root is one level short', M, 'const EXEC_PATH_DEPTH = 3;', 'const EXEC_PATH_DEPTH = 2;'],
-  ['the Bash is looked for in bin instead of usr/bin', M, '`${root}/usr/bin/bash.exe`', '`${root}/bin/bash.exe`'],
+  ['the Bash is looked for in bin instead of usr/bin', M, "}/usr/bin/bash.exe`;", "}/bin/bash.exe`;"],
   ['a missing bash.exe falls back to PATH', M, 'if (!exists(bash)) {', 'if (false) {'],
   ['the real lookup asks no git', M, "const execPath = process.platform === 'win32' ? execFileSync('git', ['--exec-path'], { encoding: 'utf8', windowsHide: true }) : '';", "const execPath = '';"],
 ];
