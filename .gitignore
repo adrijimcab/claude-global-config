@@ -271,6 +271,16 @@
 !/project-profile/
 !/project-profile/*.mjs
 !/project-profile/*.json
+# session-temp: the SessionStart/SessionEnd hooks that give each session its own TEMP. Code and sidecars only.
+# @es session-temp: los hooks que dan a cada sesión su propio TEMP. Solo código y sidecars.
+!/session-temp/
+!/session-temp/*.mjs
+!/session-temp/*.json
+# ia-perfiles: source of the team package that starts Claude Code on the company gateway or the personal account.
+# @es ia-perfiles: fuente del paquete del equipo que arranca Claude Code con el gateway de la empresa o la cuenta personal.
+!/ia-perfiles/
+!/ia-perfiles/*.ps1
+!/ia-perfiles/*.md
 !/worktree-install/
 !/worktree-install/*.mjs
 !/worktree-install/fixtures/
