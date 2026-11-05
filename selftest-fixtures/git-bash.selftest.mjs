@@ -31,12 +31,12 @@ const safely = (call) => {
 
 // The pure derivation, with injected facts. @es La derivación pura, con hechos inyectados.
 const present = (file) => file === 'C:/Program Files/Git/usr/bin/bash.exe';
-check('Windows: the Bash beside git, from the exec path', gitBashFrom({ platform: 'win32', execPath: 'C:/Program Files/Git/mingw64/libexec/git-core', exists: present }) === 'C:/Program Files/Git/usr/bin/bash.exe');
-check('Windows: a backslashed exec path gives the same Bash', gitBashFrom({ platform: 'win32', execPath: 'C:\\Program Files\\Git\\mingw64\\libexec\\git-core', exists: present }) === 'C:/Program Files/Git/usr/bin/bash.exe');
+check('Windows: the Bash beside git, from the exec path', safely(() => gitBashFrom({ platform: 'win32', execPath: 'C:/Program Files/Git/mingw64/libexec/git-core', exists: present })) === 'C:/Program Files/Git/usr/bin/bash.exe');
+check('Windows: a backslashed exec path gives the same Bash', safely(() => gitBashFrom({ platform: 'win32', execPath: 'C:\\Program Files\\Git\\mingw64\\libexec\\git-core', exists: present })) === 'C:/Program Files/Git/usr/bin/bash.exe');
 check('Windows: no bash.exe beside git is refused, never another Bash', String(safely(() => gitBashFrom({ platform: 'win32', execPath: 'C:/Program Files/Git/mingw64/libexec/git-core', exists: () => false }))).startsWith('threw: Git Bash was not found'));
 check('Windows: the refusal is bilingual', String(safely(() => gitBashFrom({ platform: 'win32', execPath: 'C:/x/mingw64/libexec/git-core', exists: () => false }))).includes('@es '));
 check('Windows: an unreadable exec path is refused', String(safely(() => gitBashFrom({ platform: 'win32', execPath: '', exists: present }))).startsWith('threw: Git Bash was not found'));
-check('elsewhere: plain bash', gitBashFrom({ platform: 'linux', execPath: '/usr/lib/git-core', exists: () => false }) === 'bash');
+check('elsewhere: plain bash', safely(() => gitBashFrom({ platform: 'linux', execPath: '/usr/lib/git-core', exists: () => false })) === 'bash');
 
 // The real machine, with a PATH whose first bash is WSL's (the measured failure). @es La máquina real, con un PATH
 // cuyo primer bash es el de WSL (el fallo medido).

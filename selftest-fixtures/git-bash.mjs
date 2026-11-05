@@ -28,10 +28,11 @@ export function gitBashFrom({ platform, execPath, exists }) {
   if (platform !== 'win32') return 'bash';
 
   const forward = typeof execPath === 'string' ? execPath.trim().split('\\').join('/') : '';
-  const root = forward === '' ? '' : path.posix.join(forward, ...Array(EXEC_PATH_DEPTH).fill('..'));
-  const bash = root === '' ? '' : `${root}/usr/bin/bash.exe`;
+  // An empty or unreadable exec path gives a relative candidate that does not exist, so `exists` alone decides.
+  // @es Una ruta vacía o ilegible da un candidato relativo que no existe, así que decide solo `exists`.
+  const bash = `${path.posix.join(forward, ...Array(EXEC_PATH_DEPTH).fill('..'))}/usr/bin/bash.exe`;
 
-  if (bash === '' || !exists(bash)) {
+  if (!exists(bash)) {
     throw new Error(`Git Bash was not found beside git (exec path "${forward}"); a selftest never falls back to another bash. @es No se encontró Git Bash junto a git (ruta "${forward}"); un selftest nunca cae en otro bash.`);
   }
 
