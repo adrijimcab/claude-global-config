@@ -40,7 +40,7 @@ check('elsewhere: plain bash', safely(() => gitBashFrom({ platform: 'linux', exe
 
 // The real machine, with a PATH whose first bash is WSL's (the measured failure). @es La máquina real, con un PATH
 // cuyo primer bash es el de WSL (el fallo medido).
-const bash = gitBash();
+const bash = String(safely(() => gitBash()));
 check('the real Bash is an absolute path on Windows, plain bash elsewhere', process.platform === 'win32' ? path.isAbsolute(bash) : bash === 'bash', bash);
 
 if (process.platform === 'win32') {
