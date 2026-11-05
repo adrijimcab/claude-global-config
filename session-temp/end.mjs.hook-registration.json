@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "SessionEnd"
+    }
+  ],
+  "why": "Removes the private TEMP folder session-temp/start.mjs made for the session, without following a link inside it, so per-session folders do not pile up."
+}

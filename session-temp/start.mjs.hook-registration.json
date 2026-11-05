@@ -1,0 +1,9 @@
+{
+  "registrations": [
+    {
+      "event": "SessionStart",
+      "matcher": "startup|resume|clear|compact"
+    }
+  ],
+  "why": "worker-temp-file-collided-across-sessions reached 4x through a run-time write into the shared TEMP root that no static guard sees; each session gets its own TEMP through CLAUDE_ENV_FILE, which its subagents' Bash commands inherit (measured 2026-11-05 with a live claude -p probe)."
+}
