@@ -241,6 +241,19 @@ rmSync(path.join(meeting, 'b'), { force: true });
 const oneByOne = await runSelftests({ root: pair, concurrency: 1 });
 check(oneByOne.exitCode === 1, `near miss: concurrency 1 runs them one after the other, so the first waits in vain: ${oneByOne.report.join(' | ')}`);
 
+// The same pair through the real command line: it must pass the plan's concurrency on to the run.
+// @es El mismo par por la línea de órdenes real: debe pasar a la corrida la concurrencia del plan.
+const viaCli = (concurrency) => {
+  rmSync(path.join(meeting, 'a'), { force: true });
+  rmSync(path.join(meeting, 'b'), { force: true });
+
+  return spawnSync(process.execPath, [RUN, '--root', pair], { cwd: pair, encoding: 'utf8', env: { ...process.env, SELFTEST_CONCURRENCY: concurrency } });
+};
+const cliTogether = viaCli('2');
+check(cliTogether.status === 0 && cliTogether.stdout.includes('2/2 green'), `the command line with SELFTEST_CONCURRENCY=2 runs the pair at the same time: exit ${cliTogether.status}, ${cliTogether.stdout}`);
+const cliOneByOne = viaCli('1');
+check(cliOneByOne.status === 1, `near miss: the command line with SELFTEST_CONCURRENCY=1 runs them one after the other: exit ${cliOneByOne.status}`);
+
 // The first listed selftest ends LAST; its line still comes first, and the verdict is the serial one.
 // @es El primer selftest listado termina el ÚLTIMO; su línea igual va primero y el veredicto es el de la serie.
 const late = repo({ tracked: { 'a/selftest.mjs': "await new Promise((resolve) => setTimeout(resolve, 800));\nprocess.exit(1);\n", 'b/selftest.mjs': GREEN, 'c/selftest.mjs': RED } });

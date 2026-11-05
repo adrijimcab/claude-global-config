@@ -103,6 +103,7 @@ const MUTANTS = [
   ['only the summary line is delivered through the hook, so selftest lines wait for the end', RUN, '      onLine(line);', "      if (line.includes(' en verde')) onLine(line);"],
   ['the returned report loses the lines it delivered', RUN, '      report.push(line);\n', ''],
   ['the command line passes no hook, so it streams nothing', RUN, 'gitDir: parsed.gitDir, onLine: writeLineSync, concurrency', 'gitDir: parsed.gitDir, onLine: undefined, concurrency'],
+  ['the command line runs one selftest at a time whatever it chose', RUN, 'onLine: writeLineSync, concurrency: plan.concurrency, childBudget });', 'onLine: writeLineSync, concurrency: 1, childBudget });'],
   ['a run that measured nothing explains itself on stdout', RUN, 'if (notMeasured !== undefined) speaker.dataError(notMeasured);', 'if (notMeasured !== undefined) speaker.data(notMeasured);'],
   ['a measured run prints a line on stderr', RUN, 'if (notMeasured !== undefined) speaker.dataError(notMeasured);', 'if (true) speaker.dataError(notMeasured);'],
   ['the usage refusal goes to stdout', RUN, "speaker.complain('usage');", "speaker.say('usage');"],
