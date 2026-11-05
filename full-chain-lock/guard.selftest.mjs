@@ -108,6 +108,12 @@ check('the real declaration loads', chains.projects.length >= 3);
 check('b100-am-ui declares its full chains', ['build:ci-pr', 'ci:test', 'check:mutation', 'check:a11y'].every((script) => declared('b100-am-ui')?.scripts.includes(script)));
 check('Discovery-FE declares its full chains', ['build:ci', 'build:ci-pr', 'test:all'].every((script) => declared('di_1700002_discovery_fe')?.scripts.includes(script)));
 check('the selftest runners are declared', ['selftest-runner/run.mjs', 'fleet-kit/selftest-all.mjs'].every((command) => declared('claude-global')?.commands.includes(command)));
+// Wrappers that run a declared chain inside them are chains too: land.mjs verifies with the selftest runner, and
+// integrate.mjs runs build:ci-pr's steps and the selftest runner itself (both measured 2026-11-05).
+// @es Los envoltorios que corren una cadena declarada por dentro también son cadenas: land.mjs verifica con el
+// runner de selftests, e integrate.mjs corre los pasos de build:ci-pr y el runner (ambos medidos el 2026-11-05).
+check('the landing of this repository is declared', declared('claude-global')?.commands.includes('worktree-landing/land.mjs'));
+check('the b100-am-ui integration is declared', declared('b100-am-ui')?.commands.includes('.claude/integrate/integrate.mjs'));
 check('the message table is bilingual', messageProblems(MESSAGES).length === 0);
 
 {
@@ -162,11 +168,17 @@ expect('deny', 'npm run build:ci-pr', 'PowerShell');
 expect('deny', '& npm run ci:test', 'PowerShell');
 expect('deny', 'cd Discovery-FE; npm run build:ci', 'PowerShell');
 expect('deny', 'node selftest-runner\\run.mjs', 'PowerShell');
+expect('deny', 'node C:/Users/adrian.jimenez/.claude/worktree-landing/land.mjs --worktree w --main m --branch master --remote origin');
+expect('deny', 'node worktree-landing\\land.mjs --worktree w --main m --branch master --remote origin', 'PowerShell');
+expect('deny', 'node .claude/integrate/integrate.mjs --target integrate/b3');
 
 // ── What does not run: allowed ──────────────────────────────────────────────────────────────────────────────
 expect('allow', `node "${RUNNER}" --chain build:ci-pr --project b100-am-ui -- npm run build:ci-pr`);
 expect('allow', `node "${RUNNER}" --chain selftest-runner/run.mjs -- node selftest-runner/run.mjs`);
 expect('allow', `node "${RUNNER}" --chain build:ci-pr -- npm run build:ci-pr`, 'PowerShell');
+expect('allow', `node "${RUNNER}" --chain worktree-landing/land.mjs --tree "w" -- node worktree-landing/land.mjs --worktree w --main m --branch master --remote origin`);
+expect('allow', 'node worktree-landing/selftest.mjs');
+expect('allow', 'node .claude/integrate/selftest.mjs');
 expect('allow', 'npm test -- foo.spec');
 expect('allow', 'npm run lint');
 expect('allow', 'npm run build');

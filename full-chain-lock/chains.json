@@ -1,5 +1,5 @@
 {
-  "why": "Full chains are declared HERE, one entry per project, because no project declares them as a set: each keeps its scripts in its own package.json (b100-am-ui: build:ci-pr, ci:test, check:mutation, check:a11y, test:all-coverage; Discovery-FE: build:ci, build:ci-pr, test:all, test:coverage:ci) and the selftest runners live in this repository. A script not listed here is not a full chain. @es Las cadenas completas se declaran AQUI, una entrada por proyecto, porque ningun proyecto las declara como conjunto: cada uno guarda sus scripts en su package.json y los runners de selftests viven en este repositorio. Un script que no esta aqui no es una cadena completa.",
+  "why": "Full chains are declared HERE, one entry per project, because no project declares them as a set: each keeps its scripts in its own package.json (b100-am-ui: build:ci-pr, ci:test, check:mutation, check:a11y, test:all-coverage; Discovery-FE: build:ci, build:ci-pr, test:all, test:coverage:ci) and the selftest runners live in this repository. A script not listed here is not a full chain. A command that runs a declared chain inside it (worktree-landing/land.mjs runs the selftest runner; .claude/integrate/integrate.mjs runs build:ci-pr's steps and the selftest runner) is declared too, because the guard sees only the command line it is given. @es Las cadenas completas se declaran AQUI, una entrada por proyecto, porque ningun proyecto las declara como conjunto: cada uno guarda sus scripts en su package.json y los runners de selftests viven en este repositorio. Un script que no esta aqui no es una cadena completa. Un comando que corre por dentro una cadena declarada (worktree-landing/land.mjs corre el runner de selftests; .claude/integrate/integrate.mjs corre los pasos de build:ci-pr y el runner) tambien se declara, porque el guard solo ve la linea de comando que recibe.",
   "projects": [
     {
       "project": "b100-am-ui",
@@ -10,7 +10,9 @@
         "check:a11y",
         "test:all-coverage"
       ],
-      "commands": []
+      "commands": [
+        ".claude/integrate/integrate.mjs"
+      ]
     },
     {
       "project": "di_1700002_discovery_fe",
@@ -28,7 +30,8 @@
       "scripts": [],
       "commands": [
         "selftest-runner/run.mjs",
-        "fleet-kit/selftest-all.mjs"
+        "fleet-kit/selftest-all.mjs",
+        "worktree-landing/land.mjs"
       ]
     }
   ]
