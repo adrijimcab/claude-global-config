@@ -31,7 +31,7 @@ import path from 'node:path';
 
 import { discoverSelftests } from './discovery.mjs';
 import { RUN, cli, fixtureKit } from './fixtures.mjs';
-import { concurrencyOf, runSelftests } from './run.mjs';
+import { PEAK_BYTES_PER_SUITE, childBudgetOf, concurrencyOf, concurrencyPlan, describeConcurrency, runSelftests } from './run.mjs';
 import { writeLineSync } from './stream.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
@@ -241,6 +241,19 @@ rmSync(path.join(meeting, 'b'), { force: true });
 const oneByOne = await runSelftests({ root: pair, concurrency: 1 });
 check(oneByOne.exitCode === 1, `near miss: concurrency 1 runs them one after the other, so the first waits in vain: ${oneByOne.report.join(' | ')}`);
 
+// The same pair through the real command line: it must pass the plan's concurrency on to the run.
+// @es El mismo par por la línea de órdenes real: debe pasar a la corrida la concurrencia del plan.
+const viaCli = (concurrency) => {
+  rmSync(path.join(meeting, 'a'), { force: true });
+  rmSync(path.join(meeting, 'b'), { force: true });
+
+  return spawnSync(process.execPath, [RUN, '--root', pair], { cwd: pair, encoding: 'utf8', env: { ...process.env, SELFTEST_CONCURRENCY: concurrency } });
+};
+const cliTogether = viaCli('2');
+check(cliTogether.status === 0 && cliTogether.stdout.includes('2/2 green'), `the command line with SELFTEST_CONCURRENCY=2 runs the pair at the same time: exit ${cliTogether.status}, ${cliTogether.stdout}`);
+const cliOneByOne = viaCli('1');
+check(cliOneByOne.status === 1, `near miss: the command line with SELFTEST_CONCURRENCY=1 runs them one after the other: exit ${cliOneByOne.status}`);
+
 // The first listed selftest ends LAST; its line still comes first, and the verdict is the serial one.
 // @es El primer selftest listado termina el ÚLTIMO; su línea igual va primero y el veredicto es el de la serie.
 const late = repo({ tracked: { 'a/selftest.mjs': "await new Promise((resolve) => setTimeout(resolve, 800));\nprocess.exit(1);\n", 'b/selftest.mjs': GREEN, 'c/selftest.mjs': RED } });
@@ -272,10 +285,77 @@ const tempLeak = await runSelftests({ root: tempWriter, concurrency: 2 });
 check(tempLeak.exitCode === 1 && /^RED\s+a\/selftest\.mjs \(exit 0\)/.test(tempLeak.report[0]) && tempLeak.report.join('\n').includes('$TMP/left.txt') && tempLeak.report.some((line) => line.startsWith('GREEN  b/')), `in parallel a selftest's own temp leak is still named on that selftest alone: ${tempLeak.report.join(' | ')}`);
 
 // How many at once. @es Cuántos a la vez.
-check(concurrencyOf({ SELFTEST_CONCURRENCY: '3' }, 16) === 3, 'SELFTEST_CONCURRENCY sets the concurrency');
-check(concurrencyOf({ SELFTEST_CONCURRENCY: '1' }, 16) === 1, 'SELFTEST_CONCURRENCY=1 runs one at a time');
-check(concurrencyOf({ SELFTEST_CONCURRENCY: '0' }, 16) === 8 && concurrencyOf({ SELFTEST_CONCURRENCY: 'x' }, 16) === 8 && concurrencyOf({ SELFTEST_CONCURRENCY: '2.5' }, 16) === 8, 'a value that is not a whole number of at least 1 falls back to the default');
-check(concurrencyOf({}, 16) === 8 && concurrencyOf({}, 6) === 4 && concurrencyOf({}, 2) === 1 && concurrencyOf({}, 1) === 1, 'the default is min(8, cores - 2), at least 1');
+// The default is min(cores - 2, floor(free memory * 0.5 / PEAK_BYTES_PER_SUITE)), at least 1; the free memory is a
+// parameter so the cases pass it. `perSuite(n)` is the free memory that affords exactly n selftests.
+// @es El valor por defecto es min(núcleos - 2, floor(memoria libre * 0.5 / PEAK_BYTES_PER_SUITE)), mínimo 1; la
+// memoria libre es un parámetro para que los casos la pasen. `perSuite(n)` es la memoria libre que da para n selftests.
+const perSuite = (n) => n * PEAK_BYTES_PER_SUITE * 2;
+const PLENTY = perSuite(1000);
+check(PEAK_BYTES_PER_SUITE >= 741_154_816, 'the per-selftest peak is never below the highest one measured (741154816 bytes, 2026-11-04)');
+check(concurrencyOf({ SELFTEST_CONCURRENCY: '3' }, 16, 0) === 3, 'SELFTEST_CONCURRENCY sets the concurrency, whatever the memory');
+check(concurrencyOf({ SELFTEST_CONCURRENCY: '1' }, 16, PLENTY) === 1, 'SELFTEST_CONCURRENCY=1 runs one at a time');
+check(concurrencyOf({ SELFTEST_CONCURRENCY: '64' }, 4, 0) === 64, 'SELFTEST_CONCURRENCY is not capped by the machine');
+check(concurrencyOf({ SELFTEST_CONCURRENCY: '0' }, 16, PLENTY) === 14 && concurrencyOf({ SELFTEST_CONCURRENCY: 'x' }, 16, PLENTY) === 14 && concurrencyOf({ SELFTEST_CONCURRENCY: '2.5' }, 16, PLENTY) === 14, 'a value that is not a whole number of at least 1 falls back to the machine default');
+check(concurrencyOf({ SELFTEST_CONCURRENCY: 'x' }, 16, perSuite(5)) === 5, 'an invalid SELFTEST_CONCURRENCY falls back to the memory bound too');
+check(concurrencyOf({}, 16, PLENTY) === 14 && concurrencyOf({}, 6, PLENTY) === 4 && concurrencyOf({}, 3, PLENTY) === 1, 'cores bound: cores - 2');
+check(concurrencyOf({}, 2, PLENTY) === 1 && concurrencyOf({}, 1, PLENTY) === 1, 'cores bound: at least 1 on a small machine');
+check(concurrencyOf({}, 64, PLENTY) === 62, 'there is no fixed cap: 64 cores run 62');
+check(concurrencyOf({}, 32, perSuite(5)) === 5 && concurrencyOf({}, 32, perSuite(5) + 1) === 5 && concurrencyOf({}, 32, perSuite(5) - 1) === 4, 'memory bound: floor(free * 0.5 / peak), exact at the boundary');
+check(concurrencyOf({}, 32, perSuite(6) - 1) === 5 && concurrencyOf({}, 32, perSuite(7)) === 7, 'memory bound: half of the free memory, not all of it');
+check(concurrencyOf({}, 32, 0) === 1 && concurrencyOf({}, 32, PEAK_BYTES_PER_SUITE / 2 - 1) === 1, 'with no memory at least one selftest still runs');
+check(concurrencyOf({}, 8, perSuite(3)) === 3 && concurrencyOf({}, 4, perSuite(3)) === 2, 'the smaller of the two bounds wins');
+
+// Which bound decided, and the budget handed to the children. @es Qué cota decidió y el presupuesto que se da a los hijos.
+const plan = (env, cores, free) => concurrencyPlan(env, cores, free);
+check(plan({ SELFTEST_CONCURRENCY: '3' }, 16, PLENTY).bound === 'override', 'the plan names SELFTEST_CONCURRENCY as the bound');
+check(plan({}, 16, PLENTY).bound === 'cores' && plan({}, 4, perSuite(2)).bound === 'cores' && plan({}, 4, perSuite(2)).concurrency === 2, 'the plan names the cores when they decide, a tie included');
+check(plan({}, 32, perSuite(5)).bound === 'memory', 'the plan names the memory when it decides');
+check(concurrencyOf({ CONCURRENCY_BUDGET: '4' }, 16, PLENTY) === 4 && plan({ CONCURRENCY_BUDGET: '4' }, 16, PLENTY).bound === 'budget', 'a budget below the machine value caps the default');
+check(concurrencyOf({ CONCURRENCY_BUDGET: '1' }, 16, PLENTY) === 1, 'a budget of 1 runs serially');
+check(concurrencyOf({ CONCURRENCY_BUDGET: '100' }, 16, PLENTY) === 14 && plan({ CONCURRENCY_BUDGET: '14' }, 16, PLENTY).bound === 'cores', 'a budget above the machine value changes nothing');
+check(concurrencyOf({ CONCURRENCY_BUDGET: '9' }, 32, perSuite(2)) === 2, 'a budget never raises the memory bound');
+check(concurrencyOf({ CONCURRENCY_BUDGET: '2', SELFTEST_CONCURRENCY: '6' }, 16, PLENTY) === 6, 'SELFTEST_CONCURRENCY wins over the budget');
+check(['x', '0', '-3', '2.5', ''].every((budget) => concurrencyOf({ CONCURRENCY_BUDGET: budget }, 16, PLENTY) === 14), 'an invalid budget is ignored');
+check(plan({ CONCURRENCY_BUDGET: '100' }, 16, PLENTY).budget === 100 && plan({}, 16, PLENTY).budget === 14 && plan({ CONCURRENCY_BUDGET: 'x' }, 16, PLENTY).budget === 14, 'the runner own budget is the one it was given, else the machine value');
+check(childBudgetOf(14, 4) === 3 && childBudgetOf(8, 1) === 8 && childBudgetOf(3, 4) === 1 && childBudgetOf(1, 1) === 1, 'the child budget is floor(budget / concurrency), at least 1');
+
+const budgetEnvs = [];
+const budgetSpawn = (file, args, options) => {
+  budgetEnvs.push(options.env.CONCURRENCY_BUDGET);
+
+  return spawnSync(file, args, options);
+};
+const budgeted = await runSelftests({ root: allGreen, concurrency: 2, childBudget: 3, spawn: budgetSpawn });
+check(budgeted.exitCode === 0 && budgetEnvs.length > 0 && budgetEnvs.every((value) => value === '3'), `every child gets the divided budget in CONCURRENCY_BUDGET: ${budgetEnvs}`);
+const inheritedBudget = process.env.CONCURRENCY_BUDGET;
+const inheritedConcurrency = process.env.SELFTEST_CONCURRENCY;
+process.env.CONCURRENCY_BUDGET = '6';
+process.env.SELFTEST_CONCURRENCY = '2';
+budgetEnvs.length = 0;
+await runSelftests({ root: allGreen, spawn: budgetSpawn });
+check(budgetEnvs.length > 0 && budgetEnvs.every((value) => value === '3'), `by default the child budget is the runner's own budget (6) over its concurrency (2): ${budgetEnvs}`);
+delete process.env.CONCURRENCY_BUDGET;
+budgetEnvs.length = 0;
+await runSelftests({ root: allGreen, spawn: budgetSpawn });
+check(budgetEnvs.length > 0 && budgetEnvs.every((value) => Number.isInteger(Number(value)) && Number(value) >= 1), `without a budget the child gets the machine value over its concurrency: ${budgetEnvs}`);
+for (const [name, value] of [['CONCURRENCY_BUDGET', inheritedBudget], ['SELFTEST_CONCURRENCY', inheritedConcurrency]]) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
+// The report header says what was chosen and why. @es La cabecera dice qué se eligió y por qué.
+const header = (env, cores, free) => {
+  const chosen = concurrencyPlan(env, cores, free);
+
+  return describeConcurrency(chosen, childBudgetOf(chosen.budget, chosen.concurrency));
+};
+check(header({ SELFTEST_CONCURRENCY: '3' }, 16, PLENTY).includes('SELFTEST_CONCURRENCY') && header({ SELFTEST_CONCURRENCY: '3' }, 16, PLENTY).includes('Running 3 selftests at once'), 'the header names the override');
+check(header({}, 16, PLENTY).includes('cores') && header({}, 16, PLENTY).includes('16 cores') && header({}, 16, PLENTY).includes('Running 14'), 'the header names the cores bound with its numbers');
+check(header({}, 32, perSuite(5)).includes('free memory') && header({}, 32, perSuite(5)).includes('Running 5'), 'the header names the memory bound');
+check(header({ CONCURRENCY_BUDGET: '4' }, 16, PLENTY).includes('CONCURRENCY_BUDGET=4') && header({ CONCURRENCY_BUDGET: '4' }, 16, PLENTY).includes('budget of 1'), 'the header names the budget bound and the budget each child gets');
+check(['override', 'cores', 'memory', 'budget'].every((bound) => /@es .*selftests/.test(describeConcurrency({ concurrency: 2, bound, budget: 4, cores: 8, freeBytes: PLENTY }, 2))), 'every header is bilingual');
+const headed = spawnSync(process.execPath, [RUN, '--root', allGreen], { cwd: allGreen, encoding: 'utf8', env: { ...process.env, SELFTEST_CONCURRENCY: '2' } });
+check(headed.status === 0 && headed.stdout.split('\n')[0].includes('Running 2 selftests at once') && headed.stdout.includes('2/2 green'), `the command line prints the header before the report: ${headed.stdout.split('\n')[0]}`);
 
 // The same through the real command line. The second selftest only passes once the PARENT has seen the
 // first one's GREEN line on stdout; a runner that prints at the end would never let it pass.
