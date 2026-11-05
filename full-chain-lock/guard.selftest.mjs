@@ -37,7 +37,7 @@ import { fullChainInvocations } from './chain-invocations.mjs';
 import { DECLARATION, loadChains } from './chains-config.mjs';
 import { evaluate as rawEvaluate } from './guard.mjs';
 import { MESSAGES } from './messages.mjs';
-import { refusalText, wrappedCommand } from './refusal.mjs';
+import { refusalText as rawRefusalText, wrappedCommand } from './refusal.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -56,6 +56,18 @@ function check(label, condition, detail = '') {
   } else {
     failed += 1;
     process.stdout.write(`  FAIL ${label}${detail ? `\n       ${detail}` : ''}\n`);
+  }
+}
+
+/**
+ * The refusal text, or `threw: <error>` when producing it throws, so a defect fails the check that asserts the outcome instead of crashing the proof.
+ * @es El texto de la negativa, o `threw: <error>` si producirlo lanza, para que un defecto falle el check que afirma el resultado en vez de tumbar la prueba.
+ */
+function refusalText(...args) {
+  try {
+    return rawRefusalText(...args);
+  } catch (error) {
+    return `threw: ${String(error)}`;
   }
 }
 
@@ -392,6 +404,31 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
       return refusalText(offender, 's', { cwd: ROOT, dialect: 'powershell', script }, { topLevelOf: echoTop }).includes(' --tree "D:/other/wt" --');
     })());
     check('a landing refusal stays bilingual', bothLanguages(landing('--worktree D:/other/wt --main D:/main')));
+  }
+
+  {
+    const landLine = (program, args) => `node ${program} ${args}`;
+    const noTree = (text) => bothLanguages(text) && text.includes('NO COMMAND IS SUGGESTED') && text.includes('NO SE SUGIERE NINGÚN COMANDO') && !text.includes('--tree "') && !text.includes('threw:');
+    const asLanding = (script, context) => refusalText({ chain: 'worktree-landing/land.mjs', projects: [], text: script }, 's', { dialect: 'bash', script, ...context }, { topLevelOf: echoTop });
+    const asChain = (script, context) => refusalText(offenderOf(script), 's', { dialect: 'bash', script, ...context }, { topLevelOf: echoTop });
+
+    check('exact outcome: a landing with no --worktree is the bilingual unknown-tree refusal', noTree(asLanding(landLine('/x/worktree-landing/land.mjs', '--main m'), { cwd: ROOT })));
+    check('exact outcome: a chain with no call directory is the bilingual unknown-tree refusal', noTree(asChain('npm run build:ci-pr', { cwd: undefined })));
+    check('exact outcome: a cd with no known starting directory is the bilingual unknown-tree refusal', noTree(asChain('cd sub && npm run build:ci-pr', { cwd: undefined })));
+    check('exact outcome: a cd with a variable target is the bilingual unknown-tree refusal', noTree(asChain('cd "$X" && npm run build:ci-pr', { cwd: ROOT })));
+    check('exact outcome: a cd with no target is the bilingual unknown-tree refusal', noTree(asChain('cd && npm run build:ci-pr', { cwd: ROOT })));
+    check('exact outcome: a directory in no git tree is the bilingual unknown-tree refusal', noTree(refusalText(offenderOf('npm run build:ci-pr'), 's', { cwd: ROOT, dialect: 'bash', script: 'npm run build:ci-pr' }, { topLevelOf: () => undefined })));
+    check('a program that merely ends in land.mjs is not a landing, so its --worktree is not the tree', (() => {
+      const script = landLine('/x/other/land.mjs', '--worktree D:/a --main m');
+
+      return refusalText({ chain: 'other', projects: [], text: script }, 's', { cwd: ROOT, dialect: 'bash', script }, { topLevelOf: echoTop }).includes(` --tree "${forward(ROOT)}" --`);
+    })());
+    check('a non-string call directory leaves the tree unknown instead of throwing', (() => {
+      const text = evaluate(JSON.stringify({ ...asMain('Bash', 'npm run build:ci-pr'), cwd: 5 }))?.hookSpecificOutput?.permissionDecisionReason ?? '';
+
+      return noTree(text);
+    })());
+    check('the guard reads the line as the dialect of the tool: a PowerShell backslash cd is followed', reasonOf(asMain('PowerShell', 'Set-Location full-chain-lock\\..; npm run ci:test')).includes(` --tree "${TOP}" --`), reasonOf(asMain('PowerShell', 'Set-Location full-chain-lock\\..; npm run ci:test')).slice(-400));
   }
 
   for (const [tool, command] of [['Bash', 'npm run build:ci-pr'], ['PowerShell', 'npm run ci:test']]) {

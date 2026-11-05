@@ -47,7 +47,7 @@ function worktreeArgument(words) {
 
   const value = words[at] === '--worktree' ? words[at + 1] : words[at].slice('--worktree='.length);
 
-  return !value || isUnresolvableWord(value) ? undefined : value;
+  return isUnresolvableWord(value) ? undefined : value;
 }
 
 /**
@@ -62,11 +62,11 @@ function directoryOf(offenderText, { cwd, dialect, script }) {
 
     const at = commandWordIndex(command.words);
 
-    if (at === -1 || !DIRECTORY_CHANGERS.has(executableName(command.words[at]).toLowerCase())) continue;
+    if (at === -1 || !DIRECTORY_CHANGERS.has(executableName(command.words[at]))) continue;
 
     const target = command.words.slice(at + 1).find((word) => !word.startsWith('-'));
 
-    directory = directory === undefined || target === undefined || isUnresolvableWord(target) ? undefined : path.resolve(directory, target);
+    directory = directory === undefined || isUnresolvableWord(target) ? undefined : path.resolve(directory, target);
   }
 
   return directory;
