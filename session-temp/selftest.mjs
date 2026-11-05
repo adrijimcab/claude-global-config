@@ -25,6 +25,15 @@ function check(label, condition, detail = '') {
   }
 }
 
+/** A call whose throw becomes a value, so a broken decision fails a check instead of crashing the proof. @es Una llamada cuyo throw se vuelve un valor. */
+const safely = (call) => {
+  try {
+    return call();
+  } catch (error) {
+    return `threw: ${error.message}`;
+  }
+};
+
 const scratch = mkdtempSync(path.join(tmpdir(), 'session-temp-selftest-'));
 // The long form, as the hook uses: the short form of the temp root carries a tilde the module refuses.
 // @es La forma larga, como la usa el hook: la forma corta de la raíz temporal lleva una tilde que el módulo rechaza.
@@ -49,12 +58,12 @@ try {
   // SessionStart. @es SessionStart.
   const envFile = path.join(scratch, 'env.sh');
   writeFileSync(envFile, '# written by another hook\n');
-  const started = startSession({ payload: { session_id: SESSION }, envFile, root });
+  const started = safely(() => startSession({ payload: { session_id: SESSION }, envFile, root }));
   check('start creates the folder', existsSync(folder));
   check('start appends the assignments after what other hooks wrote', readFileSync(envFile, 'utf8') === `# written by another hook\n${envLinesFor(folder)}`, readFileSync(envFile, 'utf8'));
   check('start returns the folder it set', started === folder);
 
-  const noEnvFile = startSession({ payload: { session_id: 'b1b1b1b1-0000-0000-0000-000000000000' }, envFile: undefined, root });
+  const noEnvFile = safely(() => startSession({ payload: { session_id: 'b1b1b1b1-0000-0000-0000-000000000000' }, envFile: undefined, root }));
   check('without CLAUDE_ENV_FILE nothing is set and no folder is made', noEnvFile === undefined && !existsSync(`${root}/claude/session-tmp/b1b1b1b1-0000-0000-0000-000000000000`));
 
   const badId = startSession({ payload: { session_id: '../escape' }, envFile, root });
@@ -65,6 +74,7 @@ try {
   const outside = path.join(scratch, 'outside');
   mkdirSync(outside);
   writeFileSync(path.join(outside, 'keep.txt'), 'x');
+  mkdirSync(folder, { recursive: true }); // the end cases need the folder even when a broken start did not make it
   writeFileSync(path.join(folder, 'left.txt'), 'x');
   const linked = path.join(folder, 'link');
   let linkMade = true;

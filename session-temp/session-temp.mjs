@@ -27,7 +27,6 @@
  * harness rechaza en una asignación.
  */
 
-import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
@@ -76,16 +75,13 @@ export function startSession({ payload, envFile, root = realTempRoot() }) {
 }
 
 /**
- * Removes a folder without following a link inside it: on Windows `rmdir /S /Q` removes a junction as a link,
- * elsewhere `rm` with `recursive` does not follow symlinks.
- * @es Borra una carpeta sin seguir un enlace de dentro: en Windows `rmdir /S /Q` quita un junction como enlace.
+ * Removes a folder without following a link inside it. MEASURED 2026-11-05 on Node 22.22.3, Windows: `rmSync` with
+ * `recursive` removes a junction as a link and leaves its target intact, so no platform branch is needed; the
+ * selftest keeps a junction to an outside folder and asserts the outside file survives.
+ * @es Borra una carpeta sin seguir un enlace de dentro. MEDIDO el 2026-11-05 en Node 22.22.3, Windows: `rmSync`
+ * recursivo quita un junction como enlace y deja intacto su destino; el selftest lo comprueba.
  */
 function removeWithoutFollowing(folder) {
-  if (process.platform === 'win32') {
-    spawnSync('cmd', ['/d', '/c', 'rmdir', '/S', '/Q', folder.split('/').join('\\')], { windowsHide: true });
-    return;
-  }
-
   rmSync(folder, { recursive: true, force: true });
 }
 

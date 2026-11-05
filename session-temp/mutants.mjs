@@ -32,7 +32,7 @@ const MUTANTS = [
   ['the env file is overwritten instead of appended to', M, 'appendFileSync(envFile, envLinesFor(folder));', "appendFileSync(envFile, envLinesFor(folder), { flag: 'w' });"],
   ['start reports nothing', M, '  appendFileSync(envFile, envLinesFor(folder));\n\n  return folder;', '  appendFileSync(envFile, envLinesFor(folder));\n\n  return undefined;'],
   // SessionEnd. @es SessionEnd.
-  ['the Windows removal follows links', M, "spawnSync('cmd', ['/d', '/c', 'rmdir', '/S', '/Q', folder.split('/').join('\\\\')], { windowsHide: true });\n    return;", 'rmSync(folder, { recursive: true, force: true });\n    return;'],
+  ['the removal is not recursive, so a folder with content stays', M, 'rmSync(folder, { recursive: true, force: true });', 'rmSync(folder, { force: true });'],
   ['the folder is never removed', M, '  removeWithoutFollowing(folder);\n\n  return', '  return'],
   ['end of a missing folder reports a removal', M, 'if (folder === undefined || !existsSync(folder)) return false;', 'if (folder === undefined) return false;'],
   // The entry points. @es Los puntos de entrada.
