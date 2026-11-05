@@ -85,11 +85,11 @@ try {
     linkMade = false;
   }
 
-  const ended = endSession({ payload: { session_id: SESSION }, root });
+  const ended = safely(() => endSession({ payload: { session_id: SESSION }, root }));
   check('end removes the session folder', ended === true && !existsSync(folder));
   check('end never follows a link out of the folder', !linkMade || existsSync(path.join(outside, 'keep.txt')), `link made: ${linkMade}`);
-  check('end of a session with no folder is a no-op', endSession({ payload: { session_id: SESSION }, root }) === false);
-  check('end with a refused session id removes nothing', endSession({ payload: { session_id: '..' }, root }) === false && existsSync(outside));
+  check('end of a session with no folder is a no-op', safely(() => endSession({ payload: { session_id: SESSION }, root })) === false);
+  check('end with a refused session id removes nothing', safely(() => endSession({ payload: { session_id: '..' }, root })) === false && existsSync(outside));
 
   // The real entry points, as the harness runs them: payload on stdin, CLAUDE_ENV_FILE in the environment.
   // @es Los puntos de entrada reales, como los corre el harness: payload por stdin, CLAUDE_ENV_FILE en el entorno.
