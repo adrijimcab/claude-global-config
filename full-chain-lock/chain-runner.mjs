@@ -26,7 +26,7 @@
  */
 
 /** The exit codes the runner itself produces; every other code is the command's. @es Los códigos de salida propios del runner; todo otro código es del comando. */
-export const EXIT = Object.freeze({ usage: 2, lockFault: 70, waitExpired: 75, notStarted: 127 });
+export const EXIT = Object.freeze({ usage: 2, lockFault: 70, detachFailed: 71, waitExpired: 75, running: 76, notStarted: 127 });
 
 /** How long a chain waits for the lock by default, in seconds. @es Cuánto espera una cadena el lock por defecto, en segundos. */
 export const DEFAULT_WAIT_SECONDS = 3600;

@@ -3,7 +3,8 @@
  * The command a proof runs UNDER the lock, as a real child process.
  *
  *   node chain-child.fixture.mjs hold <logFile> <label> <holdMs>   appends "<label> start <ms>", waits, appends "<label> end <ms>"
- *   node chain-child.fixture.mjs exit <code>                       prints a line and exits with <code>
+ *   node chain-child.fixture.mjs sleep-exit <ms> <code>            prints a line, sleeps <ms>, prints another and exits with <code>
+ *   node chain-child.fixture.mjs exit <code>                      prints a line and exits with <code>
  *   node chain-child.fixture.mjs signal                            ends itself with SIGTERM
  *   node chain-child.fixture.mjs until <logFile> <label> <stopFile> <maxMs>
  *                                                                  appends "<label> start <ms>", ends once <stopFile>
@@ -34,6 +35,13 @@ if (mode === 'hold') {
   appendFileSync(logFile, `${label} start ${String(Date.now())}\n`);
   while (!existsSync(stopFile) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
   appendFileSync(logFile, `${label} end ${String(Date.now())}\n`);
+} else if (mode === 'sleep-exit') {
+  const [sleepMs, code] = rest;
+
+  console.log('sleep-exit start');
+  await new Promise((resolve) => setTimeout(resolve, Number(sleepMs)));
+  console.log('sleep-exit end');
+  process.exit(Number(code));
 } else if (mode === 'exit') {
   console.log(`child exiting with ${rest[0]}`);
   process.exit(Number(rest[0]));
