@@ -65,7 +65,11 @@ export function evaluate(raw, { chainsOf = loadChains, decision = fullChainInvoc
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'deny',
-      permissionDecisionReason: refusalText(offenders[0], typeof payload.session_id === 'string' ? payload.session_id : undefined)
+      permissionDecisionReason: refusalText(offenders[0], typeof payload.session_id === 'string' ? payload.session_id : undefined, {
+        cwd: typeof payload.cwd === 'string' ? payload.cwd : undefined,
+        dialect,
+        script: command
+      })
     }
   };
 }
