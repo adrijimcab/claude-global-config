@@ -67,8 +67,64 @@ export const MESSAGES = {
     es: 'LOCK DE CADENAS COMPLETAS: el argumento {argument} lleva comillas dobles o un signo de porcentaje, que un lanzador .cmd de Windows no puede transportar con seguridad. Ejecuta el comando con un argumento simple o llama al programa directamente.'
   },
   usage: {
-    en: 'FULL-CHAIN LOCK usage: node run.mjs --chain <name> [--project <name>] [--session <id>] [--tree <dir>] [--wait-seconds <n>] [--poll-ms <n>] -- <command> [args...]',
-    es: 'USO DEL LOCK DE CADENAS COMPLETAS: node run.mjs --chain <nombre> [--project <nombre>] [--session <id>] [--tree <dir>] [--wait-seconds <n>] [--poll-ms <n>] -- <comando> [args...]'
+    en: [
+      'FULL-CHAIN LOCK usage: node run.mjs --chain <name> [--project <name>] [--session <id>] [--tree <dir>] [--wait-seconds <n>] [--poll-ms <n>] [--detach [--run-dir <dir>]] -- <command> [args...]',
+      '                       node run.mjs --read <run dir>'
+    ],
+    es: [
+      'USO DEL LOCK DE CADENAS COMPLETAS: node run.mjs --chain <nombre> [--project <nombre>] [--session <id>] [--tree <dir>] [--wait-seconds <n>] [--poll-ms <n>] [--detach [--run-dir <dir>]] -- <comando> [args...]',
+      '                                   node run.mjs --read <directorio de corrida>'
+    ]
+  },
+  detached: {
+    en: [
+      'FULL-CHAIN LOCK: the chain was started DETACHED from this session; no kill of this session\'s process tree reaches it. It still runs under the machine-wide lock.',
+      'Run directory: {runDir}',
+      'Detached pid:  {pid}',
+      'Read its state (running, finished with its exit code, or lost) with:',
+      '',
+      '  {readCommand}'
+    ],
+    es: [
+      'LOCK DE CADENAS COMPLETAS: la cadena se inició DESACOPLADA de esta sesión; ningún kill del árbol de procesos de esta sesión la alcanza. Sigue corriendo bajo el lock de toda la máquina.',
+      'Directorio de corrida: {runDir}',
+      'Pid desacoplado:       {pid}',
+      'Lee su estado (corriendo, terminada con su código de salida, o perdida) con:',
+      '',
+      '  {readCommand}'
+    ]
+  },
+  'detach-failed': {
+    en: 'FULL-CHAIN LOCK: the chain could NOT be started detached: {detail} Nothing runs and no environment was left on disk.',
+    es: 'LOCK DE CADENAS COMPLETAS: la cadena NO se pudo iniciar desacoplada: {detail} No corre nada y no quedó ningún entorno en disco.'
+  },
+  'run-dir-used': {
+    en: 'FULL-CHAIN LOCK: the run directory {runDir} already holds a run. Pick another --run-dir; nothing was started.',
+    es: 'LOCK DE CADENAS COMPLETAS: el directorio de corrida {runDir} ya tiene una corrida. Elige otro --run-dir; no se inició nada.'
+  },
+  'read-running': {
+    en: 'FULL-CHAIN LOCK: RUNNING. The detached chain of {runDir} is alive (pid {pid}) and has not written its verdict yet.',
+    es: 'LOCK DE CADENAS COMPLETAS: CORRIENDO. La cadena desacoplada de {runDir} está viva (pid {pid}) y aún no escribió su veredicto.'
+  },
+  'read-finished': {
+    en: 'FULL-CHAIN LOCK: FINISHED with exit {exitCode} at {endedAt}. The output is in {runDir}. This command exits with that code.',
+    es: 'LOCK DE CADENAS COMPLETAS: TERMINADA con salida {exitCode} a las {endedAt}. La salida está en {runDir}. Este comando sale con ese código.'
+  },
+  'read-unstarted': {
+    en: 'FULL-CHAIN LOCK: FINISHED WITHOUT AN EXIT CODE in {runDir}: {detail} The chain did not run to an exit of its own.',
+    es: 'LOCK DE CADENAS COMPLETAS: TERMINADA SIN CÓDIGO DE SALIDA en {runDir}: {detail} La cadena no llegó a una salida propia.'
+  },
+  'read-lost': {
+    en: 'FULL-CHAIN LOCK: LOST. The detached chain of {runDir} has no verdict and no live process: it was killed or never started. Its output so far is in that directory.',
+    es: 'LOCK DE CADENAS COMPLETAS: PERDIDA. La cadena desacoplada de {runDir} no tiene veredicto ni proceso vivo: la mataron o nunca inició. Su salida hasta ahora está en ese directorio.'
+  },
+  'usage-read': {
+    en: 'FULL-CHAIN LOCK: --read takes exactly one run directory: node run.mjs --read <run dir>.',
+    es: 'LOCK DE CADENAS COMPLETAS: --read recibe exactamente un directorio de corrida: node run.mjs --read <directorio de corrida>.'
+  },
+  'usage-run-dir-without-detach': {
+    en: 'FULL-CHAIN LOCK: --run-dir only makes sense with --detach.',
+    es: 'LOCK DE CADENAS COMPLETAS: --run-dir solo tiene sentido con --detach.'
   },
   'usage-no-separator': {
     en: 'FULL-CHAIN LOCK: the command must follow a "--" separator.',

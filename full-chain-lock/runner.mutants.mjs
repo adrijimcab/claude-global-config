@@ -114,7 +114,7 @@ const MUTANTS = [
   ['the project defaults to a constant', X, "project: flags['--project'] ?? cwdName,", "project: flags['--project'] ?? 'unknown',"],
   ['the measured tree ignores --tree', X, "tree: flags['--tree'] ?? cwd,", 'tree: cwd,'],
   ['the measured tree has no default', X, "tree: flags['--tree'] ?? cwd,", "tree: flags['--tree'],"],
-  ['--tree is not a known flag', X, "'--session', '--tree']);", "'--session']);"],
+  ['--tree is not a known flag', X, "'--session', '--tree', '--run-dir']);", "'--session', '--run-dir']);"],
   ['the poll interval flag is ignored', X, "pollMs: flags['--poll-ms'] ?? DEFAULT_POLL_MS", 'pollMs: DEFAULT_POLL_MS'],
 
   // --- the composition root
@@ -124,8 +124,8 @@ const MUTANTS = [
   ['the session is read from a variable the harness does not export', N, 'sessionFromEnvironment: process.env.CLAUDE_CODE_SESSION_ID', 'sessionFromEnvironment: process.env.CLAUDE_SESSION_ID'],
   ['the measured tree is not resolved to its top level', N, 'tree: measuredTree(parsed.request.tree)', 'tree: parsed.request.tree'],
   ['the cwd is not handed to the arguments', N, '{ cwd: process.cwd(), cwdName:', '{ cwd: undefined, cwdName:'],
-  ['a usage problem does not exit with the usage code', N, '    return EXIT.usage;', '    return 1;'],
-  ['a usage problem does not print the synopsis', N, "    say.complain('usage');", '    void say;'],
+  ['a usage problem does not exit with the usage code', N, '  return EXIT.usage;', '  return 1;'],
+  ['a usage problem does not print the synopsis', N, "  say.complain('usage');", '  void say;'],
   ['a defect of a port exits 0', N, '  return EXIT.lockFault;\n}', '  return 0;\n}'],
 
   // --- the measured tree
