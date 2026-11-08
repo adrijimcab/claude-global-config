@@ -15,9 +15,16 @@ const MUTANTS = [
   ['Windows gets plain bash', M, "if (platform !== 'win32') return 'bash';", "if (platform !== 'linux') return 'bash';"],
   ['backslashes are not turned forward', M, ".trim().split('\\\\').join('/')", '.trim()'],
   ['the root is one level short', M, 'const EXEC_PATH_DEPTH = 3;', 'const EXEC_PATH_DEPTH = 2;'],
-  ['the Bash is looked for in bin instead of usr/bin', M, "}/usr/bin/bash.exe`;", "}/bin/bash.exe`;"],
+  ['the Git tools are looked for in bin instead of usr/bin', M, "fill('..'))}/usr/bin`;", "fill('..'))}/bin`;"],
   ['a missing bash.exe falls back to PATH', M, 'if (!exists(bash)) {', 'if (false) {'],
-  ['the real lookup asks no git', M, "const execPath = process.platform === 'win32' ? execFileSync('git', ['--exec-path'], { encoding: 'utf8', windowsHide: true }) : '';", "const execPath = '';"],
+  ['the real lookup asks no git', M, "execFileSync('git', ['--exec-path'], { encoding: 'utf8', windowsHide: true }) : '');", "'' : '');"],
+  // The environment Git Bash runs in. @es El entorno en que corre Git Bash.
+  ['the environment is rewritten on every platform', M, "if (platform !== 'win32') return env;", "if (platform === 'never') return env;"],
+  ['Git usr/bin keeps forward slashes on the Windows PATH', M, "gitUsrBinOf(forwardOf(execPath)).split('/').join('\\\\');", 'gitUsrBinOf(forwardOf(execPath));'],
+  ['the PATH key is matched by exact case only', M, "Object.keys(env).find((name) => name.toUpperCase() === 'PATH') ?? 'Path';", "Object.keys(env).find((name) => name === 'PATH') ?? 'Path';"],
+  ['Git usr/bin goes last instead of first', M, '`${usrBin};${current}`', '`${current};${usrBin}`'],
+  ['an empty Path keeps a stray separator', M, "current === undefined || current === '' ? usrBin", 'current === undefined ? usrBin'],
+  ['the caller environment is ignored', M, "return gitBashEnvFrom({ platform: process.platform, execPath: gitExecPath(), env });", "return gitBashEnvFrom({ platform: process.platform, execPath: gitExecPath(), env: {} });"],
 ];
 
 const survivors = runMutants({

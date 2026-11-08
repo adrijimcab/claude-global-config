@@ -20,6 +20,38 @@ import path from 'node:path';
 /** The levels from git's exec path up to its root: mingw64/libexec/git-core. @es Niveles hasta la raíz de git. */
 const EXEC_PATH_DEPTH = 3;
 
+/** git's exec path with forward slashes, '' when unreadable. @es La ruta de git con barras normales. */
+const forwardOf = (execPath) => (typeof execPath === 'string' ? execPath.trim().split('\\').join('/') : '');
+
+/** `<git root>/usr/bin` from a forward exec path. @es `<raíz de git>/usr/bin` a partir de la ruta de git. */
+const gitUsrBinOf = (forward) => `${path.posix.join(forward, ...Array(EXEC_PATH_DEPTH).fill('..'))}/usr/bin`;
+
+/**
+ * The environment Git Bash runs a command in: Git's usr/bin first on PATH, so its own tools (cygpath, xargs, grep,
+ * sleep) answer even when the caller's PATH holds no Git directory, as b100's detached landing measured on
+ * 2026-11-05. The existing PATH key keeps its spelling (Windows writes `Path`), so no second key appears.
+ * @es El entorno en que Git Bash corre un comando: el usr/bin de Git primero en el PATH, para que sus herramientas
+ * respondan aunque el PATH de quien llama no tenga ningún directorio de Git, como midió el aterrizaje desacoplado de
+ * b100. La clave PATH existente conserva su escritura (Windows usa `Path`), así no aparece una segunda clave.
+ */
+export function gitBashEnvFrom({ platform, execPath, env }) {
+  if (platform !== 'win32') return env;
+
+  const usrBin = gitUsrBinOf(forwardOf(execPath)).split('/').join('\\');
+  const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') ?? 'Path';
+  const current = env[key];
+
+  return { ...env, [key]: current === undefined || current === '' ? usrBin : `${usrBin};${current}` };
+}
+
+/** git's exec path on Windows, '' elsewhere: the one fact both lookups need. @es La ruta de git en Windows. */
+const gitExecPath = () => (process.platform === 'win32' ? execFileSync('git', ['--exec-path'], { encoding: 'utf8', windowsHide: true }) : '');
+
+/** `env` prepared for Git Bash on this machine. @es `env` preparado para Git Bash en esta máquina. */
+export function gitBashEnv(env = process.env) {
+  return gitBashEnvFrom({ platform: process.platform, execPath: gitExecPath(), env });
+}
+
 /**
  * Pure derivation with injected facts, so a selftest can drive every case.
  * @es Derivación pura con hechos inyectados, para que un selftest recorra cada caso.
@@ -27,10 +59,10 @@ const EXEC_PATH_DEPTH = 3;
 export function gitBashFrom({ platform, execPath, exists }) {
   if (platform !== 'win32') return 'bash';
 
-  const forward = typeof execPath === 'string' ? execPath.trim().split('\\').join('/') : '';
+  const forward = forwardOf(execPath);
   // An empty or unreadable exec path gives a relative candidate that does not exist, so `exists` alone decides.
   // @es Una ruta vacía o ilegible da un candidato relativo que no existe, así que decide solo `exists`.
-  const bash = `${path.posix.join(forward, ...Array(EXEC_PATH_DEPTH).fill('..'))}/usr/bin/bash.exe`;
+  const bash = `${gitUsrBinOf(forward)}/bash.exe`;
 
   if (!exists(bash)) {
     throw new Error(`Git Bash was not found beside git (exec path "${forward}"); a selftest never falls back to another bash. @es No se encontró Git Bash junto a git (ruta "${forward}"); un selftest nunca cae en otro bash.`);
@@ -41,7 +73,7 @@ export function gitBashFrom({ platform, execPath, exists }) {
 
 /** Git Bash on this machine. @es Git Bash en esta máquina. */
 export function gitBash() {
-  const execPath = process.platform === 'win32' ? execFileSync('git', ['--exec-path'], { encoding: 'utf8', windowsHide: true }) : '';
+  const execPath = gitExecPath();
 
   return gitBashFrom({ platform: process.platform, execPath, exists: existsSync });
 }
