@@ -53,6 +53,20 @@ process.on('exit', () => {
   rmSync(SCRATCH, { recursive: true, force: true });
 });
 
+/**
+ * The environment of every real process this proof starts that reaches PowerShell (the WMI launcher): PowerShell
+ * creates `<USERPROFILE>\AppData\Roaming` on its first run and ignores APPDATA for it (measured), so the profile of
+ * those processes is a folder this proof owns, inside its own scratch, and nothing lands in the home it was given.
+ * @es El entorno de todo proceso real que esta prueba inicia y que llega a PowerShell (el lanzador WMI): PowerShell crea
+ * `<USERPROFILE>\AppData\Roaming` en su primera corrida e ignora APPDATA para eso (medido), así que el perfil de esos
+ * procesos es una carpeta de esta prueba, dentro de su propio scratch, y nada cae en el home que recibió.
+ */
+const PROFILE = path.join(SCRATCH, 'profile');
+const ownedProfile = Object.fromEntries(Object.entries(process.env).filter(([name]) => !['USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA'].includes(name.toUpperCase())));
+
+mkdirSync(PROFILE, { recursive: true });
+Object.assign(ownedProfile, { USERPROFILE: PROFILE, HOME: PROFILE, APPDATA: path.join(PROFILE, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(PROFILE, 'AppData', 'Local') });
+
 let passed = 0;
 let failed = 0;
 
@@ -332,7 +346,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
 
 // ── The command line: usage, detach, read ───────────────────────────────────────────────────────────────────
 {
-  const cli = (args) => spawnSync(process.execPath, [RUN, ...args], { encoding: 'utf8', windowsHide: true });
+  const cli = (args) => spawnSync(process.execPath, [RUN, ...args], { encoding: 'utf8', windowsHide: true, env: ownedProfile });
   const usage = cli(['--run-dir', '/r', '--chain', 'c', '--', 'x']);
   const readUsage = cli(['--read']);
 
@@ -361,7 +375,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
 
   mkdirSync(workDir, { recursive: true });
 
-  const byDefault = spawnSync(process.execPath, [RUN, '--detach', '--chain', 'cli-default', '--tree', SCRATCH, '--', process.execPath, CHILD, 'cwd'], { encoding: 'utf8', windowsHide: true, cwd: workDir });
+  const byDefault = spawnSync(process.execPath, [RUN, '--detach', '--chain', 'cli-default', '--tree', SCRATCH, '--', process.execPath, CHILD, 'cwd'], { encoding: 'utf8', windowsHide: true, cwd: workDir, env: ownedProfile });
   const printedDir = /Run directory: (.+)/.exec(byDefault.stdout)?.[1]?.trim() ?? '';
 
   spawned.add(readJson(path.join(printedDir, RUN_FILES.run)).pid);
@@ -373,7 +387,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
 /** Starts the fixture caller, kills its tree once the run record exists, and waits for the verdict. @es Inicia al llamador de prueba, mata su árbol cuando existe el registro de la corrida y espera el veredicto. */
 async function killedCaller(adapter, exitCode) {
   const dir = freshDir();
-  const caller = spawn(process.execPath, [KILL_FIXTURE, adapter, dir, String(exitCode), '3000'], { stdio: 'ignore', detached: process.platform !== 'win32', windowsHide: true });
+  const caller = spawn(process.execPath, [KILL_FIXTURE, adapter, dir, String(exitCode), '3000'], { stdio: 'ignore', detached: process.platform !== 'win32', windowsHide: true, env: ownedProfile });
 
   spawned.add(caller.pid);
   caller.once('error', () => undefined);
