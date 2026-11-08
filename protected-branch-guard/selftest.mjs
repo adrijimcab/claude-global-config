@@ -41,7 +41,7 @@ import { protectedBranchDeletions } from './branch-deletions.mjs';
 import { gitDefaultBranch } from './default-branch.mjs';
 import { evaluate } from './guard.mjs';
 import { MESSAGES } from './refusal.mjs';
-import { gitBash } from '../selftest-fixtures/git-bash.mjs';
+import { gitBash, gitBashEnv } from '../selftest-fixtures/git-bash.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GUARD = path.join(HERE, 'guard.mjs');
@@ -103,7 +103,7 @@ function expect(verdict, command, label = command, tool = 'Bash') {
   git(linked, 'branch', '-d', 'main');
   check('premise: git branch -d main from a linked worktree deletes a merged main nobody has checked out', git(main, 'branch', '--list', 'main') === '');
 
-  const swept = spawnSync(gitBash(), ['-c', 'git branch --merged | grep -v "[*+]" | xargs git branch -d'], { cwd: linked, env: cleanEnv, encoding: 'utf8' });
+  const swept = spawnSync(gitBash(), ['-c', 'git branch --merged | grep -v "[*+]" | xargs git branch -d'], { cwd: linked, env: gitBashEnv(cleanEnv), encoding: 'utf8' });
 
   check('premise: a merged-branch sweep through xargs deletes develop too', swept.status === 0 && git(main, 'branch', '--list', 'develop') === '', `${String(swept.status)} ${swept.stderr} ${String(swept.error)}`);
 }
