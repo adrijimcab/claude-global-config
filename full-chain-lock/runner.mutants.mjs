@@ -114,7 +114,7 @@ const MUTANTS = [
   ['the project defaults to a constant', X, "project: flags['--project'] ?? cwdName,", "project: flags['--project'] ?? 'unknown',"],
   ['the measured tree ignores --tree', X, "tree: flags['--tree'] ?? cwd,", 'tree: cwd,'],
   ['the measured tree has no default', X, "tree: flags['--tree'] ?? cwd,", "tree: flags['--tree'],"],
-  ['--tree is not a known flag', X, "'--session', '--tree']);", "'--session']);"],
+  ['--tree is not a known flag', X, "'--session', '--tree', '--run-dir']);", "'--session', '--run-dir']);"],
   ['the poll interval flag is ignored', X, "pollMs: flags['--poll-ms'] ?? DEFAULT_POLL_MS", 'pollMs: DEFAULT_POLL_MS'],
 
   // --- the composition root
