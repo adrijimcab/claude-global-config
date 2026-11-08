@@ -4,6 +4,13 @@
  * `chain-runner.mjs` to their real adapters and exits with the run's code.
  *
  *   node run.mjs --chain <name> [--project <name>] [--session <id>] [--tree <dir>] [--wait-seconds <n>] -- <command> [args...]
+ *   node run.mjs --detach [--run-dir <dir>] --chain <name> ... -- <command> [args...]   returns at once; the chain runs detached
+ *   node run.mjs --read <run dir>                                                       running, finished (exit N) or lost
+ *
+ * `--detach` starts the same locked chain in a process no kill of the caller's process tree reaches (`detach-chain.mjs`),
+ * with its output in `<run dir>/output.log` and its verdict in `<run dir>/verdict.json`; `--read` reports on it.
+ * @es `--detach` inicia la misma cadena con lock en un proceso que ningún kill del árbol de quien llama alcanza, con su
+ * salida en `<dir>/output.log` y su veredicto en `<dir>/verdict.json`; `--read` informa de ella.
  *
  * It takes ONE machine-wide lock (`hook-state/file-lock.mjs`, in the shared state directory `full-chain-lock` under
  * the Claude home, redirectable like every state by `HOOK_STATE_DIR`), records the holder, runs the command as a
@@ -32,11 +39,17 @@ import { fileURLToPath } from 'node:url';
 
 import { stateDir } from '../hook-state/locations.mjs';
 import { childProcessAdapter } from './child-process-adapter.mjs';
-import { parseArguments } from './cli-arguments.mjs';
+import { parseArguments, parseReadArguments } from './cli-arguments.mjs';
 import { EXIT, runChain } from './chain-runner.mjs';
+import { detachChain, readChain } from './detach-chain.mjs';
+import { detachedLauncher } from './detach-launcher.mjs';
+import { RUNS_FOLDER } from './run-directory.mjs';
 import { fileLockAdapter } from './file-lock-adapter.mjs';
 import { measuredTree } from './measured-tree.mjs';
 import { speak } from './messages.mjs';
+
+/** The word that asks for the state of a detached run. @es La palabra que pide el estado de una corrida desacoplada. */
+const READ_FLAG = '--read';
 
 /** The real clock. @es El reloj real. */
 const realClock = { now: () => Date.now(), sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) };
@@ -47,22 +60,25 @@ const realClock = { now: () => Date.now(), sleep: (ms) => new Promise((resolve) 
  */
 export async function main(argv) {
   const say = speak();
+
+  if (argv[0] === READ_FLAG) return readRun(argv, say);
+
   // Claude Code exports CLAUDE_CODE_SESSION_ID to every shell it runs; nothing exports CLAUDE_SESSION_ID, which is why
   // records written without --session named the session 'unknown'.
   // @es Claude Code exporta CLAUDE_CODE_SESSION_ID a cada shell que ejecuta; nadie exporta CLAUDE_SESSION_ID, y por eso
   // los registros escritos sin --session nombraban la sesión 'unknown'.
   const parsed = parseArguments(argv, { cwd: process.cwd(), cwdName: path.basename(process.cwd()), sessionFromEnvironment: process.env.CLAUDE_CODE_SESSION_ID });
 
-  if (parsed.problem !== undefined) {
-    say.complain(parsed.problem.id, parsed.problem.params);
-    say.complain('usage');
-
-    return EXIT.usage;
-  }
+  if (parsed.problem !== undefined) return refuse(parsed.problem, say);
 
   // The shared state mechanism of the lock, named as a literal so the state census can see it.
   // @es El mecanismo de estado compartido del lock, con su nombre literal para que el censo de estado lo vea.
-  const lock = fileLockAdapter(stateDir('full-chain-lock'));
+  const stateDirectory = stateDir('full-chain-lock');
+  const request = { ...parsed.request, tree: measuredTree(parsed.request.tree) };
+
+  if (request.detach) return detachChain(request, { launcher: detachedLauncher(), say, runsRoot: path.join(stateDirectory, RUNS_FOLDER), environment: process.env, cwd: process.cwd() });
+
+  const lock = fileLockAdapter(stateDirectory);
 
   // Last resort: a process that exits without passing its `finally` still gives the lock back.
   // @es Último recurso: un proceso que sale sin pasar por su `finally` devuelve igualmente el lock.
@@ -74,9 +90,30 @@ export async function main(argv) {
     }
   });
 
-  const request = { ...parsed.request, tree: measuredTree(parsed.request.tree) };
-
   return runChain(request, { lock, child: childProcessAdapter(), clock: realClock, say, processId: process.pid });
+}
+
+/**
+ * Tells a usage problem and the synopsis, bilingual, and answers the usage code.
+ * @es Cuenta un problema de uso y la sinopsis, bilingües, y responde el código de uso.
+ */
+function refuse(problem, say) {
+  say.complain(problem.id, problem.params);
+  say.complain('usage');
+
+  return EXIT.usage;
+}
+
+/**
+ * `--read <run dir>`: says what became of a detached run and answers its exit code.
+ * @es `--read <directorio>`: dice qué fue de una corrida desacoplada y responde su código de salida.
+ */
+function readRun(argv, say) {
+  const parsed = parseReadArguments(argv);
+
+  if (parsed.problem !== undefined) return refuse(parsed.problem, say);
+
+  return readChain(path.resolve(parsed.runDir), { say });
 }
 
 /**
