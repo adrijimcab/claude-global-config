@@ -35,9 +35,20 @@ const SESSION_ID = /^[A-Za-z0-9-]+$/;
 /** The variables every runtime reads for its temp folder. @es Las variables con que cada runtime busca su temporal. */
 const VARIABLES = ['TEMP', 'TMP', 'TMPDIR'];
 
-/** The long form of the OS temp root, `/`-separated. @es La forma larga de la raíz temporal, separada con `/`. */
-export function realTempRoot() {
-  return realpathSync.native(tmpdir()).split('\\').join('/');
+/** The tail a session's private folder adds to the shared root. @es La cola que la carpeta privada de una sesión añade a la raíz compartida. */
+const NESTED_SESSION_TEMP = /\/claude\/session-tmp\/[A-Za-z0-9-]+$/i;
+
+/**
+ * The long form of the SHARED OS temp root, `/`-separated. A process that already runs under a session's private
+ * TEMP (a hook after a resume, a command of the session itself) reports that folder as its temp dir, so the private
+ * tail is stripped: the root is always the shared one and `sessionTempOf` never nests a session folder inside another.
+ * @es La forma larga de la raíz temporal COMPARTIDA, separada con `/`. Un proceso que ya corre bajo el TEMP privado de
+ * una sesión (un hook tras un resume, un comando de la propia sesión) informa esa carpeta como su temporal, así que se
+ * quita la cola privada: la raíz es siempre la compartida y `sessionTempOf` nunca anida una carpeta de sesión en otra.
+ * @param {string} [temp] the temp dir to resolve, the process's by default. @es el directorio temporal a resolver, por defecto el del proceso.
+ */
+export function realTempRoot(temp = tmpdir()) {
+  return realpathSync.native(temp).split('\\').join('/').replace(NESTED_SESSION_TEMP, '');
 }
 
 /**
