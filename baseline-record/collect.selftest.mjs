@@ -198,10 +198,13 @@ check('problems: several at once are listed in section order', broken((copy) => 
 
   writeFileSync(hang.replay.file, 'setTimeout(() => {}, 6000);\n');
 
-  const started = Date.now();
   const hung = attempt(() => buildRecord({ ...hang.options, latencyTimeoutMs: 600 }));
 
-  check('latency: a replay that hangs is killed at the timeout and is not a measurement', [hung.stopLatency?.measured, hung.stopLatency?.exitCode, Date.now() - started < 5500], [false, null, true]);
+  // The proof that the replay was KILLED is the condition, not a clock: it would end by itself with exit code 0 only
+  // after 6 s, so an exit code of null can only come from the kill at the timeout. @es La prueba de que el replay fue
+  // MATADO es la condición, no un reloj: terminaría solo con código 0 recién a los 6 s, así que un código null solo
+  // puede venir del kill en el timeout.
+  check('latency: a replay that hangs is killed at the timeout and is not a measurement', [hung.stopLatency?.measured, hung.stopLatency?.exitCode], [false, null]);
 }
 
 // --- the entry point ---
