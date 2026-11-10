@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { isAlive, killTree } from '../process-control/process-port.mjs';
 import { sessionTempOf } from '../session-temp/session-temp.mjs';
-import { chainTempDir } from '../full-chain-lock/detached-runner.mjs';
+import { chainTempDir } from '../full-chain-lock/run-directory.mjs';
 import { evaluate } from './end.mjs';
 import { killProcess } from './kill-process.mjs';
 import { processesToEnd } from './ownership.mjs';

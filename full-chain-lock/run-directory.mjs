@@ -14,11 +14,38 @@
  * pid; sin veredicto y con un pid vivo, CORRIENDO; sin veredicto y sin pid vivo (o sin pid registrado), PERDIDA.
  */
 
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { realTempRoot } from '../session-temp/session-temp.mjs';
+
 /** The files of a run directory. @es Los ficheros de un directorio de corrida. */
 export const RUN_FILES = Object.freeze({ job: 'job.json', run: 'run.json', output: 'output.log', verdict: 'verdict.json' });
+
+/**
+ * The TEMP folder of a detached chain: `<shared temp root>/fcl/<8 hex of the sha256 of the run directory path>`.
+ * Decided by the CALLER (`detach-chain.mjs`, which shares the session's temp root) and carried in `job.json`, so the
+ * detached runner, which WMI starts with another environment, never recomputes it.
+ *   - NOT inside the run directory: that lives under the Claude home, a git repository, and the mutation engine refuses
+ *     a TEMP inside any repository (measured: "NOT MEASURED ... is inside the git repository").
+ *   - NOT under `session-tmp`, so the end-of-session sweep (`session-processes/`) never matches the chain.
+ *   - SHORT and unique per run: at most `CHAIN_TEMP_BUDGET` characters for a realistic user TEMP, because b100's
+ *     integrate fixture adds about 110 characters of its own to it and git fails with "Filename too long" past a
+ *     176-character staging budget (b100 `STAGING_PATH_BUDGET`, commit f36e204). The run directory NAME is kept out of it.
+ * @es La carpeta TEMP de una cadena desacoplada: `<raíz temporal compartida>/fcl/<8 hex del sha256 de la ruta del
+ * directorio de corrida>`. La decide QUIEN LLAMA (`detach-chain.mjs`, que comparte la raíz temporal de la sesión) y
+ * viaja en `job.json`, así el runner desacoplado, que WMI inicia con otro entorno, nunca la recalcula. NO va dentro
+ * del directorio de corrida (vive bajo el home de Claude, un repositorio git, y el motor de mutantes rechaza un TEMP
+ * dentro de cualquier repositorio); NO va bajo `session-tmp`, así el barrido de fin de sesión nunca la reconoce; es
+ * CORTA y única por corrida: como mucho `CHAIN_TEMP_BUDGET` caracteres con un TEMP de usuario realista, porque el
+ * fixture de integrate de b100 le suma unos 110 y git falla con «Filename too long» pasado un presupuesto de 176
+ * (`STAGING_PATH_BUDGET` de b100, commit f36e204). El NOMBRE del directorio de corrida queda fuera.
+ */
+export const chainTempDir = (runDir, root = realTempRoot()) => path.join(root, 'fcl', createHash('sha256').update(path.resolve(runDir)).digest('hex').slice(0, 8));
+
+/** The longest chain TEMP a realistic user TEMP (42 characters) may give. @es El TEMP de cadena más largo que da un TEMP de usuario realista (42 caracteres). */
+export const CHAIN_TEMP_BUDGET = 70;
 
 /** The runs root inside the lock's state directory. @es La raíz de las corridas dentro del directorio de estado del lock. */
 export const RUNS_FOLDER = 'runs';

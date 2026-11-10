@@ -30,12 +30,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
+import { realTempRoot } from '../session-temp/session-temp.mjs';
 import { EXIT } from './chain-runner.mjs';
 import { parseArguments, parseReadArguments } from './cli-arguments.mjs';
 import { detachChain, readChain } from './detach-chain.mjs';
 import { WMI_ENVIRONMENT, WMI_SCRIPT, detachedLauncher, spawnLauncher, wmiLauncher } from './detach-launcher.mjs';
-import { chainEnvironment, chainTempDir, runJob } from './detached-runner.mjs';
-import { RUN_FILES, defaultRunDirectory, runStatus } from './run-directory.mjs';
+import { chainEnvironment, runJob } from './detached-runner.mjs';
+import { CHAIN_TEMP_BUDGET, RUN_FILES, chainTempDir, defaultRunDirectory, runStatus } from './run-directory.mjs';
 import { MESSAGES, speak } from './messages.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -112,6 +113,7 @@ function killTree(pid) {
 }
 
 let counter = 0;
+const CHAIN_TEMP = path.join(SCRATCH, 'chain-temp');
 const freshDir = () => path.join(SCRATCH, `run-${String(counter++)}`);
 
 /** A sink that remembers what is printed. @es Un sumidero que recuerda lo impreso. */
@@ -215,6 +217,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   check('detaching returns 0 at once', code === 0);
   check('the job file carries the command, its arguments, the directory and the lock settings', job.command === 'the-command' && job.args.join('|') === 'a b|--x' && job.cwd === '/the/cwd' && job.chain === 'c1' && job.project === 'p' && job.session === 's' && job.tree === '/t' && job.waitSeconds === 90 && job.pollMs === 300, JSON.stringify(job));
   check('the job file carries the environment', job.environment?.SECRET_TOKEN === 'sekret-value-123');
+  check('the job file carries the chain TEMP the caller decided for that run directory', job.tempDir === chainTempDir(dir), String(job.tempDir));
   check('the launcher is told the node binary, the runner script and the run directory, and nothing of the environment', calls.length === 1 && calls[0].nodePath === process.execPath && calls[0].runnerPath === path.join(HERE, 'detached-runner.mjs') && calls[0].runDir === dir && !JSON.stringify(calls[0]).includes('sekret'), JSON.stringify(calls));
   check('the run record names the detached pid, the chain and the command', record.pid === 4242 && record.chain === 'c1' && record.command === 'the-command a b --x', JSON.stringify(record));
   check('the output names the run directory, the pid and the exact read command, bilingual', printed.includes(dir) && printed.includes('4242') && printed.includes(`--read "${dir}"`) && printed.includes(RUN) && isBilingual(printed), printed);
@@ -284,7 +287,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   const dir = freshDir();
 
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, RUN_FILES.job), JSON.stringify({ command: process.execPath, args: [CHILD, 'exit', '7'], cwd: SCRATCH, environment: { ...process.env, DETACH_PROOF_VARIABLE: 'reached-the-chain' }, chain: 'runner-proof', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 30, pollMs: 100 }));
+  writeFileSync(path.join(dir, RUN_FILES.job), JSON.stringify({ command: process.execPath, args: [CHILD, 'exit', '7'], cwd: SCRATCH, environment: { ...process.env, DETACH_PROOF_VARIABLE: 'reached-the-chain' }, tempDir: CHAIN_TEMP, chain: 'runner-proof', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 30, pollMs: 100 }));
 
   const verdict = await runJob(dir);
   const written = readJson(path.join(dir, RUN_FILES.verdict));
@@ -297,7 +300,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   const envDir = freshDir();
 
   mkdirSync(envDir, { recursive: true });
-  writeFileSync(path.join(envDir, RUN_FILES.job), JSON.stringify({ command: process.execPath, args: ['-e', 'process.stdout.write(String(process.env.DETACH_PROOF_VARIABLE))'], cwd: SCRATCH, environment: { ...process.env, DETACH_PROOF_VARIABLE: 'reached-the-chain' }, chain: 'runner-proof', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 30, pollMs: 100 }));
+  writeFileSync(path.join(envDir, RUN_FILES.job), JSON.stringify({ command: process.execPath, args: ['-e', 'process.stdout.write(String(process.env.DETACH_PROOF_VARIABLE))'], cwd: SCRATCH, environment: { ...process.env, DETACH_PROOF_VARIABLE: 'reached-the-chain' }, tempDir: CHAIN_TEMP, chain: 'runner-proof', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 30, pollMs: 100 }));
   await runJob(envDir);
   check('the environment of the job reaches the chain', readFileSync(path.join(envDir, RUN_FILES.output), 'utf8').includes('reached-the-chain'));
 
@@ -308,20 +311,28 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   const sessionTemp = path.join(SCRATCH, 'claude', 'session-tmp', 'session-under-sweep');
 
   mkdirSync(tempDir, { recursive: true });
-  writeFileSync(path.join(tempDir, RUN_FILES.job), JSON.stringify({ command: process.execPath, args: ['-e', 'process.stdout.write([process.env.TEMP, process.env.TMP, process.env.TMPDIR, require("fs").existsSync(process.env.TEMP)].join("|"))'], cwd: SCRATCH, environment: { ...process.env, TEMP: sessionTemp, TMP: sessionTemp, TMPDIR: sessionTemp }, chain: 'runner-proof', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 30, pollMs: 100 }));
+  writeFileSync(path.join(tempDir, RUN_FILES.job), JSON.stringify({ command: process.execPath, args: ['-e', 'process.stdout.write([process.env.TEMP, process.env.TMP, process.env.TMPDIR, require("fs").existsSync(process.env.TEMP)].join("|"))'], cwd: SCRATCH, environment: { ...process.env, TEMP: sessionTemp, TMP: sessionTemp, TMPDIR: sessionTemp }, tempDir: CHAIN_TEMP, chain: 'runner-proof', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 30, pollMs: 100 }));
   await runJob(tempDir);
 
-  const ownTemp = chainTempDir(tempDir);
+  const ownTemp = CHAIN_TEMP;
 
   check('the chain runs with TEMP, TMP and TMPDIR of its own, never the session\'s', readFileSync(path.join(tempDir, RUN_FILES.output), 'utf8').includes([ownTemp, ownTemp, ownTemp, 'true'].join('|')), readFileSync(path.join(tempDir, RUN_FILES.output), 'utf8'));
   check('the chain\'s own TEMP folder is removed once the chain ended', !existsSync(ownTemp));
-  check('the chain TEMP is outside the run directory (a git repository) and outside any session-tmp folder', !ownTemp.startsWith(tempDir) && !ownTemp.split(path.sep).includes('session-tmp') && ownTemp.endsWith(path.join('claude', 'detached-chain-tmp', path.basename(tempDir))), ownTemp);
-  check('two run directories get two chain TEMP folders', chainTempDir(path.join(SCRATCH, 'a')) !== chainTempDir(path.join(SCRATCH, 'b')));
+  // The chain TEMP the caller decides. @es El TEMP de cadena que decide quien llama.
+  const realisticRunDir = 'C:\\Users\\adrian.jimenez\\.claude\\full-chain-lock\\state\\runs\\20261110-104750250--claude-integrate-integrate-mjs';
+  const decided = chainTempDir(realisticRunDir);
+  const decidedAt = (root) => chainTempDir(realisticRunDir, root);
+
+  check('the chain TEMP is <shared temp root>/fcl/<8 hex>', path.relative(realTempRoot(), decided).split(path.sep).join('/').match(/^fcl\/[0-9a-f]{8}$/) !== null, decided);
+  check('the chain TEMP is outside the run directory (a git repository) and outside any session-tmp folder', !decided.startsWith(realisticRunDir) && !decided.split(path.sep).includes('session-tmp') && !decided.includes('claude'.concat(path.sep, 'session-tmp')), decided);
+  check('two run directories get two chain TEMP folders and one run directory always the same', chainTempDir(path.join(SCRATCH, 'a')) !== chainTempDir(path.join(SCRATCH, 'b')) && chainTempDir(path.join(SCRATCH, 'a')) === chainTempDir(path.join(SCRATCH, 'a')));
+  check('the run directory name is kept out of the chain TEMP', !decided.includes('integrate') && !decided.includes('20261110'), decided);
+  check(`the chain TEMP of a realistic run directory under a realistic user TEMP is at most ${String(CHAIN_TEMP_BUDGET)} characters (b100's integrate fixture adds ~110 to it and git fails past a 176-character staging budget)`, decidedAt('C:\\Users\\adrian.jimenez\\AppData\\Local\\Temp').length <= CHAIN_TEMP_BUDGET && CHAIN_TEMP_BUDGET === 70, decidedAt('C:\\Users\\adrian.jimenez\\AppData\\Local\\Temp'));
   check('chainEnvironment keeps every other variable and replaces the three', JSON.stringify(chainEnvironment({ A: '1', TEMP: 'x' }, '/t')) === '{"A":"1","TEMP":"/t","TMP":"/t","TMPDIR":"/t"}', JSON.stringify(chainEnvironment({ A: '1', TEMP: 'x' }, '/t')));
 
   const fakeDir = freshDir();
   const calls = [];
-  const fakeJob = { command: 'cmd', args: ['a', 'b'], cwd: SCRATCH, environment: { ONLY_THIS: '1' }, chain: 'runner-proof', project: 'p', session: 's', tree: '/the/tree', waitSeconds: 30, pollMs: 100 };
+  const fakeJob = { command: 'cmd', args: ['a', 'b'], cwd: SCRATCH, environment: { ONLY_THIS: '1' }, tempDir: CHAIN_TEMP, chain: 'runner-proof', project: 'p', session: 's', tree: '/the/tree', waitSeconds: 30, pollMs: 100 };
 
   mkdirSync(fakeDir, { recursive: true });
   writeFileSync(path.join(fakeDir, RUN_FILES.job), JSON.stringify(fakeJob));
@@ -340,14 +351,14 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   });
 
   check('the chain is started as the normal locked run with every setting of the job', JSON.stringify(calls[0][1].slice(1)) === JSON.stringify(['--chain', 'runner-proof', '--project', 'p', '--session', 's', '--tree', '/the/tree', '--wait-seconds', '30', '--poll-ms', '100', '--', 'cmd', 'a', 'b']) && calls[0][1][0] === RUN && calls[0][0] === process.execPath, JSON.stringify(calls[0][1]));
-  check('it runs in the job\'s directory with the job\'s environment, stdin closed and output on a file', calls[0][2].cwd === SCRATCH && JSON.stringify(calls[0][2].env) === JSON.stringify({ ONLY_THIS: '1', TEMP: chainTempDir(fakeDir), TMP: chainTempDir(fakeDir), TMPDIR: chainTempDir(fakeDir) }) && calls[0][2].stdio[0] === 'ignore' && typeof calls[0][2].stdio[1] === 'number' && calls[0][2].stdio[1] === calls[0][2].stdio[2]);
+  check('it runs in the job\'s directory with the job\'s environment, stdin closed and output on a file', calls[0][2].cwd === SCRATCH && JSON.stringify(calls[0][2].env) === JSON.stringify({ ONLY_THIS: '1', TEMP: CHAIN_TEMP, TMP: CHAIN_TEMP, TMPDIR: CHAIN_TEMP }) && calls[0][2].stdio[0] === 'ignore' && typeof calls[0][2].stdio[1] === 'number' && calls[0][2].stdio[1] === calls[0][2].stdio[2]);
   check('a chain ended by a signal is a verdict with the signal and no code', faked.exitCode === null && faked.signal === 'SIGTERM' && readJson(path.join(fakeDir, RUN_FILES.verdict)).signal === 'SIGTERM');
   check('the verdict carries the instants the clock gave, start first and end last', faked.startedAt === '2026-01-01T00:00:00.000Z' && faked.endedAt === '2026-01-01T00:00:09.000Z', JSON.stringify(faked));
 
   const brokenDir = freshDir();
 
   mkdirSync(brokenDir, { recursive: true });
-  writeFileSync(path.join(brokenDir, RUN_FILES.job), JSON.stringify({ command: 'x', args: [], cwd: SCRATCH, environment: {}, chain: 'c', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 1, pollMs: 100 }));
+  writeFileSync(path.join(brokenDir, RUN_FILES.job), JSON.stringify({ command: 'x', args: [], cwd: SCRATCH, environment: {}, tempDir: CHAIN_TEMP, chain: 'c', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 1, pollMs: 100 }));
 
   const unstarted = await runJob(brokenDir, { spawnProcess: () => { throw new Error('cannot start here'); } });
 
