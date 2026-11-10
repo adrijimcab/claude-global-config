@@ -202,18 +202,25 @@ check('a child that ends with code 5 resolves 5', (await childProcessAdapter({ s
   clearState();
 
   const log = path.join(SCRATCH, 'expiry.log');
-  const first = startRunner(['--chain', 'long-chain', '--', process.execPath, ...holdArgs(log, 'A', 2500)]);
+  // The holder runs until the proof releases it (30 s is only the bound that stops a leaked one), so the wait can end
+  // only by expiring: a runner that ignored --wait-seconds would wait for a holder that never ends and not exit 75.
+  // @es El holder corre hasta que la prueba lo libera (30 s es solo la cota que frena a uno que se filtre), así que la
+  // espera solo puede terminar por vencimiento: un runner que ignorara --wait-seconds esperaría a un holder que no
+  // termina y no saldría con 75.
+  const release = path.join(SCRATCH, 'expiry.release');
+  const first = startRunner(['--chain', 'long-chain', '--', process.execPath, CHILD, 'until', log, 'A', release, '30000']);
 
   await until(() => existsSync(HOLDER));
 
-  const started = Date.now();
   const second = await startRunner(['--chain', 'late-chain', '--wait-seconds', '0.4', '--poll-ms', '100', '--', process.execPath, ...holdArgs(log, 'B', 10)]);
 
   check('an expired wait exits 75', second.code === EXIT.waitExpired, `got ${String(second.code)}`);
-  check('the wait is bounded by --wait-seconds', Date.now() - started < 2200, `${String(Date.now() - started)} ms`);
+  check('the wait expired by itself while the holder still held the lock', !existsSync(release) && existsSync(HOLDER), `release written: ${String(existsSync(release))}`);
   check('the expiry message is bilingual and names the holder and that nothing ran', bilingual(second.stderr) && second.stderr.includes('gave up after 0.4s') && second.stderr.includes('long-chain') && second.stderr.includes('did NOT run'), second.stderr);
   check('the command of the expired chain never ran', !lines(log).some((line) => line.startsWith('B ')));
   check('the expired chain did not take the first one\'s lock away', existsSync(LOCK));
+
+  writeFileSync(release, 'go');
 
   const firstResult = await first;
 
