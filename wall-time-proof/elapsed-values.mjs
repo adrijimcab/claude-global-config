@@ -24,7 +24,7 @@
  * escritura en todo el fichero, no por ámbito: queda del lado cauteloso.
  */
 
-import { assignments, matchingOpen, operandSpan } from './token-walk.mjs';
+import { assignments, operandSpan } from './token-walk.mjs';
 
 /** Comparison operators. @es Operadores de comparación. */
 export const COMPARATORS = new Set(['<', '>', '<=', '>=', '==', '===', '!=', '!==']);

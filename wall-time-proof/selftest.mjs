@@ -70,7 +70,10 @@ check('red: an equality with an elapsed value', flagged(source(STARTED, "check('
 check('red: the difference is the first reading minus a later one', flagged(source(STARTED, "check('x', started - Date.now() > -5);")), [2]);
 check('red: performance.now', flagged(source('const t0 = performance.now();', "check('x', performance.now() - t0 < 5);")), [2]);
 check('red: process.hrtime.bigint', flagged(source('const t0 = process.hrtime.bigint();', "check('x', process.hrtime.bigint() - t0 < 5n);")), [2]);
-check('red: a bare hrtime import', flagged(source('const t0 = hrtime();', "check('x', hrtime() - t0 < 5);")), [2]);
+check('red: a bare hrtime import', flagged(source('const t0 = hrtime.bigint();', "check('x', hrtime.bigint() - t0 < 5n);")), [2]);
+check('red: a bare hrtime(start) is a difference already', flagged("check('x', hrtime(t0)[0] < 1);"), [1]);
+check('green: hrtime() without arguments is a pair, not an elapsed time', flagged("check('x', process.hrtime().length < 3);"), []);
+check('green: hrtime of another object is not the clock', flagged("check('x', box.hrtime(t0) < 3);"), []);
 check('red: process.hrtime(start) is a difference already', flagged(source('const t0 = process.hrtime();', "check('x', process.hrtime(t0)[0] < 1);")), [2]);
 check('red: a reading assigned later than its first use in the text', flagged(source('let started;', 'started = Date.now();', "check('x', Date.now() - started < 5);")), [3]);
 
