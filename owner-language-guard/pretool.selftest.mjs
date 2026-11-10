@@ -176,18 +176,42 @@ try {
   check('timeout: nothing on disk and nothing arriving is allowed', denied(anchoredCall(silentFile, 'toolu_none', waitingFor(silentFile, [], { timeoutMs: 100 }).read)), false);
   check('a payload without tool_use_id keeps the unanchored behaviour', denied(call(transcript(step(ENGLISH)))), true);
 
+  // The DEFAULT sleep really sleeps, and it is proved by what the engine says, never by a clock: `Atomics.wait`, the
+  // engine's blocking wait, is wrapped to record each call as [timeout, outcome]. 'timed-out' is what the engine
+  // answers only after the whole timeout has passed, and a sleep that does not sleep calls nothing. The clock of the
+  // wait is a counter that advances 25 ms per reading, so the deadline arrives after a known number of polls.
+  // @es El sleep POR DEFECTO duerme de verdad, y se prueba por lo que dice el motor, nunca por un reloj: se envuelve
+  // `Atomics.wait`, la espera bloqueante del motor, para registrar cada llamada como [plazo, resultado]. 'timed-out'
+  // es lo que el motor responde solo tras pasar todo el plazo, y un sleep que no duerme no llama a nada. El reloj de
+  // la espera es un contador que avanza 25 ms por lectura, así que el plazo llega tras un número conocido de pausas.
+  const engineWaitsDuring = (action) => {
+    const engineWait = Atomics.wait;
+    const pauses = [];
+
+    Atomics.wait = (...args) => {
+      const outcome = engineWait(...args);
+
+      pauses.push([args[3], outcome]);
+
+      return outcome;
+    };
+
+    try {
+      action();
+    } finally {
+      Atomics.wait = engineWait;
+    }
+
+    return JSON.stringify(pauses);
+  };
   const realSleepFile = transcript([...laggedBase(), textRecord(ENGLISH)]);
-  const started = Date.now();
-
-  readInterstitialTexts(realSleepFile, 'toolu_real_sleep', { timeoutMs: 150, pollMs: 25 });
+  let readings = 0;
+  const defaultPauses = engineWaitsDuring(() => readInterstitialTexts(realSleepFile, 'toolu_real_sleep', { timeoutMs: 150, pollMs: 25, now: () => 25 * readings++ }));
   const cpuBefore = process.cpuUsage();
-  const sleepStart = Date.now();
-
-  sleepSync(120);
-
+  const sleepPauses = engineWaitsDuring(() => sleepSync(120));
   const cpuMs = (process.cpuUsage(cpuBefore).user + process.cpuUsage(cpuBefore).system) / 1000;
 
-  check('sleepSync blocks for the requested time', Date.now() - sleepStart >= 110, true);
+  check('sleepSync is the engine wait for the requested 120 ms and it timed out', sleepPauses, JSON.stringify([[120, 'timed-out']]));
   check('sleepSync waits without spinning the CPU', cpuMs < 60, true);
 
   let seenId = 'unset';
@@ -195,7 +219,7 @@ try {
   anchoredCall(transcript(step(SPANISH)), '', (_file, id) => { seenId = id; return []; });
   check('an empty tool_use_id is not taken as an anchor', seenId, undefined);
   check('a string tool_use_id reaches the reader as is', (() => { let got; anchoredCall(transcript(step(SPANISH)), 'toolu_x', (_f, id) => { got = id; return []; }); return got; })(), 'toolu_x');
-  check('the default sleep really waits (>= 150 ms) and stays bounded (< 2 s)', Date.now() - started >= 150 && Date.now() - started < 2000, true);
+  check('the default sleep is the engine wait, one 25 ms poll at a time until the 150 ms deadline (five polls)', defaultPauses, JSON.stringify(Array.from({ length: 5 }, () => [25, 'timed-out'])));
 
   // The two REAL slips of 2026-10-12 (orchestrator session 5f411d3c, entries trimmed): each window ends at the
   // tool_use record of the call the guard let through. Replayed whole, and replayed as the lag left it: the text
