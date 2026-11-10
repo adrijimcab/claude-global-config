@@ -702,7 +702,7 @@ const valueOf = (read) => {
 
   const lock = fileLockAdapter(STATE);
 
-  check('over the shared state directory the port answers false while no chain holds the lock', tokenHoldsLock('x') === false);
+  check('over the shared state directory the port answers false while no chain holds the lock', valueOf(() => tokenHoldsLock('x')) === false);
   lock.tryTake({ session: 's', project: 'p', chain: 'c', tree: '/t', pid: process.pid, startedAt: 't', command: 'c' });
   check('over the shared state directory the port answers true for the holder\'s token', tokenHoldsLock(lock.readToken()) === true);
   lock.release();
