@@ -16,5 +16,9 @@
 export const DECLARED_DECIDING = Object.freeze([
   Object.freeze({ file: 'worktree-landing/land.mjs', why: 'lands a verified branch on the shared branch, or refuses: the landing verdict' }),
   Object.freeze({ file: 'worktree-landing/preconditions.mjs', why: 'decides whether a landing may start, or throws the refusal that names why not' }),
-  Object.freeze({ file: 'hook-dispatch/merge.mjs', why: 'merges the verdicts of several guards into the one the harness reads: deny beats ask beats allow' })
+  Object.freeze({ file: 'hook-dispatch/merge.mjs', why: 'merges the verdicts of several guards into the one the harness reads: deny beats ask beats allow' }),
+  Object.freeze({ file: 'wall-time-proof/lexer.mjs', why: 'decides what is code and what is text: a string, comment or regular expression read as code (or the reverse) flips the wall-time guard verdict' }),
+  Object.freeze({ file: 'wall-time-proof/token-walk.mjs', why: 'decides where an operand of a comparison and the expression of an assignment end, which the wall-time guard verdict rests on' }),
+  Object.freeze({ file: 'wall-time-proof/elapsed-values.mjs', why: 'decides which values are an elapsed wall time and which are a deadline, the core of the wall-time guard verdict' }),
+  Object.freeze({ file: 'wall-time-proof/check-calls.mjs', why: 'decides which assertions compare an elapsed wall time against a bound: the red or green of the wall-time guard' })
 ]);

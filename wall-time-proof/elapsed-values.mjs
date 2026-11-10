@@ -29,21 +29,20 @@ import { assignments, matchingOpen, operandSpan } from './token-walk.mjs';
 /** Comparison operators. @es Operadores de comparación. */
 export const COMPARATORS = new Set(['<', '>', '<=', '>=', '==', '===', '!=', '!==']);
 
-/** Values after which a `-` is a subtraction. @es Valores tras los que un `-` es una resta. */
-const VALUE_KINDS = new Set(['word', 'number', 'string']);
-const NOT_A_VALUE_WORD = new Set(['return', 'typeof', 'case', 'throw', 'in', 'of', 'void', 'delete', 'await', 'yield']);
-
 const isWord = (token, text) => token?.kind === 'word' && token.text === text;
 const isPunct = (token, text) => token?.kind === 'punct' && token.text === text;
 
-/** The call shapes that read the clock, as word/punctuation sequences. @es Las formas de llamada que leen el reloj. */
+/**
+ * The call shapes that read the clock as ONE number, as word/punctuation sequences. `process.hrtime()` without
+ * arguments is not one of them: it returns a pair, and subtracting pairs is not an elapsed time.
+ * @es Las formas de llamada que leen el reloj como UN número. `process.hrtime()` sin argumentos no es una: devuelve un
+ * par, y restar pares no es un tiempo transcurrido.
+ */
 const READING_CALLS = [
   ['Date', '.', 'now', '(', ')'],
   ['performance', '.', 'now', '(', ')'],
   ['process', '.', 'hrtime', '.', 'bigint', '(', ')'],
-  ['process', '.', 'hrtime', '(', ')'],
   ['hrtime', '.', 'bigint', '(', ')'],
-  ['hrtime', '(', ')'],
 ];
 
 /** Length of the reading call that starts at `at`, or 0. @es Largo de la llamada de lectura que empieza en `at`, o 0. */
@@ -65,9 +64,10 @@ function isHrtimeDifference(tokens, at) {
 }
 
 /**
- * End (exclusive) of the clock reading that starts at `at`, or -1: a reading call, a name that holds a reading, or
- * a parenthesised one.
- * @es Fin (exclusivo) de la lectura de reloj que empieza en `at`, o -1.
+ * End (exclusive) of the clock reading that starts at `at`, or -1: a reading call, or a name that holds a reading
+ * (not a property of something else, not called, not the object of a member access).
+ * @es Fin (exclusivo) de la lectura de reloj que empieza en `at`, o -1: una llamada de lectura, o un nombre que guarda
+ * una lectura (no una propiedad de otra cosa, ni llamado, ni objeto de un acceso a miembro).
  */
 function readingStartingAt(tokens, at, readings) {
   const token = tokens[at];
@@ -78,43 +78,21 @@ function readingStartingAt(tokens, at, readings) {
 
   if (call > 0) return at + call;
 
-  if (token.kind === 'word' && readings.has(token.text) && !isPunct(tokens[at - 1], '.') && !isPunct(tokens[at + 1], '(') && !isPunct(tokens[at + 1], '.')) return at + 1;
+  const isHeldReading = token.kind === 'word' && readings.has(token.text) && !isPunct(tokens[at - 1], '.') && !isPunct(tokens[at + 1], '(') && !isPunct(tokens[at + 1], '.');
 
-  if (isPunct(token, '(')) {
-    const inner = readingStartingAt(tokens, at + 1, readings);
-
-    return inner !== -1 && isPunct(tokens[inner], ')') ? inner + 1 : -1;
-  }
-
-  return -1;
+  return isHeldReading ? at + 1 : -1;
 }
 
-/** Whether a clock reading ends at token `at`. @es Si una lectura de reloj termina en el token `at`. */
+/** Whether a clock reading ends at token `at`; the longest reading call is seven tokens. @es Si una lectura de reloj termina en el token `at`; la llamada de lectura más larga tiene siete tokens. */
 function readingEndingAt(tokens, at, readings) {
-  if (isPunct(tokens[at], ')')) {
-    const open = matchingOpen(tokens, at);
+  for (let start = Math.max(0, at - 6); start <= at; start += 1) if (readingStartingAt(tokens, start, readings) === at + 1) return true;
 
-    for (let start = Math.max(0, open - 6); start <= open; start += 1) if (readingStartingAt(tokens, start, readings) === at + 1) return true;
-
-    return false;
-  }
-
-  return readingStartingAt(tokens, at, readings) === at + 1;
-}
-
-/** Whether the `-` at `at` is a binary subtraction. @es Si el `-` en `at` es una resta binaria. */
-function isSubtraction(tokens, at) {
-  const before = tokens[at - 1];
-
-  if (before === undefined) return false;
-  if (before.kind === 'word') return !NOT_A_VALUE_WORD.has(before.text);
-
-  return VALUE_KINDS.has(before.kind) || isPunct(before, ')') || isPunct(before, ']');
+  return false;
 }
 
 /** Whether a token range holds a clock reading call or a reading name. @es Si un rango de tokens lleva una lectura de reloj o un nombre de lectura. */
 function holdsReading(tokens, from, to, readings) {
-  for (let at = from; at < to; at += 1) if (readingStartingAt(tokens, at, readings) > at && !isPunct(tokens[at], '(')) return true;
+  for (let at = from; at < to; at += 1) if (readingStartingAt(tokens, at, readings) !== -1) return true;
 
   return false;
 }
@@ -124,9 +102,9 @@ function elapsedIndexes(tokens, { readings, elapsed }) {
   const found = new Set();
 
   tokens.forEach((token, at) => {
-    if (token.kind === 'punct' && token.text === '-' && isSubtraction(tokens, at) && readingEndingAt(tokens, at - 1, readings) && readingStartingAt(tokens, at + 1, readings) !== -1) found.add(at);
-    else if (token.kind === 'word' && token.text === 'hrtime' && isHrtimeDifference(tokens, at)) found.add(at);
-    else if (token.kind === 'word' && elapsed.has(token.text) && !isPunct(tokens[at - 1], '.') && !isPunct(tokens[at + 1], '=')) found.add(at);
+    if (token.text === '-' && readingEndingAt(tokens, at - 1, readings) && readingStartingAt(tokens, at + 1, readings) !== -1) found.add(at);
+    else if (isHrtimeDifference(tokens, at)) found.add(at);
+    else if (token.kind === 'word' && elapsed.has(token.text) && !isPunct(tokens[at - 1], '.')) found.add(at);
   });
 
   return found;
