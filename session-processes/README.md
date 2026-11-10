@@ -29,7 +29,7 @@ When a Claude Code session ends, this SessionEnd hook ends every process the ses
 - A process of another session (a different TEMP, even one that merely starts with this session's folder).
 - A process with no TEMP, or whose environment cannot be read (another user, protected): it is unknown, so it is neither listed nor taken down by a tree end.
 - The hook itself, its ancestors (the harness, the session's `claude`) and its descendants (the reader), even when they carry the TEMP.
-- A **detached full chain** (`full-chain-lock/run.mjs --detach`) on purpose: its runner gives the chain a TEMP of its own, `<run dir>/temp`, removed when the chain ends, so it never carries the session's TEMP and outlives the session.
+- A **detached full chain** (`full-chain-lock/run.mjs --detach`) on purpose: its runner gives the chain a TEMP of its own, `<temp root>/claude/detached-chain-tmp/<run dir name>` (outside the Claude home repository, which the mutation engine requires), removed when the chain ends, so it never carries the session's TEMP and outlives the session.
 - Windows only. On another platform the reader throws and the hook reports it on stderr; it does not pretend there was nothing to sweep.
 
 ## Why not a Job Object / Por qué no un Job Object

@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { isAlive, killTree } from '../process-control/process-port.mjs';
 import { sessionTempOf } from '../session-temp/session-temp.mjs';
+import { chainTempDir } from '../full-chain-lock/detached-runner.mjs';
 import { evaluate } from './end.mjs';
 import { killProcess } from './kill-process.mjs';
 import { processesToEnd } from './ownership.mjs';
@@ -244,13 +245,13 @@ try {
   const runDir = path.join(scratch, 'chain-run');
   const stateHome = path.join(scratch, 'state');
   const detach = spawnSync(process.execPath, [RUN, '--detach', '--run-dir', runDir, '--chain', 'sweep-proof', '--project', 'sweep-proof', '--session', 'sweep-proof', '--tree', scratch, '--', process.execPath, HOLDER, release], { encoding: 'utf8', windowsHide: true, cwd: scratch, env: withTemp(sessionTemp, { HOOK_STATE_DIR: stateHome }) });
-  const chainTemp = path.join(runDir, 'temp').split('\\').join('/');
+  const chainTemp = chainTempDir(runDir).split('\\').join('/');
   const ofChain = () => readEnvironments().filter((entry) => entry.temp?.split('\\').join('/') === chainTemp);
   // The chain's runner and its holder are two node processes carrying the chain's TEMP. @es El runner de la cadena y su holder son dos procesos node con el TEMP de la cadena.
   const chainUp = await until(() => ofChain().filter((entry) => entry.name === 'node').length >= 2);
   const chainPids = ofChain().map((entry) => entry.pid);
 
-  check('the detached chain started and runs with a TEMP of its own inside its run directory', detach.status === 0 && chainUp, `${String(detach.status)} ${detach.stdout}${detach.stderr}`);
+  check('the detached chain started and runs with a TEMP of its own, outside its run directory', detach.status === 0 && chainUp, `${String(detach.status)} ${detach.stdout}${detach.stderr}`);
   // The owned child has a holder of its own below it: a tree, ended with everything below it. @es El hijo propio tiene un holder debajo: un árbol, terminado con todo lo de abajo.
   const belowFound = await until(() => readEnvironments().some((entry) => entry.parentPid === ownChild.pid && entry.temp === sessionTemp));
   const grandchild = readEnvironments().find((entry) => entry.parentPid === ownChild.pid && entry.name === 'node')?.pid;
