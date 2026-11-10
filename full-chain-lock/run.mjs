@@ -21,8 +21,18 @@
  * The holder record names the session (`--session`, else the harness's `CLAUDE_CODE_SESSION_ID`) and the absolute
  * tree the chain measures (`measured-tree.mjs`), which `write-guard.mjs` reads to refuse writes into that tree.
  *
+ * While the command runs it holds the lock, and the command's environment carries FULL_CHAIN_LOCK_TOKEN, the holder id the lock
+ * port wrote into `chain.lock`. A heavy chain runner that must run only under the lock (`selftest-runner/run.mjs`) refuses to
+ * start unless that value matches the live holder (`lock-token.mjs`); a copied, stale or forged value, or no lock file, is refused.
+ * A value already in the caller's environment is replaced.
+ *
  * Exit codes of its own: 2 usage, 70 the lock could not be taken because of a fault, 75 the wait expired, 127 the
  * command could not be started. Any other code is the command's.
+ *
+ * @es Mientras el comando corre, el runner tiene el lock y el entorno del comando lleva FULL_CHAIN_LOCK_TOKEN, el id de dueño que el
+ * puerto del lock escribió en `chain.lock`. Un runner de cadenas pesadas que debe correr solo bajo el lock
+ * (`selftest-runner/run.mjs`) se niega a arrancar si ese valor no coincide con el dueño vivo (`lock-token.mjs`); un valor
+ * copiado, caducado o falsificado, o sin fichero de lock, se rechaza. Un valor ya presente en el entorno de quien llama se reemplaza.
  *
  * @es El runner de una cadena completa y la raíz de composición del lock: conecta los puertos de `chain-runner.mjs`
  * con sus adaptadores reales y sale con el código de la corrida. Toma UN lock de toda la máquina, registra al

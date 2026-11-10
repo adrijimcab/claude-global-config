@@ -336,7 +336,7 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
   const told = [];
   const say = { say: () => undefined, complain: (id) => told.push(id), line: () => '' };
   let ran = 0;
-  const lock = { tryTake: () => { throw new LockFault('lock exploded'); }, readHolder: () => undefined, release: () => undefined };
+  const lock = { tryTake: () => { throw new LockFault('lock exploded'); }, readHolder: () => undefined, readToken: () => 'token', release: () => undefined };
   const code = await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 100, pollMs: 10 }, { lock, child: { run: () => { ran += 1; return Promise.resolve(0); } }, clock: { now: () => 0, sleep }, say, processId: 1 });
 
   check('a lock fault at take time exits 70 without running the command', code === EXIT.lockFault && ran === 0 && told.includes('lock-fault'));
@@ -613,6 +613,15 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   check('the forwarders are removed after a spawn error too', Object.keys(before).every((signal) => process.listenerCount(signal) === before[signal]));
 }
 
+/** What `read` answers, or `threw <name>` when it throws, so a check compares a value and a crash is never the verdict. @es Lo que responde `read`, o `threw <nombre>` si lanza, para que un check compare un valor y un crash nunca sea el veredicto. */
+const valueOf = (read) => {
+  try {
+    return read();
+  } catch (error) {
+    return `threw ${error instanceof Error ? error.name : 'value'}`;
+  }
+};
+
 // ── The lock token: handed to the command, and which values hold the lock ──────────────────────────────────────
 {
   const told = [];
@@ -644,10 +653,10 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   const adapter = childProcessAdapter({ spawnProcess: (file, args, options) => { seen = { file, args, options }; const fake = new EventEmitter(); fake.kill = () => undefined; setImmediate(() => fake.emit('close', 0, null)); return fake; } });
 
   await adapter.run(process.execPath, ['x'], { FULL_CHAIN_LOCK_TOKEN: 'abc' });
-  check('the child adapter adds the given variables to the environment the child starts with', seen.options.env.FULL_CHAIN_LOCK_TOKEN === 'abc' && seen.options.env.PATH === process.env.PATH && seen.options.stdio === 'inherit', JSON.stringify(Object.keys(seen.options)));
+  check('the child adapter adds the given variables to the environment the child starts with', seen.options.env?.FULL_CHAIN_LOCK_TOKEN === 'abc' && seen.options.env?.PATH === process.env.PATH && seen.options.stdio === 'inherit', JSON.stringify(Object.keys(seen.options)));
 
   await adapter.run(process.execPath, ['x']);
-  check('with no variables given the child starts with the caller\'s own environment', !('FULL_CHAIN_LOCK_TOKEN' in seen.options.env) && seen.options.env.PATH === process.env.PATH);
+  check('with no variables given the child starts with the caller\'s own environment', seen.options.env !== undefined && !('FULL_CHAIN_LOCK_TOKEN' in seen.options.env) && seen.options.env.PATH === process.env.PATH);
 }
 
 {
@@ -656,7 +665,7 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   const record = { session: 's', project: 'p', chain: 'c', tree: '/t', pid: process.pid, startedAt: 't', command: 'c' };
   const lock = fileLockAdapter(STATE);
 
-  check('with no lock file there is no token and nothing holds the lock', lock.readToken() === undefined && lock.holdsToken('anything') === false);
+  check('with no lock file there is no token and nothing holds the lock', valueOf(() => lock.readToken()) === undefined && valueOf(() => lock.holdsToken('anything')) === false);
   lock.tryTake(record);
 
   const token = lock.readToken();
@@ -670,7 +679,7 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
   check('the right token with a record of another process than the lock\'s owner does not hold it', lock.holdsToken(token) === false);
   writeFileSync(HOLDER, JSON.stringify(record));
   lock.release();
-  check('after the release the same token no longer holds the lock, and no token is readable', lock.holdsToken(token) === false && lock.readToken() === undefined);
+  check('after the release the same token no longer holds the lock, and no token is readable', valueOf(() => lock.holdsToken(token)) === false && valueOf(() => lock.readToken()) === undefined);
 
   lock.tryTake(record);
   check('a token copied from a finished chain does not hold the next chain\'s lock, which has its own', lock.readToken() !== token && lock.holdsToken(token) === false && lock.holdsToken(lock.readToken()) === true);
