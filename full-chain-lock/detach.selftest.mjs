@@ -358,18 +358,23 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   check('the synopsis has the --read line', errorLines(readUsage).some((line) => line.startsWith('node run.mjs --read <run dir>')), readUsage.stderr);
 
   const dir = freshDir();
-  const started = Date.now();
-  const detach = cli(['--detach', '--run-dir', dir, '--chain', 'cli-proof', '--tree', SCRATCH, '--', process.execPath, CHILD, 'sleep-exit', '1500', '5']);
-  const returnedIn = Date.now() - started;
+  // The chain ends only when the proof writes this file, so "returned before the chain ended" is a condition, not a clock.
+  // @es La cadena termina solo cuando la prueba escribe este fichero: «volvió antes de que terminara» es una condición, no un reloj.
+  const releaseDir = freshDir();
+  mkdirSync(releaseDir, { recursive: true });
+  const release = path.join(releaseDir, 'release');
+  const detach = cli(['--detach', '--run-dir', dir, '--chain', 'cli-proof', '--tree', SCRATCH, '--', process.execPath, CHILD, 'gate-exit', release, '5', '120000']);
   const pid = readJson(path.join(dir, RUN_FILES.run)).pid;
+  const verdictBeforeRelease = existsSync(path.join(dir, RUN_FILES.verdict));
 
   spawned.add(pid);
-  check('the command returns before the chain ends, exit 0', detach.status === 0 && returnedIn < 1400, `status ${String(detach.status)} in ${String(returnedIn)} ms\n${detach.stderr}`);
+  check('the command returns before the chain ends, exit 0', detach.status === 0 && !verdictBeforeRelease, `status ${String(detach.status)}, verdict before release ${String(verdictBeforeRelease)}\n${detach.stderr}`);
   check('it prints the run directory, the pid and the read command in two languages', detach.stdout.includes(dir) && detach.stdout.includes(String(pid)) && detach.stdout.includes('--read') && isBilingual(detach.stdout), detach.stdout);
   check('while the chain runs, --read says running', cli(['--read', dir]).status === EXIT.running);
+  writeFileSync(release, '');
   check('the verdict appears with the chain\'s exit code', await until(() => existsSync(path.join(dir, RUN_FILES.verdict))) && readJson(path.join(dir, RUN_FILES.verdict)).exitCode === 5);
   check('--read then exits with the chain\'s code and says finished', (() => { const r = cli(['--read', dir]); return r.status === 5 && r.stdout.includes('exit 5'); })());
-  check('the output of the chain is in output.log', readFileSync(path.join(dir, RUN_FILES.output), 'utf8').includes('sleep-exit end'));
+  check('the output of the chain is in output.log', readFileSync(path.join(dir, RUN_FILES.output), 'utf8').includes('gate-exit end'));
 
   const workDir = path.join(SCRATCH, 'caller-directory');
 

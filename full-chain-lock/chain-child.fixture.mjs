@@ -4,6 +4,10 @@
  *
  *   node chain-child.fixture.mjs hold <logFile> <label> <holdMs>   appends "<label> start <ms>", waits, appends "<label> end <ms>"
  *   node chain-child.fixture.mjs sleep-exit <ms> <code>            prints a line, sleeps <ms>, prints another and exits with <code>
+ *   node chain-child.fixture.mjs gate-exit <stopFile> <code> <maxMs>
+ *                                                                  prints a line, waits until <stopFile> exists (or <maxMs>),
+ *                                                                  prints another and exits with <code>, so a proof decides
+ *                                                                  when the chain ends instead of racing a clock
  *   node chain-child.fixture.mjs exit <code>                      prints a line and exits with <code>
  *   node chain-child.fixture.mjs signal                            ends itself with SIGTERM
  *   node chain-child.fixture.mjs until <logFile> <label> <stopFile> <maxMs>
@@ -15,7 +19,9 @@
  * @es El comando que una prueba ejecuta BAJO el lock, como proceso hijo real: `hold` registra inicio y fin con una
  * espera en medio, `exit` sale con el código dado, `signal` se termina a sí mismo con SIGTERM y `until` termina cuando
  * existe <stopFile> (o tras <maxMs>), para que una prueba cierre la cadena por su camino normal en toda plataforma: un
- * proceso de Windows matado desde fuera no ejecuta su propia limpieza.
+ * proceso de Windows matado desde fuera no ejecuta su propia limpieza. `gate-exit` imprime una línea, espera a que exista
+ * <stopFile> (o <maxMs>), imprime otra y sale con <code>, para que la prueba decida cuándo termina la cadena en vez de
+ * competir con un reloj.
  */
 
 import { appendFileSync, existsSync } from 'node:fs';
@@ -41,6 +47,14 @@ if (mode === 'hold') {
   console.log('sleep-exit start');
   await new Promise((resolve) => setTimeout(resolve, Number(sleepMs)));
   console.log('sleep-exit end');
+  process.exit(Number(code));
+} else if (mode === 'gate-exit') {
+  const [stopFile, code, maxMs] = rest;
+  const deadline = Date.now() + Number(maxMs);
+
+  console.log('gate-exit start');
+  while (!existsSync(stopFile) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+  console.log('gate-exit end');
   process.exit(Number(code));
 } else if (mode === 'cwd') {
   console.log(`cwd ${process.cwd()}`);
