@@ -42,7 +42,7 @@ export function parseRows(text) {
   for (const line of String(text).split(/\r?\n/)) {
     const [pid, parentPid, name, ...rest] = line.split('\t');
 
-    if (!/^\d+$/.test(pid ?? '') || !/^\d+$/.test(parentPid ?? '') || name === undefined || rest.length !== 1) continue;
+    if (!/^\d+$/.test(pid) || !/^\d+$/.test(parentPid) || rest.length !== 1) continue;
 
     rows.push({ pid: Number(pid), parentPid: Number(parentPid), name, temp: rest[0] === UNREADABLE ? undefined : rest[0] });
   }
