@@ -37,10 +37,10 @@ export function matchingClose(tokens, open) {
 }
 
 /**
- * Where the expression assigned to a name ends: at the `;` or `,` of its own level, or at the bracket that closes
+ * Where the expression assigned to a name ends: at a `;`, at a `,` of its own level, or at the bracket that closes
  * the enclosing one. `from` is the first token of the expression.
- * @es Dónde acaba la expresión asignada a un nombre: en el `;` o `,` de su nivel, o en el paréntesis que cierra el
- * que la contiene. `from` es el primer token de la expresión.
+ * @es Dónde acaba la expresión asignada a un nombre: en un `;`, en una `,` de su nivel, o en el paréntesis que cierra
+ * el que la contiene. `from` es el primer token de la expresión.
  */
 function expressionEnd(tokens, from) {
   let depth = 0;
@@ -54,7 +54,7 @@ function expressionEnd(tokens, from) {
       if (depth === 0) return at;
 
       depth -= 1;
-    } else if (depth === 0 && (token.text === ';' || token.text === ',')) return at;
+    } else if (token.text === ';' || (depth === 0 && token.text === ',')) return at;
   }
 
   return tokens.length;

@@ -25,7 +25,7 @@
  * es la de la comparación) y LOS TEXTOS (archivo:línea, la regla y los dos idiomas).
  */
 
-import { ASSERTION_NAMES, elapsedAssertionLines } from './check-calls.mjs';
+import { elapsedAssertionLines } from './check-calls.mjs';
 import { tokenize } from './lexer.mjs';
 import { RULE, findingMessage, summaryMessage } from './messages.mjs';
 import { scanFiles } from './scan.mjs';
@@ -127,7 +127,16 @@ check('lexer: an apostrophe inside a comment', flagged(source(STARTED, "// don't
 check('lexer: a slash inside a character class of a regular expression', flagged(source(STARTED, 'const path = /[/]x/;', "check('x', Date.now() - started < 5);")), [3]);
 check('lexer: a backtick and a nested template in a template expression', flagged(source(STARTED, 'const text = `a ${`b ${1}`} \\` c`;', "check('x', Date.now() - started < 5);")), [3]);
 check('lexer: lines counted through a multi-line block comment and template', flagged(source(STARTED, '/* one', 'two */', 'const text = `x', 'y`;', "check('x', Date.now() - started < 5);")), [6]);
-check('lexer: an escaped quote does not end a string', flagged(source(STARTED, "const s = 'it\\'s';", "check('x', Date.now() - started < 5);")), [3]);
+check('lexer: an escaped quote does not end a string', flagged(source(STARTED, "const s = 'it\\'s'; check('x', Date.now() - started < 5);")), [2]);
+check('lexer: a slash inside a character class, with a quote after it on the line', flagged(source(STARTED, 'const r = /[/"]/; check(\'x\', Date.now() - started < 5);')), [2]);
+check('tokens: an identifier may start with a non-ASCII letter', tokenize('const ñandú = 1;').map((token) => token.text), ['const', 'ñandú', '=', '1', ';']);
+check('red: a comma inside a call does not end the expression held in a name', flagged(source(STARTED, 'const spent = Math.max(0, Date.now() - started);', "check('x', spent < 5);")), [3]);
+check('green: a name read in a declaration list after a reading stays a reading', flagged(source('const t = Date.now(), spent = Date.now() - t;', "check('x', t < 5);")), []);
+check('green: a closing brace ends the call', flagged(source(STARTED, "check('x', { a: 1 });", 'const bad = Date.now() - started < 5;')), []);
+check('green: a property is not a reading when it is the left operand', flagged(source(STARTED, "check('x', box.started - Date.now() < 5);")), []);
+check('green: a property is not a reading when it is assigned to a name', flagged(source(STARTED, 'const t = box.started;', "check('x', Date.now() - t < 5);")), []);
+check('green: a sum of readings is not an elapsed time', flagged(source(STARTED, "check('x', started + Date.now() > limit);")), []);
+check('green: a bare assertion name is not a call', flagged(source(STARTED, 'const fn = check;', 'const bad = foo(Date.now() - started < 5);')), []);
 check('lexer: braces of an object inside a template expression', flagged(source(STARTED, 'const text = `${JSON.stringify({ a: 1 })}`;', "check('x', Date.now() - started < 5);")), [3]);
 
 // --- every comparator and every assertion name ---
@@ -135,7 +144,9 @@ for (const operator of ['<', '>', '<=', '>=', '==', '===', '!=', '!==']) {
   check(`red: the comparator ${operator}`, flagged(source(STARTED, `check('x', Date.now() - started ${operator} 5);`)), [2]);
 }
 
-for (const name of ASSERTION_NAMES) check(`red: the assertion name ${name}`, flagged(source(STARTED, `${name}(Date.now() - started < 5);`)), [2]);
+// The list is written out, not read from the module: a name dropped from the module would otherwise drop its own proof.
+// @es La lista se escribe aquí y no se lee del módulo: un nombre quitado del módulo quitaría su propia prueba.
+for (const name of ['check', 'expect', 'assert', 'ok', 'equal', 'strictEqual', 'deepEqual', 'deepStrictEqual', 'notEqual', 'notStrictEqual']) check(`red: the assertion name ${name}`, flagged(source(STARTED, `${name}(Date.now() - started < 5);`)), [2]);
 
 // --- the reach of an operand: a neighbour that is not an operand is never read as one ---
 const SPENT = source(STARTED, 'const spent = Date.now() - started;');
@@ -214,8 +225,8 @@ const offender = source(STARTED, "check('x', Date.now() - started < 5);");
 const scan = scanFiles(['a.selftest.mjs', 'b.selftest.mjs'], (file) => (file === 'a.selftest.mjs' ? offender : "check('x', true);"));
 
 check('scan: counts the files and finds the one offender', [scan.scanned, scan.findings.map((finding) => [finding.file, finding.line])], [2, [['a.selftest.mjs', 2]]]);
-check('scan: the message names file:line, the rule and both languages', [scan.findings[0].message.startsWith('a.selftest.mjs:2 '), scan.findings[0].message.includes(RULE), scan.findings[0].message.includes(' @es ')], [true, true, true]);
-check('words: the finding message is the one the scan prints', findingMessage('a.selftest.mjs', 2), scan.findings[0].message);
+check('scan: the message names file:line, the rule and both languages', [scan.findings[0]?.message.startsWith('a.selftest.mjs:2 '), scan.findings[0]?.message.includes(RULE), scan.findings[0]?.message.includes(' @es ')], [true, true, true]);
+check('words: the finding message is the one the scan prints', findingMessage('a.selftest.mjs', 2), scan.findings[0]?.message);
 check('words: the rule names what is forbidden and what is fine', [RULE.includes('elapsed wall time'), RULE.includes('deadline'), RULE.includes('@es')], [true, true, true]);
 check('words: a clean summary is bilingual', [summaryMessage(3, 0).includes('no elapsed wall time is asserted'), summaryMessage(3, 0).includes('@es')], [true, true]);
 check('words: a failing summary counts the findings', [summaryMessage(3, 2).startsWith('2 elapsed-time assertion(s) in 3'), summaryMessage(3, 2).includes('@es')], [true, true]);
