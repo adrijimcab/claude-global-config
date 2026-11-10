@@ -1,0 +1,8 @@
+{
+  "registrations": [
+    {
+      "event": "SessionEnd"
+    }
+  ],
+  "why": "Ends every process the session started and left alive (identified by the session's private TEMP that session-temp/start.mjs gave it), and nothing else: never another session, a detached full-chain-lock chain, or the hook's own chain."
+}
