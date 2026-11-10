@@ -34,7 +34,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const HOLDER = path.join(HERE, 'holder.fixture.mjs');
 const MAKER = path.join(HERE, 'orphan-maker.fixture.mjs');
 const PROBE = path.join(HERE, 'environment-reader.probe.mjs');
-const END = path.join(HERE, 'end.mjs');
+const WRAPPER = path.join(HERE, 'chain-wrapper.fixture.mjs');
 const RUN = path.join(HERE, '..', 'full-chain-lock', 'run.mjs');
 
 let passed = 0;
@@ -166,7 +166,7 @@ const HOOK = [row(9000, 8000, 'node', SESSION), row(8000, 7000, 'claude', SESSIO
 
 // ── The table: parsing and the platform ─────────────────────────────────────────────────────────────────────────
 {
-  const rows = parseRows('10\t4\tnode\tC:/a\r\n11\t10\tcmd\t\n12\t10\tsvc\t?\nnot a row\n13\tx\tnode\tC:/a\n14\t10\tnode\tC:/a\textra\n15\t10\tnode\n');
+  const rows = parseRows('10\t4\tnode\tC:/a\r\n11\t10\tcmd\t\n12\t10\tsvc\t?\nnot a row\n13\tx\tnode\tC:/a\nx\t4\tnode\tC:/a\n14\t10\tnode\tC:/a\textra\n15\t10\tnode\n');
 
   check('a line gives pid, parent, name and TEMP; a CRLF ending is accepted', JSON.stringify(rows[0]) === '{"pid":10,"parentPid":4,"name":"node","temp":"C:/a"}', JSON.stringify(rows));
   check('an empty TEMP is the empty text and an unreadable one is undefined', rows[1]?.temp === '' && rows[2]?.temp === undefined && rows.length === 3, JSON.stringify(rows));
@@ -224,15 +224,15 @@ try {
   mkdirSync(otherTemp, { recursive: true });
 
   const exited = new Map();
-  const start = (temp) => {
-    const child = spawn(process.execPath, [HOLDER, release], { env: withTemp(temp), stdio: 'ignore', windowsHide: true });
+  const start = (temp, ...extra) => {
+    const child = spawn(process.execPath, [HOLDER, release, ...extra], { env: withTemp(temp), stdio: 'ignore', windowsHide: true });
 
     owned.add(child.pid);
     child.once('exit', (code) => exited.set(child.pid, code));
 
     return child;
   };
-  const ownChild = start(sessionTemp);
+  const ownChild = start(sessionTemp, 'with-child');
   const foreign = start(otherTemp);
   const made = spawnSync(process.execPath, [MAKER, sessionTemp, release], { encoding: 'utf8', windowsHide: true });
   const orphan = Number(made.stdout.trim());
@@ -251,16 +251,26 @@ try {
   const chainPids = ofChain().map((entry) => entry.pid);
 
   check('the detached chain started and runs with a TEMP of its own inside its run directory', detach.status === 0 && chainUp, `${String(detach.status)} ${detach.stdout}${detach.stderr}`);
+  // The owned child has a holder of its own below it: a tree, ended with everything below it. @es El hijo propio tiene un holder debajo: un árbol, terminado con todo lo de abajo.
+  const belowFound = await until(() => readEnvironments().some((entry) => entry.parentPid === ownChild.pid && entry.temp === sessionTemp));
+  const grandchild = readEnvironments().find((entry) => entry.parentPid === ownChild.pid && entry.name === 'node')?.pid;
+
+  check('the owned child has a process below it carrying the session TEMP', belowFound && grandchild !== undefined);
   check('the orphan and the owned child are alive before the sweep, carrying the session TEMP', isAlive(orphan) && isAlive(ownChild.pid) && readEnvironments().filter((entry) => entry.temp === sessionTemp).length >= 2);
 
   // The hook runs under the session TEMP too, as it does after a resume: it must not end itself or its reader.
   // @es El hook corre también bajo el TEMP de la sesión, como tras un resume: no debe terminarse a sí mismo ni a su lector.
-  const hook = spawnSync(process.execPath, [END], { input: JSON.stringify({ hook_event_name: 'SessionEnd', session_id: sessionId }), encoding: 'utf8', windowsHide: true, env: withTemp(sessionTemp) });
+  // A wrapper between the test and the hook carries the session TEMP too: an ancestor of the hook that must be spared.
+  // @es Un wrapper entre la prueba y el hook lleva también el TEMP de la sesión: un ancestro del hook que debe respetarse.
+  const wrapped = spawnSync(process.execPath, [WRAPPER], { input: JSON.stringify({ hook_event_name: 'SessionEnd', session_id: sessionId }), encoding: 'utf8', windowsHide: true, env: withTemp(sessionTemp) });
+  const hook = wrapped.status === 0 ? JSON.parse(wrapped.stdout) : { status: `wrapper ${String(wrapped.status)}`, stdout: wrapped.stdout, stderr: wrapped.stderr };
 
+  check('the wrapper that is an ancestor of the hook, carrying the session TEMP, was spared and exited 0', wrapped.status === 0, `${String(wrapped.status)} ${wrapped.stdout}${wrapped.stderr}`);
   check('the hook exits 0 and prints nothing on stdout, even running under the session TEMP', hook.status === 0 && hook.stdout === '', `${String(hook.status)} ${hook.stdout}${hook.stderr}`);
   check('it says it ended the orphan and the owned child', hook.stderr.includes(`node ${String(orphan)}`) && hook.stderr.includes(`node ${String(ownChild.pid)}`), hook.stderr);
   check('the orphan is dead', await until(() => !isAlive(orphan)));
   check('the owned child died, ended by the sweep and never released', (await until(() => exited.has(ownChild.pid))) && exited.get(ownChild.pid) !== 0 && !existsSync(release));
+  check('the process below the owned child died with it, ended as a tree', await until(() => !isAlive(grandchild)));
   check('the foreign-marked process is alive after the sweep', isAlive(foreign.pid) && !exited.has(foreign.pid));
   check('every process of the detached chain is alive after the sweep', chainPids.length >= 2 && chainPids.every((pid) => isAlive(pid)), JSON.stringify(chainPids));
 

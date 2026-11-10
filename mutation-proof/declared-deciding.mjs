@@ -16,5 +16,6 @@
 export const DECLARED_DECIDING = Object.freeze([
   Object.freeze({ file: 'worktree-landing/land.mjs', why: 'lands a verified branch on the shared branch, or refuses: the landing verdict' }),
   Object.freeze({ file: 'worktree-landing/preconditions.mjs', why: 'decides whether a landing may start, or throws the refusal that names why not' }),
-  Object.freeze({ file: 'hook-dispatch/merge.mjs', why: 'merges the verdicts of several guards into the one the harness reads: deny beats ask beats allow' })
+  Object.freeze({ file: 'hook-dispatch/merge.mjs', why: 'merges the verdicts of several guards into the one the harness reads: deny beats ask beats allow' }),
+  Object.freeze({ file: 'session-processes/ownership.mjs', why: 'decides which processes belong to a session and how each is ended: a wrong answer kills another session\'s process or leaves one alive' })
 ]);
