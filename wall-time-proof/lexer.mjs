@@ -51,7 +51,7 @@ export function tokenize(source) {
 
     while (index < source.length && source[index] !== quote && source[index] !== '\n') index += source[index] === '\\' ? 2 : 1;
 
-    index += 1;
+    if (source[index] === quote) index += 1;
   }
 
   /** Reads template text up to the closing backtick or a `${`; true when an expression follows. @es Lee texto de plantilla hasta el cierre o un `${`; verdadero si sigue una expresión. */
@@ -123,6 +123,8 @@ export function tokenize(source) {
 
       index += 1;
     }
+
+    if (source[index] !== '/') return;
 
     index += 1;
 

@@ -25,7 +25,7 @@
  * es la de la comparación) y LOS TEXTOS (archivo:línea, la regla y los dos idiomas).
  */
 
-import { elapsedAssertionLines } from './check-calls.mjs';
+import { ASSERTION_NAMES, elapsedAssertionLines } from './check-calls.mjs';
 import { tokenize } from './lexer.mjs';
 import { RULE, findingMessage, summaryMessage } from './messages.mjs';
 import { scanFiles } from './scan.mjs';
@@ -130,7 +130,68 @@ check('lexer: lines counted through a multi-line block comment and template', fl
 check('lexer: an escaped quote does not end a string', flagged(source(STARTED, "const s = 'it\\'s';", "check('x', Date.now() - started < 5);")), [3]);
 check('lexer: braces of an object inside a template expression', flagged(source(STARTED, 'const text = `${JSON.stringify({ a: 1 })}`;', "check('x', Date.now() - started < 5);")), [3]);
 
+// --- every comparator and every assertion name ---
+for (const operator of ['<', '>', '<=', '>=', '==', '===', '!=', '!==']) {
+  check(`red: the comparator ${operator}`, flagged(source(STARTED, `check('x', Date.now() - started ${operator} 5);`)), [2]);
+}
+
+for (const name of ASSERTION_NAMES) check(`red: the assertion name ${name}`, flagged(source(STARTED, `${name}(Date.now() - started < 5);`)), [2]);
+
+// --- the reach of an operand: a neighbour that is not an operand is never read as one ---
+const SPENT = source(STARTED, 'const spent = Date.now() - started;');
+const neighbours = [
+  ['a comma before', "check('x', spent, count < 5);"],
+  ['a comma after', "check('x', count < 5, spent);"],
+  ['&&', "check('x', count < 5 && spent);"],
+  ['||', "check('x', spent || count < 5);"],
+  ['??', "check('x', spent ?? count < 5);"],
+  ['a conditional test', "check('x', spent ? count < 5 : 0);"],
+  ['a conditional branch', "check('x', ok ? count < 5 : spent);"],
+  ['a statement end', "check('x', run(() => { void spent; return count < 5; }));"],
+  ['an arrow parameter', "check('x', run((spent) => count < 5));"],
+  ['an assignment target', "check('x', run(() => { spent = count < 5; }));"],
+  ['the end of the call', "check('x', count < 5);\nconst e = Date.now() - started;"]
+];
+
+for (const [name, line] of neighbours) check(`green: ${name} is not part of the operand`, flagged(source(SPENT, line)), []);
+
+check('red: a call inside the operand keeps its commas', flagged(source(SPENT, "check('x', Math.max(spent, 3) < 5);")), [3]);
+check('red: an array before the comparison does not close the call', flagged(source(STARTED, "check('x', [a], Date.now() - started < 5);")), [2]);
+check('red: an object before the comparison does not close the call', flagged(source(STARTED, "check('x', { a: 1 }, Date.now() - started < 5);")), [2]);
+check('red: an unclosed call is still scanned to the end', flagged(source(STARTED, "check('x', Date.now() - started < 5")), [2]);
+check('red: a declaration list ends each name at its comma', flagged(source('const t = Date.now(), spent = Date.now() - t;', "check('x', spent < 5);")), [2]);
+
+// --- which names hold what ---
+check('green: a property assignment does not make a reading', flagged(source('box.started = Date.now();', "check('x', Date.now() - started < 5);")), []);
+check('green: a default parameter ends at its bracket', flagged(source('function f(t0 = Date.now()) { return Date.now() - t0; }', "check('x', t0 < 5);")), []);
+check('green: an arrow is not an elapsed value', flagged(source(STARTED, 'const probe = () => Date.now() - started;', "check('x', probe < 5);")), []);
+check('green: a function expression is not an elapsed value', flagged(source(STARTED, 'const probe = function () { return Date.now() - started; };', "check('x', probe < 5);")), []);
+check('green: a called name is not a reading', flagged(source(STARTED, "check('x', Date.now() - started() < 5);")), []);
+check('green: the object of a member access is not a reading', flagged(source(STARTED, "check('x', Date.now() - started.value < 5);")), []);
+check('green: a global clock behind a property is not the clock', flagged(source(STARTED, "check('x', box.Date.now() - started < 5);")), []);
+check('green: a property named like an elapsed name is not it', flagged(source(SPENT, "check('x', box.spent < 5);")), []);
+check('green: a property named like a verdict name is not it', flagged(source(STARTED, 'const fast = Date.now() - started < 5;', "check('x', box.fast);")), []);
+check('red: lines are ascending even when a verdict name follows its comparison', flagged(source(STARTED, 'const fast = Date.now() - started < 5;', 'check(', "  'x',", '  fast,', '  Date.now() - started < 5,', ');')), [5, 6]);
+
+// --- the lexer decisions that hide an offender when they go wrong ---
+for (const word of ['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']) {
+  check(`lexer: a slash after ${word} starts a regular expression`, flagged(source(STARTED, `${word} /"/; check('x', Date.now() - started < 5);`)), [2]);
+}
+
+for (const before of ['(a)', 'a[0]', '{}', 'a++', 'a--', 'total', '4', "'s'", '`t`', '/x/']) {
+  check(`lexer: a slash after ${before} is a division`, flagged(source(STARTED, `${before} / 2; check('x', Date.now() - started < 5); const z = 1 / 2;`)), [2]);
+}
+
+check('lexer: an unterminated string ends at its line', flagged(source(STARTED, "const s = 'oops", "check('x', Date.now() - started < 5);")), [3]);
+check('lexer: an unterminated regular expression ends at its line', flagged(source(STARTED, 'const r = /oops', "check('x', Date.now() - started < 5);")), [3]);
+check('lexer: a line comment at the end of the source', flagged(source(STARTED, "check('x', Date.now() - started < 5); // done")), [2]);
+
 const kinds = (text) => tokenize(text).map((token) => token.kind);
+
+check('tokens: a hashbang is skipped only on the first line', tokenize('x;\n#!y').map((token) => token.text), ['x', ';', '#', '!', 'y']);
+check('tokens: numbers keep their separators, dots and leading dot', tokenize('a = 15_000 + .5').map((token) => token.text), ['a', '=', '15_000', '+', '.5']);
+check('tokens: an escaped dollar does not open a template expression', kinds('`a \\${b}`'), ['string']);
+check('tokens: every multi-character operator stays whole', tokenize('a >>>= b ... c **= d <<= e >>= f >>> g &&= h ||= i ??= j => k == l != m <= n && o || p ?? q ?. r ++ s -- t += u -= v *= w /= x %= y &= z |= a ^= b ** c << d >> e').map((token) => token.text).filter((text) => text.length > 1 && !/^[a-z]$/.test(text)), ['>>>=', '...', '**=', '<<=', '>>=', '>>>', '&&=', '||=', '??=', '=>', '==', '!=', '<=', '&&', '||', '??', '?.', '++', '--', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '**', '<<', '>>']);
 
 check('tokens: kinds of a call', kinds("check('a', 1.5e3, /x/g);"), ['word', 'punct', 'string', 'punct', 'number', 'punct', 'regex', 'punct', 'punct']);
 check('tokens: a template expression is code between synthetic parentheses', tokenize('`a${b}c`').map((token) => `${token.kind}:${token.text}${token.synthetic === true ? '*' : ''}`), ['string:', 'punct:(*', 'word:b', 'punct:)*', 'string:']);
