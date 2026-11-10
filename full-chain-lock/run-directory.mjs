@@ -5,7 +5,6 @@
  *   run.json      the detached runner's pid, the chain and the command, written by the launcher
  *   output.log    the chain's standard output and error
  *   verdict.json  `{ exitCode, signal, startedAt, endedAt, command }`, written when the chain ends
- *   temp/         the chain's own TEMP, made by the detached runner and removed when the chain ends
  *
  * `runStatus` answers from those files alone: a verdict means FINISHED whatever the pid says; no verdict and a live
  * pid means RUNNING; no verdict and no live pid (or no pid recorded) means LOST. The pid probe is a parameter.
@@ -19,7 +18,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 /** The files of a run directory. @es Los ficheros de un directorio de corrida. */
-export const RUN_FILES = Object.freeze({ job: 'job.json', run: 'run.json', output: 'output.log', verdict: 'verdict.json', temp: 'temp' });
+export const RUN_FILES = Object.freeze({ job: 'job.json', run: 'run.json', output: 'output.log', verdict: 'verdict.json' });
 
 /** The runs root inside the lock's state directory. @es La raíz de las corridas dentro del directorio de estado del lock. */
 export const RUNS_FOLDER = 'runs';

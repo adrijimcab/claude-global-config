@@ -24,6 +24,7 @@ import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, write
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { realTempRoot } from '../session-temp/session-temp.mjs';
 import { RUN_FILES } from './run-directory.mjs';
 
 const RUN = path.join(path.dirname(fileURLToPath(import.meta.url)), 'run.mjs');
@@ -43,13 +44,24 @@ const commandText = (job) => [job.command, ...job.args].join(' ');
 const runArguments = (job) => [RUN, '--chain', job.chain, '--project', job.project, '--session', job.session, '--tree', job.tree, '--wait-seconds', String(job.waitSeconds), '--poll-ms', String(job.pollMs), '--', job.command, ...job.args];
 
 /**
+ * The TEMP folder of a detached chain: `<shared temp root>/claude/detached-chain-tmp/<run directory name>`. It is NOT
+ * inside the run directory: that lives under the Claude home, a git repository, and the mutation engine refuses a TEMP
+ * inside any repository (measured: "NOT MEASURED ... is inside the git repository"). It is not under `session-tmp`
+ * either, so the end-of-session sweep never matches it.
+ * @es La carpeta TEMP de una cadena desacoplada: `<raíz temporal compartida>/claude/detached-chain-tmp/<nombre del
+ * directorio de corrida>`. NO está dentro del directorio de corrida: ese vive bajo el home de Claude, un repositorio
+ * git, y el motor de mutantes rechaza un TEMP dentro de cualquier repositorio (medido). Tampoco está bajo
+ * `session-tmp`, así que el barrido de fin de sesión nunca la reconoce.
+ */
+export const chainTempDir = (runDir) => path.join(realTempRoot(), 'claude', 'detached-chain-tmp', path.basename(runDir));
+
+/**
  * The environment the chain runs in: the job's, with TEMP, TMP and TMPDIR pointing at `tempDir`. A detached chain must
  * outlive the session that started it, and the session's end sweeps (`session-processes/`) every process whose TEMP is
- * the session's private folder, so the chain carries a TEMP of its own, inside its run directory, never the session's.
+ * the session's private folder, so the chain carries a TEMP of its own, never the session's.
  * @es El entorno en el que corre la cadena: el del trabajo, con TEMP, TMP y TMPDIR apuntando a `tempDir`. Una cadena
  * desacoplada debe sobrevivir a la sesión que la inició, y el fin de sesión barre (`session-processes/`) todo proceso
- * cuyo TEMP sea la carpeta privada de la sesión, así que la cadena lleva un TEMP propio, dentro de su directorio de
- * corrida, nunca el de la sesión.
+ * cuyo TEMP sea la carpeta privada de la sesión, así que la cadena lleva un TEMP propio, nunca el de la sesión.
  */
 export function chainEnvironment(environment, tempDir) {
   return { ...environment, TEMP: tempDir, TMP: tempDir, TMPDIR: tempDir };
@@ -108,7 +120,7 @@ export async function runJob(runDir, { spawnProcess = spawn, now = () => new Dat
   }
 
   let ended;
-  const tempDir = path.join(runDir, RUN_FILES.temp);
+  const tempDir = chainTempDir(runDir);
 
   try {
     const { code, signal } = await runLocked(job, path.join(runDir, RUN_FILES.output), tempDir, spawnProcess);

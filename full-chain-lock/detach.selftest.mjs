@@ -34,7 +34,7 @@ import { EXIT } from './chain-runner.mjs';
 import { parseArguments, parseReadArguments } from './cli-arguments.mjs';
 import { detachChain, readChain } from './detach-chain.mjs';
 import { WMI_ENVIRONMENT, WMI_SCRIPT, detachedLauncher, spawnLauncher, wmiLauncher } from './detach-launcher.mjs';
-import { chainEnvironment, runJob } from './detached-runner.mjs';
+import { chainEnvironment, chainTempDir, runJob } from './detached-runner.mjs';
 import { RUN_FILES, defaultRunDirectory, runStatus } from './run-directory.mjs';
 import { MESSAGES, speak } from './messages.mjs';
 
@@ -311,10 +311,12 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   writeFileSync(path.join(tempDir, RUN_FILES.job), JSON.stringify({ command: process.execPath, args: ['-e', 'process.stdout.write([process.env.TEMP, process.env.TMP, process.env.TMPDIR, require("fs").existsSync(process.env.TEMP)].join("|"))'], cwd: SCRATCH, environment: { ...process.env, TEMP: sessionTemp, TMP: sessionTemp, TMPDIR: sessionTemp }, chain: 'runner-proof', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 30, pollMs: 100 }));
   await runJob(tempDir);
 
-  const ownTemp = path.join(tempDir, RUN_FILES.temp);
+  const ownTemp = chainTempDir(tempDir);
 
-  check('the chain runs with TEMP, TMP and TMPDIR inside its run directory, never the session\'s', readFileSync(path.join(tempDir, RUN_FILES.output), 'utf8').includes([ownTemp, ownTemp, ownTemp, 'true'].join('|')), readFileSync(path.join(tempDir, RUN_FILES.output), 'utf8'));
+  check('the chain runs with TEMP, TMP and TMPDIR of its own, never the session\'s', readFileSync(path.join(tempDir, RUN_FILES.output), 'utf8').includes([ownTemp, ownTemp, ownTemp, 'true'].join('|')), readFileSync(path.join(tempDir, RUN_FILES.output), 'utf8'));
   check('the chain\'s own TEMP folder is removed once the chain ended', !existsSync(ownTemp));
+  check('the chain TEMP is outside the run directory (a git repository) and outside any session-tmp folder', !ownTemp.startsWith(tempDir) && !ownTemp.split(path.sep).includes('session-tmp') && ownTemp.endsWith(path.join('claude', 'detached-chain-tmp', path.basename(tempDir))), ownTemp);
+  check('two run directories get two chain TEMP folders', chainTempDir(path.join(SCRATCH, 'a')) !== chainTempDir(path.join(SCRATCH, 'b')));
   check('chainEnvironment keeps every other variable and replaces the three', JSON.stringify(chainEnvironment({ A: '1', TEMP: 'x' }, '/t')) === '{"A":"1","TEMP":"/t","TMP":"/t","TMPDIR":"/t"}', JSON.stringify(chainEnvironment({ A: '1', TEMP: 'x' }, '/t')));
 
   const fakeDir = freshDir();
@@ -338,7 +340,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   });
 
   check('the chain is started as the normal locked run with every setting of the job', JSON.stringify(calls[0][1].slice(1)) === JSON.stringify(['--chain', 'runner-proof', '--project', 'p', '--session', 's', '--tree', '/the/tree', '--wait-seconds', '30', '--poll-ms', '100', '--', 'cmd', 'a', 'b']) && calls[0][1][0] === RUN && calls[0][0] === process.execPath, JSON.stringify(calls[0][1]));
-  check('it runs in the job\'s directory with the job\'s environment, stdin closed and output on a file', calls[0][2].cwd === SCRATCH && JSON.stringify(calls[0][2].env) === JSON.stringify({ ONLY_THIS: '1', TEMP: path.join(fakeDir, RUN_FILES.temp), TMP: path.join(fakeDir, RUN_FILES.temp), TMPDIR: path.join(fakeDir, RUN_FILES.temp) }) && calls[0][2].stdio[0] === 'ignore' && typeof calls[0][2].stdio[1] === 'number' && calls[0][2].stdio[1] === calls[0][2].stdio[2]);
+  check('it runs in the job\'s directory with the job\'s environment, stdin closed and output on a file', calls[0][2].cwd === SCRATCH && JSON.stringify(calls[0][2].env) === JSON.stringify({ ONLY_THIS: '1', TEMP: chainTempDir(fakeDir), TMP: chainTempDir(fakeDir), TMPDIR: chainTempDir(fakeDir) }) && calls[0][2].stdio[0] === 'ignore' && typeof calls[0][2].stdio[1] === 'number' && calls[0][2].stdio[1] === calls[0][2].stdio[2]);
   check('a chain ended by a signal is a verdict with the signal and no code', faked.exitCode === null && faked.signal === 'SIGTERM' && readJson(path.join(fakeDir, RUN_FILES.verdict)).signal === 'SIGTERM');
   check('the verdict carries the instants the clock gave, start first and end last', faked.startedAt === '2026-01-01T00:00:00.000Z' && faked.endedAt === '2026-01-01T00:00:09.000Z', JSON.stringify(faked));
 
