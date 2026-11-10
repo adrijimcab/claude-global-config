@@ -276,6 +276,13 @@
 !/session-temp/
 !/session-temp/*.mjs
 !/session-temp/*.json
+# session-processes: the SessionEnd sweep that kills the processes a session left alive. Code, the PowerShell reader, sidecars and its README.
+# @es session-processes: el barrido de SessionEnd que mata los procesos que una sesión dejó vivos. Código, el lector de PowerShell, sidecars y su README.
+!/session-processes/
+!/session-processes/*.mjs
+!/session-processes/*.ps1
+!/session-processes/*.json
+!/session-processes/README.md
 # ia-perfiles: source of the team package that starts Claude Code on the company gateway or the personal account.
 # @es ia-perfiles: fuente del paquete del equipo que arranca Claude Code con el gateway de la empresa o la cuenta personal.
 !/ia-perfiles/
