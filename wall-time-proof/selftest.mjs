@@ -182,6 +182,15 @@ for (const before of ['(a)', 'a[0]', '{}', 'a++', 'a--', 'total', '4', "'s'", '`
   check(`lexer: a slash after ${before} is a division`, flagged(source(STARTED, `${before} / 2; check('x', Date.now() - started < 5); const z = 1 / 2;`)), [2]);
 }
 
+check('lexer: a regular expression as the very first token', flagged(source('/"/.test(s); const started = Date.now();', "check('x', Date.now() - started < 5);")), [2]);
+check('lexer: an escaped slash does not end a regular expression', flagged(source(STARTED, 'const r = /a\\/"/; check(\'x\', Date.now() - started < 5);')), [2]);
+check('lexer: a class that closes lets the next slash end the regular expression', flagged(source(STARTED, 'const r = /[a]/; const s = "/"; check(\'x\', Date.now() - started < 5);')), [2]);
+check('lexer: a dollar that is not a template expression stays text', flagged(source(STARTED, 'const t = `cost $5 and ${1}`;', "check('x', Date.now() - started < 5);")), [3]);
+check('lexer: carriage returns and tabs are blanks', flagged("const started = Date.now();\r\ncheck('x', Date.now()\r\n\t- started < 5);\r\n"), [3]);
+check('green: a call with arguments is not an hrtime difference', flagged("check('x', count(1) < 5);"), []);
+check('green: a name hrtime that is not called is not a difference', flagged("check('x', hrtime < 3);"), []);
+check('green: a difference that ends the source reads nothing past it', flagged('const s = Date.now() -'), []);
+check('green: a difference whose first operand is not a reading', flagged(source(STARTED, "check('x', total - started < 3);")), []);
 check('lexer: an unterminated string ends at its line', flagged(source(STARTED, "const s = 'oops", "check('x', Date.now() - started < 5);")), [3]);
 check('lexer: an unterminated regular expression ends at its line', flagged(source(STARTED, 'const r = /oops', "check('x', Date.now() - started < 5);")), [3]);
 check('lexer: a line comment at the end of the source', flagged(source(STARTED, "check('x', Date.now() - started < 5); // done")), [2]);

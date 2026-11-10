@@ -26,10 +26,7 @@ function assertionArguments(tokens) {
   const found = [];
 
   tokens.forEach((token, at) => {
-    const isCall = token.kind === 'word' && ASSERTION_NAMES.has(token.text) && tokens[at + 1]?.text === '(';
-    const isDeclaration = tokens[at - 1]?.kind === 'word' && tokens[at - 1].text === 'function';
-
-    if (!isCall || isDeclaration) return;
+    if (!ASSERTION_NAMES.has(token.text) || tokens[at + 1]?.text !== '(') return;
 
     const close = matchingClose(tokens, at + 1);
 
