@@ -5,3 +5,9 @@ Ledger lines archived verbatim, append-only: each block is one original line, by
 ## Ledger line archived 2026-10-01 (condensed)
 
 - [global] 2026-09-30 — A bilingual-campaign worker I launched (a6bcb38a) spawned 6 child agents of its own, each running vitest in its own worktree, while a full integrate.mjs build:ci-pr was running and two other workers were live, exceeding the owner's cap of 3 heavy workers (#971) -> root cause: my brief never said the worker may not delegate, and a large disjoint workload invites fan-out -> RULE: every brief states 'do not spawn sub-agents; if the work is too large, report the partition and stop', and the orchestrator splits large campaigns itself within the cap. <!--fc:worker-subdelegated-past-the-concurrency-cap#1-->
+
+## Ledger line archived 2026-11-10 (promoted)
+
+- [guards] 2026-09-30 — RULE: every brief states 'do not spawn sub-agents; if the work is too large, report the partition and stop', and the orchestrator splits large campaigns itself within the cap. Evidence: lessons/evidence/worker-subdelegated-past-the-concurrency-cap.md <!--fc:worker-subdelegated-past-the-concurrency-cap#1-->
+
+Promoted 2026-11-10 to ~/.claude/rules/promoted-guards.md; closed by mechanism C:/Users/adrian.jimenez/.claude/worker-delegation-guard/guard.mjs (selftest run, exit 0)

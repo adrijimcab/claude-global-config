@@ -34,3 +34,9 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-10-05 — brief-measured-line-carried-an-unmeasured-claim: no mechanism <!--fc:brief-measured-line-carried-an-unmeasured-claim#6-->
 
 - [promoted] 2026-10-18 — engram-writes-refused-after-session-resume: no mechanism <!--fc:engram-writes-refused-after-session-resume#2-->
+- [promoted] 2026-11-10 — live-ledger-lines-dropped-by-landing: mechanism C:/Users/adrian.jimenez/.claude/worktree-landing/ledger-retention.mjs <!--fc:live-ledger-lines-dropped-by-landing#1-->
+- [promoted] 2026-11-10 — tree-written-during-its-full-chain: mechanism C:/Users/adrian.jimenez/.claude/full-chain-lock/write-guard.mjs <!--fc:tree-written-during-its-full-chain#1-->
+- [promoted] 2026-11-10 — vendored-copy-edited-in-place: mechanism C:/Users/adrian.jimenez/.claude/vendored-edit-guard/guard.mjs <!--fc:vendored-copy-edited-in-place#1-->
+- [promoted] 2026-11-10 — worker-subdelegated-past-the-concurrency-cap: mechanism C:/Users/adrian.jimenez/.claude/worker-delegation-guard/guard.mjs <!--fc:worker-subdelegated-past-the-concurrency-cap#1-->
+- [promoted] 2026-11-10 — worker-work-left-uncommitted-across-a-stop: mechanism C:/Users/adrian.jimenez/.claude/commit-cadence-guard/guard.mjs <!--fc:worker-work-left-uncommitted-across-a-stop#3-->
+- [promoted] 2026-11-10 — user-facing-prose-leaked-into-a-worker-brief: mechanism C:/Users/adrian.jimenez/.claude/brief-audience/guard.mjs <!--fc:user-facing-prose-leaked-into-a-worker-brief#1-->

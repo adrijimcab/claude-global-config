@@ -262,56 +262,40 @@ corregido el 2026-09-30 tras `worker-overwrote-master-backlog`)
 
 **Esta sección vincula al ORQUESTADOR (la sesión principal), NUNCA a un agente delegado.**
 
-- Cada proyecto tiene UN backlog maestro, fuente única de lo que queda. Donde un registro de engram
-  no cabe (tope de 50.000 bytes), vive en un DOCUMENTO VERSIONADO y engram guarda un puntero con su
-  registro de cambios: en `~/.claude`, `checklists/master-backlog.md` (+ `host-backlog.md`); en
-  b100-am-ui, desde el 2026-10-11 (decisión del dueño), `.claude/checklists/master-backlog.md` del repo
-  de respaldo del tooling, con `backlog/1.0.0-master` (#972) congelado (sin más líneas: llegó al tope; se
-  reduce a puntero cuando el guard de contenido acepte el documento como archivo; el registro de cambios
-  es el historial git del documento). En los demás proyectos, el registro de engram `backlog/<hito>-master`.
+- Cada proyecto tiene UN backlog maestro, fuente única de lo que queda: el registro de engram
+  `backlog/<hito>-master`, o un documento versionado con puntero en engram donde el registro no cabe
+  (dónde vive el de cada proyecto y quién commitea su documento: `lessons/on-demand/promoted-records.md`).
 - Todo hallazgo, defecto, deuda, decisión pendiente del dueño o tarea «encolada» que aparezca —de un
   agente, de una medición o de la conversación— se escribe en ese backlog EN EL MISMO TURNO en que
   aparece. Nunca queda solo en el chat, en un reporte de agente o en una nota suelta.
 - **Quién escribe:** SOLO el orquestador llama `mem_save`/`mem_update` sobre un `topic_key`/id de
   backlog maestro. **Un agente delegado NUNCA escribe, actualiza ni borra un registro de backlog
   maestro** — pone su hallazgo en su informe de `SubagentHandback`, y el orquestador lo transcribe al
-  backlog EN EL MISMO TURNO en que lo recibe, sin perder lo que ya había. Lo mismo vale para el
-  documento de un backlog versionado: lo edita, lo commitea (pathspec explícito) y lo sube en el mismo
-  turno la sesión que orquesta ESE proyecto — el de b100-am-ui su sesión de b100, en su repo de respaldo;
-  el global la sesión de `~/.claude`, por `land.mjs` a `master` (decisión del dueño 2026-10-11: «cada
-  proyecto debería subir sus propios commits… y los universales… que se commiteen a master»). Un commit
-  del documento es un dato, no código de hooks: no pide pausa de coordinación. Sus archivos
-  (`master-backlog-archive/`) están congelados.
+  backlog EN EL MISMO TURNO en que lo recibe, sin perder lo que ya había. El documento de un backlog
+  versionado lo commitea y lo sube en el mismo turno la sesión que orquesta ESE proyecto.
 - Guardar con el mismo `topic_key` REEMPLAZA el contenido: siempre se lee la revisión actual
   (`mem_get_observation`) y se reescribe la revisión completa, sumando lo nuevo, sin perder nada.
 
 ## Config de agentes versionada y subida en el momento (directiva del dueño 2026-09-30, global)
 
 - Toda modificación de agentes, `CLAUDE.md`, reglas, contratos, hooks, guards o gates de tooling se
-  COMMITEA y se SUBE a su repo de respaldo en el mismo turno en que queda implementada y verificada:
-  - `~/.claude/**` → `adrijimcab/claude-global-config` (`git -C ~/.claude …`, rama `master`);
-  - `<b100-am-ui>/.claude/**` → `adrijimcab/b100-am-ui-claude-tooling`
-    (`node .claude/backup-repo.mjs …`, rama `master`);
-  - `<di_1700002_discovery_fe>/.claude/**` → `adrijimcab/di-1700002-discovery-fe-claude-tooling`
-    (`node .claude/backup-repo.mjs …`, rama `master`; creado el 2026-10-11 con autorización del dueño);
-  - un repo de proyecto nuevo con `.claude/` propio declara aquí su repo de respaldo antes de usarlo;
-  - ese proyecto declara también `.claude/agent-contract/anchors.json` con el par inglés/español de su contrato, y el guard `agent-contract-parity` rechaza toda delegación mientras falte.
+  COMMITEA y se SUBE a su repo de respaldo privado de `adrijimcab` en el mismo turno en que queda
+  implementada y verificada (el repo de cada proyecto, y lo que declara un proyecto nuevo antes de usar el suyo:
+  `lessons/on-demand/promoted-landing.md`).
 - **Nada de IA va al remoto de la empresa** (directiva del dueño 2026-10-11: «NO SE SUBE A BASE 100 NADA DE
   IA, TODO ESTO A adrijimcab»): el `.claude/`, los artefactos de agentes y toda regla que nombre una
   herramienta de IA viven en `.git/info/exclude` del proyecto (nunca en su `.gitignore` versionado) y se
   respaldan solo en el repo privado de `adrijimcab`. Antes de cada push a un remoto de la empresa, `git grep`
   sobre lo que se sube busca NOMBRES de herramientas de IA (claude, anthropic, engram, openspec, gentle-ai,
   copilot, chatgpt, openai — nunca frases genéricas como «spec-driven», que el inglés corriente usa) y un
-  hallazgo frena el push. Un guard que necesita conocer esos nombres (el de atribución en los commits) lee
-  la lista desde fuera del repo, nunca la versiona.
+  hallazgo frena el push.
 - **A la empresa no se sube nada sin autorización explícita del dueño; a `adrijimcab` sí** (directiva del
   dueño 2026-10-11: «Ni land.js ni nadie tiene que subir nada a remoto sin mi autorización explícita», «Push
   solo cuando yo te lo diga», «Quiero que no suba a mi empresa, a adrijimcab cuando quieras»). Ninguna sesión
   ni agente hace push, tag ni release a un remoto de la empresa sin que el dueño lo ordene en la conversación
   para ESE push; el trabajo verificado se integra en LOCAL y espera. Los repos de respaldo de
-  `github.com/adrijimcab/*` se suben cuando haga falta. Mecanismo: `land.mjs` decide la publicación por la URL
-  del remoto — `adrijimcab` se publica, cualquier otro remoto integra solo en local e imprime el comando de push
-  para el dueño, sin ningún flag que lo encienda.
+  `github.com/adrijimcab/*` se suben cuando haga falta (mecanismo: `land.mjs`, en
+  `lessons/on-demand/promoted-landing.md`).
 - Solo se commitea lo propio y terminado: lo que un agente VIVO está escribiendo lo commitea ese
   agente al terminar (nunca se commitea el estado de trabajo de un actor vivo).
 - Mensajes en inglés, Conventional, sin atribución. Artefactos de ejecución (`state/`, `.runs/`,

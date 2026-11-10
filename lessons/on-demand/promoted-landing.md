@@ -22,3 +22,18 @@ Binding. The harness does NOT load this file; `~/.claude/rules/promoted-rules.md
   RULE: before choosing a side, diff what each side uniquely HOLDS, not just what the gate will re-check; when both sides carry content, the resolution is a union you construct and verify, never a side you pick.
   RULE: act on what a finding SAYS, never on what its state name suggests.
   RULE (face of 2026-10-18, Discovery): before writing a shared memory or configuration file, check whether it exists and read it; extend it, never replace it, because another session may have created it minutes earlier.
+
+## The backup repository of each project, and how publication is decided (moved from rules/00-owner-mandates.md, 2026-11-10)
+
+- Repos de respaldo (rama `master` en todos):
+  - `~/.claude/**` → `adrijimcab/claude-global-config` (`git -C ~/.claude …`);
+  - `<b100-am-ui>/.claude/**` → `adrijimcab/b100-am-ui-claude-tooling` (`node .claude/backup-repo.mjs …`);
+  - `<di_1700002_discovery_fe>/.claude/**` → `adrijimcab/di-1700002-discovery-fe-claude-tooling`
+    (`node .claude/backup-repo.mjs …`; creado el 2026-10-11 con autorización del dueño);
+  - un repo de proyecto nuevo con `.claude/` propio declara aquí su repo de respaldo antes de usarlo;
+  - ese proyecto declara también `.claude/agent-contract/anchors.json` con el par inglés/español de su contrato, y el
+    guard `agent-contract-parity` rechaza toda delegación mientras falte.
+- Un guard que necesita conocer los nombres de herramientas de IA (el de atribución en los commits) lee la lista desde
+  fuera del repo, nunca la versiona.
+- Mecanismo de publicación: `land.mjs` decide por la URL del remoto — `adrijimcab` se publica, cualquier otro remoto
+  integra solo en local e imprime el comando de push para el dueño, sin ningún flag que lo encienda.
