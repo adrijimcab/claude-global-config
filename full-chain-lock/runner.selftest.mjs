@@ -42,6 +42,7 @@ import { childProcessAdapter } from './child-process-adapter.mjs';
 import { parseArguments } from './cli-arguments.mjs';
 import { fileLockAdapter } from './file-lock-adapter.mjs';
 import { launchPlan } from './launch-plan.mjs';
+import { LOCK_TOKEN_VARIABLE, tokenHoldsLock } from './lock-token.mjs';
 import { measuredTree } from './measured-tree.mjs';
 import { MESSAGES, speak } from './messages.mjs';
 import { failureCode } from './run.mjs';
@@ -324,7 +325,7 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
   const told = [];
   const say = { say: () => undefined, complain: (id, params) => told.push([id, params]), line: () => '' };
   let released = 0;
-  const lock = { tryTake: () => true, readHolder: () => undefined, release: () => { released += 1; throw new Error('cannot remove'); } };
+  const lock = { tryTake: () => true, readHolder: () => undefined, readToken: () => 'token', release: () => { released += 1; throw new Error('cannot remove'); } };
   const code = await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 100, pollMs: 10 }, { lock, child: { run: () => Promise.resolve(9) }, clock: { now: () => 0, sleep }, say, processId: 1 }).catch(() => 'threw');
 
   check('a release that fails never changes the command\'s exit code', code === 9);
@@ -351,6 +352,7 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
   const lock = {
     tryTake: () => { takes += 1; return takes === 6; },
     readHolder: () => { if (takes === 4) holder = { ...holder, pid: 2 }; return holder; },
+    readToken: () => 'token',
     release: () => undefined
   };
   const clock = { now: () => now, sleep: (ms) => { sleeps.push(ms); now += ms; return Promise.resolve(); } };
@@ -365,7 +367,7 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
   const told = [];
   const say = { say: () => undefined, complain: (id) => told.push(id), line: () => '' };
   let takes = 0;
-  const lock = { tryTake: () => { takes += 1; return takes === 4; }, readHolder: () => (takes === 1 ? undefined : { chain: 'a', project: 'p', session: 's', pid: 1, startedAt: 't' }), release: () => undefined };
+  const lock = { tryTake: () => { takes += 1; return takes === 4; }, readHolder: () => (takes === 1 ? undefined : { chain: 'a', project: 'p', session: 's', pid: 1, startedAt: 't' }), readToken: () => 'token', release: () => undefined };
 
   await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 5000, pollMs: 10 }, { lock, child: { run: () => Promise.resolve(0) }, clock: { now: () => 0, sleep }, say, processId: 1 });
 
@@ -373,7 +375,7 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
 
   const stillTold = [];
   let looks = 0;
-  const missing = { tryTake: () => { looks += 1; return looks === 4; }, readHolder: () => undefined, release: () => undefined };
+  const missing = { tryTake: () => { looks += 1; return looks === 4; }, readHolder: () => undefined, readToken: () => 'token', release: () => undefined };
 
   await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 5000, pollMs: 10 }, { lock: missing, child: { run: () => Promise.resolve(0) }, clock: { now: () => 0, sleep }, say: { ...say, complain: (id) => stillTold.push(id) }, processId: 1 }).catch((error) => stillTold.push(`threw ${error.name}`));
 
@@ -609,6 +611,110 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
 
   check('a spawn error rejects with CommandNotStarted carrying the system code', outcome instanceof CommandNotStarted && outcome.messageId === 'spawn-failed' && outcome.params.code === 'ENOENT');
   check('the forwarders are removed after a spawn error too', Object.keys(before).every((signal) => process.listenerCount(signal) === before[signal]));
+}
+
+// ── The lock token: handed to the command, and which values hold the lock ──────────────────────────────────────
+{
+  const told = [];
+  const given = [];
+  let released = 0;
+  const say = { say: () => undefined, complain: (id) => told.push(id), line: () => '' };
+  const fakeLock = (token) => ({ tryTake: () => true, readHolder: () => undefined, readToken: () => token, release: () => { released += 1; } });
+  const request = { chain: 'c', project: 'p', session: 's', command: 'cmd', args: ['a'], waitMs: 100, pollMs: 10 };
+  const clock = { now: () => 0, sleep };
+  const code = await runChain(request, { lock: fakeLock('holder-id'), child: { run: (...call) => { given.push(call); return Promise.resolve(4); } }, clock, say, processId: 1 });
+
+  check('the command is handed the holder id the lock port holds, under FULL_CHAIN_LOCK_TOKEN, and nothing else', code === 4 && JSON.stringify(given) === JSON.stringify([['cmd', ['a'], { FULL_CHAIN_LOCK_TOKEN: 'holder-id' }]]), JSON.stringify(given));
+  check('the variable name the runner hands out is FULL_CHAIN_LOCK_TOKEN', LOCK_TOKEN_VARIABLE === 'FULL_CHAIN_LOCK_TOKEN');
+
+  const before = released;
+  let ran = 0;
+  const unreadable = await runChain(request, { lock: fakeLock(undefined), child: { run: () => { ran += 1; return Promise.resolve(0); } }, clock, say, processId: 1 });
+
+  check('a holder id that cannot be read back exits 70 and the command does not run', unreadable === EXIT.lockFault && ran === 0);
+  check('that refusal is told with its own id and gives the lock back', told.includes('token-unreadable') && released === before + 1);
+}
+
+{
+  let seen;
+  const adapter = childProcessAdapter({ spawnProcess: (file, args, options) => { seen = { file, args, options }; const fake = new EventEmitter(); fake.kill = () => undefined; setImmediate(() => fake.emit('close', 0, null)); return fake; } });
+
+  await adapter.run(process.execPath, ['x'], { FULL_CHAIN_LOCK_TOKEN: 'abc' });
+  check('the child adapter adds the given variables to the environment the child starts with', seen.options.env.FULL_CHAIN_LOCK_TOKEN === 'abc' && seen.options.env.PATH === process.env.PATH && seen.options.stdio === 'inherit', JSON.stringify(Object.keys(seen.options)));
+
+  await adapter.run(process.execPath, ['x']);
+  check('with no variables given the child starts with the caller\'s own environment', !('FULL_CHAIN_LOCK_TOKEN' in seen.options.env) && seen.options.env.PATH === process.env.PATH);
+}
+
+{
+  clearState();
+
+  const record = { session: 's', project: 'p', chain: 'c', tree: '/t', pid: process.pid, startedAt: 't', command: 'c' };
+  const lock = fileLockAdapter(STATE);
+
+  check('with no lock file there is no token and nothing holds the lock', lock.readToken() === undefined && lock.holdsToken('anything') === false);
+  lock.tryTake(record);
+
+  const token = lock.readToken();
+
+  check('the token is what the lock port wrote into chain.lock, owned by this process', typeof token === 'string' && token.startsWith(`${String(process.pid)}:`), String(token));
+  check('the live holder\'s own token holds the lock', lock.holdsToken(token) === true);
+  check('a forged token does not hold it', lock.holdsToken(`${String(process.pid)}:forged`) === false);
+  check('an empty, missing or non-text token does not hold it', ['', undefined, null, 42, {}].every((value) => lock.holdsToken(value) === false));
+  check('the right token with a holder the probe calls dead does not hold it', fileLockAdapter(STATE, { isAlive: () => false }).holdsToken(token) === false);
+  writeFileSync(HOLDER, JSON.stringify({ ...record, pid: process.pid + 1 }));
+  check('the right token with a record of another process than the lock\'s owner does not hold it', lock.holdsToken(token) === false);
+  writeFileSync(HOLDER, JSON.stringify(record));
+  lock.release();
+  check('after the release the same token no longer holds the lock, and no token is readable', lock.holdsToken(token) === false && lock.readToken() === undefined);
+
+  lock.tryTake(record);
+  check('a token copied from a finished chain does not hold the next chain\'s lock, which has its own', lock.readToken() !== token && lock.holdsToken(token) === false && lock.holdsToken(lock.readToken()) === true);
+  lock.release();
+
+  const dead = deadPid();
+
+  plantLock(dead, 5);
+  check('a stale lock (dead owner, old) is held by nobody, its own token included', fileLockAdapter(STATE).holdsToken(`${String(dead)}:planted`) === false);
+  clearState();
+}
+
+{
+  const asked = [];
+  const answers = tokenHoldsLock('value', { lock: { holdsToken: (token) => { asked.push(token); return true; } } });
+
+  check('the port asks the lock about exactly the token it was given and answers the lock\'s answer', answers === true && asked.join() === 'value');
+
+  clearState();
+
+  const lock = fileLockAdapter(STATE);
+
+  check('over the shared state directory the port answers false while no chain holds the lock', tokenHoldsLock('x') === false);
+  lock.tryTake({ session: 's', project: 'p', chain: 'c', tree: '/t', pid: process.pid, startedAt: 't', command: 'c' });
+  check('over the shared state directory the port answers true for the holder\'s token', tokenHoldsLock(lock.readToken()) === true);
+  lock.release();
+  clearState();
+}
+
+// ── End to end: the real runner gives its command a token the real port accepts ─────────────────────────────────
+{
+  clearState();
+
+  const result = await startRunner(['--chain', 'token', '--project', 'p', '--', process.execPath, CHILD, 'token-holds']);
+
+  check('the command started by the real runner is given a token that holds the lock while it runs', result.code === 0 && result.stdout.includes('holds=true'), `${String(result.code)} ${result.stdout}`);
+  check('the lock is released afterwards', lockFree());
+
+  clearState();
+
+  const named = await startRunner(['--chain', 'token', '--project', 'p', '--', process.execPath, CHILD, 'env', LOCK_TOKEN_VARIABLE]);
+  const value = /FULL_CHAIN_LOCK_TOKEN=(\S+)/.exec(named.stdout)?.[1];
+
+  check('the variable the command sees carries a holder id of this machine\'s lock format (pid:random)', value !== undefined && /^\d+:[0-9a-f]+$/.test(value), named.stdout);
+
+  const stale = await startRunner(['--chain', 'token', '--project', 'p', '--', process.execPath, CHILD, 'env', LOCK_TOKEN_VARIABLE], { FULL_CHAIN_LOCK_TOKEN: 'inherited-and-stale' });
+
+  check('a token already in the caller\'s environment is replaced by the lock\'s own', !stale.stdout.includes('inherited-and-stale') && /FULL_CHAIN_LOCK_TOKEN=\d+:/.test(stale.stdout), stale.stdout);
 }
 
 // ── The real speaker ────────────────────────────────────────────────────────────────────────────────────────

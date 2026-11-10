@@ -11,6 +11,10 @@
  *   - WHICH ROOT: absolute, relative, a subdirectory; not a repository; nothing discovered.
  *   - HOW ONE ENDS: green; non-zero exit; killed by a signal; timeout; a listed file missing. Each red
  *     one must leave the later selftests running, and the exit status must be 1.
+ *   - WHETHER IT MAY START: only when FULL_CHAIN_LOCK_TOKEN holds the full-chain lock now: a held lock with its token runs;
+ *     a missing, empty, forged, copied-from-a-finished-chain (stale holder) token, and a state with no lock file, are each
+ *     refused with exit 2, the bilingual message and the exact locked command, and no selftest ran; the real
+ *     `full-chain-lock/run.mjs` wrapping the runner supplies the token end to end, and so does the printed command.
  *   - WHAT THE OPERATOR CAN CHOOSE: nothing. An option that would filter or skip is refused.
  *   - WHEN A LINE APPEARS: each selftest's GREEN or RED line is delivered the moment that selftest ends,
  *     before the next one starts, in process (the `onLine` hook) and through the real command line (a
@@ -26,13 +30,17 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { discoverSelftests } from './discovery.mjs';
-import { RUN, cli, fixtureKit } from './fixtures.mjs';
-import { PEAK_BYTES_PER_SUITE, childBudgetOf, concurrencyOf, concurrencyPlan, describeConcurrency, runSelftests } from './run.mjs';
+import { RUN, cli, cliWith, fixtureKit, holdLockForRunner } from './fixtures.mjs';
+import { LOCK_TOKEN_VARIABLE, lockedCommand, startedUnderLock } from './lock-gate.mjs';
+import { MESSAGES } from './messages.mjs';
+import { PEAK_BYTES_PER_SUITE, childBudgetOf, concurrencyOf, concurrencyPlan, describeConcurrency, main, runSelftests } from './run.mjs';
 import { writeLineSync } from './stream.mjs';
+import { makeSpeaker } from '../bilingual-output/speaker.mjs';
+import { tokenHoldsLock } from '../full-chain-lock/lock-token.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
 // Every guard this selftest spawns or imports keeps its state in a temp directory: never the live one a real
@@ -40,6 +48,12 @@ import { isolateState } from '../hook-state/locations.mjs';
 // @es Cada guardia que este selftest lanza o importa guarda su estado en un directorio temporal: nunca en el
 // vivo que lee una sesión real, ni con líneas de una corrida anterior.
 isolateState('selftest-runner');
+
+// Every runner this selftest starts is started under a REAL lock held in that isolated state, as `full-chain-lock/run.mjs`
+// would start it; the refusals below override the token or the state they are about.
+// @es Cada runner que este selftest inicia se inicia bajo un lock REAL tomado en ese estado aislado, como lo iniciaría
+// `full-chain-lock/run.mjs`; las negativas de más abajo sustituyen el token o el estado del que tratan.
+holdLockForRunner();
 
 const GREEN = 'process.exit(0)\n';
 const RED = "console.log('BOOM-MARK'); process.exit(1)\n";
@@ -450,6 +464,115 @@ const alwaysFull = () => {
 };
 const gaveUp = written((chunks, fd, bytes, offset, length) => alwaysFull(chunks, fd, bytes, offset, length), 'never accepted', { retries: 3 });
 check(gaveUp.error?.code === 'EAGAIN' && attempts === 4, `a pipe that never drains is given up on after the bounded retries, raising EAGAIN: attempts ${attempts}`);
+
+// ── Whether it may start: only under the full-chain lock ─────────────────────────────────────────────
+const LOCK_RUN = path.join(import.meta.dirname, '..', 'full-chain-lock', 'run.mjs');
+const slashed = (file) => file.split('\\').join('/');
+
+/** Drives `main` in process with its seams: what the lock port was asked, what ran, what was said. @es Maneja `main` en proceso con sus costuras. */
+async function inProcess(environment, holds, argv = ['--root', allGreen]) {
+  const asked = [];
+  const ran = [];
+  const said = [];
+  const exit = await main(argv, {
+    environment,
+    holdsLock: (token) => {
+      asked.push(token);
+      return holds(token);
+    },
+    execute: (options) => {
+      ran.push(options);
+      return Promise.resolve({ exitCode: 7 });
+    },
+    tell: makeSpeaker(MESSAGES, { log: (line) => said.push(line), error: (line) => said.push(line) }),
+  });
+
+  return { exit, asked, ran, said };
+}
+
+const granted = await inProcess({ [LOCK_TOKEN_VARIABLE]: 'token' }, () => true);
+check(granted.exit === 7 && granted.ran.length === 1 && granted.ran[0].root === allGreen && granted.asked.join() === 'token' && granted.said.length === 0, `a token that holds the lock runs the selftests and returns their exit code: ${JSON.stringify(granted)}`);
+
+for (const [label, environment, holds, asks] of [
+  ['a missing token', {}, () => true, 0],
+  ['an empty token', { [LOCK_TOKEN_VARIABLE]: '' }, () => true, 0],
+  ['a token that is not text', { [LOCK_TOKEN_VARIABLE]: 42 }, () => true, 0],
+  ['a token the lock does not hold (stale, copied or forged)', { [LOCK_TOKEN_VARIABLE]: 'token' }, () => false, 1],
+  ['an answer of the lock port that is not exactly true', { [LOCK_TOKEN_VARIABLE]: 'token' }, () => 'yes', 1],
+]) {
+  const refused = await inProcess(environment, holds);
+
+  check(refused.exit === 2 && refused.ran.length === 0, `${label}: exit 2 and no selftest runs: ${JSON.stringify(refused)}`);
+  check(refused.asked.length === asks, `${label}: the lock port is asked ${asks} time(s): ${refused.asked.length}`);
+  check(refused.said.length === 1 && refused.said[0].startsWith('REFUSED: the selftest runner is a full chain') && refused.said[0].includes(' @es RECHAZADO: el runner de selftests es una cadena completa'), `${label}: one bilingual refusal: ${refused.said.join('|')}`);
+  check(refused.said[0].includes(LOCK_TOKEN_VARIABLE) && refused.said[0].includes(`Run it through the lock: ${lockedCommand(['--root', allGreen], allGreen)} @es `), `${label}: the refusal names the variable and the exact locked command`);
+}
+
+check(startedUnderLock({ [LOCK_TOKEN_VARIABLE]: 'a' }, (token) => token === 'a') && !startedUnderLock({ [LOCK_TOKEN_VARIABLE]: 'a' }, (token) => token === 'b'), 'the gate asks the port about the very token it read');
+const command = lockedCommand(['--root', 'with space', '--git-dir', 'g'], 'with space');
+check(command.startsWith(`node ${slashed(LOCK_RUN)} --chain selftest-runner --tree `) && command.includes(` -- node ${slashed(RUN)} --root "with space" --git-dir g`) && command.includes('--tree "'), `the locked command wraps this runner and its arguments, quoting what needs it: ${command}`);
+
+const marker = path.join(bareDir(), 'ran-marker');
+const marked = repo({ tracked: { 'a/selftest.mjs': `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(marker)}, 'ran');\n` } });
+const refusalOf = (result) => result.status === 2 && result.stdout === '' && result.stderr.startsWith('REFUSED:') && result.stderr.includes(' @es RECHAZADO:') && !existsSync(marker);
+const stateRoot = () => bareDir();
+
+rmSync(marker, { force: true });
+const heldRun = cli(marked, '--root', marked);
+check(heldRun.status === 0 && heldRun.stdout.includes('1/1 green') && existsSync(marker), `through the command line, the token this process holds runs the selftest: ${heldRun.status} ${heldRun.stdout}${heldRun.stderr}`);
+
+for (const [label, environment] of [
+  ['a missing token', { [LOCK_TOKEN_VARIABLE]: undefined }],
+  ['an empty token', { [LOCK_TOKEN_VARIABLE]: '' }],
+  ['a forged token', { [LOCK_TOKEN_VARIABLE]: '1:forged' }],
+  ['a state with no lock file at all', { HOOK_STATE_DIR: stateRoot(), [LOCK_TOKEN_VARIABLE]: '1:no-lock-here' }],
+]) {
+  rmSync(marker, { force: true });
+
+  const result = cliWith(environment, marked, '--root', marked);
+
+  check(refusalOf(result), `through the command line, ${label} is refused with exit 2 and no selftest ran: ${result.status} ${result.stderr}`);
+}
+
+// A token that WAS valid: read from a real locked chain in a state of its own; once that chain ended it no longer holds
+// anything there, and against the live lock this process holds (another holder id) it does not match either.
+// @es Un token que FUE válido: leído de una cadena real con lock en un estado propio; al terminar esa cadena ya no tiene
+// nada allí, y contra el lock vivo de este proceso (otro id de dueño) tampoco coincide.
+const chainState = stateRoot();
+const finished = spawnSync(process.execPath, [LOCK_RUN, '--chain', 'selftest-runner', '--project', 'p', '--', process.execPath, path.join(import.meta.dirname, '..', 'full-chain-lock', 'chain-child.fixture.mjs'), 'env', LOCK_TOKEN_VARIABLE], { encoding: 'utf8', env: { ...process.env, HOOK_STATE_DIR: chainState } });
+const copied = /FULL_CHAIN_LOCK_TOKEN=(\S+)/.exec(finished.stdout)?.[1];
+
+check(finished.status === 0 && copied !== undefined, `a real locked chain was given a token to copy: ${finished.status} ${finished.stdout}${finished.stderr}`);
+rmSync(marker, { force: true });
+check(refusalOf(cliWith({ HOOK_STATE_DIR: chainState, [LOCK_TOKEN_VARIABLE]: copied }, marked, '--root', marked)), 'the token of a chain that ended holds nothing in its own state');
+check(refusalOf(cliWith({ [LOCK_TOKEN_VARIABLE]: copied }, marked, '--root', marked)) && tokenHoldsLock(copied) === false, 'a token copied from another chain does not match the lock another holder has now');
+
+const staleState = stateRoot();
+const staleDir = path.join(staleState, 'full-chain-lock');
+const deadPid = spawnSync(process.execPath, ['-e', ''], { windowsHide: true }).pid;
+
+mkdirSync(staleDir, { recursive: true });
+writeFileSync(path.join(staleDir, 'chain.lock'), `${deadPid}:planted`);
+writeFileSync(path.join(staleDir, 'holder.json'), JSON.stringify({ session: 'old', project: 'old', chain: 'old', pid: deadPid, startedAt: '2026-01-01T00:00:00.000Z', command: 'old' }));
+utimesSync(path.join(staleDir, 'chain.lock'), new Date(Date.now() - 5 * 60_000), new Date(Date.now() - 5 * 60_000));
+check(refusalOf(cliWith({ HOOK_STATE_DIR: staleState, [LOCK_TOKEN_VARIABLE]: `${deadPid}:planted` }, marked, '--root', marked)), 'a stale holder (dead owner, old lock) with its own token is refused');
+
+// The real wrapper supplies the token end to end, and so does the command the refusal prints.
+// @es El wrapper real da el token de punta a punta, y también lo hace el comando que imprime la negativa.
+const wrapperState = stateRoot();
+const wrapped = spawnSync(process.execPath, [LOCK_RUN, '--chain', 'selftest-runner', '--project', 'p', '--tree', marked, '--', process.execPath, RUN, '--root', marked], { encoding: 'utf8', env: { ...process.env, HOOK_STATE_DIR: wrapperState, [LOCK_TOKEN_VARIABLE]: '1:inherited-and-wrong' } });
+
+check(wrapped.status === 0 && wrapped.stdout.includes('1/1 green') && existsSync(marker), `the real full-chain-lock/run.mjs wrapping the runner gives it a token it accepts: ${wrapped.status} ${wrapped.stdout}${wrapped.stderr}`);
+check(!existsSync(path.join(wrapperState, 'full-chain-lock', 'chain.lock')), 'the lock is released after the wrapped run');
+
+rmSync(marker, { force: true });
+const printedState = stateRoot();
+const refused = cliWith({ HOOK_STATE_DIR: printedState, [LOCK_TOKEN_VARIABLE]: undefined }, marked, '--root', marked);
+const printed = /Run it through the lock: (.+) @es /s.exec(refused.stderr)?.[1];
+const words = printed?.match(/"[^"]*"|\S+/g)?.map((piece) => piece.replace(/^"|"$/g, ''));
+const rerun = words === undefined ? undefined : spawnSync(process.execPath, words.slice(1), { cwd: marked, encoding: 'utf8', env: { ...process.env, HOOK_STATE_DIR: printedState, [LOCK_TOKEN_VARIABLE]: undefined } });
+
+check(words?.[0] === 'node' && rerun?.status === 0 && rerun.stdout.includes('1/1 green') && existsSync(marker), `the command the refusal prints runs the selftests when typed as it is: ${printed} -> ${rerun?.status} ${rerun?.stdout}${rerun?.stderr}`);
 
 // ── Nothing to filter with ───────────────────────────────────────────────────────────────────────
 const filtered = cli(allGreen, '--root', allGreen, '--only', 'a/selftest.mjs');

@@ -7,6 +7,15 @@
  *
  * Usage: node run.mjs [--root <dir> [--git-dir <dir>]]
  *
+ * RUNS ONLY UNDER THE FULL-CHAIN LOCK. The whole runner is a full chain, so it starts only when `FULL_CHAIN_LOCK_TOKEN`
+ * (given to its command by `full-chain-lock/run.mjs`, the holder id of `chain.lock`) matches the live holder of the lock
+ * now (`full-chain-lock/lock-token.mjs`). A missing, copied, stale or forged value, or no lock file at all, is refused:
+ * bilingual message on stderr with the exact `full-chain-lock/run.mjs` command that runs it, exit 2, no selftest run.
+ * @es SOLO CORRE BAJO EL LOCK DE CADENAS COMPLETAS. El runner entero es una cadena completa, así que arranca solo si
+ * `FULL_CHAIN_LOCK_TOKEN` (que `full-chain-lock/run.mjs` da a su comando: el id de dueño de `chain.lock`) coincide con
+ * el dueño vivo del lock ahora. Un valor ausente, copiado, caducado o falsificado, o ningún fichero de lock, se
+ * rechaza: mensaje bilingüe en stderr con el comando exacto de `full-chain-lock/run.mjs`, salida 2, ningún selftest.
+ *
  * `--git-dir` names the repository of a tree its code repository ignores (a tooling tree versioned elsewhere,
  * like b100-am-ui's `.claude`); that repository then decides which selftests exist (`discovery.mjs`).
  * @es `--git-dir` nombra el repositorio de un árbol que su repo de código ignora; ese repositorio decide entonces
@@ -73,8 +82,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { makeSpeaker } from '../bilingual-output/speaker.mjs';
+import { tokenHoldsLock } from '../full-chain-lock/lock-token.mjs';
 import { runChild } from './child-run.mjs';
 import { DiscoveryError, discoverSelftests } from './discovery.mjs';
+import { LOCK_TOKEN_VARIABLE, lockedCommand, startedUnderLock } from './lock-gate.mjs';
 import { MESSAGES } from './messages.mjs';
 import { createSandbox, removeSandbox, sandboxEnv } from './sandbox.mjs';
 import { escapesOf, sandboxEscapes, treeEscapes } from './sandbox-verdict.mjs';
@@ -427,23 +438,35 @@ function parseArgs(argv) {
 }
 
 /**
- * Runs the command line and prints the report; resolves the process exit code.
- * @es Ejecuta la línea de órdenes e imprime el informe; resuelve el código de salida del proceso.
+ * Runs the command line and prints the report; resolves the process exit code. It refuses (exit 2, nothing run) unless
+ * `FULL_CHAIN_LOCK_TOKEN` holds the full-chain lock now. The parameters are the seams of its own selftest, never
+ * switches: `environment` (the variables read), `holdsLock` (the lock port `full-chain-lock/lock-token.mjs`),
+ * `execute` (the run of the selftests) and `tell` (the speaker of the refusal).
+ * @es Ejecuta la línea de órdenes e imprime el informe; resuelve el código de salida del proceso. Se niega (salida 2,
+ * sin ejecutar nada) salvo que `FULL_CHAIN_LOCK_TOKEN` tenga ahora el lock de cadenas completas. Los parámetros son las
+ * costuras de su propio selftest, nunca interruptores: `environment`, `holdsLock` (el puerto del lock), `execute` (la
+ * corrida de los selftests) y `tell` (el speaker de la negativa).
  */
-async function main() {
-  const parsed = parseArgs(process.argv.slice(2));
+export async function main(argv, { environment = process.env, holdsLock = tokenHoldsLock, execute = runSelftests, tell = speaker } = {}) {
+  const parsed = parseArgs(argv);
   if ('error' in parsed) {
     speaker.complain('usage');
+    return EXIT_NOT_MEASURED;
+  }
+  // The whole runner is a full chain: it starts only when the full-chain lock is held for it (`lock-gate.mjs`).
+  // @es El runner entero es una cadena completa: arranca solo si el lock de cadenas completas se mantiene para él.
+  if (!startedUnderLock(environment, holdsLock)) {
+    tell.complain('lock-required', { variable: LOCK_TOKEN_VARIABLE, command: lockedCommand(argv, parsed.root) });
     return EXIT_NOT_MEASURED;
   }
   const plan = concurrencyPlan();
   const childBudget = childBudgetOf(plan.budget, plan.concurrency);
   writeLineSync(describeConcurrency(plan, childBudget));
-  const { exitCode, notMeasured } = await runSelftests({ root: parsed.root, gitDir: parsed.gitDir, onLine: writeLineSync, concurrency: plan.concurrency, childBudget });
+  const { exitCode, notMeasured } = await execute({ root: parsed.root, gitDir: parsed.gitDir, onLine: writeLineSync, concurrency: plan.concurrency, childBudget });
   // Why nothing (more) was measured goes to stderr; the lines already streamed are not repeated.
   // @es Por qué no se midió (más) va a stderr; las líneas ya emitidas no se repiten.
   if (notMeasured !== undefined) speaker.dataError(notMeasured);
   return exitCode;
 }
 
-if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) process.exitCode = await main();
+if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) process.exitCode = await main(process.argv.slice(2));

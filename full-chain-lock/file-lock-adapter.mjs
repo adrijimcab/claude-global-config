@@ -90,6 +90,34 @@ export function fileLockAdapter(directory, lockOptions = {}) {
       }
     },
 
+    /**
+     * The holder id the lock port wrote into the lock file (the file's whole content, opaque here), or `undefined`
+     * when there is no lock file. It is what `run.mjs` hands the chain it runs as its token.
+     * @es El id de dueño que el puerto escribió en el fichero de lock (todo su contenido, opaco aquí), o `undefined`
+     * si no hay fichero. Es lo que `run.mjs` da como token a la cadena que ejecuta.
+     */
+    readToken() {
+      try {
+        return readFileSync(lockFile, 'utf8');
+      } catch {
+        return undefined;
+      }
+    },
+
+    /**
+     * Whether `token` is the holder id of the lock as it stands NOW: the lock file holds exactly this token and a
+     * chain is running (`liveHolder`). A token that is empty, copied from a finished chain, forged, or asked while no
+     * lock file exists answers false.
+     * @es Si `token` es el id de dueño del lock tal como está AHORA: el fichero de lock tiene exactamente este token
+     * y hay una cadena corriendo (`liveHolder`). Un token vacío, copiado de una cadena ya terminada, falsificado o
+     * consultado sin fichero de lock responde false.
+     */
+    holdsToken(token) {
+      if (typeof token !== 'string' || token === '') return false;
+
+      return this.readToken() === token && this.liveHolder() !== undefined;
+    },
+
     release() {
       if (mine === undefined) return;
 
