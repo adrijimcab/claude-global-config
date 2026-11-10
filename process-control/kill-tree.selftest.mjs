@@ -97,13 +97,18 @@ async function diesWithin(pid, milliseconds) {
 /** A node process that spawns a grandchild sleeping 60 s, writes its pid to a file, and sleeps too. @es Un proceso node con un nieto durmiente de 60 s. */
 function treeFixture(name, breakaway, grandchildStdio = 'ignore') {
   const pidFile = path.join(scratch, `${name}.pid`);
+  const endedFile = path.join(scratch, `${name}.ended`);
+  // Each sleeper writes `endedFile` if it reaches the end of its 60 s, so a proof can say "the runner returned before
+  // the sleepers ended" by the file being absent, not by a clock. @es Cada durmiente escribe `endedFile` si llega al
+  // final de sus 60 s, así una prueba dice «el runner volvió antes de que terminaran» porque el fichero no existe.
+  const sleeper = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(endedFile)}, 'ended'), 60000)`;
   const code = `const { spawn } = require('node:child_process');
-const grandchild = spawn(process.execPath, ['-e', ${JSON.stringify(SLEEPER)}], { stdio: ${JSON.stringify(grandchildStdio)}, detached: ${breakaway} });
+const grandchild = spawn(process.execPath, ['-e', ${JSON.stringify(sleeper)}], { stdio: ${JSON.stringify(grandchildStdio)}, detached: ${breakaway} });
 require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(grandchild.pid));
 ${breakaway ? 'grandchild.unref();' : ''}
-${SLEEPER};`;
+${sleeper};`;
 
-  return { args: ['-e', code], grandchildPid: () => (existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8')) : undefined) };
+  return { args: ['-e', code], sleepersEnded: () => existsSync(endedFile), grandchildPid: () => (existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8')) : undefined) };
 }
 
 /** A live sleeper the selftest owns. @es Un durmiente vivo que posee el selftest. */
@@ -126,7 +131,6 @@ check('oracle: sees a dead process', await diesWithin(probe.pid, 2000), true);
 // --- H8-b: the timeout kills the child AND its grandchild, within 2 s, for both shapes ---
 for (const [shape, breakaway] of [['plain grandchild', false], ['grandchild broken away from the job', true]]) {
   const fixture = treeFixture(breakaway ? 'away' : 'plain', breakaway);
-  const started = Date.now();
   const result = await runWithTimeout({ command: process.execPath, args: fixture.args, timeoutMs: 3000 });
   const grandchild = fixture.grandchildPid();
 
@@ -134,7 +138,7 @@ for (const [shape, breakaway] of [['plain grandchild', false], ['grandchild brok
 
   check(`timeout (${shape}): the fixture started its grandchild before the timeout`, grandchild !== undefined, true);
   check(`timeout (${shape}): it reports the timeout`, result.timedOut, true);
-  check(`timeout (${shape}): it returns long before the 60 s sleepers end`, Date.now() - started < 15_000, true);
+  check(`timeout (${shape}): it returns before the 60 s sleepers end`, fixture.sleepersEnded(), false);
   check(`timeout (${shape}): the child is dead within 2 s`, await diesWithin(result.pid, 2000), true);
   check(`timeout (${shape}): the grandchild is dead within 2 s`, grandchild !== undefined && (await diesWithin(grandchild, 2000)), true);
   check(`timeout (${shape}): the report says a tree was killed`, result.kill?.outcome, 'killed');
@@ -143,13 +147,12 @@ for (const [shape, breakaway] of [['plain grandchild', false], ['grandchild brok
 
 // --- a survivor that holds the output pipes open must not hold the runner: the streams are cut after the kill ---
 const holder = treeFixture('holder', true, 'inherit');
-const holderStarted = Date.now();
 const heldOpen = await runWithTimeout({ command: process.execPath, args: holder.args, timeoutMs: 3000, kill: (pid) => process.kill(pid) });
 const holderPid = holder.grandchildPid();
 
 if (holderPid !== undefined) toKill.push(holderPid);
 
-check('pipes held by a survivor: the runner still returns within seconds, not when the survivor ends', [heldOpen.timedOut, Date.now() - holderStarted < 20_000], [true, true]);
+check('pipes held by a survivor: the runner still returns while the survivor is alive and has not ended', [heldOpen.timedOut, holderPid !== undefined && isAlive(holderPid), holder.sleepersEnded()], [true, true, false]);
 
 // --- the runner when nothing times out ---
 const quick = await runWithTimeout({ command: process.execPath, args: ['-e', "process.stdout.write('out'); process.stderr.write('err')"], timeoutMs: 20_000 });
