@@ -26,7 +26,7 @@ function assertionArguments(tokens) {
   const found = [];
 
   tokens.forEach((token, at) => {
-    const isCall = token.kind === 'word' && ASSERTION_NAMES.has(token.text) && tokens[at + 1]?.text === '(' && tokens[at + 1].kind === 'punct';
+    const isCall = token.kind === 'word' && ASSERTION_NAMES.has(token.text) && tokens[at + 1]?.text === '(';
     const isDeclaration = tokens[at - 1]?.kind === 'word' && tokens[at - 1].text === 'function';
 
     if (!isCall || isDeclaration) return;
@@ -54,7 +54,7 @@ export function elapsedAssertionLines(source) {
     for (const at of boundComparisons(tokens, from, to, elapsedAt)) lines.add(tokens[at].line);
 
     for (let at = from; at < to; at += 1) {
-      const isVerdictName = tokens[at].kind === 'word' && comparisons.has(tokens[at].text) && tokens[at - 1]?.text !== '.' && tokens[at + 1]?.text !== '=';
+      const isVerdictName = tokens[at].kind === 'word' && comparisons.has(tokens[at].text) && tokens[at - 1]?.text !== '.';
 
       if (isVerdictName) lines.add(tokens[at].line);
     }

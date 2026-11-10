@@ -115,7 +115,7 @@ export function boundComparisons(tokens, from, to, elapsedAt) {
   const hits = [];
 
   for (let at = from; at < to; at += 1) {
-    if (tokens[at].kind !== 'punct' || !COMPARATORS.has(tokens[at].text)) continue;
+    if (!COMPARATORS.has(tokens[at].text)) continue;
 
     const sides = [operandSpan(tokens, at, 'left'), operandSpan(tokens, at, 'right')];
 

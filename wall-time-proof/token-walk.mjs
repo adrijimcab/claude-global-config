@@ -37,26 +37,6 @@ export function matchingClose(tokens, open) {
 }
 
 /**
- * Index of the bracket that opens the one at `close`, or -1.
- * @es Índice del paréntesis que abre el de `close`, o -1.
- */
-export function matchingOpen(tokens, close) {
-  let depth = 0;
-
-  for (let at = close; at >= 0; at -= 1) {
-    if (tokens[at].kind !== 'punct') continue;
-    if (CLOSE.has(tokens[at].text)) depth += 1;
-    else if (OPEN.has(tokens[at].text)) {
-      depth -= 1;
-
-      if (depth === 0) return at;
-    }
-  }
-
-  return -1;
-}
-
-/**
  * Where the expression assigned to a name ends: at the `;` or `,` of its own level, or at the bracket that closes
  * the enclosing one. `from` is the first token of the expression.
  * @es Dónde acaba la expresión asignada a un nombre: en el `;` o `,` de su nivel, o en el paréntesis que cierra el
