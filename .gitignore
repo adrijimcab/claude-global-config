@@ -276,6 +276,11 @@
 !/session-temp/
 !/session-temp/*.mjs
 !/session-temp/*.json
+# wall-time-proof: the guard that refuses an elapsed wall time compared against a bound in a selftest. Code and README only.
+# @es wall-time-proof: el guard que rechaza un tiempo de pared transcurrido comparado con una cota en un selftest. Solo código y README.
+!/wall-time-proof/
+!/wall-time-proof/*.mjs
+!/wall-time-proof/README.md
 # ia-perfiles: source of the team package that starts Claude Code on the company gateway or the personal account.
 # @es ia-perfiles: fuente del paquete del equipo que arranca Claude Code con el gateway de la empresa o la cuenta personal.
 !/ia-perfiles/
