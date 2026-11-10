@@ -48,9 +48,9 @@ const MUTANTS = [
   ['the printed command runs the lock of another folder', GATE, "const LOCK_RUNNER = slashed('../full-chain-lock/run.mjs');", "const LOCK_RUNNER = slashed('../full-chain-lock/detach-chain.mjs');"],
   ['the refusal stops saying nothing was run', WORDS, ' Nothing was run. Run it through the lock: {command}', ' Run it through the lock: {command}'],
   ['the Spanish refusal stops saying nothing was run', WORDS, ' No se ejecutó nada. Ejecútalo por el lock: {command}', ' Ejecútalo por el lock: {command}'],
-  ['the refusal stops naming the variable', WORDS, '; {variable} is missing, stale, or', '; the token is missing, stale, or'],
-  ['the refusal stops offering the command', WORDS, 'Run it through the lock: {command}', 'Run it through the lock.'],
-  ['the Spanish refusal stops offering the command', WORDS, 'Ejecútalo por el lock: {command}', 'Ejecútalo por el lock.'],
+  // A placeholder dropped from ONE half of a message makes the table refuse to load (`bilingual-output/message.mjs`), which is the guard
+  // of that case; mutants of that shape died by crash, so none is listed here.
+  // @es Un marcador quitado de UNA mitad de un mensaje hace que la tabla se niegue a cargar, y esa es la guarda de ese caso; los mutantes de esa forma morían por crash, así que no se listan.
 
   // Which files are selftests / Qué ficheros son selftests
   ['the bare name `selftest.mjs` is no longer recognised', DISCOVERY, 'name === BARE_NAME || name.endsWith(SUFFIX)', 'name.endsWith(SUFFIX)'],
