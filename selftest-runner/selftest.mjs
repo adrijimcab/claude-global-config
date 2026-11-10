@@ -504,9 +504,13 @@ for (const [label, environment, holds, asks] of [
 
   check(refused.exit === 2 && refused.ran.length === 0, `${label}: exit 2 and no selftest runs: ${JSON.stringify(refused)}`);
   check(refused.asked.length === asks, `${label}: the lock port is asked ${asks} time(s): ${refused.asked.length}`);
-  check(refused.said.length === 1 && refused.said[0].startsWith('REFUSED: the selftest runner is a full chain') && refused.said[0].includes(' @es RECHAZADO: el runner de selftests es una cadena completa'), `${label}: one bilingual refusal: ${refused.said.join('|')}`);
-  check(refused.said[0].includes(' Nothing was run. Run it through the lock: ') && refused.said[0].includes(' No se ejecutó nada. Ejecútalo por el lock: '), `${label}: the refusal says nothing was run, in both languages: ${refused.said[0]}`);
-  check(refused.said[0].includes(LOCK_TOKEN_VARIABLE) && refused.said[0].includes(`Run it through the lock: ${lockedCommand(['--root', allGreen], allGreen)} @es `), `${label}: the refusal names the variable and the exact locked command`);
+  // A run that said nothing reads as an empty text, so the checks below fail as values instead of crashing.
+  // @es Una corrida que no dijo nada se lee como texto vacío, así los checks fallan como valores y no caen por una excepción.
+  const text = refused.said[0] ?? '';
+
+  check(refused.said.length === 1 && text.startsWith('REFUSED: the selftest runner is a full chain') && text.includes(' @es RECHAZADO: el runner de selftests es una cadena completa'), `${label}: one bilingual refusal: ${refused.said.join('|')}`);
+  check(text.includes(' Nothing was run. Run it through the lock: ') && text.includes(' No se ejecutó nada. Ejecútalo por el lock: '), `${label}: the refusal says nothing was run, in both languages: ${text}`);
+  check(text.includes(LOCK_TOKEN_VARIABLE) && text.includes(`Run it through the lock: ${lockedCommand(['--root', allGreen], allGreen)} @es `), `${label}: the refusal names the variable and the exact locked command`);
 }
 
 check(startedUnderLock({ [LOCK_TOKEN_VARIABLE]: 'a' }, (token) => token === 'a') && !startedUnderLock({ [LOCK_TOKEN_VARIABLE]: 'a' }, (token) => token === 'b'), 'the gate asks the port about the very token it read');
