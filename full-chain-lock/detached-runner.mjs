@@ -20,7 +20,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { closeSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,15 +42,29 @@ const commandText = (job) => [job.command, ...job.args].join(' ');
 /** The arguments of the normal locked run for a job. @es Los argumentos de la corrida normal con lock para un trabajo. */
 const runArguments = (job) => [RUN, '--chain', job.chain, '--project', job.project, '--session', job.session, '--tree', job.tree, '--wait-seconds', String(job.waitSeconds), '--poll-ms', String(job.pollMs), '--', job.command, ...job.args];
 
+/**
+ * The environment the chain runs in: the job's, with TEMP, TMP and TMPDIR pointing at `tempDir`. A detached chain must
+ * outlive the session that started it, and the session's end sweeps (`session-processes/`) every process whose TEMP is
+ * the session's private folder, so the chain carries a TEMP of its own, inside its run directory, never the session's.
+ * @es El entorno en el que corre la cadena: el del trabajo, con TEMP, TMP y TMPDIR apuntando a `tempDir`. Una cadena
+ * desacoplada debe sobrevivir a la sesión que la inició, y el fin de sesión barre (`session-processes/`) todo proceso
+ * cuyo TEMP sea la carpeta privada de la sesión, así que la cadena lleva un TEMP propio, dentro de su directorio de
+ * corrida, nunca el de la sesión.
+ */
+export function chainEnvironment(environment, tempDir) {
+  return { ...environment, TEMP: tempDir, TMP: tempDir, TMPDIR: tempDir };
+}
+
 /** Runs the chain of `job` with its output in `outputFile`; resolves `{ code, signal }`, rejects when it cannot start. @es Corre la cadena de `job` con su salida en `outputFile`; resuelve `{ code, signal }`, rechaza si no puede iniciarse. */
-function runLocked(job, outputFile, spawnProcess) {
+function runLocked(job, outputFile, tempDir, spawnProcess) {
   const output = openSync(outputFile, 'a');
 
   return new Promise((resolve, reject) => {
     let child;
 
     try {
-      child = spawnProcess(process.execPath, runArguments(job), { cwd: job.cwd, env: job.environment, stdio: ['ignore', output, output], windowsHide: true });
+      mkdirSync(tempDir, { recursive: true });
+      child = spawnProcess(process.execPath, runArguments(job), { cwd: job.cwd, env: chainEnvironment(job.environment, tempDir), stdio: ['ignore', output, output], windowsHide: true });
     } catch (error) {
       closeSync(output);
       reject(error);
@@ -94,14 +108,17 @@ export async function runJob(runDir, { spawnProcess = spawn, now = () => new Dat
   }
 
   let ended;
+  const tempDir = path.join(runDir, RUN_FILES.temp);
 
   try {
-    const { code, signal } = await runLocked(job, path.join(runDir, RUN_FILES.output), spawnProcess);
+    const { code, signal } = await runLocked(job, path.join(runDir, RUN_FILES.output), tempDir, spawnProcess);
 
     ended = { exitCode: code, signal };
   } catch (error) {
     ended = { exitCode: null, signal: null, error: `the chain could not be started: ${error.message}. @es no se pudo iniciar la cadena: ${error.message}.` };
   }
+
+  rmSync(tempDir, { recursive: true, force: true });
 
   const verdict = { ...ended, startedAt, endedAt: now().toISOString(), command: commandText(job) };
 

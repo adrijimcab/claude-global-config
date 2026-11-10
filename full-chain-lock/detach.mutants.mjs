@@ -108,6 +108,13 @@ const MUTANTS = [
 
   // --- the detached runner
   ['the job file with the environment is kept', J, '    rmSync(jobFile, { force: true });\n', ''],
+  ['the chain keeps the session TEMP', J, 'return { ...environment, TEMP: tempDir, TMP: tempDir, TMPDIR: tempDir };', 'return { ...environment };'],
+  ['the chain replaces TEMP but not TMP', J, 'TEMP: tempDir, TMP: tempDir, TMPDIR: tempDir }', 'TEMP: tempDir, TMPDIR: tempDir }'],
+  ['the chain replaces TEMP but not TMPDIR', J, 'TEMP: tempDir, TMP: tempDir, TMPDIR: tempDir }', 'TEMP: tempDir, TMP: tempDir }'],
+  ['the chain gets no TEMP of its own, only the job environment', J, 'env: chainEnvironment(job.environment, tempDir)', 'env: job.environment'],
+  ['the chain TEMP is not inside the run directory', J, "const tempDir = path.join(runDir, RUN_FILES.temp);", "const tempDir = path.join(runDir, '..', RUN_FILES.temp);"],
+  ['the chain TEMP folder is never made', J, '      mkdirSync(tempDir, { recursive: true });\n', ''],
+  ['the chain TEMP folder is left behind', J, '  rmSync(tempDir, { recursive: true, force: true });\n', ''],
   ['a missing job leaves no verdict', J, '    writeVerdict(runDir, verdict);\n\n    return verdict;\n  }\n\n  let ended;', '    return verdict;\n  }\n\n  let ended;'],
   ['the chain\'s exit code is not recorded', J, 'ended = { exitCode: code, signal };', 'ended = { exitCode: 0, signal };'],
   ['the signal is not recorded', J, 'ended = { exitCode: code, signal };', 'ended = { exitCode: code, signal: null };'],
