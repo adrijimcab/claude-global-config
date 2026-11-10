@@ -137,6 +137,7 @@ check('green: a property is not a reading when it is the left operand', flagged(
 check('green: a property is not a reading when it is assigned to a name', flagged(source(STARTED, 'const t = box.started;', "check('x', Date.now() - t < 5);")), []);
 check('green: a sum of readings is not an elapsed time', flagged(source(STARTED, "check('x', started + Date.now() > limit);")), []);
 check('green: a bare assertion name is not a call', flagged(source(STARTED, 'const fn = check;', 'const bad = foo(Date.now() - started < 5);')), []);
+check('lexer: code after an object inside a template expression is still code', flagged(source(STARTED, "const t = `${f({ a: 1 }, check('x', Date.now() - started < 5))}`;")), [2]);
 check('lexer: braces of an object inside a template expression', flagged(source(STARTED, 'const text = `${JSON.stringify({ a: 1 })}`;', "check('x', Date.now() - started < 5);")), [3]);
 
 // --- every comparator and every assertion name ---
