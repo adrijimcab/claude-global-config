@@ -51,6 +51,17 @@ try {
   check('a non-string session id is refused', sessionTempOf(5, root) === undefined);
   check('a folder spelled with a tilde is refused (the harness refuses it in an assignment)', sessionTempOf(SESSION, 'C:/Users/ADRIAN~1.JIM/Temp') === undefined);
 
+  // The root is the shared one even under a private session folder (another id, so the start cases below still make their own).
+  // @es La raíz es la compartida aun bajo una carpeta privada de sesión (otro id, para que los casos de start de abajo hagan la suya).
+  const nested = `${root}/claude/session-tmp/c2c2c2c2-0000-0000-0000-000000000000`;
+  mkdirSync(nested, { recursive: true });
+  check('the root of a process already under a session folder is the shared root', realTempRoot(nested) === root, realTempRoot(nested));
+  check('a session folder under that root is made at the root, never nested', sessionTempOf(SESSION, realTempRoot(nested)) === folder, String(sessionTempOf(SESSION, realTempRoot(nested))));
+  mkdirSync(`${root}/claude/other`, { recursive: true });
+  check('a folder that is not under claude/session-tmp keeps its path', realTempRoot(`${root}/claude/other`) === `${root}/claude/other`, realTempRoot(`${root}/claude/other`));
+  mkdirSync(`${nested}/deeper`, { recursive: true });
+  check('a folder below a session folder is not the session tail, so it is kept', realTempRoot(`${nested}/deeper`) === `${nested}/deeper`, realTempRoot(`${nested}/deeper`));
+
   // What the env file receives. @es Qué recibe el fichero de entorno.
   const lines = envLinesFor('C:/x/y');
   check('the three variables are exported, single-quoted, one per line', lines === "export TEMP='C:/x/y'\nexport TMP='C:/x/y'\nexport TMPDIR='C:/x/y'\n", JSON.stringify(lines));

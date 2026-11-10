@@ -21,7 +21,10 @@ const MUTANTS = [
   ['a non-string session id is accepted', M, "if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) return undefined;", 'if (!SESSION_ID.test(sessionId)) return undefined;'],
   ['a root with a tilde is accepted', M, "if (root.includes('~') || root.includes(\"'\")) return undefined;", "if (root.includes(\"'\")) return undefined;"],
   ['the folder is not under the session-tmp tree', M, 'return `${root}/claude/session-tmp/${sessionId}`;', 'return `${root}/claude/${sessionId}`;'],
-  ['the root keeps its short 8.3 form', M, 'return realpathSync.native(tmpdir()).split', 'return tmpdir().split'],
+  ['the root keeps its short 8.3 form', M, 'return realpathSync.native(temp).split', 'return temp.split'],
+  ['a private session folder is taken as the root', M, ".join('/').replace(NESTED_SESSION_TEMP, '');", ".join('/');"],
+  ['the private tail matches any folder name', M, '/\\/claude\\/session-tmp\\/[A-Za-z0-9-]+$/i', '/\\/claude\\/[A-Za-z0-9-]+\\/[A-Za-z0-9-]+$/i'],
+  ['the private tail is not anchored at the end of the path', M, '/\\/claude\\/session-tmp\\/[A-Za-z0-9-]+$/i', '/\\/claude\\/session-tmp\\/[A-Za-z0-9-]+/i'],
   // What the env file receives. @es Qué recibe el fichero de entorno.
   ['TMPDIR is not set', M, "const VARIABLES = ['TEMP', 'TMP', 'TMPDIR'];", "const VARIABLES = ['TEMP', 'TMP'];"],
   ['the value is not quoted', M, "`export ${name}='${folder}'\\n`", '`export ${name}=${folder}\\n`'],
