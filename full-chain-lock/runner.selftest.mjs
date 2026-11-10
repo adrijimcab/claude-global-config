@@ -633,6 +633,10 @@ check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECON
 
   check('a holder id that cannot be read back exits 70 and the command does not run', unreadable === EXIT.lockFault && ran === 0);
   check('that refusal is told with its own id and gives the lock back', told.includes('token-unreadable') && released === before + 1);
+
+  const unreadableText = speak({ log: () => undefined, error: () => undefined }).line('token-unreadable');
+
+  check('that refusal says, in both languages, that the command did not run and the lock was released', unreadableText.includes('did NOT run') && unreadableText.includes('the lock was released') && unreadableText.includes(' @es ') && unreadableText.includes('NO se ejecutó') && unreadableText.includes('el lock se soltó'), unreadableText);
 }
 
 {

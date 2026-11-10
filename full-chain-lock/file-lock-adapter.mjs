@@ -113,8 +113,10 @@ export function fileLockAdapter(directory, lockOptions = {}) {
      * consultado sin fichero de lock responde false.
      */
     holdsToken(token) {
-      if (typeof token !== 'string' || token === '') return false;
-
+      // No separate check for an empty or non-text token: a lock file with no readable owner has no live holder, and a
+      // missing file answers `undefined`, which a live holder never pairs with.
+      // @es Sin comprobación aparte para un token vacío o que no es texto: un lock sin dueño legible no tiene dueño vivo, y
+      // un fichero ausente responde `undefined`, que un dueño vivo nunca acompaña.
       return this.readToken() === token && this.liveHolder() !== undefined;
     },
 

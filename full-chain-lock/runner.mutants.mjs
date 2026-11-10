@@ -28,8 +28,27 @@ const X = 'full-chain-lock/cli-arguments.mjs';
 const M = 'full-chain-lock/messages.mjs';
 const N = 'full-chain-lock/run.mjs';
 const T = 'full-chain-lock/measured-tree.mjs';
+const K = 'full-chain-lock/lock-token.mjs';
 
 const MUTANTS = [
+  // --- the token the command is handed, and the port that says whether it holds the lock
+  ['the command is given no token', R, '{ [LOCK_TOKEN_VARIABLE]: token }', '{}'],
+  ['the command is given the token under another name', R, "export const LOCK_TOKEN_VARIABLE = 'FULL_CHAIN_LOCK_TOKEN';", "export const LOCK_TOKEN_VARIABLE = 'FULL_CHAIN_LOCK_TOKEN_X';"],
+  ['a holder id that cannot be read back still runs the command', R, 'if (token === undefined) {', 'if (false) {'],
+  ['a holder id that cannot be read back exits with another code', R, "say.complain('token-unreadable');\n\n      return EXIT.lockFault;", "say.complain('token-unreadable');\n\n      return 1;"],
+  ['a holder id that cannot be read back is not told', R, "say.complain('token-unreadable');", 'void say;'],
+  ['the child adapter drops the variables it is given', C, 'env: { ...process.env, ...environment }', 'env: { ...process.env }'],
+  ['the child adapter starts the child with only the variables it is given', C, 'env: { ...process.env, ...environment }', 'env: { ...environment }'],
+  ['the child adapter does not pass an environment at all', C, '{ ...plan.options, env: { ...process.env, ...environment } }', 'plan.options'],
+  ['the token read is not the lock file content', A, "return readFileSync(lockFile, 'utf8');", 'return undefined;'],
+  ['any token holds the lock while a chain runs', A, 'return this.readToken() === token && this.liveHolder() !== undefined;', 'return this.liveHolder() !== undefined;'],
+  ['the right token holds the lock with no chain running', A, 'return this.readToken() === token && this.liveHolder() !== undefined;', 'return this.readToken() === token;'],
+  ['the port answers about another token than the one it was given', K, 'return lock.holdsToken(token);', 'return lock.holdsToken(undefined);'],
+  ['the port answers true whatever the lock says', K, 'return lock.holdsToken(token);', 'return true;'],
+  ['the port reads the state of another mechanism', K, "stateDir('full-chain-lock')", "stateDir('other-mechanism')"],
+  ['the token refusal stops saying the command did not run', M, 'Your command did NOT run (a full chain never runs unlocked); the lock was released.', 'The lock was released.'],
+  ['the Spanish token refusal stops saying the lock was released', M, 'el lock se soltó.', 'listo.'],
+
   // --- the domain: the lock is taken before the command, and given back on every path
   ['the command runs without the lock having been taken', R, '    if (taken) break;', '    break;'],
   ['the lock is never given back', R, '    giveBack(lock, say);\n', ''],

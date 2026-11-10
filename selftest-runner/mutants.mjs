@@ -17,8 +17,41 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const DISCOVERY = 'selftest-runner/discovery.mjs';
 const RUN = 'selftest-runner/run.mjs';
 const STREAM = 'selftest-runner/stream.mjs';
+const GATE = 'selftest-runner/lock-gate.mjs';
+const WORDS = 'selftest-runner/messages.mjs';
 
 const MUTANTS = [
+  // Whether it may start: only under the full-chain lock / Si puede arrancar: solo bajo el lock de cadenas completas
+  ['the gate is skipped, so the runner starts without the lock', RUN, 'if (!startedUnderLock(environment, holdsLock)) {', 'if (false) {'],
+  ['the refusal exits green', RUN, 'return EXIT_NOT_MEASURED;\n  }\n  const plan', 'return EXIT_GREEN;\n  }\n  const plan'],
+  ['the refusal exits like a red selftest', RUN, 'return EXIT_NOT_MEASURED;\n  }\n  const plan', 'return EXIT_RED;\n  }\n  const plan'],
+  ['the refusal says nothing', RUN, "tell.complain('lock-required', { variable: LOCK_TOKEN_VARIABLE, command: lockedCommand(argv, parsed.root) });", 'void tell;'],
+  ['the refusal prints no command', RUN, 'command: lockedCommand(argv, parsed.root) }', "command: '' }"],
+  ['the refusal names the working directory as the tree to run', RUN, 'lockedCommand(argv, parsed.root)', 'lockedCommand(argv, process.cwd())'],
+  ['the refusal names no variable', RUN, 'variable: LOCK_TOKEN_VARIABLE, command', "variable: '', command"],
+  ['the selftests run through a fixed function whatever the caller hands in', RUN, 'await execute({', 'await runSelftests({'],
+  ['the lock port defaults to one that always agrees', RUN, 'holdsLock = tokenHoldsLock,', 'holdsLock = () => true,'],
+  ['the environment defaults to an empty one', RUN, 'environment = process.env,', 'environment = {},'],
+  ['a missing token is passed to the lock port as if it were a value', GATE, 'typeof token === \'string\' && token !== \'\' && holdsLock(token) === true', 'holdsLock(token) === true'],
+  ['an empty token is passed to the lock port', GATE, "token !== '' && ", ''],
+  ['a token that is not text is passed to the lock port', GATE, "typeof token === 'string' && ", ''],
+  ['an answer that is merely truthy counts as held', GATE, 'holdsLock(token) === true', 'holdsLock(token)'],
+  ['the lock is never asked', GATE, 'holdsLock(token) === true', 'true'],
+  ['the token is read from another variable', GATE, 'environment[LOCK_TOKEN_VARIABLE]', 'environment.OTHER_TOKEN'],
+  ['the printed command names another chain', GATE, "const CHAIN = 'selftest-runner';", "const CHAIN = 'other-chain';"],
+  ['the printed command drops the tree', GATE, ' --tree ${word(path.resolve(root).split(\'\\\\\').join(\'/\'))} --', ' --'],
+  ['the printed tree keeps its backslashes', GATE, ".split('\\\\').join('/'))} --", ')} --'],
+  ['the printed command drops the arguments', GATE, '${argv.map((argument) => ` ${word(argument)}`).join(\'\')}', ''],
+  ['the printed command never quotes', GATE, 'PLAIN_WORD.test(text) ? text : `"${text}"`', 'text'],
+  ['the printed command always quotes', GATE, 'PLAIN_WORD.test(text) ? text : `"${text}"`', '`"${text}"`'],
+  ['the printed command runs another runner', GATE, "const SELFTEST_RUNNER = slashed('./run.mjs');", "const SELFTEST_RUNNER = slashed('./stream.mjs');"],
+  ['the printed command runs the lock of another folder', GATE, "const LOCK_RUNNER = slashed('../full-chain-lock/run.mjs');", "const LOCK_RUNNER = slashed('../full-chain-lock/detach-chain.mjs');"],
+  ['the refusal stops saying nothing was run', WORDS, ' Nothing was run. Run it through the lock: {command}', ' Run it through the lock: {command}'],
+  ['the Spanish refusal stops saying nothing was run', WORDS, ' No se ejecutó nada. Ejecútalo por el lock: {command}', ' Ejecútalo por el lock: {command}'],
+  ['the refusal stops naming the variable', WORDS, '; {variable} is missing, stale, or', '; the token is missing, stale, or'],
+  ['the refusal stops offering the command', WORDS, 'Run it through the lock: {command}', 'Run it through the lock.'],
+  ['the Spanish refusal stops offering the command', WORDS, 'Ejecútalo por el lock: {command}', 'Ejecútalo por el lock.'],
+
   // Which files are selftests / Qué ficheros son selftests
   ['the bare name `selftest.mjs` is no longer recognised', DISCOVERY, 'name === BARE_NAME || name.endsWith(SUFFIX)', 'name.endsWith(SUFFIX)'],
   ['the `.selftest.mjs` suffix is no longer recognised', DISCOVERY, 'name === BARE_NAME || name.endsWith(SUFFIX)', 'name === BARE_NAME'],
@@ -125,7 +158,7 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['selftest-runner', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  paths: ['selftest-runner', 'full-chain-lock', 'mutation-proof', 'hook-state', 'bilingual-output'],
   selftest: 'selftest-runner/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',
