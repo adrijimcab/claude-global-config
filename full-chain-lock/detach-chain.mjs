@@ -26,7 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { EXIT } from './chain-runner.mjs';
-import { RUN_FILES, defaultRunDirectory, runStatus } from './run-directory.mjs';
+import { RUN_FILES, chainTempDir, defaultRunDirectory, runStatus } from './run-directory.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -58,7 +58,7 @@ export function detachChain(request, { launcher, say, runsRoot, environment, cwd
 
   try {
     mkdirSync(runDir, { recursive: true });
-    writeFileSync(jobFile, JSON.stringify({ command: request.command, args: request.args, cwd, environment, chain: request.chain, project: request.project, session: request.session, tree: request.tree, waitSeconds: request.waitMs / 1000, pollMs: request.pollMs }), { mode: 0o600 });
+    writeFileSync(jobFile, JSON.stringify({ command: request.command, args: request.args, cwd, environment, tempDir: chainTempDir(runDir), chain: request.chain, project: request.project, session: request.session, tree: request.tree, waitSeconds: request.waitMs / 1000, pollMs: request.pollMs }), { mode: 0o600 });
 
     const pid = launcher.launch({ nodePath: process.execPath, runnerPath: DETACHED_RUNNER, runDir, cwd });
 
