@@ -224,22 +224,36 @@ try {
   notThrown(() => incrementFires('guard-v', { lock: { wait: () => { defaultWaits += 1; } } }));
   check('J-1: the default wait budget of the counter is thirteen attempts', defaultWaits, 13);
 
-  const started = Date.now();
+  // The DEFAULT sleeper really sleeps, which no injected one can show, and it is proved by what the engine says,
+  // never by a clock: `Atomics.wait` is wrapped to record each call, and a budget whose own clock stays at zero (so
+  // there is always time left) makes one default pause. It is the engine's wait for 15 ms, and it answered
+  // 'timed-out', which the engine says only after the whole timeout has passed; a sleeper that does not sleep calls
+  // nothing and answers nothing. That the budget gives up well before the lock's own default (40 pauses of 50 ms)
+  // is the thirteen attempts above, and how the budget is spent is proved with an injected clock below.
+  // @es El durmiente POR DEFECTO duerme de verdad, algo que ninguno inyectado puede mostrar, y se prueba por lo que
+  // dice el motor, nunca por un reloj: se envuelve `Atomics.wait` para registrar cada llamada y un presupuesto cuyo
+  // reloj propio queda en cero (siempre sobra tiempo) hace una pausa por defecto. Es la espera del motor por 15 ms
+  // y respondió 'timed-out', que el motor dice solo tras pasar todo el plazo; un durmiente que no duerme no llama a
+  // nada. Que el presupuesto se rinde mucho antes que el valor por defecto del lock (40 pausas de 50 ms) son los
+  // trece intentos de arriba, y cómo se gasta el presupuesto se prueba abajo con un reloj inyectado.
+  const engineWait = Atomics.wait;
+  const enginePauses = [];
 
-  notThrown(() => incrementFires('guard-v'));
-  const spent = Date.now() - started;
+  Atomics.wait = (...args) => {
+    const outcome = engineWait(...args);
 
-  // The only check on real time: it proves the DEFAULT sleeper really sleeps, which no injected one can. The lower
-  // bound is the proof (the budget sleeps about 200 ms, so less than 150 means it did not sleep); load only makes a
-  // run longer, so it cannot redden it. The upper bound only separates the 200 ms budget from the lock's own
-  // default of 40 pauses of 50 ms (2 s): 1 s is five times the budget and half that default. How the budget is
-  // spent is proved with an injected clock below, never here.
-  // @es El único check con tiempo real: prueba que el durmiente POR DEFECTO duerme de verdad, algo que ninguno
-  // inyectado puede. La cota inferior es la prueba (el presupuesto duerme unos 200 ms; menos de 150 es que no
-  // durmió); la carga solo alarga una corrida, así que no la pone en rojo. La cota superior solo separa el
-  // presupuesto de 200 ms del valor por defecto del lock, 40 pausas de 50 ms (2 s): 1 s es cinco veces el
-  // presupuesto y la mitad de ese valor. Cómo se gasta el presupuesto se prueba abajo con un reloj inyectado.
-  check('J-1: with the real pause, a busy counter really sleeps and gives up well before the lock default (more than 150 ms, less than 1 s)', [spent > 150, spent < 1_000], [true, true]);
+    enginePauses.push([args[3], outcome]);
+
+    return outcome;
+  };
+
+  try {
+    journal.firesBudget({ now: () => 0 }).wait();
+  } finally {
+    Atomics.wait = engineWait;
+  }
+
+  check('J-1: the default pause of a busy counter is the engine wait for 15 ms and it timed out', enginePauses, [[15, 'timed-out']]);
 
   mkdirSync(path.dirname(firesPath('guard-x')), { recursive: true });
   writeFileSync(firesPath('guard-x'), '{not json');
