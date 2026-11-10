@@ -41,6 +41,7 @@ const MUTANTS = [
   ['the child adapter starts the child with only the variables it is given', C, 'env: { ...process.env, ...environment }', 'env: { ...environment }'],
   ['the child adapter does not pass an environment at all', C, '{ ...plan.options, env: { ...process.env, ...environment } }', 'plan.options'],
   ['the token read is not the lock file content', A, "return readFileSync(lockFile, 'utf8');", 'return undefined;'],
+  ['an absent lock file throws when its token is read', A, '      } catch {\n        return undefined;\n      }\n    },\n\n    /**\n     * Whether', '      } catch (error) {\n        throw error;\n      }\n    },\n\n    /**\n     * Whether'],
   ['any token holds the lock while a chain runs', A, 'return this.readToken() === token && this.liveHolder() !== undefined;', 'return this.liveHolder() !== undefined;'],
   ['the right token holds the lock with no chain running', A, 'return this.readToken() === token && this.liveHolder() !== undefined;', 'return this.readToken() === token;'],
   ['the port answers about another token than the one it was given', K, 'return lock.holdsToken(token);', 'return lock.holdsToken(undefined);'],
@@ -52,8 +53,8 @@ const MUTANTS = [
   // --- the domain: the lock is taken before the command, and given back on every path
   ['the command runs without the lock having been taken', R, '    if (taken) break;', '    break;'],
   ['the lock is never given back', R, '    giveBack(lock, say);\n', ''],
-  ['a fault of the lock lets the command run anyway', R, '      return EXIT.lockFault;', '      taken = true;'],
-  ['a fault of the lock exits with the wrong code', R, '      return EXIT.lockFault;', '      return 1;'],
+  ['a fault of the lock lets the command run anyway', R, "say.complain('lock-fault', { detail: faultDetail(error) });\n\n      return EXIT.lockFault;", "say.complain('lock-fault', { detail: faultDetail(error) });\n\n      taken = true;"],
+  ['a fault of the lock exits with the wrong code', R, "say.complain('lock-fault', { detail: faultDetail(error) });\n\n      return EXIT.lockFault;", "say.complain('lock-fault', { detail: faultDetail(error) });\n\n      return 1;"],
   ['an expired wait exits 0', R, '      return EXIT.waitExpired;\n    }\n\n    await', '      return 0;\n    }\n\n    await'],
   ['the holder is announced at every poll', R, 'if (settled && identity !== announced) {', 'if (true) {'],
   ['a record missing at the first look is announced as unreadable at once', R, 'const settled = holder !== undefined || looked;', 'const settled = true;'],
@@ -92,7 +93,7 @@ const MUTANTS = [
   ['a running holder matches any record whose pid is unset', A, 'return holder !== undefined && holder.pid === owner ? holder : undefined;', 'return holder?.pid === owner ? holder ?? null : undefined;'],
   ['a running holder uses the port\'s default ceiling', A, 'liveOwnerOf(lockFile, { ...LOCK_AGES, ...lockOptions })', 'liveOwnerOf(lockFile, { ...lockOptions })'],
   ['a running holder ignores the injected lock options', A, 'liveOwnerOf(lockFile, { ...LOCK_AGES, ...lockOptions })', 'liveOwnerOf(lockFile, { ...LOCK_AGES })'],
-  ['an unreadable record throws instead of reading as none', A, '      } catch {\n        return undefined;\n      }\n    },\n\n    release', '      } catch (error) {\n        throw error;\n      }\n    },\n\n    release'],
+  ['an unreadable record throws instead of reading as none', A, '      } catch {\n        return undefined;\n      }\n    },\n\n    /**\n     * The holder id', '      } catch (error) {\n        throw error;\n      }\n    },\n\n    /**\n     * The holder id'],
 
   // --- how a command is started
   ['a non-Windows platform is treated as Windows', L, "if (platform !== 'win32') return direct;", 'if (false) return direct;'],
