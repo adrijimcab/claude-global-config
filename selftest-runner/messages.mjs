@@ -36,6 +36,10 @@ export const MESSAGES = {
     en: 'Usage: node run.mjs [--root <dir> [--git-dir <dir>]]. No filter or skip option exists.',
     es: 'Uso: node run.mjs [--root <dir> [--git-dir <dir>]]. No existe ninguna opción de filtro ni de salto.'
   },
+  'lock-required': {
+    en: 'REFUSED: the selftest runner is a full chain and starts only while the full-chain lock is held for it; {variable} is missing, stale, or does not match the live holder of the lock. Nothing was run. Run it through the lock: {command}',
+    es: 'RECHAZADO: el runner de selftests es una cadena completa y arranca solo mientras el lock de cadenas completas se mantiene para él; {variable} falta, caducó o no coincide con el dueño vivo del lock. No se ejecutó nada. Ejecútalo por el lock: {command}'
+  },
   missing: {
     en: 'file missing on disk',
     es: 'fichero ausente en disco'

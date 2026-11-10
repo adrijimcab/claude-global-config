@@ -50,6 +50,10 @@ export const MESSAGES = {
     en: 'FULL-CHAIN LOCK: the lock could not be taken because of a fault, not because another chain holds it: {detail} Your command did NOT run (a full chain never runs unlocked).',
     es: 'LOCK DE CADENAS COMPLETAS: el lock no se pudo tomar por un fallo, no porque otra cadena lo tenga: {detail} Tu comando NO se ejecutó (una cadena completa nunca corre sin lock).'
   },
+  'token-unreadable': {
+    en: 'FULL-CHAIN LOCK: the lock was taken but its holder id could not be read back, so the command cannot be given its FULL_CHAIN_LOCK_TOKEN. Your command did NOT run (a full chain never runs unlocked); the lock was released.',
+    es: 'LOCK DE CADENAS COMPLETAS: el lock se tomó pero no se pudo releer su id de dueño, así que no se puede dar al comando su FULL_CHAIN_LOCK_TOKEN. Tu comando NO se ejecutó (una cadena completa nunca corre sin lock); el lock se soltó.'
+  },
   'run-failed': {
     en: 'FULL-CHAIN LOCK: the command could not be run because of an internal error: {detail} The lock was released.',
     es: 'LOCK DE CADENAS COMPLETAS: el comando no se pudo ejecutar por un error interno: {detail} El lock se soltó.'

@@ -8,6 +8,9 @@
  *                                                                  prints a line, waits until <stopFile> exists (or <maxMs>),
  *                                                                  prints another and exits with <code>, so a proof decides
  *                                                                  when the chain ends instead of racing a clock
+ *   node chain-child.fixture.mjs env <name>                        prints "<name>=<value of that environment variable, or empty>"
+ *   node chain-child.fixture.mjs token-holds                       prints "holds=<true|false>": the answer of the real port
+ *                                                                  `lock-token.mjs` for the token this process was given
  *   node chain-child.fixture.mjs exit <code>                      prints a line and exits with <code>
  *   node chain-child.fixture.mjs signal                            ends itself with SIGTERM
  *   node chain-child.fixture.mjs until <logFile> <label> <stopFile> <maxMs>
@@ -56,6 +59,12 @@ if (mode === 'hold') {
   while (!existsSync(stopFile) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
   console.log('gate-exit end');
   process.exit(Number(code));
+} else if (mode === 'env') {
+  console.log(`${rest[0]}=${process.env[rest[0]] ?? ''}`);
+} else if (mode === 'token-holds') {
+  const { LOCK_TOKEN_VARIABLE, tokenHoldsLock } = await import('./lock-token.mjs');
+
+  console.log(`holds=${String(tokenHoldsLock(process.env[LOCK_TOKEN_VARIABLE]))}`);
 } else if (mode === 'cwd') {
   console.log(`cwd ${process.cwd()}`);
 } else if (mode === 'exit') {

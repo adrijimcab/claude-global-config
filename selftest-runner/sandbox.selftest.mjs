@@ -37,7 +37,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { RUN, fixtureKit, git } from './fixtures.mjs';
+import { RUN, fixtureKit, git, holdLockForRunner } from './fixtures.mjs';
 import { runSelftests } from './run.mjs';
 import { createSandbox, removeSandbox, sandboxEnv } from './sandbox.mjs';
 import { TreeStatusError, mainCheckoutOf } from './tree-status.mjs';
@@ -47,6 +47,10 @@ import { isolateState } from '../hook-state/locations.mjs';
 const FLEET_ROOT = path.resolve(import.meta.dirname, '..');
 
 isolateState('selftest-runner-sandbox');
+
+// The runners started below run under a REAL lock held in this isolated state (the token goes through the environment).
+// @es Los runners que se inician abajo corren bajo un lock REAL tomado en este estado aislado (el token va por el entorno).
+holdLockForRunner();
 
 const { check, bareDir, repo, finish } = fixtureKit('selftest-runner sandbox selftest');
 
@@ -65,17 +69,17 @@ function realWorld() {
 const everything = (directory) => readdirSync(directory, { recursive: true }).map(String).sort();
 
 /**
- * The runner's environment pointed at `world`, with no state root of its own, running one selftest at a time: this
- * file proves the PER-SELFTEST leak verdict; the batch verdict of a parallel run is proved in `selftest.mjs`.
+ * The runner's environment pointed at `world`, running one selftest at a time: this file proves the PER-SELFTEST
+ * leak verdict; the batch verdict of a parallel run is proved in `selftest.mjs`. Its state root is this selftest's
+ * isolated one, which holds the lock the runner checks for (`holdLockForRunner`); each selftest the runner starts
+ * gets a fresh state root of its own regardless.
  * @es El entorno del runner apuntado a `world`, de a un selftest: este fichero prueba el veredicto de fugas POR
- * SELFTEST; el de la tanda de una corrida paralela se prueba en `selftest.mjs`.
+ * SELFTEST; el de la tanda de una corrida paralela se prueba en `selftest.mjs`. Su raíz de estado es la aislada de
+ * este selftest, que tiene el lock que el runner comprueba; cada selftest que el runner inicia recibe igual una raíz
+ * de estado nueva propia.
  */
 function envOf(world) {
-  const env = { ...process.env, HOME: world.home, USERPROFILE: world.home, HOOK_CLAUDE_HOME: path.join(world.home, '.claude'), TMP: world.temp, TEMP: world.temp, TMPDIR: world.temp, SELFTEST_CONCURRENCY: '1' };
-
-  delete env.HOOK_STATE_DIR;
-
-  return env;
+  return { ...process.env, HOME: world.home, USERPROFILE: world.home, HOOK_CLAUDE_HOME: path.join(world.home, '.claude'), TMP: world.temp, TEMP: world.temp, TMPDIR: world.temp, SELFTEST_CONCURRENCY: '1' };
 }
 
 /**

@@ -35,6 +35,14 @@ export const DEFAULT_WAIT_SECONDS = 3600;
 export const DEFAULT_POLL_MS = 2000;
 
 /**
+ * The variable through which the runner hands its command the holder id of the lock it holds for it, so a heavy
+ * chain runner it starts can prove it was started under the lock (`lock-token.mjs` answers that question).
+ * @es La variable con la que el runner da a su comando el id de dueño del lock que mantiene para él, para que un
+ * runner de cadenas pesadas que este inicie pueda probar que lo iniciaron bajo el lock (`lock-token.mjs` responde).
+ */
+export const LOCK_TOKEN_VARIABLE = 'FULL_CHAIN_LOCK_TOKEN';
+
+/**
  * What a child port throws when the command could not even be started: the id and parameters of the bilingual
  * message that says why. Any other error it throws is a defect and propagates after the lock is released.
  * @es Lo que lanza el puerto del hijo cuando el comando ni siquiera pudo iniciarse: el id y los parámetros del
@@ -138,7 +146,17 @@ export async function runChain(request, ports) {
   }
 
   try {
-    return await child.run(request.command, request.args);
+    // The holder id the lock port wrote, handed to the command so a heavy runner it starts can prove it runs under the lock.
+    // @es El id de dueño que escribió el puerto del lock, dado al comando para que un runner pesado que este inicie pruebe que corre bajo el lock.
+    const token = lock.readToken();
+
+    if (token === undefined) {
+      say.complain('token-unreadable');
+
+      return EXIT.lockFault;
+    }
+
+    return await child.run(request.command, request.args, { [LOCK_TOKEN_VARIABLE]: token });
   } catch (error) {
     if (!(error instanceof CommandNotStarted)) throw error;
 
