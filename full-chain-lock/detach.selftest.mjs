@@ -320,11 +320,18 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
   check('the chain\'s own TEMP folder is removed once the chain ended', !existsSync(ownTemp));
   // The chain TEMP the caller decides. @es El TEMP de cadena que decide quien llama.
   const realisticRunDir = 'C:\\Users\\adrian.jimenez\\.claude\\full-chain-lock\\state\\runs\\20261110-104750250--claude-integrate-integrate-mjs';
-  const decided = chainTempDir(realisticRunDir);
   const decidedAt = (root) => chainTempDir(realisticRunDir, root);
+  // The caller is a session command, built here rather than inherited: under the selftest runner this process's own
+  // TEMP is a sandbox below a session folder, which realTempRoot keeps on purpose. @es Quien llama es un comando de
+  // sesión, construido aquí y no heredado: bajo el runner de selftests el TEMP de este proceso es un sandbox debajo de
+  // una carpeta de sesión, que realTempRoot conserva a propósito.
+  mkdirSync(sessionTemp, { recursive: true });
+  const sharedRoot = realTempRoot(sessionTemp);
+  const decided = decidedAt(sharedRoot);
 
-  check('the chain TEMP is <shared temp root>/fcl/<8 hex>', path.relative(realTempRoot(), decided).split(path.sep).join('/').match(/^fcl\/[0-9a-f]{8}$/) !== null, decided);
-  check('the chain TEMP is outside the run directory (a git repository) and outside any session-tmp folder', !decided.startsWith(realisticRunDir) && !decided.split(path.sep).includes('session-tmp') && !decided.includes('claude'.concat(path.sep, 'session-tmp')), decided);
+  check('a session caller resolves to the shared temp root above its session folder', sharedRoot === realTempRoot(SCRATCH), sharedRoot);
+  check('the chain TEMP is <shared temp root>/fcl/<8 hex>', path.relative(sharedRoot, decided).split(path.sep).join('/').match(/^fcl\/[0-9a-f]{8}$/) !== null, decided);
+  check('the chain TEMP is outside the run directory (a git repository) and outside the caller\'s session folder', !decided.startsWith(realisticRunDir) && !decided.startsWith(sessionTemp) && !path.relative(sharedRoot, decided).split(path.sep).includes('session-tmp'), decided);
   check('two run directories get two chain TEMP folders and one run directory always the same', chainTempDir(path.join(SCRATCH, 'a')) !== chainTempDir(path.join(SCRATCH, 'b')) && chainTempDir(path.join(SCRATCH, 'a')) === chainTempDir(path.join(SCRATCH, 'a')));
   check('the run directory name is kept out of the chain TEMP', !decided.includes('integrate') && !decided.includes('20261110'), decided);
   check(`the chain TEMP of a realistic run directory under a realistic user TEMP is at most ${String(CHAIN_TEMP_BUDGET)} characters (b100's integrate fixture adds ~110 to it and git fails past a 176-character staging budget)`, decidedAt('C:\\Users\\adrian.jimenez\\AppData\\Local\\Temp').length <= CHAIN_TEMP_BUDGET && CHAIN_TEMP_BUDGET === 70, decidedAt('C:\\Users\\adrian.jimenez\\AppData\\Local\\Temp'));
