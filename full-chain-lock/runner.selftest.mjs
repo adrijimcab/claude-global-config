@@ -655,8 +655,13 @@ const valueOf = (read) => {
   await adapter.run(process.execPath, ['x'], { FULL_CHAIN_LOCK_TOKEN: 'abc' });
   check('the child adapter adds the given variables to the environment the child starts with', seen.options.env?.FULL_CHAIN_LOCK_TOKEN === 'abc' && seen.options.env?.PATH === process.env.PATH && seen.options.stdio === 'inherit', JSON.stringify(Object.keys(seen.options)));
 
+  // Compared with the caller's environment as it is, never with an assumed one: under the lock the caller itself
+  // carries a token, which the child inherits unchanged. @es Se compara con el entorno real de quien llama, nunca
+  // con uno supuesto: bajo el lock quien llama ya lleva un token, que el hijo hereda sin cambios.
   await adapter.run(process.execPath, ['x']);
-  check('with no variables given the child starts with the caller\'s own environment', seen.options.env !== undefined && !('FULL_CHAIN_LOCK_TOKEN' in seen.options.env) && seen.options.env.PATH === process.env.PATH);
+  const childEnv = Object.entries(seen.options.env ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  const callerEnv = Object.entries(process.env).sort(([a], [b]) => a.localeCompare(b));
+  check('with no variables given the child starts with exactly the caller\'s own environment', seen.options.env !== undefined && JSON.stringify(childEnv) === JSON.stringify(callerEnv), JSON.stringify(seen.options.env?.FULL_CHAIN_LOCK_TOKEN));
 }
 
 {
