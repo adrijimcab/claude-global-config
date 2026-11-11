@@ -24,8 +24,12 @@ import { readEnvironments } from './process-table.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const HOLDER = path.join(HERE, 'holder.fixture.mjs');
 const MAKER = path.join(HERE, 'orphan-maker.fixture.mjs');
-const OURS = 'C:/probe/ours';
-const THEIRS = 'C:/probe/theirs';
+// Markers unique to this run: a process another run left alive never reads as ours (measured 2026-11-11: three
+// holders of a killed run still carried the fixed marker hours later and turned check (c) red for every later run).
+// @es Marcadores únicos de esta corrida: un proceso que otra corrida dejó vivo nunca se lee como nuestro (medido el
+// 2026-11-11: tres holders de una corrida matada seguían con el marcador fijo horas después y ponían en rojo el (c)).
+const OURS = `C:/probe/ours-${String(process.pid)}`;
+const THEIRS = `C:/probe/theirs-${String(process.pid)}`;
 const scratch = mkdtempSync(path.join(tmpdir(), 't17-probe-'));
 const release = path.join(scratch, 'release');
 const started = [];
