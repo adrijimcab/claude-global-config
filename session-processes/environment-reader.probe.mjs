@@ -35,6 +35,10 @@ const release = path.join(scratch, 'release');
 const started = [];
 let failures = 0;
 
+// Its holders exit when this probe is gone, even if it is killed before its finally (holder.fixture.mjs).
+// @es Sus holders salen cuando este probe ya no está, aunque lo maten antes de su finally.
+process.env.SESSION_PROCESSES_PROOF_OWNER = String(process.pid);
+
 const withTemp = (value) => ({ ...process.env, TEMP: value, TMP: value, TMPDIR: value });
 const report = (label, ok, detail = '') => {
   if (!ok) failures += 1;

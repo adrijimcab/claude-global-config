@@ -221,7 +221,9 @@ const rootFolder = path.join(scratch, 'root');
 
 mkdirSync(profile, { recursive: true });
 mkdirSync(rootFolder, { recursive: true });
-Object.assign(process.env, { USERPROFILE: profile, HOME: profile, APPDATA: path.join(profile, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(profile, 'AppData', 'Local') });
+// Every holder this proof starts, directly or below another process, exits when this proof is gone (holder.fixture.mjs).
+// @es Todo holder que esta prueba inicia, directo o debajo de otro proceso, sale cuando esta prueba ya no está.
+Object.assign(process.env, { USERPROFILE: profile, HOME: profile, APPDATA: path.join(profile, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(profile, 'AppData', 'Local'), SESSION_PROCESSES_PROOF_OWNER: String(process.pid) });
 
 const ownRoot = realTempRoot(rootFolder);
 
