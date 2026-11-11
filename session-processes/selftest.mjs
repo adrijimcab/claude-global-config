@@ -23,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isAlive, killTree } from '../process-control/process-port.mjs';
-import { sessionTempOf } from '../session-temp/session-temp.mjs';
+import { realTempRoot, sessionTempOf } from '../session-temp/session-temp.mjs';
 import { chainTempDir } from '../full-chain-lock/run-directory.mjs';
 import { evaluate } from './end.mjs';
 import { killProcess } from './kill-process.mjs';
@@ -210,6 +210,21 @@ const owned = new Set();
 const startedAt = Date.now();
 const withTemp = (value, extra = {}) => ({ ...process.env, TEMP: value, TMP: value, TMPDIR: value, ...extra });
 
+// Everything this proof starts lives in its scratch. PowerShell (the environment reader, also run by the hook) creates
+// <USERPROFILE>\AppData\Roaming on its first run, so the profile every child inherits is a folder of this proof; and the
+// session folders hang from a root of this proof, never from the shared session-tmp a live harness uses.
+// @es Todo lo que esta prueba inicia vive en su scratch. PowerShell (el lector de entornos, que también corre el hook)
+// crea <USERPROFILE>\AppData\Roaming en su primera corrida, así que el perfil que heredan los hijos es una carpeta de esta
+// prueba; y las carpetas de sesión cuelgan de una raíz de esta prueba, nunca del session-tmp compartido de un harness vivo.
+const profile = path.join(scratch, 'profile');
+const rootFolder = path.join(scratch, 'root');
+
+mkdirSync(profile, { recursive: true });
+mkdirSync(rootFolder, { recursive: true });
+Object.assign(process.env, { USERPROFILE: profile, HOME: profile, APPDATA: path.join(profile, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(profile, 'AppData', 'Local') });
+
+const ownRoot = realTempRoot(rootFolder);
+
 try {
   const probe = spawnSync(process.execPath, [PROBE], { encoding: 'utf8', windowsHide: true });
 
@@ -217,8 +232,8 @@ try {
 
   const sessionId = `sweep-selftest-${String(process.pid)}-${String(startedAt)}`;
   const otherId = `${sessionId}-other`;
-  const sessionTemp = sessionTempOf(sessionId);
-  const otherTemp = sessionTempOf(otherId);
+  const sessionTemp = sessionTempOf(sessionId, ownRoot);
+  const otherTemp = sessionTempOf(otherId, ownRoot);
   const release = path.join(scratch, 'release');
 
   mkdirSync(sessionTemp, { recursive: true });
@@ -245,7 +260,7 @@ try {
   const runDir = path.join(scratch, 'chain-run');
   const stateHome = path.join(scratch, 'state');
   const detach = spawnSync(process.execPath, [RUN, '--detach', '--run-dir', runDir, '--chain', 'sweep-proof', '--project', 'sweep-proof', '--session', 'sweep-proof', '--tree', scratch, '--', process.execPath, HOLDER, release], { encoding: 'utf8', windowsHide: true, cwd: scratch, env: withTemp(sessionTemp, { HOOK_STATE_DIR: stateHome }) });
-  const chainTemp = chainTempDir(runDir).split('\\').join('/');
+  const chainTemp = chainTempDir(runDir, ownRoot).split('\\').join('/');
   const ofChain = () => readEnvironments().filter((entry) => entry.temp?.split('\\').join('/') === chainTemp);
   // The chain's runner and its holder are two node processes carrying the chain's TEMP. @es El runner de la cadena y su holder son dos procesos node con el TEMP de la cadena.
   const chainUp = await until(() => ofChain().filter((entry) => entry.name === 'node').length >= 2);
@@ -284,10 +299,8 @@ try {
 } finally {
   writeFileSync(path.join(scratch, 'release'), 'x');
   for (const pid of owned) killTree(pid);
+  // The session folders, the profile and the chain's TEMP all live in the scratch. @es Las carpetas de sesión, el perfil y el TEMP de la cadena viven en el scratch.
   rmSync(scratch, { recursive: true, force: true });
-  // Only the two folders this proof made; their parents may be a live harness's. @es Solo las dos carpetas que hizo esta prueba; sus padres pueden ser de un harness vivo.
-  rmSync(sessionTempOf(`sweep-selftest-${String(process.pid)}-${String(startedAt)}`), { recursive: true, force: true });
-  rmSync(sessionTempOf(`sweep-selftest-${String(process.pid)}-${String(startedAt)}-other`), { recursive: true, force: true });
 }
 
 console.log(`session-processes selftest: ${String(passed)}/${String(passed + failed)} assertions passed @es aserciones superadas`);
