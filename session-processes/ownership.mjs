@@ -50,8 +50,10 @@ export function processesToEnd({ rows, sessionTemp, hookPid }) {
   const listed = [];
 
   for (const row of marked.values()) {
-    // A parent cycle (a pid reused while its child lives) covers nobody: both members stay listed. @es Un ciclo de padres no cubre a nadie: ambos miembros quedan en la lista.
-    const coveredAbove = [...lineageOf(rows, row.pid)].some((pid) => pid !== row.pid && treeEnders.has(pid) && !lineageOf(rows, pid).has(row.pid));
+    // A parent cycle (a pid reused while its child lives) covers nobody: both members stay listed. The row itself never
+    // covers itself either, since its own lineage holds it. @es Un ciclo de padres no cubre a nadie: ambos miembros quedan
+    // en la lista. La fila tampoco se cubre a sí misma, porque su propio linaje la contiene.
+    const coveredAbove = [...lineageOf(rows, row.pid)].some((pid) => treeEnders.has(pid) && !lineageOf(rows, pid).has(row.pid));
 
     if (!coveredAbove) listed.push({ pid: row.pid, name: row.name, tree: treeEnders.has(row.pid) });
   }
