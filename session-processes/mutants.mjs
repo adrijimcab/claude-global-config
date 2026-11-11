@@ -80,7 +80,10 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['session-processes', 'session-temp', 'hook-io', 'process-control', 'process-reaper', 'full-chain-lock', 'hook-state'],
+  // full-chain-lock/run.mjs runs as a child of the selftest, so its imports (bilingual-output among them) are outside
+  // the static import closure and must be named here. @es run.mjs corre como hijo del selftest: sus imports
+  // (bilingual-output entre ellos) quedan fuera del cierre estático de imports y se nombran aquí.
+  paths: ['session-processes', 'session-temp', 'hook-io', 'process-control', 'process-reaper', 'full-chain-lock', 'hook-state', 'bilingual-output'],
   selftest: 'session-processes/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'
