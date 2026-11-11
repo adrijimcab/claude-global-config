@@ -43,3 +43,6 @@ file matching the `paths:` above is read.
 
 - **`user-facing-prose-leaked-into-a-worker-brief`** — enforced by `brief-audience/guard.mjs`.
   RULE: the user-facing reply is written only AFTER every tool call in the turn is closed, never inside one. Before sending any brief, the last thing in the prompt must be an instruction to the worker -- if the final paragraph addresses anyone but the worker, the block is malformed and must not be sent. And when it happens anyway, correct the live worker immediately and name which part to discard rather than hoping it ignored it.
+
+- **`wall-time-asserted-as-concurrency-proof`** — enforced by `wall-time-proof/tree.selftest.mjs` (scans every selftest for an asserted elapsed wall time).
+  RULE: Concurrency is proved by a condition that holds only when the units overlap (a meeting of marks with a deadline), never by a wall-time bound, and the near miss run one at a time is shown red.
