@@ -217,11 +217,32 @@ mkdirSync(profile);
 const privateEnv = { ...process.env, USERPROFILE: profile, HOME: profile, APPDATA: path.join(profile, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(profile, 'AppData', 'Local') };
 const realList = () => listProcesses(privateEnv);
 
+/**
+ * The process list once every pid in `gone` has left it, or at the deadline: a death is waited for as a condition, never
+ * as a fixed sleep, which a loaded machine outlasts. A reaper that killed nothing reaches the deadline and the checks
+ * that read the list go red.
+ * @es La lista de procesos cuando todos los pid de `gone` salieron de ella, o al vencer el plazo: una muerte se espera
+ * como condición, nunca con una pausa fija, que una máquina cargada supera. Un reaper que no mató nada llega al plazo y
+ * los checks que leen la lista quedan en rojo.
+ */
+async function listOnceGone(gone, deadlineMs = 20000) {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    const list = realList();
+    if (!gone.some((pid) => list.some((entry) => entry.pid === pid)) || Date.now() >= deadline) return list;
+    await wait(200);
+  }
+}
+
 const target = linkedWorktree('target');
 const siblingOther = linkedWorktree('other');
 const siblingPrefix = linkedWorktree('target-two');
-const tildeTarget = linkedWorktree('tilde-wt');
-const tildeSibling = linkedWorktree('tilde-wt-two');
+// A `~` command line names no unique folder, so its name carries this run's pid: two runs at once never reap each
+// other's process. @es Una línea con `~` no nombra una carpeta única, así que su nombre lleva el pid de esta corrida:
+// dos corridas a la vez nunca se cosechan el proceso.
+const TILDE = `tilde-wt-${String(process.pid)}`;
+const tildeTarget = linkedWorktree(TILDE);
+const tildeSibling = linkedWorktree(`${TILDE}-two`);
 const shortTarget = linkedWorktree('short-wt');
 const shortReverse = linkedWorktree('short-reverse');
 // The same fixture seen through os.tmpdir(), which is an 8.3 short name on this machine (ADRIAN~1.JIM) while the
@@ -244,8 +265,8 @@ try {
   const other = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', siblingOther]);
   const prefix = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', siblingPrefix]);
 
-  const tilde = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '~/tilde-wt/x.mjs']);
-  const tildeOther = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '~/tilde-wt-two/x.mjs']);
+  const tilde = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', `~/${TILDE}/x.mjs`]);
+  const tildeOther = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', `~/${TILDE}-two/x.mjs`]);
   const shortNamed = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', asTmpdirSpells(shortTarget)]);
   const shortGiven = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', shortReverse]);
 
@@ -268,8 +289,7 @@ try {
   } catch {
     /* the crash stays the CRASHED outcome, which fails the checks below @es el crash queda como CRASHED y hace fallar los checks siguientes */
   }
-  await wait(1500);
-  const after = realList();
+  const after = await listOnceGone([loop.pid, holder.pid, ...sleepers, ...grandchildren]);
   const present = (pid) => after.some((entry) => entry.pid === pid);
 
   check('the real reap is not refused', real.refused, undefined);
@@ -289,8 +309,7 @@ try {
   } catch {
     /* stays CRASHED @es queda CRASHED */
   }
-  await wait(1000);
-  const afterTilde = realList();
+  const afterTilde = await listOnceGone([tilde.pid]);
   const alive = (pid) => afterTilde.some((entry) => entry.pid === pid);
   check('the process that names the worktree through ~ is matched', viaTilde.matched.some((entry) => entry.pid === tilde.pid), true);
   check('the process that names the worktree through ~ is dead', alive(tilde.pid), false);
@@ -301,8 +320,7 @@ try {
   // is given that way. @es Nombres cortos 8.3: la línea de comandos nombra el worktree por os.tmpdir(), y al revés.
   const viaShortLine = reapAgentProcesses({ worktree: shortTarget }, { list: realList });
   const viaShortGiven = reapAgentProcesses({ worktree: asTmpdirSpells(shortReverse) }, { list: realList });
-  await wait(1000);
-  const afterShort = realList();
+  const afterShort = await listOnceGone([shortNamed.pid, shortGiven.pid]);
   const aliveShort = (pid) => afterShort.some((entry) => entry.pid === pid);
   check('a command line in 8.3 short spelling matches the real worktree path', viaShortLine.matched.some((entry) => entry.pid === shortNamed.pid), true);
   check('a command line in 8.3 short spelling is dead', aliveShort(shortNamed.pid), false);
@@ -310,8 +328,7 @@ try {
   check('a command line in the real spelling is dead for a short-spelled worktree', aliveShort(shortGiven.pid), false);
   // A worktree given through a link is the same directory as the real path a command line names. @es Un worktree dado por un enlace es el mismo directorio que la ruta real que nombra la línea de comandos.
   const viaJunction = reapAgentProcesses({ worktree: junction }, { list: realList });
-  await wait(1000);
-  const afterJunction = realList();
+  const afterJunction = await listOnceGone([viaLink.pid]);
   check('a worktree given through a junction matches a command line naming its real path', viaJunction.matched.some((entry) => entry.pid === viaLink.pid), true);
   check('the process naming the real path of the junction is dead', afterJunction.some((entry) => entry.pid === viaLink.pid), false);
   check('the short-name reaps left the sibling processes alone', [other, prefix, tildeOther].every((child) => aliveShort(child.pid)), true);
