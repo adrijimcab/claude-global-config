@@ -325,6 +325,23 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
 
   check('the chain runs with TEMP, TMP and TMPDIR of its own, never the session\'s', readFileSync(path.join(tempDir, RUN_FILES.output), 'utf8').includes([ownTemp, ownTemp, ownTemp, 'true'].join('|')), readFileSync(path.join(tempDir, RUN_FILES.output), 'utf8'));
   check('the chain\'s own TEMP folder is removed once the chain ended', !existsSync(ownTemp));
+
+  // A chain TEMP that cannot be removed (a process the chain left alive holds a folder in it) still gets a verdict,
+  // with the chain's own exit code and the folder named. @es Un TEMP de cadena que no se puede borrar sigue dando
+  // veredicto, con el código de salida de la cadena y la carpeta nombrada.
+  const heldDir = freshDir();
+
+  mkdirSync(heldDir, { recursive: true });
+  writeFileSync(path.join(heldDir, RUN_FILES.job), JSON.stringify({ command: process.execPath, args: ['-e', 'process.exit(3)'], cwd: SCRATCH, environment: process.env, tempDir: CHAIN_TEMP, chain: 'runner-proof', project: 'p', session: 's', tree: SCRATCH, waitSeconds: 30, pollMs: 100 }));
+  // A throw is decided as a value, so a runner that dies here fails the checks below instead of crashing the proof.
+  // @es Un throw se decide como valor: un runner que muere aquí hace fallar los checks siguientes en vez de romper la prueba.
+  const held = await runJob(heldDir, { removeTree: () => { throw new Error('EBUSY: resource busy or locked'); } }).catch((error) => ({ crashed: error.message }));
+  const heldVerdict = existsSync(path.join(heldDir, RUN_FILES.verdict)) ? readJson(path.join(heldDir, RUN_FILES.verdict)) : undefined;
+
+  check('a chain TEMP that cannot be removed still ends in a verdict with the chain\'s exit code', heldVerdict?.exitCode === 3 && held.exitCode === 3, JSON.stringify(heldVerdict));
+  check('that verdict names the folder left behind and why', heldVerdict?.tempLeft?.path === CHAIN_TEMP && heldVerdict.tempLeft.error.includes('EBUSY'), JSON.stringify(heldVerdict));
+  check('a removed chain TEMP leaves no tempLeft in the verdict', readJson(path.join(tempDir, RUN_FILES.verdict)).tempLeft === undefined);
+  rmSync(CHAIN_TEMP, { recursive: true, force: true });
   // The chain TEMP the caller decides. @es El TEMP de cadena que decide quien llama.
   const realisticRunDir = 'C:\\Users\\adrian.jimenez\\.claude\\full-chain-lock\\state\\runs\\20261110-104750250--claude-integrate-integrate-mjs';
   const decidedAt = (root) => chainTempDir(realisticRunDir, root);

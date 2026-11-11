@@ -85,11 +85,15 @@ function runLocked(job, outputFile, tempDir, spawnProcess) {
 /**
  * Runs the job of `runDir` and writes its verdict.
  * @param {string} runDir
- * @param {{ spawnProcess?: Function, now?: () => Date }} [ports]
+ * A chain TEMP that cannot be removed (a process the chain left alive still holds a folder in it) never costs the
+ * verdict: the verdict is written with `tempLeft` naming the folder and the error.
+ * @param {{ spawnProcess?: Function, now?: () => Date, removeTree?: (dir: string) => void }} [ports]
  * @returns {Promise<object>} the verdict that was written.
- * @es Ejecuta el trabajo de `runDir` y escribe su veredicto; devuelve el veredicto escrito.
+ * @es Ejecuta el trabajo de `runDir` y escribe su veredicto; devuelve el veredicto escrito. Un TEMP de cadena que no se
+ * puede borrar (un proceso que la cadena dejó vivo aún tiene una carpeta en él) nunca cuesta el veredicto: se escribe con
+ * `tempLeft`, que nombra la carpeta y el error.
  */
-export async function runJob(runDir, { spawnProcess = spawn, now = () => new Date() } = {}) {
+export async function runJob(runDir, { spawnProcess = spawn, now = () => new Date(), removeTree = (dir) => rmSync(dir, { recursive: true, force: true }) } = {}) {
   const startedAt = now().toISOString();
   let job;
 
@@ -117,9 +121,15 @@ export async function runJob(runDir, { spawnProcess = spawn, now = () => new Dat
     ended = { exitCode: null, signal: null, error: `the chain could not be started: ${error.message}. @es no se pudo iniciar la cadena: ${error.message}.` };
   }
 
-  rmSync(tempDir, { recursive: true, force: true });
+  let tempLeft;
 
-  const verdict = { ...ended, startedAt, endedAt: now().toISOString(), command: commandText(job) };
+  try {
+    removeTree(tempDir);
+  } catch (error) {
+    tempLeft = { path: tempDir, error: error.message };
+  }
+
+  const verdict = { ...ended, startedAt, endedAt: now().toISOString(), command: commandText(job), ...(tempLeft === undefined ? {} : { tempLeft }) };
 
   writeVerdict(runDir, verdict);
 
