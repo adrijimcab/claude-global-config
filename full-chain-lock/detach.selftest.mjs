@@ -65,8 +65,15 @@ process.on('exit', () => {
 const PROFILE = path.join(SCRATCH, 'profile');
 const ownedProfile = Object.fromEntries(Object.entries(process.env).filter(([name]) => !['USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA'].includes(name.toUpperCase())));
 
+// Their TEMP is this proof's too: a chain the proof kills on purpose never removes its own chain TEMP, which would
+// otherwise stay in the TEMP the proof was given (measured 2026-11-11: fcl/<8 hex> left behind under the runner sandbox).
+// @es Su TEMP también es de esta prueba: una cadena que la prueba mata a propósito nunca borra su TEMP de cadena, que si
+// no quedaría en el TEMP que recibió la prueba (medido el 2026-11-11: fcl/<8 hex> abandonado bajo el sandbox del runner).
+const OWNED_TEMP = path.join(SCRATCH, 'temp');
+
 mkdirSync(PROFILE, { recursive: true });
-Object.assign(ownedProfile, { USERPROFILE: PROFILE, HOME: PROFILE, APPDATA: path.join(PROFILE, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(PROFILE, 'AppData', 'Local') });
+mkdirSync(OWNED_TEMP, { recursive: true });
+Object.assign(ownedProfile, { USERPROFILE: PROFILE, HOME: PROFILE, APPDATA: path.join(PROFILE, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(PROFILE, 'AppData', 'Local'), TEMP: OWNED_TEMP, TMP: OWNED_TEMP, TMPDIR: OWNED_TEMP });
 
 let passed = 0;
 let failed = 0;
