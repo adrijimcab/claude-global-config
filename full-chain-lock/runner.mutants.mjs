@@ -32,7 +32,7 @@ const K = 'full-chain-lock/lock-token.mjs';
 
 const MUTANTS = [
   // --- the token the command is handed, and the port that says whether it holds the lock
-  ['the command is given no token', R, '{ [LOCK_TOKEN_VARIABLE]: token }', '{}'],
+  ['the command is given no token', R, '{ [LOCK_TOKEN_VARIABLE]: token, ...(', '{ ...('],
   ['the command is given the token under another name', R, "export const LOCK_TOKEN_VARIABLE = 'FULL_CHAIN_LOCK_TOKEN';", "export const LOCK_TOKEN_VARIABLE = 'FULL_CHAIN_LOCK_TOKEN_X';"],
   ['a holder id that cannot be read back still runs the command', R, 'if (token === undefined) {', 'if (false) {'],
   ['a holder id that cannot be read back exits with another code', R, "say.complain('token-unreadable');\n\n      return EXIT.lockFault;", "say.complain('token-unreadable');\n\n      return 1;"],
