@@ -14,6 +14,7 @@
  * que sea fast-forward en ambos sitios)?; ¿choca alguna ruta aterrizada con algo que el principal ya tiene?
  */
 
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import { collisionsOf } from './collisions.mjs';
@@ -30,6 +31,18 @@ const LISTED_PATHS = 20;
 function canonical(directory) {
   const absolute = path.resolve(directory.trim()).split(path.sep).join('/');
   return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+}
+
+/** The folder of the full-chain lock, whose runner verifies every landing. @es La carpeta del lock de cadenas completas, cuyo runner verifica todo aterrizaje. */
+const LOCK_TOOL = 'full-chain-lock/';
+
+/** A real path in one spelling (8.3 short names expanded), or undefined when it does not exist. @es Una ruta real en una sola grafía (nombres cortos 8.3 expandidos), o undefined si no existe. */
+function realSpelling(file) {
+  try {
+    return canonical(realpathSync.native(file));
+  } catch {
+    return undefined;
+  }
 }
 
 /** At most LISTED_PATHS paths, indented, then how many more. @es Como mucho LISTED_PATHS rutas, y cuántas más. */
@@ -175,11 +188,41 @@ function requireLiveLedgerKept({ worktree, main, head }) {
 }
 
 /**
- * @param {{ worktree: string, main: string, branch: string, remote: string }} inputs
+ * A landing that changes the full-chain lock runs under the runner of its own branch. The verification starts the
+ * branch's selftest runner, which trusts only the token the RUNNING lock hands it; a lock runner from another tree
+ * verifies the new lock with the old one (2026-11-11 T31: refused for a missing token; 2026-11-11 T17: red for a TEMP the
+ * old runner did not set). `lockRunner` is the run.mjs that holds the lock for this landing (FULL_CHAIN_LOCK_RUNNER).
+ * @es Un aterrizaje que cambia el lock de cadenas completas corre bajo el runner de su propia rama. La verificación
+ * arranca el runner de selftests de la rama, que solo confía en el token que le da el lock que CORRE; un runner de otro
+ * árbol verifica el lock nuevo con el viejo (T31: rechazado por falta de token; T17: rojo por un TEMP que el runner viejo
+ * no ponía). `lockRunner` es el run.mjs que tiene el lock para este aterrizaje (FULL_CHAIN_LOCK_RUNNER).
+ */
+function requireLockToolOfTheBranch({ worktree, landed, lockRunner }) {
+  const lockPaths = landed.filter((relative) => relative.startsWith(LOCK_TOOL));
+
+  if (lockPaths.length === 0) return;
+
+  const runner = lockRunner === undefined || lockRunner === '' ? undefined : realSpelling(lockRunner);
+  const tree = realSpelling(worktree);
+
+  if (runner !== undefined && tree !== undefined && runner.startsWith(`${tree}/`)) return;
+
+  const own = path.join(worktree, 'full-chain-lock', 'run.mjs');
+  const shown = lockRunner === undefined || lockRunner === '' ? 'no lock runner (FULL_CHAIN_LOCK_RUNNER is unset)' : lockRunner;
+
+  throw new Refusal('lock-tool-from-another-tree', [
+    `This branch changes ${lockPaths.length} path(s) under ${LOCK_TOOL}, so it lands under the lock runner of its own tree, ${own}; it runs under ${shown}, which would verify the new lock with the old one. Launch it with that runner, from the worktree, naming it with --tree: @es Esta rama cambia ${lockPaths.length} ruta(s) bajo ${LOCK_TOOL}, así que aterriza bajo el runner del lock de su propio árbol, ${own}; corre bajo ${shown}, que verificaría el lock nuevo con el viejo. Lánzala con ese runner, desde el worktree, nombrándolo con --tree:`,
+    `    node "${own}" --chain worktree-landing/land.mjs --tree "${worktree}" -- node <land.mjs> --worktree "${worktree}" ...`,
+    ...listed(lockPaths),
+  ]);
+}
+
+/**
+ * @param {{ worktree: string, main: string, branch: string, remote: string, lockRunner?: string }} inputs
  * @returns {{ head: string, tip: string, remoteTip: string, landed: string[], integration: string, ledger: string }}
  * @es Devuelve el HEAD que aterriza, la punta compartida, la punta remota, las rutas aterrizadas y lo que halló cada comprobación.
  */
-export function landingRangeOf({ worktree, main, branch, remote }) {
+export function landingRangeOf({ worktree, main, branch, remote, lockRunner }) {
   requireOneRepositoryTwoCheckouts(worktree, main);
   const integration = requireIntegrationBranch({ main, branch });
   requireCommittedWorktree(worktree);
@@ -189,6 +232,7 @@ export function landingRangeOf({ worktree, main, branch, remote }) {
   requireSharedTipContained({ worktree, main, branch, head, tip });
   const remoteTip = requireRemoteTipContained({ main, branch, remote, head });
   const landed = requireNoCollision({ main, tip, head });
+  requireLockToolOfTheBranch({ worktree, landed, lockRunner });
   const ledger = requireLiveLedgerKept({ worktree, main, head });
   return { head, tip, remoteTip, landed, integration, ledger };
 }

@@ -135,7 +135,7 @@ const MUTANTS = [
   ['the chain runs without the lock', J, "'--chain', job.chain, '--project'", "'--project'"],
   ['the chain runs at the measured top-level, not in the directory asked for', J, "'--tree', job.cwd", "'--tree', job.tree"],
   ['the detached chain runs in the caller cwd, not in the given tree', N, 'cwd: request.cwd });', 'cwd: process.cwd() });'],
-  ['the chain runs at the recorded top-level, not in the given tree', N, 'cwd: path.resolve(parsed.request.tree) };', 'cwd: measuredTree(parsed.request.tree) };'],
+  ['the chain runs at the recorded top-level, not in the given tree', N, 'cwd: path.resolve(parsed.request.tree), ', 'cwd: measuredTree(parsed.request.tree), '],
   ['the chain forgets the wait', J, "String(job.waitSeconds)", "'1'"],
   ['the chain forgets the poll interval', J, "String(job.pollMs)", "'1'"],
 

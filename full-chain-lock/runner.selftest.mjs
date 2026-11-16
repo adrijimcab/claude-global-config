@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 import { messageProblems } from '../bilingual-output/message.mjs';
 import { LockFault } from '../hook-state/file-lock.mjs';
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
-import { CommandNotStarted, DEFAULT_POLL_MS, DEFAULT_WAIT_SECONDS, EXIT, runChain } from './chain-runner.mjs';
+import { CommandNotStarted, DEFAULT_POLL_MS, DEFAULT_WAIT_SECONDS, EXIT, LOCK_RUNNER_VARIABLE, runChain } from './chain-runner.mjs';
 import { childProcessAdapter } from './child-process-adapter.mjs';
 import { parseArguments } from './cli-arguments.mjs';
 import { CEILING_MS, fileLockAdapter } from './file-lock-adapter.mjs';
@@ -759,6 +759,24 @@ const valueOf = (read) => {
   const stale = await startRunner(['--chain', 'token', '--project', 'p', '--', process.execPath, CHILD, 'env', LOCK_TOKEN_VARIABLE], { FULL_CHAIN_LOCK_TOKEN: 'inherited-and-stale' });
 
   check('a token already in the caller\'s environment is replaced by the lock\'s own', !stale.stdout.includes('inherited-and-stale') && /FULL_CHAIN_LOCK_TOKEN=\d+:/.test(stale.stdout), stale.stdout);
+
+  // The command also learns which run.mjs holds the lock for it, so a landing can refuse a lock verified by another tree.
+  // @es El comando también sabe qué run.mjs tiene el lock para él, para que un aterrizaje rechace un lock verificado por otro árbol.
+  const runnerSeen = await startRunner(['--chain', 'token', '--project', 'p', '--', process.execPath, CHILD, 'env', LOCK_RUNNER_VARIABLE], { FULL_CHAIN_LOCK_RUNNER: 'inherited-runner' });
+  const runnerPath = /FULL_CHAIN_LOCK_RUNNER=(.+)/.exec(runnerSeen.stdout)?.[1]?.trim() ?? '';
+
+  check('the command is told the path of the run.mjs that holds the lock, replacing an inherited one', runnerPath !== '' && realpathSync.native(runnerPath) === realpathSync.native(RUN), `${runnerPath} against ${RUN}`);
+}
+
+// ── The runner names itself to its command ─────────────────────────────────────────────────────────────────────
+{
+  let given;
+  const lock = { tryTake: () => true, readHolder: () => undefined, readToken: () => 'token', release: () => undefined };
+  const child = { run: (command, args, environment) => { given = environment; return Promise.resolve(0); } };
+  const say = { say: () => undefined, complain: () => undefined, line: () => '' };
+
+  await runChain({ chain: 'c', project: 'p', session: 's', tree: '/t', cwd: '/t', runner: '/the/run.mjs', command: 'cmd', args: [], waitMs: 100, pollMs: 10 }, { lock, child, clock: { now: () => 0, sleep }, say, processId: 1 });
+  check('the runner hands its command its own path under FULL_CHAIN_LOCK_RUNNER, beside the token', given?.[LOCK_RUNNER_VARIABLE] === '/the/run.mjs' && given?.[LOCK_TOKEN_VARIABLE] === 'token', JSON.stringify(given));
 }
 
 // ── The real speaker ────────────────────────────────────────────────────────────────────────────────────────

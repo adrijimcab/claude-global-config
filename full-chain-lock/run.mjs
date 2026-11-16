@@ -89,7 +89,7 @@ export async function main(argv) {
   // @es La cadena corre en el directorio que nombra --tree tal como se dio (el cwd de quien llama sin --tree), así el
   // árbol que registra es el árbol en el que corre; el árbol registrado es la raíz de git de ese directorio, que puede
   // estar por encima (un proyecto en una subcarpeta).
-  const request = { ...parsed.request, tree: measuredTree(parsed.request.tree), cwd: path.resolve(parsed.request.tree) };
+  const request = { ...parsed.request, tree: measuredTree(parsed.request.tree), cwd: path.resolve(parsed.request.tree), runner: fileURLToPath(import.meta.url) };
 
   if (request.detach) return detachChain(request, { launcher: detachedLauncher(), say, runsRoot: path.join(stateDirectory, RUNS_FOLDER), environment: process.env, cwd: request.cwd });
 

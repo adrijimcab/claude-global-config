@@ -91,12 +91,14 @@ function stoppedBy(refusal) {
  * @es `reap` (apagado por defecto) cierra los cabos sueltos del worktree aterrizado DESPUÉS de un aterrizaje
  * escrito: se matan los procesos que lo nombran y el informe dice cuáles. Nunca cambia si el aterrizaje ocurrió
  * ni cómo, y `--check` nunca siega.
- * @param {{ worktree: string, main: string, branch: string, remote: string, check?: boolean, reap?: boolean, verifyTimeoutMs?: number, reaper?: typeof reapAgentProcesses }} inputs
+ * `lockRunner` is the run.mjs that holds the full-chain lock for this landing, as the runner hands it to its child.
+ * @es `lockRunner` es el run.mjs que tiene el lock de cadenas completas para este aterrizaje, como lo da el runner a su hijo.
+ * @param {{ worktree: string, main: string, branch: string, remote: string, check?: boolean, reap?: boolean, verifyTimeoutMs?: number, reaper?: typeof reapAgentProcesses, lockRunner?: string }} inputs
  * @returns {{ exitCode: number, lines: string[] }}
  * @es Devuelve el código de salida y las líneas del informe.
  */
-export function land({ worktree, main, branch, remote, check = false, reap = false, verifyTimeoutMs, reaper = reapAgentProcesses }) {
-  const inputs = { worktree, main, branch, remote };
+export function land({ worktree, main, branch, remote, check = false, reap = false, verifyTimeoutMs, reaper = reapAgentProcesses, lockRunner = process.env.FULL_CHAIN_LOCK_RUNNER }) {
+  const inputs = { worktree, main, branch, remote, lockRunner };
   try {
     const before = landingRangeOf(inputs);
     const summary = verifyWorktree(worktree, { main, timeoutMs: verifyTimeoutMs });

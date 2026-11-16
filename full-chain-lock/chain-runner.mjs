@@ -52,6 +52,15 @@ export const DEFAULT_POLL_MS = 2000;
 export const LOCK_TOKEN_VARIABLE = 'FULL_CHAIN_LOCK_TOKEN';
 
 /**
+ * The variable through which the runner hands its command its own path (`request.runner`), so a landing can tell which
+ * version of the lock is verifying it (worktree-landing/preconditions.mjs refuses a change to the lock verified by
+ * another tree's runner).
+ * @es La variable con la que el runner da a su comando su propia ruta (`request.runner`), para que un aterrizaje sepa qué
+ * versión del lock lo verifica (preconditions.mjs rechaza un cambio del lock verificado por el runner de otro árbol).
+ */
+export const LOCK_RUNNER_VARIABLE = 'FULL_CHAIN_LOCK_RUNNER';
+
+/**
  * What a child port throws when the command could not even be started: the id and parameters of the bilingual
  * message that says why. Any other error it throws is a defect and propagates after the lock is released.
  * @es Lo que lanza el puerto del hijo cuando el comando ni siquiera pudo iniciarse: el id y los parámetros del
@@ -166,7 +175,7 @@ export async function runChain(request, ports) {
       return EXIT.lockFault;
     }
 
-    return await child.run(request.command, request.args, { [LOCK_TOKEN_VARIABLE]: token }, request.cwd);
+    return await child.run(request.command, request.args, { [LOCK_TOKEN_VARIABLE]: token, ...(request.runner === undefined ? {} : { [LOCK_RUNNER_VARIABLE]: request.runner }) }, request.cwd);
   } catch (error) {
     if (!(error instanceof CommandNotStarted)) throw error;
 

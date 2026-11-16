@@ -450,6 +450,32 @@ try {
   put(ignoredSame.main, 'gen/out.txt', 'landed\n');
   expectLanded('near miss: an ignored file with identical content at a landed path', ignoredSame);
 
+  // ── A change to the full-chain lock lands under the runner of its own tree ─────────────────────────
+  const lockOther = layout({ work: { 'full-chain-lock/run.mjs': 'new lock\n' } });
+  const otherRunner = path.join(lockOther.base, 'elsewhere', 'full-chain-lock', 'run.mjs');
+  put(lockOther.base, 'elsewhere/full-chain-lock/run.mjs', 'old lock\n');
+  const lockOtherReport = expectRefused('a change to the lock verified by another tree\'s runner', lockOther, { reason: 'lock-tool-from-another-tree', text: '    full-chain-lock/run.mjs', extra: { lockRunner: otherRunner } });
+  check(lockOtherReport.includes(path.join(lockOther.worktree, 'full-chain-lock', 'run.mjs')) && lockOtherReport.includes(otherRunner), `a change to the lock verified by another runner: the report names the runner to use and the one that ran: ${lockOtherReport}`);
+
+  const lockNone = layout({ work: { 'full-chain-lock/run.mjs': 'new lock\n' } });
+  expectRefused('a change to the lock landed with no lock runner named', lockNone, { reason: 'lock-tool-from-another-tree', text: 'FULL_CHAIN_LOCK_RUNNER is unset', extra: { lockRunner: '' } });
+
+  const lockOwn = layout({ work: { 'full-chain-lock/run.mjs': 'new lock\n' } });
+  expectLanded('near miss: a change to the lock under the runner of its own tree', lockOwn, landFixture(lockOwn, { lockRunner: path.join(lockOwn.worktree, 'full-chain-lock', 'run.mjs') }));
+
+  // With no lockRunner given, land reads it from FULL_CHAIN_LOCK_RUNNER, as the real runner hands it.
+  // @es Sin lockRunner, land lo lee de FULL_CHAIN_LOCK_RUNNER, como lo da el runner real.
+  const lockFromEnvironment = layout({ work: { 'full-chain-lock/run.mjs': 'new lock\n' } });
+  const savedRunner = process.env.FULL_CHAIN_LOCK_RUNNER;
+  process.env.FULL_CHAIN_LOCK_RUNNER = path.join(lockFromEnvironment.worktree, 'full-chain-lock', 'run.mjs');
+  const fromEnvironment = landFixture(lockFromEnvironment);
+  if (savedRunner === undefined) delete process.env.FULL_CHAIN_LOCK_RUNNER;
+  else process.env.FULL_CHAIN_LOCK_RUNNER = savedRunner;
+  expectLanded('near miss: the runner named in FULL_CHAIN_LOCK_RUNNER is the branch\'s own', lockFromEnvironment, fromEnvironment);
+
+  const lockUntouched = layout({ work: { 'b.txt': 'b\n' } });
+  expectLanded('near miss: a branch that leaves the lock alone lands under any runner', lockUntouched, landFixture(lockUntouched, { lockRunner: otherRunner }));
+
   // ── The range ─────────────────────────────────────────────────────────────────────────────────
   const behind = layout({ work: { 'b.txt': 'b\n' } });
   put(behind.main, 'c.txt', 'c\n');
