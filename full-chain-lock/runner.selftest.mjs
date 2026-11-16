@@ -765,7 +765,11 @@ const valueOf = (read) => {
   const runnerSeen = await startRunner(['--chain', 'token', '--project', 'p', '--', process.execPath, CHILD, 'env', LOCK_RUNNER_VARIABLE], { FULL_CHAIN_LOCK_RUNNER: 'inherited-runner' });
   const runnerPath = /FULL_CHAIN_LOCK_RUNNER=(.+)/.exec(runnerSeen.stdout)?.[1]?.trim() ?? '';
 
-  check('the command is told the path of the run.mjs that holds the lock, replacing an inherited one', runnerPath !== '' && realpathSync.native(runnerPath) === realpathSync.native(RUN), `${runnerPath} against ${RUN}`);
+  // A path that does not resolve (an inherited value left in place) is a failed check, never a crash.
+  // @es Una ruta que no resuelve (un valor heredado que quedó) es un check fallido, nunca un crash.
+  const resolved = (file) => { try { return realpathSync.native(file); } catch { return undefined; } };
+
+  check('the command is told the path of the run.mjs that holds the lock, replacing an inherited one', runnerPath !== '' && resolved(runnerPath) !== undefined && resolved(runnerPath) === resolved(RUN), `${runnerPath} against ${RUN}`);
 }
 
 // ── The runner names itself to its command ─────────────────────────────────────────────────────────────────────
