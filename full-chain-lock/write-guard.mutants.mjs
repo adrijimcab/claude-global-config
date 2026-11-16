@@ -54,7 +54,9 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['full-chain-lock', 'mutation-proof', 'hook-state', 'hook-io', 'hook-payloads', 'shell-command', 'cherry-pick-guard', 'write-targets', 'company-remote', 'worker-git-guard', 'selftest-runner', 'bilingual-output'],
+  // run.mjs runs as a child of the selftest; its import of session-temp (since T17) is outside the closure the engine
+  // walks. @es run.mjs corre como hijo del selftest; su import de session-temp (desde T17) queda fuera del cierre.
+  paths: ['full-chain-lock', 'mutation-proof', 'hook-state', 'hook-io', 'hook-payloads', 'shell-command', 'cherry-pick-guard', 'write-targets', 'company-remote', 'worker-git-guard', 'selftest-runner', 'bilingual-output', 'session-temp'],
   selftest: 'full-chain-lock/write-guard.selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail'

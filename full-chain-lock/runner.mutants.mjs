@@ -39,7 +39,7 @@ const MUTANTS = [
   ['a holder id that cannot be read back is not told', R, "say.complain('token-unreadable');", 'void say;'],
   ['the child adapter drops the variables it is given', C, 'env: { ...process.env, ...environment }', 'env: { ...process.env }'],
   ['the child adapter starts the child with only the variables it is given', C, 'env: { ...process.env, ...environment }', 'env: { ...environment }'],
-  ['the child adapter does not pass an environment at all', C, '{ ...plan.options, env: { ...process.env, ...environment } }', 'plan.options'],
+  ['the child adapter does not pass an environment at all', C, ', env: { ...process.env, ...environment } }', ' }'],
   ['the token read is not the lock file content', A, "return readFileSync(lockFile, 'utf8');", 'return undefined;'],
   ['an absent lock file throws when its token is read', A, '      } catch {\n        return undefined;\n      }\n    },\n\n    /**\n     * Whether', '      } catch (error) {\n        throw error;\n      }\n    },\n\n    /**\n     * Whether'],
   ['any token holds the lock while a chain runs', A, 'return this.readToken() === token && this.liveHolder() !== undefined;', 'return this.liveHolder() !== undefined;'],

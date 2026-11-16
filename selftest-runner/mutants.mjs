@@ -159,7 +159,10 @@ const MUTANTS = [
 
 const survivors = runMutants({
   fleetRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  paths: ['selftest-runner', 'full-chain-lock', 'mutation-proof', 'hook-state', 'bilingual-output'],
+  // full-chain-lock/run.mjs runs as a child of the selftest, so its imports (session-temp among them, since T17) are
+  // outside the import closure the engine walks and are named here. @es run.mjs corre como hijo del selftest: sus
+  // imports (session-temp entre ellos, desde T17) quedan fuera del cierre que recorre el motor y se nombran aquí.
+  paths: ['selftest-runner', 'full-chain-lock', 'mutation-proof', 'hook-state', 'bilingual-output', 'session-temp'],
   selftest: 'selftest-runner/selftest.mjs',
   mutants: MUTANTS,
   crashKills: 'fail',

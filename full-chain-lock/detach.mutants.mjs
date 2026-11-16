@@ -144,7 +144,7 @@ const MUTANTS = [
   ['--detach runs the chain in the foreground', N, 'if (request.detach) return', 'if (false) return'],
   ['a detached run is not rooted under the runs folder', N, 'path.join(stateDirectory, RUNS_FOLDER)', 'stateDirectory'],
   ['a detached run does not get the caller\'s environment', N, 'environment: process.env, cwd', 'environment: {}, cwd'],
-  ['a detached run does not get the caller\'s directory', N, 'cwd: process.cwd() });\n', "cwd: '/' });\n"],
+  ['a detached run does not get its directory', N, 'cwd: request.cwd });\n', "cwd: '/' });\n"],
   ['a --read problem is not refused', N, 'if (parsed.problem !== undefined) return refuse(parsed.problem, say);\n\n  return readChain', 'return readChain'],
   ['the documented detach-failed code changes', R, 'detachFailed: 71,', 'detachFailed: 72,'],
   ['the documented running code changes', R, 'running: 76,', 'running: 77,'],
