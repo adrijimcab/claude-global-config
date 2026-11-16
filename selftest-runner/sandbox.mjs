@@ -93,13 +93,27 @@ const COMPILE_CACHE_OFF = 'NODE_DISABLE_COMPILE_CACHE';
 export const CLAUDE_FOLDER = '.claude';
 
 /**
- * Creates a fresh sandbox under `parent`: `{ root, home, claudeHome, state, temp }`, every directory empty.
- * @es Crea un sandbox nuevo bajo `parent`, con cada directorio vacío.
+ * Where a suite's TEMP sits inside its sandbox: BELOW a session folder (`claude/session-tmp/<id>`), always. A real
+ * session hands its commands such a TEMP, and a proof that reads its own TEMP as the shared temp root then measures
+ * the wrong root (2026-11-11: detach.selftest passed alone and failed in a landing launched from a session). Fixing
+ * the shape here makes that assumption fail on every run, not only when the runner happens to start from a session.
+ * The id is short because some fixtures budget the length of the paths below TEMP.
+ * @es Dónde está el TEMP de una suite en su sandbox: DEBAJO de una carpeta de sesión, siempre. Una sesión real da a sus
+ * comandos un TEMP así, y una prueba que lee su propio TEMP como la raíz compartida mide la raíz equivocada (2026-11-11:
+ * detach.selftest pasaba solo y fallaba en un aterrizaje lanzado desde una sesión). Fijar la forma aquí hace fallar esa
+ * suposición en cada corrida. El id es corto porque algunos fixtures presupuestan el largo de las rutas bajo TEMP.
+ */
+export const SESSION_SHAPED_TEMP = ['claude', 'session-tmp', 's', 'temp'];
+
+/**
+ * Creates a fresh sandbox under `parent`: `{ root, home, claudeHome, state, temp }`, every directory empty, its temp
+ * below a session folder (SESSION_SHAPED_TEMP).
+ * @es Crea un sandbox nuevo bajo `parent`, con cada directorio vacío y su temporal debajo de una carpeta de sesión.
  */
 export function createSandbox(parent = tmpdir()) {
   const root = mkdtempSync(path.join(parent, 'selftest-sandbox-'));
   const home = path.join(root, 'home');
-  const sandbox = { root, home, claudeHome: path.join(home, CLAUDE_FOLDER), state: path.join(root, 'state-root'), temp: path.join(root, 'temp') };
+  const sandbox = { root, home, claudeHome: path.join(home, CLAUDE_FOLDER), state: path.join(root, 'state-root'), temp: path.join(root, ...SESSION_SHAPED_TEMP) };
 
   for (const directory of [sandbox.claudeHome, sandbox.state, sandbox.temp]) mkdirSync(directory, { recursive: true });
 
