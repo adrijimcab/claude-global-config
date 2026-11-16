@@ -40,7 +40,7 @@ import { isolateState, stateDir } from '../hook-state/locations.mjs';
 import { CommandNotStarted, DEFAULT_POLL_MS, DEFAULT_WAIT_SECONDS, EXIT, runChain } from './chain-runner.mjs';
 import { childProcessAdapter } from './child-process-adapter.mjs';
 import { parseArguments } from './cli-arguments.mjs';
-import { fileLockAdapter } from './file-lock-adapter.mjs';
+import { CEILING_MS, fileLockAdapter } from './file-lock-adapter.mjs';
 import { launchPlan } from './launch-plan.mjs';
 import { LOCK_TOKEN_VARIABLE, tokenHoldsLock } from './lock-token.mjs';
 import { measuredTree } from './measured-tree.mjs';
@@ -472,7 +472,9 @@ if (process.platform === 'win32') {
 
 // ── What the documentation promises ─────────────────────────────────────────────────────────────────────────
 check('the exit codes the runner documents are 2, 70, 75 and 127', EXIT.usage === 2 && EXIT.lockFault === 70 && EXIT.waitExpired === 75 && EXIT.notStarted === 127, JSON.stringify(EXIT));
-check('the default wait is an hour and the poll two seconds', DEFAULT_WAIT_SECONDS === 3600 && DEFAULT_POLL_MS === 2000);
+// A waiter outlasts any legitimate holder: the default wait IS the lock's ceiling, so the two can never drift apart.
+// @es Quien espera sobrevive a todo dueño legítimo: la espera por defecto ES el techo del lock, así nunca se separan.
+check('the default wait is the lock ceiling (12 h) and the poll two seconds', DEFAULT_WAIT_SECONDS * 1000 === CEILING_MS && CEILING_MS === 12 * 60 * 60 * 1000 && DEFAULT_POLL_MS === 2000, `${String(DEFAULT_WAIT_SECONDS)} s against ${String(CEILING_MS)} ms`);
 
 {
   const told = [];
@@ -640,7 +642,7 @@ const valueOf = (read) => {
   const clock = { now: () => 0, sleep };
   const code = await runChain(request, { lock: fakeLock('holder-id'), child: { run: (...call) => { given.push(call); return Promise.resolve(4); } }, clock, say, processId: 1 });
 
-  check('the command is handed the holder id the lock port holds, under FULL_CHAIN_LOCK_TOKEN, and nothing else', code === 4 && JSON.stringify(given) === JSON.stringify([['cmd', ['a'], { FULL_CHAIN_LOCK_TOKEN: 'holder-id' }]]), JSON.stringify(given));
+  check('the command is handed the holder id the lock port holds, under FULL_CHAIN_LOCK_TOKEN, and nothing else', code === 4 && given.length === 1 && JSON.stringify(given[0].slice(0, 3)) === JSON.stringify(['cmd', ['a'], { FULL_CHAIN_LOCK_TOKEN: 'holder-id' }]) && given[0][3] === request.cwd, JSON.stringify(given));
   check('the variable name the runner hands out is FULL_CHAIN_LOCK_TOKEN', LOCK_TOKEN_VARIABLE === 'FULL_CHAIN_LOCK_TOKEN');
 
   const before = released;
@@ -669,6 +671,23 @@ const valueOf = (read) => {
   const childEnv = Object.entries(seen.options.env ?? {}).sort(([a], [b]) => a.localeCompare(b));
   const callerEnv = Object.entries(process.env).sort(([a], [b]) => a.localeCompare(b));
   check('with no variables given the child starts with exactly the caller\'s own environment', seen.options.env !== undefined && JSON.stringify(childEnv) === JSON.stringify(callerEnv), JSON.stringify(seen.options.env?.FULL_CHAIN_LOCK_TOKEN));
+
+  await adapter.run(process.execPath, ['x'], {}, '/the/tree');
+  check('the child adapter starts the child in the directory it is given', seen.options.cwd === '/the/tree', String(seen.options.cwd));
+  await adapter.run(process.execPath, ['x'], {});
+  check('with no directory given the child adapter sets none, so the child keeps the caller\'s', !('cwd' in seen.options), JSON.stringify(Object.keys(seen.options)));
+}
+
+// ── The directory the command runs in ──────────────────────────────────────────────────────────────────────────
+{
+  let runIn = 'never called';
+  const say = { say: () => undefined, complain: () => undefined, line: () => '' };
+  const lock = { tryTake: () => true, readHolder: () => undefined, readToken: () => 'token', release: () => undefined };
+  const child = { run: (command, args, environment, cwd) => { runIn = cwd; return Promise.resolve(0); } };
+  const request = { chain: 'c', project: 'p', session: 's', tree: '/top', cwd: '/top/project', command: 'cmd', args: [], waitMs: 100, pollMs: 10 };
+
+  await runChain(request, { lock, child, clock: { now: () => 0, sleep }, say, processId: 1 });
+  check('the runner runs the command in the request\'s directory, never the recorded tree', runIn === '/top/project', String(runIn));
 }
 
 {

@@ -204,7 +204,7 @@ export const MESSAGES = {
       '',
       '  {wrapped}',
       '',
-      '--tree names the tree the chain measures, so the lock records and protects the right one.',
+      '--tree names the tree the chain measures and the directory it runs in, so the lock records and protects the right one.',
       'It waits (bounded, --wait-seconds, default {defaultWaitSeconds}) while another chain runs, prints who holds the lock, runs your',
       'command with its exact exit code and releases the lock on every exit path.'
     ],
@@ -215,7 +215,7 @@ export const MESSAGES = {
       '',
       '  {wrapped}',
       '',
-      '--tree nombra el árbol que mide la cadena, para que el lock registre y proteja el correcto.',
+      '--tree nombra el árbol que mide la cadena y el directorio donde corre, para que el lock registre y proteja el correcto.',
       'Espera (acotado, --wait-seconds, por defecto {defaultWaitSeconds}) mientras otra cadena corre, muestra quién tiene el lock, ejecuta tu',
       'comando con su código de salida exacto y suelta el lock en toda salida.'
     ]

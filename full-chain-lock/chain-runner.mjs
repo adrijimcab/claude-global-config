@@ -5,8 +5,8 @@
  *
  *   - `lock`:  `tryTake(record)` takes the lock once (stale holders are broken by the lock's own rule) and says
  *              whether it did; `readHolder()` reads who holds it, or `undefined`; `release()` gives it back.
- *   - `child`: `run(command, args)` runs the command and resolves its exit code, exactly. It rejects when the
- *              command cannot be started.
+ *   - `child`: `run(command, args, environment, cwd)` runs the command in `cwd` and resolves its exit code, exactly.
+ *              It rejects when the command cannot be started.
  *   - `clock`: `now()` in milliseconds and `sleep(ms)`.
  *   - `say`:   the speaker of `messages.mjs` (`say.say`, `say.complain`, `say.line`).
  *
@@ -28,8 +28,17 @@
 /** The exit codes the runner itself produces; every other code is the command's. @es Los códigos de salida propios del runner; todo otro código es del comando. */
 export const EXIT = Object.freeze({ usage: 2, lockFault: 70, detachFailed: 71, waitExpired: 75, running: 76, notStarted: 127 });
 
-/** How long a chain waits for the lock by default, in seconds. @es Cuánto espera una cadena el lock por defecto, en segundos. */
-export const DEFAULT_WAIT_SECONDS = 3600;
+/**
+ * How long a chain waits for the lock by default, in seconds: the lock's own ceiling (`file-lock-adapter.mjs`
+ * CEILING_MS, 12 h), the longest a live chain may hold it before it is broken. A shorter default gives up on a holder
+ * that is still legitimately working (measured 2026-11-10 and 2026-11-12: one hour expired behind b100 chains that
+ * held longer, and the queued chains never ran). The runner selftest pins the two equal.
+ * @es Cuánto espera una cadena el lock por defecto, en segundos: el techo del propio lock (CEILING_MS, 12 h), lo
+ * máximo que una cadena viva puede tenerlo antes de que se rompa. Un valor menor abandona a un dueño que sigue
+ * trabajando legítimamente (medido el 2026-11-10 y el 2026-11-12: una hora caducó detrás de cadenas de b100 más largas
+ * y las cadenas en cola nunca corrieron). El selftest del runner fija que los dos sean iguales.
+ */
+export const DEFAULT_WAIT_SECONDS = 12 * 60 * 60;
 
 /** How often a waiting chain looks at the lock again, in milliseconds. @es Cada cuánto vuelve a mirar el lock una cadena que espera, en milisegundos. */
 export const DEFAULT_POLL_MS = 2000;
@@ -90,7 +99,8 @@ function giveBack(lock, say) {
 /**
  * Runs `request.command` under the lock.
  *
- * @param {{ chain: string, project: string, session: string, tree: string, command: string, args: string[], waitMs: number, pollMs: number }} request
+ * @param {{ chain: string, project: string, session: string, tree: string, cwd?: string, command: string, args: string[], waitMs: number, pollMs: number }} request
+ *   `cwd` is the directory the command runs in (run.mjs: the --tree given, else the caller's cwd).
  * @param {{ lock: object, child: object, clock: object, say: object, processId: number }} ports
  * @returns {Promise<number>} the exit code of the whole run: the command's own, or one of `EXIT`.
  * @throws whatever the child port throws, after the lock was released.
@@ -156,7 +166,7 @@ export async function runChain(request, ports) {
       return EXIT.lockFault;
     }
 
-    return await child.run(request.command, request.args, { [LOCK_TOKEN_VARIABLE]: token });
+    return await child.run(request.command, request.args, { [LOCK_TOKEN_VARIABLE]: token }, request.cwd);
   } catch (error) {
     if (!(error instanceof CommandNotStarted)) throw error;
 

@@ -76,7 +76,12 @@ const MUTANTS = [
   ['the wait is announced in milliseconds', R, 'const waitSeconds = request.waitMs / 1000;', 'const waitSeconds = request.waitMs;'],
   ['the documented usage code changes', R, 'usage: 2,', 'usage: 3,'],
   ['the documented wait-expired code changes', R, 'waitExpired: 75,', 'waitExpired: 76,'],
-  ['the default wait changes', R, 'export const DEFAULT_WAIT_SECONDS = 3600;', 'export const DEFAULT_WAIT_SECONDS = 60;'],
+  ['the default wait changes', R, 'export const DEFAULT_WAIT_SECONDS = 12 * 60 * 60;', 'export const DEFAULT_WAIT_SECONDS = 60;'],
+  ['the command runs where the runner was started, not in the request\'s directory', R, '{ [LOCK_TOKEN_VARIABLE]: token }, request.cwd);', '{ [LOCK_TOKEN_VARIABLE]: token });'],
+  ['the command runs in the recorded tree, not in the request\'s directory', R, '{ [LOCK_TOKEN_VARIABLE]: token }, request.cwd);', '{ [LOCK_TOKEN_VARIABLE]: token }, request.tree);'],
+  ['the child adapter ignores the directory it is given', C, '...(cwd === undefined ? {} : { cwd }), ', ''],
+  ['the child adapter sets a directory even when none is given', C, '...(cwd === undefined ? {} : { cwd }), ', 'cwd, '],
+  ['the default wait goes back to one hour, below the lock ceiling', R, 'export const DEFAULT_WAIT_SECONDS = 12 * 60 * 60;', 'export const DEFAULT_WAIT_SECONDS = 3600;'],
 
   // --- the lock adapter
   ['the holder record is never written', A, '        renameSync(partial, holderFile);', '        void partial;'],

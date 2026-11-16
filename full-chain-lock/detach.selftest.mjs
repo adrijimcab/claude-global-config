@@ -381,7 +381,7 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
     }
   });
 
-  check('the chain is started as the normal locked run with every setting of the job', JSON.stringify(calls[0][1].slice(1)) === JSON.stringify(['--chain', 'runner-proof', '--project', 'p', '--session', 's', '--tree', '/the/tree', '--wait-seconds', '30', '--poll-ms', '100', '--', 'cmd', 'a', 'b']) && calls[0][1][0] === RUN && calls[0][0] === process.execPath, JSON.stringify(calls[0][1]));
+  check('the chain is started as the normal locked run with every setting of the job', JSON.stringify(calls[0][1].slice(1)) === JSON.stringify(['--chain', 'runner-proof', '--project', 'p', '--session', 's', '--tree', SCRATCH, '--wait-seconds', '30', '--poll-ms', '100', '--', 'cmd', 'a', 'b']) && calls[0][1][0] === RUN && calls[0][0] === process.execPath, JSON.stringify(calls[0][1]));
   check('it runs in the job\'s directory with the job\'s environment, stdin closed and output on a file', calls[0][2].cwd === SCRATCH && JSON.stringify(calls[0][2].env) === JSON.stringify({ ONLY_THIS: '1', TEMP: CHAIN_TEMP, TMP: CHAIN_TEMP, TMPDIR: CHAIN_TEMP }) && calls[0][2].stdio[0] === 'ignore' && typeof calls[0][2].stdio[1] === 'number' && calls[0][2].stdio[1] === calls[0][2].stdio[2]);
   check('a chain ended by a signal is a verdict with the signal and no code', faked.exitCode === null && faked.signal === 'SIGTERM' && readJson(path.join(fakeDir, RUN_FILES.verdict)).signal === 'SIGTERM');
   check('the verdict carries the instants the clock gave, start first and end last', faked.startedAt === '2026-01-01T00:00:00.000Z' && faked.endedAt === '2026-01-01T00:00:09.000Z', JSON.stringify(faked));
@@ -445,7 +445,29 @@ const defaults = { cwd: '/w', cwdName: 'w', sessionFromEnvironment: undefined };
 
   spawned.add(readJson(path.join(printedDir, RUN_FILES.run)).pid);
   check('with no --run-dir the run directory is under the runs folder of the lock\'s state', printedDir !== '' && path.relative(path.join(stateDir('full-chain-lock'), 'runs'), printedDir).split(path.sep).length === 1 && !path.relative(path.join(stateDir('full-chain-lock'), 'runs'), printedDir).startsWith('..'), byDefault.stdout);
-  check('the chain runs in the directory its caller was in', await until(() => existsSync(path.join(printedDir, RUN_FILES.verdict))) && readFileSync(path.join(printedDir, RUN_FILES.output), 'utf8').includes(`cwd ${workDir}`), printedDir);
+  // The tree a chain records is the tree it runs in: --tree names the directory, whatever the caller's cwd.
+  // @es El árbol que registra una cadena es el árbol en el que corre: --tree nombra el directorio, sea cual sea el cwd.
+  check('with --tree the chain runs in that directory, not in its caller\'s', await until(() => existsSync(path.join(printedDir, RUN_FILES.verdict))) && readFileSync(path.join(printedDir, RUN_FILES.output), 'utf8').includes(`cwd ${SCRATCH}`), readFileSync(path.join(printedDir, RUN_FILES.output), 'utf8'));
+
+  const noTreeDir = freshDir();
+  const noTree = spawnSync(process.execPath, [RUN, '--detach', '--run-dir', noTreeDir, '--chain', 'cli-no-tree', '--', process.execPath, CHILD, 'cwd'], { encoding: 'utf8', windowsHide: true, cwd: workDir, env: ownedProfile });
+
+  spawned.add(readJson(path.join(noTreeDir, RUN_FILES.run)).pid);
+  check('with no --tree the chain runs in the directory its caller was in', noTree.status === 0 && (await until(() => existsSync(path.join(noTreeDir, RUN_FILES.verdict)))) && readFileSync(path.join(noTreeDir, RUN_FILES.output), 'utf8').includes(`cwd ${workDir}`), readFileSync(path.join(noTreeDir, RUN_FILES.output), 'utf8'));
+
+  // A --tree below a git top-level runs there, not at the top-level the lock records (a project in a subfolder).
+  // @es Un --tree debajo de una raíz de git corre ahí, no en la raíz que registra el lock (un proyecto en una subcarpeta).
+  const repo = path.join(SCRATCH, 'repo');
+  const project = path.join(repo, 'project');
+
+  mkdirSync(project, { recursive: true });
+  spawnSync('git', ['init', '-q', repo], { encoding: 'utf8', windowsHide: true });
+
+  const subDir = freshDir();
+  const sub = spawnSync(process.execPath, [RUN, '--detach', '--run-dir', subDir, '--chain', 'cli-sub-tree', '--tree', project, '--', process.execPath, CHILD, 'cwd'], { encoding: 'utf8', windowsHide: true, cwd: workDir, env: ownedProfile });
+
+  spawned.add(readJson(path.join(subDir, RUN_FILES.run)).pid);
+  check('a --tree in a subfolder of a git repository runs in that subfolder, not at its top-level', sub.status === 0 && (await until(() => existsSync(path.join(subDir, RUN_FILES.verdict)))) && readFileSync(path.join(subDir, RUN_FILES.output), 'utf8').includes(`cwd ${project}`), readFileSync(path.join(subDir, RUN_FILES.output), 'utf8'));
 }
 
 // ── THE KILL: the caller's whole tree dies, the chain does not ──────────────────────────────────────────────

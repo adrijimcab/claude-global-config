@@ -39,8 +39,13 @@ function writeVerdict(runDir, verdict) {
 /** The words of the command as the caller typed them. @es Las palabras del comando como las escribió quien llamó. */
 const commandText = (job) => [job.command, ...job.args].join(' ');
 
-/** The arguments of the normal locked run for a job. @es Los argumentos de la corrida normal con lock para un trabajo. */
-const runArguments = (job) => [RUN, '--chain', job.chain, '--project', job.project, '--session', job.session, '--tree', job.tree, '--wait-seconds', String(job.waitSeconds), '--poll-ms', String(job.pollMs), '--', job.command, ...job.args];
+/**
+ * The arguments of the normal locked run for a job. Its --tree is the directory the chain runs in (`job.cwd`), never the
+ * measured top-level (`job.tree`): the inner run records the same top-level from it and runs the command there.
+ * @es Los argumentos de la corrida normal con lock para un trabajo. Su --tree es el directorio donde corre la cadena
+ * (`job.cwd`), nunca la raíz medida (`job.tree`): la corrida interna registra desde él la misma raíz y ejecuta ahí.
+ */
+const runArguments = (job) => [RUN, '--chain', job.chain, '--project', job.project, '--session', job.session, '--tree', job.cwd, '--wait-seconds', String(job.waitSeconds), '--poll-ms', String(job.pollMs), '--', job.command, ...job.args];
 
 /**
  * The environment the chain runs in: the job's, with TEMP, TMP and TMPDIR pointing at `tempDir`. A detached chain must

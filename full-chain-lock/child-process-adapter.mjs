@@ -28,16 +28,16 @@ const codeOfSignal = (signal) => 128 + (constants.signals[signal] ?? 0);
 
 /**
  * @param {object} [context] `spawnProcess` and the `launchPlan` context, injectable for a proof.
- * @returns {{ run: (command: string, args: string[], environment?: object) => Promise<number> }} `environment` is added to the child's own (the caller's) environment.
- * @es El puerto `child`; `spawnProcess` y el contexto de `launchPlan` son inyectables; `environment` se suma al entorno del hijo (el de quien llama).
+ * @returns {{ run: (command: string, args: string[], environment?: object, cwd?: string) => Promise<number> }} `environment` is added to the child's own (the caller's) environment; `cwd`, when given, is the directory the child starts in.
+ * @es El puerto `child`; `spawnProcess` y el contexto de `launchPlan` son inyectables; `environment` se suma al entorno del hijo (el de quien llama); `cwd`, si se da, es el directorio donde arranca el hijo.
  */
 export function childProcessAdapter({ spawnProcess = spawn, ...context } = {}) {
   return {
-    run(command, args, environment = {}) {
+    run(command, args, environment = {}, cwd = undefined) {
       const plan = launchPlan(command, args, context);
 
       return new Promise((resolve, reject) => {
-        const child = spawnProcess(plan.file, plan.args, { ...plan.options, env: { ...process.env, ...environment } });
+        const child = spawnProcess(plan.file, plan.args, { ...plan.options, ...(cwd === undefined ? {} : { cwd }), env: { ...process.env, ...environment } });
         const forwarders = FORWARDED.map((signal) => {
           const forward = () => child.kill(signal);
 

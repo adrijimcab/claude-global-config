@@ -250,7 +250,7 @@ check('a worker running the wrapped form passes', verdictOf(asWorker('Bash', `no
   check('a chain declared by several projects gets no guessed --project: the runner records the directory', !text.includes('--project'), text);
   check('a chain declared by ONE project names it in the command', unique.includes(`node "${RUNNER}" --chain check:mutation --project b100-am-ui --session sess-main --tree "`) && unique.includes('" -- npm run check:mutation'), unique);
   check('it names the memory incident as the reason', english.includes('2026-10-05') && english.includes('low memory'));
-  check('it states the bounded wait', english.includes('--wait-seconds') && english.includes('3600'));
+  check('it states the bounded wait', english.includes('--wait-seconds') && english.includes(String(12 * 60 * 60)));
   check('the runner it names exists', existsSync(RUNNER));
 
   for (const [tool, command] of [['Bash', 'npm run build:ci-pr'], ['PowerShell', 'npm run ci:test'], ['Bash', 'node selftest-runner/run.mjs --root x']]) {

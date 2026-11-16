@@ -84,9 +84,14 @@ export async function main(argv) {
   // The shared state mechanism of the lock, named as a literal so the state census can see it.
   // @es El mecanismo de estado compartido del lock, con su nombre literal para que el censo de estado lo vea.
   const stateDirectory = stateDir('full-chain-lock');
-  const request = { ...parsed.request, tree: measuredTree(parsed.request.tree) };
+  // The chain runs in the directory --tree names as given (the caller's cwd without --tree), so the tree it records is
+  // the tree it runs in; the recorded tree is that directory's git top-level, which can be above it (a subfolder project).
+  // @es La cadena corre en el directorio que nombra --tree tal como se dio (el cwd de quien llama sin --tree), así el
+  // árbol que registra es el árbol en el que corre; el árbol registrado es la raíz de git de ese directorio, que puede
+  // estar por encima (un proyecto en una subcarpeta).
+  const request = { ...parsed.request, tree: measuredTree(parsed.request.tree), cwd: path.resolve(parsed.request.tree) };
 
-  if (request.detach) return detachChain(request, { launcher: detachedLauncher(), say, runsRoot: path.join(stateDirectory, RUNS_FOLDER), environment: process.env, cwd: process.cwd() });
+  if (request.detach) return detachChain(request, { launcher: detachedLauncher(), say, runsRoot: path.join(stateDirectory, RUNS_FOLDER), environment: process.env, cwd: request.cwd });
 
   const lock = fileLockAdapter(stateDirectory);
 
