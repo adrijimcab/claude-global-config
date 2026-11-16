@@ -145,7 +145,13 @@ for (const [index, given] of seen.entries()) {
 }
 check(new Set(seen.flatMap((given) => [given.homedir, given.state, given.tmpdir])).size === 6, 'each selftest gets a sandbox of its own, never shared');
 
+// A suite's TEMP is always below a session folder, the shape a session hands its commands, so a proof that reads its
+// own TEMP as the shared root fails on every run. @es El TEMP de una suite está siempre debajo de una carpeta de sesión.
+check(seen.length > 0 && seen.every((given) => /[\\/]claude[\\/]session-tmp[\\/][^\\/]+[\\/]temp$/i.test(given.tmpdir)), `every suite sees a TEMP below a session folder: ${JSON.stringify(seen.map((given) => given.tmpdir))}`);
+
 const unit = createSandbox(bareDir());
+
+check(path.relative(unit.root, unit.temp).split(path.sep).join('/') === 'claude/session-tmp/s/temp' && existsSync(unit.temp), `the sandbox temp is claude/session-tmp/s/temp below its root, and exists: ${unit.temp}`);
 const unitEnv = sandboxEnv(unit, { base: { Temp: 'stale', home: 'stale', Hook_State_Dir: 'stale', PATH: 'kept' }, tree: '.' });
 check(!('Temp' in unitEnv) && !('home' in unitEnv) && !('Hook_State_Dir' in unitEnv) && unitEnv.TEMP === unit.temp && unitEnv.HOME === unit.home && unitEnv.HOOK_STATE_DIR === unit.state, `a variable spelled in another case is replaced, never left beside the new one: ${Object.keys(unitEnv)}`);
 check(unitEnv.PATH === 'kept' && unitEnv.SELFTEST_TREE === path.resolve('.'), 'the rest of the environment is kept and the tree is made absolute');
