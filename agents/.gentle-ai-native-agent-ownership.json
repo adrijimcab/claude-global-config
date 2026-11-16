@@ -1,9 +1,9 @@
 {
   "version": 1,
   "files": {
-    "jd-fix-agent.md": "91c697d837804201c4380e46303ae753e01dab619b3053f40b047309930d3b7b",
-    "jd-judge-a.md": "29eb0df208129099cca2cdb25242601a0860a6ee74a61a85e51a2c1435359a1a",
-    "jd-judge-b.md": "2e4bc466c8d00f6d6963111593a06389db651fb017f268328c8acd3a2541aaa9",
+    "jd-fix-agent.md": "03d0bfc2a9e2c0f2799460ca18bdeaccccdbec4c8e8c9401d26abec154148ff6",
+    "jd-judge-a.md": "ce5823d3ee3570e5e9cd3e0f112cc0363ed8d997ed426dad8502efa83771a31d",
+    "jd-judge-b.md": "4a8b666ae2b3d08c16fae2ea66bbacd9a8dc40002ac2d987683b357c35a83e1a",
     "review-readability.md": "95505869ca27ac055ba28dd33d78c6c704a4ab3633a6aa1e24928b902932a657",
     "review-refuter.md": "69bda33f52bce74ec8d45f0f7c340571a9b90adec63c6fc23137493ee172186f",
     "review-reliability.md": "0394dbfc58f2f13979f018a645b20704e72f562f501dc5a68b54bc6c169b3a8f",

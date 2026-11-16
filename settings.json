@@ -113,6 +113,22 @@
         ]
       }
     ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "command": "node \"$HOME/.claude/session-temp/end.mjs\"",
+            "timeout": 10,
+            "type": "command"
+          },
+          {
+            "command": "node \"$HOME/.claude/session-processes/end.mjs\"",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
@@ -147,9 +163,9 @@
       {
         "hooks": [
           {
-            "type": "command",
             "command": "node \"$HOME/.claude/session-temp/start.mjs\"",
-            "timeout": 10
+            "timeout": 10,
+            "type": "command"
           }
         ],
         "matcher": "startup|resume|clear|compact"
@@ -280,22 +296,6 @@
           }
         ],
         "matcher": ""
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$HOME/.claude/session-temp/end.mjs\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "node \"$HOME/.claude/session-processes/end.mjs\"",
-            "timeout": 10
-          }
-        ]
       }
     ]
   },
