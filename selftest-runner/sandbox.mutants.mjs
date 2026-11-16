@@ -95,6 +95,8 @@ const MUTANTS = [
   ['an added path is not a change', TREE, "    if (!before.has(entry)) changes.push({ path: entry, change: 'added' });\n    else if", '    if (!before.has(entry)) continue;\n    else if'],
   ['a changed path is not a change', TREE, "    else if (before.get(entry) !== signature) changes.push({ path: entry, change: 'changed' });\n", ''],
   ['a path no longer listed is not a change', TREE, "if (!after.has(entry)) changes.push({ path: entry, change: 'removed' });", 'void entry;'],
+  ['a suite gets a flat TEMP, not one below a session folder', SANDBOX, 'temp: path.join(root, ...SESSION_SHAPED_TEMP) };', "temp: path.join(root, 'temp') };"],
+  ['the session-shaped TEMP loses its session folder', SANDBOX, "['claude', 'session-tmp', 's', 'temp']", "['claude', 'temp']"],
   ['the tree changes are not sorted', TREE, 'return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));', 'return changes;'],
 ];
 
