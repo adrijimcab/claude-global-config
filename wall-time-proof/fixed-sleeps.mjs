@@ -147,8 +147,12 @@ export function fixedSleepLines(source) {
     const [awaitWord, name, open, value, close] = tokens.slice(at, at + 5);
     const isSleep = awaitWord.kind === 'word' && awaitWord.text === 'await' && helpers.has(name.text) && open.text === '(' && value.kind === 'number' && close.text === ')';
 
-    if (isSleep && tokens[at - 1]?.text !== '.' && !insideLoop(tokens, at)) lines.add(awaitWord.line);
+    // The window starts at `await`, so a method call (`await clock.sleep(300)`) never matches: a dot sits where the
+    // name should be. Tokens are walked top to bottom, so the lines come out ascending. @es La ventana empieza en
+    // `await`, así que una llamada a método nunca coincide: hay un punto donde iría el nombre. Los tokens se recorren
+    // de arriba abajo, así que las líneas salen ascendentes.
+    if (isSleep && !insideLoop(tokens, at)) lines.add(awaitWord.line);
   }
 
-  return [...lines].sort((a, b) => a - b);
+  return [...lines];
 }

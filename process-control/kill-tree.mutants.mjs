@@ -71,7 +71,7 @@ const MUTANTS = [
   ['a console window opens for the child', K, "windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']", "windowsHide: false, stdio: ['ignore', 'pipe', 'pipe']"],
   ['the working directory is not passed on', K, '{ cwd, env, detached', '{ env, detached'],
   ['the environment is not passed on', K, '{ cwd, env, detached', '{ cwd, detached'],
-  ['no process tree is killed on a timeout by default', K, 'kill = killTree }', 'kill = () => undefined }'],
+  ['no process tree is killed on a timeout by default', K, 'kill = killTree, startTimer', 'kill = () => undefined, startTimer'],
   ['the child inherits an open stdin', K, "stdio: ['ignore', 'pipe', 'pipe']", "stdio: ['pipe', 'pipe', 'pipe']"],
   ['output is collected as raw chunks, splitting a multi-byte character', K, "child.stdout?.setEncoding('utf8').on", 'child.stdout?.on'],
   ['stderr is collected into stdout', K, "child.stderr?.setEncoding('utf8').on('data', (chunk) => (result.stderr += chunk))", "child.stderr?.setEncoding('utf8').on('data', (chunk) => (result.stdout += chunk))"],
