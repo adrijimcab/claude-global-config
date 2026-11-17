@@ -321,7 +321,7 @@
       "**Trusted cloud buckets**: None configured",
       "**Key internal services**: gitlab.base100.local (source control + CI/CD)",
       "**Internal package registry**: gitlab.base100.local (seen as a package registry host in config scan)",
-      "**Sensitive data locations & audiences**: .storybook/stories/b100-pii-sanitize.stories.ts (PII-related story file) — share only with audiences cleared for personal-data handling",
+      "**Sensitive data locations \u0026 audiences**: .storybook/stories/b100-pii-sanitize.stories.ts (PII-related story file) — share only with audiences cleared for personal-data handling",
       "**Data retention / declassification**: None configured",
       "**Sensitive remote targets**: any namespace, host, or container whose name carries prod or production as a whole word or name segment",
       "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
