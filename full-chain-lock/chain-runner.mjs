@@ -122,7 +122,7 @@ export async function runChain(request, ports) {
   const record = { session: request.session, project: request.project, chain: request.chain, tree: request.tree, pid: processId, startedAt, command: [request.command, ...request.args].join(' ') };
   const deadline = clock.now() + request.waitMs;
   let announced;
-  let looked = false;
+  let missingBefore = false;
 
   for (;;) {
     let taken;
@@ -140,12 +140,15 @@ export async function runChain(request, ports) {
     const holder = lock.readHolder();
     const identity = JSON.stringify(holder ?? null);
 
-    // A record that is missing on the FIRST look is usually a holder between taking the lock and writing it; it is
-    // announced as unreadable only if it is still missing at the next look.
-    // @es Un registro ausente en la PRIMERA mirada suele ser un dueño entre tomar el lock y escribirlo; solo se anuncia como ilegible si sigue ausente en la siguiente.
-    const settled = holder !== undefined || looked;
+    // A missing record is a holder between two steps: after taking the lock and before writing it, or after removing it
+    // and before releasing the lock (file-lock-adapter release). Either way it is announced as unreadable only when it
+    // is still missing at the next look, at any point of the wait, never on one look alone.
+    // @es Un registro ausente es un dueño entre dos pasos: tras tomar el lock y antes de escribirlo, o tras borrarlo y
+    // antes de soltar el lock. Solo se anuncia como ilegible si sigue ausente en la siguiente mirada, en cualquier momento
+    // de la espera, nunca por una sola mirada.
+    const settled = holder !== undefined || missingBefore;
 
-    looked = true;
+    missingBefore = holder === undefined;
 
     if (settled && identity !== announced) {
       announce(say, holder, waitSeconds);

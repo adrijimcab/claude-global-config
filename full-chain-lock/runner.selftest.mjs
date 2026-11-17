@@ -387,6 +387,18 @@ const silent = { say: () => undefined, complain: () => undefined, line: () => ''
   await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 5000, pollMs: 10 }, { lock: missing, child: { run: () => Promise.resolve(0) }, clock: { now: () => 0, sleep }, say: { ...say, complain: (id) => stillTold.push(id) }, processId: 1 }).catch((error) => stillTold.push(`threw ${error.name}`));
 
   check('a record still missing at the second look is announced once as unreadable', stillTold.join() === 'waiting-unreadable', stillTold.join());
+
+  // The release window measured in the landing run 20261117-234140806: the holder removes its record, then releases
+  // the lock; one look in between found the lock held and no record, and the wait was announced a second time.
+  // @es La ventana de liberación medida en el aterrizaje 20261117-234140806: el dueño borra su registro y luego suelta
+  // el lock; una mirada entre ambos vio el lock tomado sin registro y la espera se anunció por segunda vez.
+  const releasingTold = [];
+  let releaseLooks = 0;
+  const releasing = { tryTake: () => { releaseLooks += 1; return releaseLooks === 4; }, readHolder: () => (releaseLooks === 3 ? undefined : { chain: 'a', project: 'p', session: 's', pid: 1, startedAt: 't' }), readToken: () => 'token', release: () => undefined };
+
+  await runChain({ chain: 'c', project: 'p', session: 's', command: 'c', args: [], waitMs: 5000, pollMs: 10 }, { lock: releasing, child: { run: () => Promise.resolve(0) }, clock: { now: () => 0, sleep }, say: { ...say, complain: (id) => releasingTold.push(id) }, processId: 1 });
+
+  check('a record missing for one look after a readable holder (the release window) is not announced', releasingTold.join() === 'waiting', releasingTold.join());
 }
 
 {
