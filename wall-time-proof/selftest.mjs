@@ -27,7 +27,8 @@
 
 import { elapsedAssertionLines } from './check-calls.mjs';
 import { tokenize } from './lexer.mjs';
-import { RULE, findingMessage, summaryMessage } from './messages.mjs';
+import { fixedSleepLines } from './fixed-sleeps.mjs';
+import { RULE, SLEEP_RULE, findingMessage, fixedSleepMessage, summaryMessage } from './messages.mjs';
 import { scanFiles } from './scan.mjs';
 
 let passed = 0;
@@ -221,6 +222,35 @@ check('tokens: a unicode identifier is one word', tokenize('const año = 1;').ma
 check('tokens: a hashbang line is skipped', tokenize('#!/usr/bin/env node\nx;').map((token) => token.text), ['x', ';']);
 check('tokens: an unterminated block comment ends at the end of the source', tokenize('a /* b').map((token) => token.text), ['a']);
 
+// --- FIXED SLEEPS: a bare sleep outside a loop is flagged; a sleep that polls a condition in a loop is not ---
+const sleeps = (text) => {
+  try {
+    return fixedSleepLines(text);
+  } catch (error) {
+    return `threw: ${error.message}`;
+  }
+};
+
+// Every source below defines its helpers first (line 1), the way a selftest does. @es Cada fuente define antes sus helpers (línea 1).
+const SLEEP = 'const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));';
+const WAIT = 'const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));';
+
+check('sleep red: a bare await sleep(300) statement', sleeps(source(SLEEP, 'start();', 'await sleep(300);', 'check(read());')), [3]);
+check('sleep red: another helper name, wait(2500)', sleeps(source(WAIT, 'await wait(2500);')), [2]);
+check('sleep red: a function declaration built on setTimeout', sleeps(source('function settle(ms) {', '  return new Promise((resolve) => setTimeout(resolve, ms));', '}', 'await settle(2000);')), [4]);
+check('sleep red: setTimeout imported from node:timers/promises under another name', sleeps(source("import { setTimeout as pause } from 'node:timers/promises';", 'await pause(500);')), [2]);
+check('sleep red: inside an if block, which is no loop', sleeps(source(SLEEP, 'if (ready) {', '  await sleep(50);', '}')), [3]);
+check('sleep red: inside a function body that is not a loop', sleeps(source(SLEEP, 'async function f() {', '  await sleep(100);', '}')), [3]);
+check('sleep green: a function that takes a number but is no sleep', sleeps(source('const afterBlocks = (count) => gate(count);', 'await afterBlocks(2);')), []);
+check('sleep green: the braceless body of a while loop', sleeps(source(SLEEP, 'while (!ready() && Date.now() < end) await sleep(25);')), []);
+check('sleep green: the step of a for header', sleeps(source(SLEEP, 'for (const deadline = Date.now() + ms; Date.now() < deadline; await sleep(100)) if (gone(pid)) return true;')), []);
+check('sleep green: the block of a for (;;) loop', sleeps(source(WAIT, 'for (;;) {', '  if (done()) return;', '  await wait(200);', '}')), []);
+check('sleep green: the block of a do loop', sleeps(source(SLEEP, 'do {', '  await sleep(10);', '} while (!done());')), []);
+check('sleep green: a nested block inside a loop body', sleeps(source(SLEEP, 'while (x) {', '  if (y) {', '    await sleep(10);', '  }', '}')), []);
+check('sleep green: an argument that is not a number literal', sleeps(source(SLEEP, 'await sleep(ms);')), []);
+check('sleep green: a method of an object, not a sleep helper', sleeps(source(SLEEP, 'await clock.sleep(300);')), []);
+check('sleep green: a sleep named only in a string or a comment', sleeps(source(SLEEP, "const text = 'await sleep(300);';", '// await sleep(300);')), []);
+
 // --- THE WORDS ---
 const offender = source(STARTED, "check('x', Date.now() - started < 5);");
 const scan = scanFiles(['a.selftest.mjs', 'b.selftest.mjs'], (file) => (file === 'a.selftest.mjs' ? offender : "check('x', true);"));
@@ -229,8 +259,13 @@ check('scan: counts the files and finds the one offender', [scan.scanned, scan.f
 check('scan: the message names file:line, the rule and both languages', [scan.findings[0]?.message.startsWith('a.selftest.mjs:2 '), scan.findings[0]?.message.includes(RULE), scan.findings[0]?.message.includes(' @es ')], [true, true, true]);
 check('words: the finding message is the one the scan prints', findingMessage('a.selftest.mjs', 2), scan.findings[0]?.message);
 check('words: the rule names what is forbidden and what is fine', [RULE.includes('elapsed wall time'), RULE.includes('deadline'), RULE.includes('@es')], [true, true, true]);
-check('words: a clean summary is bilingual', [summaryMessage(3, 0).includes('no elapsed wall time is asserted'), summaryMessage(3, 0).includes('@es')], [true, true]);
-check('words: a failing summary counts the findings', [summaryMessage(3, 2).startsWith('2 elapsed-time assertion(s) in 3'), summaryMessage(3, 2).includes('@es')], [true, true]);
+check('words: a clean summary names both rules and is bilingual', [summaryMessage(3, 0).includes('no elapsed wall time is asserted'), summaryMessage(3, 0).includes('no fixed sleep'), summaryMessage(3, 0).includes('@es')], [true, true, true]);
+check('words: a failing summary counts the findings and names both kinds', [summaryMessage(3, 2).startsWith('2 wall-time finding(s)'), summaryMessage(3, 2).includes('fixed sleep'), summaryMessage(3, 2).includes(' in 3 '), summaryMessage(3, 2).includes('@es')], [true, true, true, true]);
+
+const sleepScan = scanFiles(['c.selftest.mjs'], () => source(SLEEP, 'await sleep(300);'));
+
+check('scan: a fixed sleep is a finding with its own message, file:line and rule', [sleepScan.findings.length, sleepScan.findings[0]?.message], [1, fixedSleepMessage('c.selftest.mjs', 2)]);
+check('words: the sleep rule names the condition, the loop and the injected timer, in both languages', [SLEEP_RULE.includes('condition polled up to a deadline'), SLEEP_RULE.includes('injected timer'), SLEEP_RULE.includes(' @es ')], [true, true, true]);
 
 if (failures.length > 0) {
   console.error(`wall-time-proof selftest FAILED (${failures.length}/${passed + failures.length}):\n${failures.join('\n')}`);

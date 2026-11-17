@@ -19,6 +19,8 @@ const L = 'wall-time-proof/lexer.mjs';
 const T = 'wall-time-proof/token-walk.mjs';
 const E = 'wall-time-proof/elapsed-values.mjs';
 const C = 'wall-time-proof/check-calls.mjs';
+const S = 'wall-time-proof/fixed-sleeps.mjs';
+const SCAN = 'wall-time-proof/scan.mjs';
 
 const setText = (items) => `new Set([${items.map((item) => `'${item}'`).join(', ')}])`;
 const withoutEach = (items) => items.map((item) => [item, items.filter((other) => other !== item)]);
@@ -136,7 +138,23 @@ const MUTANTS = [
   ['an unclosed call is not scanned', C, 'to: close === -1 ? tokens.length : close', 'to: close'],
   ['the verdict of a comparison held in a name is not read', C, 'comparisons.has(tokens[at].text)', 'false'],
   ['a property named like a verdict name is it', C, " && tokens[at - 1]?.text !== '.'", ''],
-  ['the lines are not sorted', C, '.sort((a, b) => a - b)', '']
+  ['the lines are not sorted', C, '.sort((a, b) => a - b)', ''],
+  ['while is not a loop', S, "new Set(['for', 'while'])", "new Set(['for'])"],
+  ['for is not a loop', S, "new Set(['for', 'while'])", "new Set(['while'])"],
+  ['a braceless loop body is not a loop', S, "  if (before?.text === ')' && isLoopHeader(tokens, matchingOpen(tokens, at - 1))) return true;\n", ''],
+  ['a loop header is not a loop', S, "      if (token.text === '(' && isLoopHeader(tokens, index)) return true;\n", ''],
+  ['a do block is not a loop', S, "        if (opener?.text === 'do') return true;\n", ''],
+  ['a loop block is not a loop', S, "        if (opener?.text === ')' && isLoopHeader(tokens, matchingOpen(tokens, index - 1))) return true;\n", ''],
+  ['a closed inner group is read as the enclosing one', S, '        depth -= 1;\n        continue;', '        continue;'],
+  ['any function taking a number is a sleep', S, 'helpers.has(name.text)', "name.kind === 'word'"],
+  ['a variable argument is a sleep', S, "value.kind === 'number'", 'true'],
+  ['a method named like a helper is a sleep', S, "isSleep && tokens[at - 1]?.text !== '.'", 'isSleep'],
+  ['a timers/promises import is no sleep', S, "if (token.text === 'as' && TIMER_WORDS.has(", "if (false && TIMER_WORDS.has("],
+  ['a definition built on setTimeout is no sleep', S, 'if (tokens.slice(at + 1, end).some(', 'if (false && tokens.slice(at + 1, end).some('],
+  ['a function declaration is no definition', S, "tokens[at - 1]?.text === 'function' ||", 'false ||'],
+  ['the sleep lines are not sorted', S, 'return [...lines].sort((a, b) => a - b);', 'return [...lines];'],
+  ['fixed sleeps are not scanned', SCAN, '      ...fixedSleepLines(source).map((line) => ({ file, line, message: fixedSleepMessage(file, line) })),\n', ''],
+  ['a fixed sleep is reported with the elapsed-time message', SCAN, 'message: fixedSleepMessage(file, line)', 'message: findingMessage(file, line)'],
 ];
 
 const survivors = runMutants({
