@@ -94,6 +94,13 @@ async function diesWithin(pid, milliseconds) {
   return !isAlive(pid);
 }
 
+/** Waits until the process is alive, up to a deadline: a start is a condition, never a fixed sleep. @es Espera a que el proceso esté vivo, con plazo: un arranque es una condición, nunca una pausa fija. */
+async function aliveWithin(pid, milliseconds) {
+  for (const deadline = Date.now() + milliseconds; Date.now() < deadline; await sleep(100)) if (isAlive(pid)) return true;
+
+  return isAlive(pid);
+}
+
 /** A node process that spawns a grandchild sleeping 60 s, writes its pid to a file, and sleeps too. @es Un proceso node con un nieto durmiente de 60 s. */
 function treeFixture(name, breakaway, grandchildStdio = 'ignore') {
   const pidFile = path.join(scratch, `${name}.pid`);
@@ -123,8 +130,7 @@ function startSleeper() {
 // --- the oracle itself: it must see a live process and a dead one ---
 const probe = startSleeper();
 
-await sleep(300);
-check('oracle: sees a live process', isAlive(probe.pid), true);
+check('oracle: sees a live process', await aliveWithin(probe.pid, 10_000), true);
 probe.kill();
 check('oracle: sees a dead process', await diesWithin(probe.pid, 2000), true);
 
@@ -199,11 +205,20 @@ gap.pid = 4242;
 gap.stdout = new PassThrough();
 gap.stderr = new PassThrough();
 
+// The timer is fired by hand at the exact moment under test, never awaited past its deadline: a sleep proves only that
+// the real timer happened to fire in time. @es El timer se dispara a mano en el momento exacto que se prueba.
+const manualTimer = () => {
+  const timer = { fire: undefined, stopped: false };
+
+  return { timer, startTimer: (callback) => ((timer.fire = callback), timer), stopTimer: (handle) => { handle.stopped = true; } };
+};
 const killed = [];
-const pending = runWithTimeout({ command: 'x', timeoutMs: 100, spawnProcess: () => gap, kill: (pid) => killed.push(pid) });
+const gapTimer = manualTimer();
+const pending = runWithTimeout({ command: 'x', timeoutMs: 100, spawnProcess: () => gap, kill: (pid) => killed.push(pid), startTimer: gapTimer.startTimer, stopTimer: gapTimer.stopTimer });
 
 gap.emit('exit', 0, null);
-await sleep(300);
+check('exit gap: the run armed its timer', typeof gapTimer.timer.fire, 'function');
+gapTimer.timer.fire?.();
 gap.emit('close', 0, null);
 
 const afterGap = await pending;
@@ -218,25 +233,28 @@ fake.stdout = new PassThrough();
 fake.stderr = new PassThrough();
 
 const killedLater = [];
-const closing = runWithTimeout({ command: 'x', timeoutMs: 100, spawnProcess: () => fake, kill: (pid) => killedLater.push(pid) });
+const closeTimer = manualTimer();
+const closing = runWithTimeout({ command: 'x', timeoutMs: 100, spawnProcess: () => fake, kill: (pid) => killedLater.push(pid), startTimer: closeTimer.startTimer, stopTimer: closeTimer.stopTimer });
 
 fake.stdout.write(Buffer.from([0xc3]));
 fake.stdout.write(Buffer.from([0xb1]));
 fake.stderr.write('warn');
-await sleep(20);
+// The written chunks reach their listeners on a later turn of the event loop; one turn is what the close needs.
+// @es Los trozos escritos llegan a sus oyentes en una vuelta posterior del bucle; una vuelta es lo que necesita el cierre.
+await new Promise((resolve) => setImmediate(resolve));
 fake.emit('close', null, 'SIGKILL');
 
 const closed = await closing;
 
-await sleep(300);
 check('close: a multi-byte character split across chunks is decoded whole', [closed.stdout, closed.stderr], ['ñ', 'warn']);
 check('close: the status and the signal are both reported', [closed.status, closed.signal], [null, 'SIGKILL']);
+check('close: the timer is stopped when the process closes, even without an exit event', closeTimer.timer.stopped, true);
 check('close: a closed process is never killed by its timer, even without an exit event', killedLater, []);
 
 // --- killTree: the already-dead and the never-existing ---
 const dead = startSleeper();
 
-await sleep(300);
+check('already dead: the sleeper was alive before its kill', await aliveWithin(dead.pid, 10_000), true);
 dead.kill();
 await diesWithin(dead.pid, 2000);
 
@@ -248,7 +266,7 @@ check('never existed: reported as already dead', killTree(2_147_483_000).outcome
 // --- killTree: a live process is killed and reported ---
 const live = startSleeper();
 
-await sleep(300);
+check('live: the sleeper is alive before the kill', await aliveWithin(live.pid, 10_000), true);
 
 const liveReport = killTree(live.pid);
 
@@ -272,7 +290,7 @@ check('refused (own pid, real default): a process asked to kill itself survives 
 
 const byDefaultSignal = startSleeper();
 
-await sleep(300);
+check('posix path: the sleeper is alive before the kill', await aliveWithin(byDefaultSignal.pid, 10_000), true);
 check('posix path with the real signal sender kills a live process', [killTree(byDefaultSignal.pid, { platform: 'linux' }).outcome, await diesWithin(byDefaultSignal.pid, 2000)], ['killed', true]);
 check('accepted (pid 2): the smallest killable id passes the refusal', killTree(2, { ...recorders, ownPid: 99, platform: 'linux' }).outcome, 'killed');
 
@@ -319,7 +337,7 @@ check('posix: another error is a failure with its message', [killTree(500, posix
 const printed = [];
 const surviving = startSleeper();
 
-await sleep(300);
+check('cli: the sleeper is alive before the command line runs', await aliveWithin(surviving.pid, 10_000), true);
 
 const cli = (argv, deps) => {
   const lines = [];

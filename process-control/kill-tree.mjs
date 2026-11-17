@@ -100,10 +100,13 @@ export function killTree(pid, { platform = process.platform, taskkill = runTaskk
  * Runs a command, collecting its output, and kills its whole tree when `timeoutMs` passes. Never rejects: a
  * command that cannot start comes back with `error`. A timer that fires after the process already exited
  * (the gap before `close`) kills nothing, because that pid may belong to someone else by then.
+ * The timer is a port (`startTimer`, `stopTimer`), so a proof fires it at the exact moment it means to prove instead of
+ * sleeping past `timeoutMs` and hoping it fired.
  * @returns `{ pid, status, signal, stdout, stderr, timedOut, kill, error }`; `kill` is the `killTree` report.
- * @es Corre un comando y mata todo su árbol al vencer `timeoutMs`. Nunca rechaza. Un timer posterior a la salida no mata nada.
+ * @es Corre un comando y mata todo su árbol al vencer `timeoutMs`. Nunca rechaza. Un timer posterior a la salida no mata
+ * nada. El timer es un puerto, así una prueba lo dispara en el momento exacto que quiere probar en vez de dormir.
  */
-export function runWithTimeout({ command, args = [], timeoutMs, cwd, env, platform = process.platform, spawnProcess = spawn, kill = killTree }) {
+export function runWithTimeout({ command, args = [], timeoutMs, cwd, env, platform = process.platform, spawnProcess = spawn, kill = killTree, startTimer = setTimeout, stopTimer = clearTimeout }) {
   return new Promise((resolve) => {
     const child = spawnProcess(command, args, { cwd, env, detached: platform !== 'win32', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const result = { pid: child.pid, status: null, signal: null, stdout: '', stderr: '', timedOut: false, kill: undefined, error: undefined };
@@ -112,7 +115,7 @@ export function runWithTimeout({ command, args = [], timeoutMs, cwd, env, platfo
     child.stdout?.setEncoding('utf8').on('data', (chunk) => (result.stdout += chunk));
     child.stderr?.setEncoding('utf8').on('data', (chunk) => (result.stderr += chunk));
 
-    const timer = setTimeout(() => {
+    const timer = startTimer(() => {
       if (exited) return;
 
       result.timedOut = true;
@@ -121,7 +124,7 @@ export function runWithTimeout({ command, args = [], timeoutMs, cwd, env, platfo
       child.stderr?.destroy();
     }, timeoutMs);
     const finish = () => {
-      clearTimeout(timer);
+      stopTimer(timer);
       resolve(result);
     };
 
