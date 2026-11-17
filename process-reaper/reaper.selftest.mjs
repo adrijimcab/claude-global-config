@@ -19,7 +19,7 @@
  * empieza igual) sobreviven. No mata nada más: toda línea que puede coincidir lleva un directorio creado aquí.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -253,12 +253,20 @@ const tildeTarget = linkedWorktree(TILDE);
 const tildeSibling = linkedWorktree(`${TILDE}-two`);
 const shortTarget = linkedWorktree('short-wt');
 const shortReverse = linkedWorktree('short-reverse');
-// The same fixture seen through os.tmpdir(), which is an 8.3 short name on this machine (ADRIAN~1.JIM) while the
-// fixture root is its real path. @es La misma fixture vista por os.tmpdir(), que aquí es un nombre corto 8.3.
+// The same fixture spelled with its 8.3 short names, asked of Windows itself (`%~s`), never derived from os.tmpdir():
+// under a detached chain the inherited TEMP is already the long form, and a case built on it compared a long path with
+// a long path and proved nothing. A spelling equal to the long one is a refused precondition, not a pass.
+// @es La misma fixture escrita con sus nombres cortos 8.3, pedidos al propio Windows (`%~s`), nunca derivados de
+// os.tmpdir(): bajo una cadena desacoplada el TEMP heredado ya es la forma larga, y un caso armado sobre él comparaba una
+// ruta larga con otra larga sin probar nada. Una escritura igual a la larga es una precondición rechazada, no un éxito.
+const shortRoot = spawnSync('cmd.exe', ['/d', '/c', `for %I in ("${fixtureRoot}") do @echo %~sI`], { encoding: 'utf8', windowsHide: true, windowsVerbatimArguments: true }).stdout.trim();
+if (shortRoot === '' || shortRoot.toLowerCase() === fixtureRoot.toLowerCase() || !shortRoot.includes('~')) {
+  throw new Error(`precondition: the fixture root has no distinct 8.3 short spelling (${fixtureRoot} -> ${shortRoot}); the 8.3 cases cannot be measured here. @es precondición: la raíz de la fixture no tiene una escritura corta 8.3 distinta; los casos 8.3 no se pueden medir aquí.`);
+}
 const junctionTarget = linkedWorktree('junction-wt');
 const junction = path.join(fixtureRoot, 'via-junction');
 symlinkSync(junctionTarget, junction, 'junction');
-const asTmpdirSpells =(directory) => path.join(os.tmpdir(), path.relative(path.dirname(fixtureRoot), directory));
+const asTmpdirSpells = (directory) => path.join(shortRoot, path.relative(fixtureRoot, directory));
 const spawned = [];
 const launch = (command, args, env = process.env) => {
   const child = spawn(command, args, { stdio: 'ignore', windowsHide: true, env });
