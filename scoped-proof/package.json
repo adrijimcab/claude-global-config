@@ -1,0 +1,8 @@
+{
+  "name": "scoped-proof",
+  "private": true,
+  "description": "The TypeScript the scoped-proof selftest resolves a fixture project with; real runs load the project's own.",
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

@@ -281,6 +281,12 @@
 !/wall-time-proof/
 !/wall-time-proof/*.mjs
 !/wall-time-proof/README.md
+# scoped-proof: lists every spec a change reaches through the import graph. Code, its manifest and lockfile; node_modules stays out.
+# @es scoped-proof: lista cada spec que alcanza un cambio por el grafo de imports. Código, su manifiesto y su lockfile; node_modules queda fuera.
+!/scoped-proof/
+!/scoped-proof/*.mjs
+!/scoped-proof/package.json
+!/scoped-proof/package-lock.json
 # session-processes: the SessionEnd sweep that kills the processes a session left alive. Code, the PowerShell reader, sidecars and its README.
 # @es session-processes: el barrido de SessionEnd que mata los procesos que una sesión dejó vivos. Código, el lector de PowerShell, sidecars y su README.
 !/session-processes/
