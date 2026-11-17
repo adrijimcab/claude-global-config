@@ -69,17 +69,20 @@ try {
   write('src/cycle/a.ts', "import { b } from './b';\nexport const a = b;\n");
   write('src/cycle/b.ts', "import { a } from './a';\nexport const b = a;\n");
   write('src/cycle/a.spec.ts', "import { a } from './a';\nvoid a;\n");
+  write('src/broken.ts', "import { gone } from './missing';\nexport const broken = gone;\n");
+  write('src/globals.d.ts', "import '@core/svc';\nexport declare const globals: number;\n");
+  write('src/g.spec.ts', "import { globals } from './globals';\nvoid globals;\n");
   write('node_modules/dep/index.spec.ts', "import { svc } from '../../src/core/svc';\nvoid svc;\n");
 
   const specs = (changed) => specsFor({ root, tsconfig: 'tsconfig.json', changed, typescript });
 
-  check('alias, transitive and dynamic importers of a changed service are listed; unrelated and node_modules are not', specs(['src/core/svc.ts']), ['src/app.spec.ts', 'src/feature/comp.spec.ts', 'src/routes.spec.ts']);
+  check('alias, transitive, dynamic and declaration-file importers of a changed service are listed; unrelated and node_modules are not', specs(['src/core/svc.ts']), ['src/app.spec.ts', 'src/feature/comp.spec.ts', 'src/g.spec.ts', 'src/routes.spec.ts']);
   check('a changed spec lists itself', specs(['src/other.spec.ts']), ['src/other.spec.ts']);
   check('a change no spec reaches gives an empty list', specs(['src/lonely.ts']), []);
-  check('an absolute changed path gives the same list', specs([path.join(root, 'src', 'core', 'svc.ts')]), ['src/app.spec.ts', 'src/feature/comp.spec.ts', 'src/routes.spec.ts']);
+  check('an absolute changed path gives the same list', specs([path.join(root, 'src', 'core', 'svc.ts')]), ['src/app.spec.ts', 'src/feature/comp.spec.ts', 'src/g.spec.ts', 'src/routes.spec.ts']);
   check('an import cycle ends and its spec is listed', specs(['src/cycle/b.ts']), ['src/cycle/a.spec.ts']);
 
-  if (process.platform === 'win32') check('a changed path spelled in another case gives the same list', specs(['SRC/CORE/SVC.TS']), ['src/app.spec.ts', 'src/feature/comp.spec.ts', 'src/routes.spec.ts']);
+  if (process.platform === 'win32') check('a changed path spelled in another case gives the same list', specs(['SRC/CORE/SVC.TS']), ['src/app.spec.ts', 'src/feature/comp.spec.ts', 'src/g.spec.ts', 'src/routes.spec.ts']);
 
   let outside;
 
@@ -95,11 +98,27 @@ try {
   check('options: no changed file is refused', optionsOf(['--root', 'r', '--tsconfig', 't.json', '--']), undefined);
   check('options: a missing separator is refused', optionsOf(['--root', 'r', '--tsconfig', 't.json', 'a.ts']), undefined);
   check('options: flags out of order are refused', optionsOf(['--tsconfig', 't.json', '--root', 'r', '--', 'a.ts']), undefined);
+  check('options: an extra word before the separator is refused', optionsOf(['--root', 'r', '--tsconfig', 't.json', 'x', '--', 'a.ts']), undefined);
 
-  const cli = (...args) => spawnSync(process.execPath, [path.join(HERE, 'cli.mjs'), ...args], { encoding: 'utf8', windowsHide: true }).status;
+  const cli = (cliRoot, ...args) => {
+    const run = spawnSync(process.execPath, [path.join(HERE, 'cli.mjs'), '--root', cliRoot, ...args], { encoding: 'utf8', windowsHide: true });
 
-  check('cli: bad arguments exit 2', cli('--root', root), 2);
-  check('cli: a project with no typescript installed exits 2, never an empty green', cli('--root', root, '--tsconfig', 'tsconfig.json', '--', 'src/core/svc.ts'), 2);
+    return { status: run.status, why: run.stderr.includes('no typescript is installed') ? 'no typescript' : run.stderr.includes('exports no compiler API') ? 'no compiler API' : run.stderr.includes('Usage') ? 'usage' : run.stderr };
+  };
+
+  check('cli: bad arguments exit 2 with the usage', cli(root), { status: 2, why: 'usage' });
+  check('cli: a project with no typescript installed exits 2 naming it, never an empty green', cli(root, '--tsconfig', 'tsconfig.json', '--', 'src/core/svc.ts'), { status: 2, why: 'no typescript' });
+
+  // The shape TypeScript 7 has (measured 2026-11-18 on the global 7.0.2: a version and no compiler API).
+  // @es La forma que tiene TypeScript 7 (medida en el 7.0.2 global: una versión y ninguna API de compilador).
+  const native = path.join(root, 'native');
+
+  write('native/package.json', '{ "name": "native", "private": true }\n');
+  write('native/tsconfig.json', '{}\n');
+  write('native/a.ts', 'export const a = 1;\n');
+  write('native/node_modules/typescript/package.json', '{ "name": "typescript", "version": "7.0.2", "main": "index.js" }\n');
+  write('native/node_modules/typescript/index.js', "module.exports = { version: '7.0.2' };\n");
+  check('cli: a typescript without the compiler API exits 2 naming it, never an empty green', cli(native, '--tsconfig', 'tsconfig.json', '--', 'a.ts'), { status: 2, why: 'no compiler API' });
 
   const keyOf = (file) => file.toLowerCase();
   const pure = (changed) => relatedSpecs({ imports: new Map([['a.ts', ['b.ts']], ['b.ts', []], ['a.spec.ts', ['a.ts']], ['B.spec.ts', ['b.ts']]]), changed, isSpec: (file) => file.endsWith('.spec.ts'), keyOf });

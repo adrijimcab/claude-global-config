@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * The decisions of the scoped-spec helper (the backward walk, the project-source filter, the folders it skips, the
+ * The decisions of the scoped-spec helper (the backward walk, the files it reads, the folders it skips, the
  * compiler-API refusal, the argument shape, the outside-root refusal), each broken once, that `selftest.mjs` must
  * catch. A survivor is a missing assertion, never a mutant to soften.
- * @es Las decisiones del helper de specs acotados (el recorrido hacia atrás, el filtro de fuente del proyecto, las
+ * @es Las decisiones del helper de specs acotados (el recorrido hacia atrás, los ficheros que lee, las
  * carpetas que salta, el rechazo sin API de compilador, la forma de los argumentos, el rechazo fuera de la raíz), rotas
  * una a una, que `selftest.mjs` debe cazar. Un superviviente es una aserción que falta, nunca un mutante que ablandar.
  */
@@ -25,10 +25,8 @@ const MUTANTS = [
   ['every reached file is a spec', R, ' && isSpec(file)', ''],
   ['the list is not sorted', R, 'return [...new Set(specs)].sort();', 'return [...new Set(specs)];'],
   ['node_modules is walked', G, "const SKIPPED = new Set(['node_modules', ", 'const SKIPPED = new Set(['],
-  ['declaration files are read as source', G, " && !entry.name.endsWith('.d.ts')", ''],
-  ['an import into a dependency folder counts', G, " && !relative.split(path.sep).some((part) => SKIPPED.has(part))", ''],
-  ['an import outside the root counts', G, "relative !== '' && !relative.startsWith('..') && ", ''],
-  ['dynamic imports are not read', G, 'typescript.preProcessFile(readFileSync(file, \'utf8\'), true, true)', 'typescript.preProcessFile(readFileSync(file, \'utf8\'), true, false)'],
+  ['declaration files are not read', G, "entry.isFile() && entry.name.endsWith('.ts')", "entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')"],
+  ['imports are not read', G, "typescript.preProcessFile(readFileSync(file, 'utf8'), true)", "typescript.preProcessFile(readFileSync(file, 'utf8'), false)"],
   ['a typescript without the compiler API is used', G, "  if (typeof typescript.resolveModuleName !== 'function' || typescript.sys === undefined) {", '  if (false) {'],
   ['a project with no typescript gets an empty graph', G, "    throw new Error(`no typescript is installed for ${root}", "    return { sys: {}, resolveModuleName: () => ({}) };\n    throw new Error(`no typescript is installed for ${root}"],
   ['the separator may sit anywhere', C, 'if (separator !== 4 || ', 'if (separator < 0 || '],

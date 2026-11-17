@@ -3,20 +3,21 @@
  * project root (dependency, build and cache folders excluded) mapped to the project files it imports. Resolution is the
  * compiler's (`ts.resolveModuleName` with the options of the project's tsconfig), so path aliases such as `@core/state`
  * and `b100-am-ui/testing` resolve exactly as the build resolves them; nothing here re-implements module resolution.
- * Dynamic `import('...')` counts, because routes load their pages that way.
+ * Dynamic `import('...')` counts, because routes load their pages that way. Declaration files are project source too.
  *
  *   loadTypeScript(root) -> the `typescript` module the project installs, or throws naming the root
  *   importGraph({ root, tsconfig, typescript }) -> Map<file, file[]>
  *
- * An import that resolves outside the root, or into a dependency folder, is left out: a spec never needs to run
- * because a package it uses changed.
+ * An edge may point outside the project (a package): nothing walks from there, because the files a change names are
+ * project files (`cli.mjs` refuses one outside the root) and the graph keys are only the project's own files.
  *
  * @es El grafo de imports de un proyecto TypeScript, resuelto por el TypeScript del propio proyecto: cada fichero `.ts`
  * bajo la raíz (sin carpetas de dependencias, build ni caché) con los ficheros del proyecto que importa. La resolución
  * es la del compilador (`ts.resolveModuleName` con las opciones del tsconfig del proyecto), así que los alias como
  * `@core/state` y `b100-am-ui/testing` resuelven igual que en el build; aquí no se reimplementa la resolución. Los
- * `import('...')` dinámicos cuentan, porque las rutas cargan así sus páginas. Un import que resuelve fuera de la raíz o
- * dentro de una carpeta de dependencias se deja fuera: un spec nunca necesita correr porque cambió un paquete que usa.
+ * `import('...')` dinámicos cuentan, porque las rutas cargan así sus páginas, y los ficheros de declaración también son
+ * fuente. Una arista puede apuntar fuera del proyecto (un paquete): nada recorre desde ahí, porque los ficheros que nombra
+ * un cambio son del proyecto (`cli.mjs` rechaza uno fuera de la raíz) y las claves del grafo son solo los suyos.
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -55,7 +56,7 @@ function sourceFiles(directory) {
 
     if (entry.isDirectory()) {
       if (!SKIPPED.has(entry.name)) found.push(...sourceFiles(full));
-    } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
       found.push(full);
     }
   }
@@ -72,13 +73,6 @@ function compilerOptionsOf(typescript, tsconfig) {
   return typescript.parseJsonConfigFileContent(read.config, typescript.sys, path.dirname(tsconfig), undefined, tsconfig).options;
 }
 
-/** Whether a resolved file is project source under `root`. @es Si un fichero resuelto es fuente del proyecto bajo `root`. */
-function isProjectSource(root, file) {
-  const relative = path.relative(root, file);
-
-  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative) && !relative.split(path.sep).some((part) => SKIPPED.has(part));
-}
-
 /**
  * @param {{ root: string, tsconfig: string, typescript: any }} input
  * @returns {Map<string, string[]>}
@@ -88,13 +82,15 @@ export function importGraph({ root, tsconfig, typescript }) {
   const graph = new Map();
 
   for (const file of sourceFiles(root)) {
-    const { importedFiles } = typescript.preProcessFile(readFileSync(file, 'utf8'), true, true);
+    // `readImportFiles` lists static imports, re-exports and dynamic `import()` alike (the routes case of the selftest).
+    // @es `readImportFiles` lista imports estáticos, re-exports e `import()` dinámicos por igual.
+    const { importedFiles } = typescript.preProcessFile(readFileSync(file, 'utf8'), true);
     const targets = [];
 
     for (const { fileName } of importedFiles) {
       const resolved = typescript.resolveModuleName(fileName, file, options, typescript.sys).resolvedModule?.resolvedFileName;
 
-      if (resolved !== undefined && isProjectSource(root, path.resolve(resolved))) targets.push(path.resolve(resolved));
+      if (resolved !== undefined) targets.push(path.resolve(resolved));
     }
 
     graph.set(file, targets);
