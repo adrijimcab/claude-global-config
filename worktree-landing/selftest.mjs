@@ -36,6 +36,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isolateState, stateDir } from '../hook-state/locations.mjs';
+import { listProcesses } from '../process-control/process-port.mjs';
 import { requireIntegrationBranch } from './integration-branch.mjs';
 import { land } from './land.mjs';
 import { mayPublishTo } from './remote-policy.mjs';
@@ -818,6 +819,17 @@ try {
     }
   };
   const settle = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+  // Every wait is a condition polled up to a deadline: the holders listed where the reaper looks, a reaped one gone.
+  // @es Toda espera es una condición sondeada hasta un plazo: los holders listados donde mira el reaper, uno segado ya muerto.
+  const until = async (ready, deadlineMs = 20_000) => {
+    const deadline = Date.now() + deadlineMs;
+    while (!ready() && Date.now() < deadline) await settle(100);
+    return ready();
+  };
+  const listed = (...children) => {
+    const rows = listProcesses();
+    return children.every((child) => rows.some((row) => row.pid === child.pid));
+  };
   try {
     const reaped = layout({ work: { 'r.txt': 'r\n' } });
     const unreaped = layout({ work: { 'r.txt': 'r\n' } });
@@ -825,21 +837,20 @@ try {
     const onReaped = holderNaming(reaped.worktree);
     const onUnreaped = holderNaming(unreaped.worktree);
     const onChecked = holderNaming(checkedOnly.worktree);
-    await settle(2000);
-    check(isRunning(onReaped) && isRunning(onUnreaped) && isRunning(onChecked), 'reap: the processes naming the worktrees are running before any landing');
+    check(await until(() => listed(onReaped, onUnreaped, onChecked)) && isRunning(onReaped) && isRunning(onUnreaped) && isRunning(onChecked), 'reap: the processes naming the worktrees are running and listed before any landing');
     const checkedReap = cli(...argsOf(checkedOnly), '--check', '--reap');
     check(checkedReap.status === 0 && isRunning(onChecked), `reap: --check never reaps: ${checkedReap.status} ${checkedReap.stderr}`);
     const plain = cli(...argsOf(unreaped));
     check(plain.status === 0 && isRunning(onUnreaped), `reap: a landing without --reap leaves the processes alone: ${plain.status} ${plain.stderr}`);
     const withReap = cli(...argsOf(reaped), '--reap');
-    await settle(1500);
+    await until(() => !isRunning(onReaped));
     check(withReap.status === 0 && withReap.stdout.startsWith('LANDED '), `reap: the landing with --reap lands: ${withReap.status} ${withReap.stdout}${withReap.stderr}`);
     check(!isRunning(onReaped), 'reap: a process naming the landed worktree is dead after the landing');
     check(isRunning(onUnreaped) && isRunning(onChecked), 'reap: the processes of other worktrees survive');
     check(withReap.stdout.includes('Reaped ') && withReap.stdout.includes('@es Segados '), `reap: the report says what was reaped in both languages: ${withReap.stdout}`);
     const refusedReap = layout({ work: { verdict: '1\n' } });
     const onRefused = holderNaming(refusedReap.worktree);
-    await settle(2000);
+    check(await until(() => listed(onRefused)), 'reap: the process naming the refused worktree is listed before the landing');
     const redReap = cli(...argsOf(refusedReap), '--reap');
     check(redReap.status === 1 && isRunning(onRefused), `reap: a refused landing reaps nothing: ${redReap.status} ${redReap.stderr}`);
     const injected = [];

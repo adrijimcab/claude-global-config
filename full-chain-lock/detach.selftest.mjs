@@ -484,7 +484,9 @@ async function killedCaller(adapter, exitCode) {
 
   if (detachedPid !== undefined) spawned.add(detachedPid);
 
-  await sleep(500);
+  // The caller is killed once the detached chain reads as running, a condition, never after a fixed sleep.
+  // @es Al llamador se lo mata cuando la cadena desacoplada figura como corriendo, una condición, nunca tras una pausa fija.
+  await until(() => runStatus(dir).state === 'running', 12_000);
   killTree(caller.pid);
 
   const verdict = await until(() => existsSync(path.join(dir, RUN_FILES.verdict)), 12_000);

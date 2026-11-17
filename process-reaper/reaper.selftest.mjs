@@ -226,10 +226,18 @@ const realList = () => listProcesses(privateEnv);
  * los checks que leen la lista quedan en rojo.
  */
 async function listOnceGone(gone, deadlineMs = 20000) {
+  return listOnce((list) => !gone.some((pid) => list.some((entry) => entry.pid === pid)), deadlineMs);
+}
+
+/**
+ * The process list once `ready(list)` holds, or at the deadline: a start or a death is waited for as a condition.
+ * @es La lista de procesos cuando `ready(list)` se cumple, o al vencer el plazo: un arranque o una muerte se esperan como condición.
+ */
+async function listOnce(ready, deadlineMs = 20000) {
   const deadline = Date.now() + deadlineMs;
   for (;;) {
     const list = realList();
-    if (!gone.some((pid) => list.some((entry) => entry.pid === pid)) || Date.now() >= deadline) return list;
+    if (ready(list) || Date.now() >= deadline) return list;
     await wait(200);
   }
 }
@@ -272,8 +280,10 @@ try {
 
   const viaLink = launch(process.execPath, ['-e', 'setInterval(() => {}, 1000)', junctionTarget]);
 
-  await wait(2500);
-  const before = realList();
+  // Everything the preconditions below read must exist: every launched process, the loop's sleeping child and the
+  // holder's grandchild. @es Todo lo que leen las precondiciones debe existir: cada proceso lanzado, el hijo del bucle y el nieto del holder.
+  const launched = [loop, holder, other, prefix, tilde, tildeOther, shortNamed, shortGiven, viaLink];
+  const before = await listOnce((list) => launched.every((child) => list.some((entry) => entry.pid === child.pid)) && [loop, holder].every((parent) => list.some((entry) => entry.parentPid === parent.pid)));
   const childrenOf = (parent) => before.filter((entry) => entry.parentPid === parent.pid).map((entry) => entry.pid);
   const sleepers = childrenOf(loop);
   const grandchildren = childrenOf(holder);
@@ -340,7 +350,9 @@ try {
       /* already gone @es ya muerto */
     }
   }
-  await wait(300);
+  // The folders are removed once the processes that held them are gone, a condition, never a fixed sleep.
+  // @es Las carpetas se borran cuando ya no están los procesos que las tenían, una condición, nunca una pausa fija.
+  await listOnceGone(spawned.map((child) => child.pid));
   rmSync(junction, { force: true }); // the link itself, never what it points at @es el enlace mismo, nunca lo que señala
   rmSync(fixtureRoot, { recursive: true, force: true });
 }
