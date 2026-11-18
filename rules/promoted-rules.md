@@ -55,6 +55,9 @@ Las claves de «On-demand», al final, conservan sus frases en el fichero de `~/
 - **`engram-writes-refused-after-session-resume`**
   RULE: after any session resume, probe one engram write before relying on engram; when it is refused ("host session … already ended"), write through the engram CLI instead (the route in rules/10-contracts.md), read it back, and never keep the record in a file (owner order 2026-10-18).
 
+- **`changed-file-own-spec-left-out-of-scoped-run`** — mechanism `scoped-proof/cli.mjs`.
+  RULE: the scoped proof of a change runs every spec that reaches a changed file through the import graph, listed by `node ~/.claude/scoped-proof/cli.mjs --root <project> --tsconfig <tsconfig> -- <changed files>` (the project's own TypeScript resolves aliases, transitive and dynamic imports), never only the specs of the feature folder; every brief that asks for a scoped run names that command.
+
 ## On-demand promoted rules — binding, READ IN FULL when the situation applies
 - Before writing a delegation brief, launching or messaging a worker, quoting a path or mechanism from a document, blaming a tool, or acting on a worktree, process or branch that is not yours: `~/.claude/lessons/on-demand/promoted-delegation.md`.
 - Before integrating, landing, merging, fast-forwarding or pushing a branch, resolving a collision, or when the integration branch changes: `~/.claude/lessons/on-demand/promoted-landing.md`.

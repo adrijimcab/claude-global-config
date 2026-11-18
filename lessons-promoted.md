@@ -41,3 +41,4 @@ area, in its `promoted-<area>.md`), which it loads. Machine state: the trailing 
 - [promoted] 2026-11-10 — worker-work-left-uncommitted-across-a-stop: mechanism C:/Users/adrian.jimenez/.claude/commit-cadence-guard/guard.mjs <!--fc:worker-work-left-uncommitted-across-a-stop#4-->
 - [promoted] 2026-11-10 — user-facing-prose-leaked-into-a-worker-brief: mechanism C:/Users/adrian.jimenez/.claude/brief-audience/guard.mjs <!--fc:user-facing-prose-leaked-into-a-worker-brief#1-->
 - [promoted] 2026-11-11 — wall-time-asserted-as-concurrency-proof: mechanism C:/Users/adrian.jimenez/.claude/wall-time-proof/tree.selftest.mjs <!--fc:wall-time-asserted-as-concurrency-proof#2-->
+- [promoted] 2026-11-18 — changed-file-own-spec-left-out-of-scoped-run: mechanism C:/Users/adrian.jimenez/.claude/scoped-proof/cli.mjs <!--fc:changed-file-own-spec-left-out-of-scoped-run#2-->
