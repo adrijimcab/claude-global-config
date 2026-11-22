@@ -50,17 +50,10 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stateDir } from '../hook-state/locations.mjs';
 import { commitsMadeBySession } from './own-commits.mjs';
+import { savedIn } from './save-calls.mjs';
 
 /** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
 const stateDirectory = () => stateDir('engram-persistence');
-
-/**
- * The literal that marks a save in the transcript. A tool name, not a phrase: prose about saving is
- * not a save, and this project has been burned by exactly that distinction elsewhere.
- * @es El literal que marca un guardado: un nombre de herramienta, no una frase. Hablar de guardar no
- * es guardar.
- */
-const SAVE_MARKERS = ['mem_save', 'mem_session_summary'];
 
 const statePathFor = (sessionId) => join(stateDirectory(), `${sessionId || 'unknown'}.json`);
 
@@ -138,14 +131,17 @@ function reason(subjects) {
     'there ALWAYS. Those commit subjects are the content this save owes.',
     '',
     'Call mem_save (or mem_session_summary) with what actually happened — the decision and its reason,',
-    'the measurement and the command that produced it, what is now open. Then stop again.',
+    'the measurement and the command that produced it, what is now open. Then stop again. When engram',
+    'refuses the MCP write after a resume, `engram save` through the CLI counts the same; a refused call',
+    'or a sentence that names the tool does not.',
     '',
     'This checks whether HEAD MOVED, not whether the turn felt important, because a commit is the',
     'project\'s own definition of work that landed. A save made BEFORE these commits does not cover',
     'them: the check reads only the transcript written since the last save, so order counts. Only commits',
     'made by this session\'s own shell calls count; commits other sessions made on the branch do not.',
     '',
-    '@es Llama a mem_save (o mem_session_summary) con lo que realmente pasó: la decisión y su motivo, la',
+    '@es Llama a mem_save (o mem_session_summary) con lo que realmente pasó (si engram rechaza el MCP tras',
+    '@es reanudar, `engram save` por CLI cuenta igual; una llamada rechazada o una frase que nombra la herramienta no): la decisión y su motivo, la',
     '@es medición y el comando que la produjo, qué queda abierto. Luego termina de nuevo. Se comprueba si',
     '@es HEAD se movió por commits de ESTA sesión (los de otras sesiones en la misma rama no cuentan), y un',
     '@es guardado ANTERIOR a esos commits no los cubre: importa el orden.'
@@ -197,7 +193,7 @@ function decide(payload) {
     return;
   }
 
-  if (SAVE_MARKERS.some((marker) => tail.includes(marker))) {
+  if (savedIn(tail)) {
     writeState(sessionId, { head, offset: size ?? 0 });
     return;
   }

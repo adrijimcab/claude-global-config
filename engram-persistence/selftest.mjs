@@ -77,6 +77,18 @@ function shellCall(command, startMs, endMs, { tool = 'Bash', failed = false } = 
   return `${JSON.stringify(use)}\n${JSON.stringify(result)}\n`;
 }
 
+/**
+ * Any tool call as its two transcript records, with an input and a result that may be an error (a refused write).
+ * @es Cualquier llamada de herramienta como sus dos registros del transcript, con un input y un resultado que puede ser error.
+ */
+function toolCall(name, input, { failed = false } = {}) {
+  const id = `toolu_${(callCounter += 1)}`;
+  const use = { message: { content: [{ type: 'tool_use', id, name, input }] } };
+  const result = { message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: failed }] } };
+
+  return `${JSON.stringify(use)}\n${JSON.stringify(result)}\n`;
+}
+
 /** A commit whose committer date is `atMs`, made without any transcript evidence. @es Un commit con fecha de committer `atMs`, sin evidencia en el transcript. */
 function commitAt(dir, subject, atMs) {
   writeFileSync(join(dir, `${subject}.txt`), subject, 'utf8');
@@ -127,7 +139,7 @@ const stateOf = (session) => {
   }
 };
 
-const SAVED = 'start\ncalled mem_save with the decision\n';
+const SAVED = `start\n${toolCall('mcp__engram__mem_save', { title: 'decision' })}`;
 
 const results = [];
 const check = (label, expected, actual, extra = '') => {
@@ -200,7 +212,7 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'landed');
-  writeFileSync(transcript, `start\n${callsFor(dir)}called mem_save with the decision\n`, 'utf8');
+  writeFileSync(transcript, `start\n${callsFor(dir)}${toolCall('mcp__engram__mem_save', { title: 'decision' })}`, 'utf8');
 
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
@@ -213,13 +225,13 @@ mkdirSync(STATE_DIR, { recursive: true });
   const dir = makeRepo();
   const transcript = join(dir, 't.jsonl');
 
-  writeFileSync(transcript, 'start\ncalled mem_save earlier, before any of this\n', 'utf8');
+  writeFileSync(transcript, `start\n${toolCall('mcp__engram__mem_save', { title: 'earlier' })}`, 'utf8');
 
   const session = `st-order-${Date.now()}`;
 
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'after-the-save');
-  writeFileSync(transcript, `start\ncalled mem_save earlier, before any of this\nplain work now\n${callsFor(dir)}`, 'utf8');
+  writeFileSync(transcript, `start\n${toolCall('mcp__engram__mem_save', { title: 'earlier' })}plain work now\n${callsFor(dir)}`, 'utf8');
 
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
@@ -260,7 +272,7 @@ mkdirSync(STATE_DIR, { recursive: true });
 
   run(dir, { session_id: session, transcript_path: transcript });
   advance(dir, 'landed-after-accents');
-  writeFileSync(transcript, `${multiByteHistory}${callsFor(dir)}called mem_save with the decision\n`, 'utf8');
+  writeFileSync(transcript, `${multiByteHistory}${callsFor(dir)}${toolCall('mcp__engram__mem_save', { title: 'decision' })}`, 'utf8');
 
   const r = run(dir, { session_id: session, transcript_path: transcript });
 
@@ -337,8 +349,29 @@ function baselined(name, transcriptText = 'start\n') {
   const { dir, transcript, session } = baselined('summary');
 
   advance(dir, 'landed');
-  writeFileSync(transcript, `start\n${callsFor(dir)}called mem_session_summary to close out\n`, 'utf8');
+  writeFileSync(transcript, `start\n${callsFor(dir)}${toolCall('mcp__engram__mem_session_summary', { content: 'close' })}`, 'utf8');
   check('a session summary is a save too', 'allow', verdict(run(dir, { session_id: session, transcript_path: transcript })));
+}
+
+// The CLI route a resumed session must take (promoted rule engram-writes-refused-after-session-resume), and what
+// must not pass for a save: prose naming the tool, a refused MCP write, a failed CLI call, another engram command.
+// @es La vía CLI que debe usar una sesión reanudada, y lo que no puede pasar por guardado: prosa que nombra la
+// herramienta, una escritura MCP rechazada, una llamada CLI fallida, otro comando de engram.
+for (const [label, expected, records] of [
+  ['an engram save through the CLI (Bash) is a save', 'allow', () => toolCall('Bash', { command: 'engram save --type decision --project p --topic k -- title body' })],
+  ['an engram.exe save through PowerShell is a save', 'allow', () => toolCall('PowerShell', { command: '& "C:\\bin\\engram.exe" save --type decision -- title body' })],
+  ['a plugin-named MCP update is a save', 'allow', () => toolCall('mcp__plugin_engram_engram__mem_update', { id: 1 })],
+  ['prose that names mem_save and engram save is not a save', 'block', () => `${JSON.stringify({ message: { content: [{ type: 'text', text: 'I will call mem_save, or engram save through the CLI.' }] } })}\n`],
+  ['an MCP save the engram hook refused is not a save', 'block', () => toolCall('mcp__engram__mem_save', { title: 'x' }, { failed: true })],
+  ['a failed CLI save is not a save', 'block', () => toolCall('Bash', { command: 'engram save --type decision -- t b' }, { failed: true })],
+  ['another engram command is not a save', 'block', () => toolCall('Bash', { command: 'engram search decision' })],
+  ['a save call with no result yet is not a save', 'block', () => toolCall('Bash', { command: 'engram save -- t b' }).split('\n')[0] + '\n'],
+]) {
+  const { dir, transcript, session } = baselined(`cli-${label.length}-${expected}`);
+
+  advance(dir, 'landed');
+  writeFileSync(transcript, `start\n${callsFor(dir)}${records()}`, 'utf8');
+  check(label, expected, verdict(run(dir, { session_id: session, transcript_path: transcript })));
 }
 
 {

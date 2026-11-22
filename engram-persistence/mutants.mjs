@@ -18,7 +18,8 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const GUARD = 'engram-persistence/guard.mjs';
 const OWN = 'engram-persistence/own-commits.mjs';
-const SATISFIED = "tail.includes(marker))) {\n    writeState(sessionId, { head, offset: size ?? 0 });";
+const SAVES = 'engram-persistence/save-calls.mjs';
+const SATISFIED = "if (savedIn(tail)) {\n    writeState(sessionId, { head, offset: size ?? 0 });";
 
 const MUTANTS = [
   // When the guard steps aside / Cuándo se aparta el guard
@@ -31,10 +32,18 @@ const MUTANTS = [
   ['an idle Stop keeps the old transcript offset, so a save made while idle covers later commits', GUARD, 'offset: size ?? state.offset', 'offset: state.offset'],
   // What counts as a save, and when / Qué cuenta como guardado y cuándo
   ['the transcript tail is cut on the decoded string by a byte offset', GUARD, "readFileSync(path).subarray(offset).toString('utf8')", "readFileSync(path, 'utf8').slice(offset)"],
-  ['mem_save no longer counts as a save', GUARD, "['mem_save', 'mem_session_summary']", "['mem_session_summary']"],
-  ['mem_session_summary no longer counts as a save', GUARD, "['mem_save', 'mem_session_summary']", "['mem_save']"],
-  ['every marker must appear before the save counts', GUARD, 'SAVE_MARKERS.some(', 'SAVE_MARKERS.every('],
-  ['a satisfied guard keeps its old baseline, so the same save is spent twice', GUARD, SATISFIED, "tail.includes(marker))) {\n    void sessionId;"],
+  ['mem_save no longer counts as a save', SAVES, 'mem_(?:save|session_summary|update)', 'mem_(?:session_summary|update)'],
+  ['mem_session_summary no longer counts as a save', SAVES, 'mem_(?:save|session_summary|update)', 'mem_(?:save|update)'],
+  ['mem_update no longer counts as a save', SAVES, 'mem_(?:save|session_summary|update)', 'mem_(?:save|session_summary)'],
+  ['the plugin server name no longer counts', SAVES, '^mcp__(?:plugin_engram_)?engram__', '^mcp__engram__'],
+  ['an engram save through the CLI no longer counts', SAVES, 'SHELLS.has(item.name) && typeof', 'false && typeof'],
+  ['a PowerShell CLI save no longer counts', SAVES, "new Set(['Bash', 'PowerShell'])", "new Set(['Bash'])"],
+  ['engram.exe no longer counts', SAVES, 'engram(?:\\.exe)?["\']?\\s+save', 'engram\\s+save'],
+  ['any engram command counts as a save', SAVES, '\\s+save(?:\\s|$)', '\\s+\\w+(?:\\s|$)'],
+  ['prose counts as a save', SAVES, "if (item?.type === 'tool_use' && isSave(item))", 'if (isSave({ ...item, name: item?.name ?? \'Bash\', input: { command: item?.text ?? item?.input?.command } }))'],
+  ['a refused save counts', SAVES, ' && item.is_error !== true) return true;', ') return true;'],
+  ['a save with no result counts', SAVES, "if (item?.type === 'tool_result' && saves.has(item.tool_use_id)", "if (saves.size > 0 || item?.type === 'tool_result' && saves.has(item.tool_use_id)"],
+  ['a satisfied guard keeps its old baseline, so the same save is spent twice', GUARD, SATISFIED, "if (savedIn(tail)) {\n    void sessionId;"],
   // Fail open / Falla abierto
   ['an unreadable transcript crashes the guard instead of re-baselining', GUARD, 'if (tail === undefined) {', 'if (false) {'],
   ['an unresolvable recorded head re-baselines instead of leaving state alone', GUARD, 'return; // the range is unreadable (rebased, gone) — no honest verdict', 'landed = []; // the range is unreadable (rebased, gone) — no honest verdict'],
