@@ -187,6 +187,33 @@ function scriptWriteReason(refusal) {
 }
 
 /**
+ * Refusal for a delegated agent that edits a source file in place through a shell tool. The remedy is the Edit tool.
+ * @es Rechazo para un agente delegado que edita un fuente en el sitio con una herramienta de shell. El remedio es Edit.
+ */
+function inPlaceEditReason(refusal) {
+  return [
+    `EVAL-GUARD REFUSED this command: \`${refusal.program}\` edits the source file \`${refusal.payload}\` in place through a shell.`,
+    `@es EVAL-GUARD RECHAZÓ este comando: \`${refusal.program}\` edita el fuente \`${refusal.payload}\` en el sitio a través de un shell.`,
+    '',
+    'Why. The promoted rule shell-one-liner-corrupted-data: source files are written only with the Write and Edit',
+    'tools, never through a shell tool, because the shell can change the pattern or the text on the way and the',
+    'file is written wrong with exit code 0. It recurred 7 times while only briefs stated it (the 7th, 2026-11-22,',
+    'an escape-free sed -i on a spec file).',
+    '@es Por qué. La regla promovida shell-one-liner-corrupted-data: los fuentes se escriben solo con Write y Edit,',
+    '@es nunca con una herramienta de shell, porque el shell puede cambiar el patrón o el texto en el camino y el',
+    '@es fichero queda mal con código 0. Se repitió 7 veces mientras solo los briefs la decían.',
+    '',
+    'What works instead: change the file with the Edit tool (or write a new one with the Write tool).',
+    '@es Lo que sí funciona: cambiar el fichero con la herramienta Edit (o escribir uno nuevo con Write).',
+    '',
+    'This rule applies to delegated agents only, and only to a source file: reading (sed -n, perl -ne, Get-Content)',
+    'and editing a file that is not source (a log, a scratch text) are untouched.',
+    '@es Esta regla es solo para agentes delegados y solo para un fuente: leer y editar un fichero que no es fuente',
+    '@es (un log, un texto de scratch) no se toca.'
+  ].join('\n');
+}
+
+/**
  * Refusal for a path built in a Bash line for a nested PowerShell or cmd. The remedy is a script file that takes
  * the path as a plain argument, or the PowerShell tool, where no outer bash exists.
  * @es Rechazo de una ruta construida en una línea de Bash para un PowerShell o cmd anidado. El remedio es un fichero
@@ -228,6 +255,7 @@ function reason(refusal) {
   if (refusal.kind === 'script-write') return scriptWriteReason(refusal);
   if (refusal.kind === 'msys-switch') return switchReason(refusal);
   if (refusal.kind === 'text-edit') return textEditReason(refusal);
+  if (refusal.kind === 'in-place-edit') return inPlaceEditReason(refusal);
 
   const scaffold = scaffoldPath('eval');
   const evidence = refusal.findings

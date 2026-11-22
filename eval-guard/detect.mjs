@@ -53,6 +53,7 @@
  * en vez de prohibir acentos que nunca tuvieron la culpa. SIN REGEX (M5).
  */
 
+import { inPlaceSourceEdit } from './in-place-edits.mjs';
 import { isEnvironmentAssignment, programName, programWords } from './launchers.mjs';
 import { nestedShellRefusal } from './nested-shell-backslashes.mjs';
 import { familyOf, NODE_OPTIONS_TAKING_A_VALUE, readsScriptFromStdin } from './script-source.mjs';
@@ -1230,6 +1231,16 @@ export function inspectCommand(command, { toolName, delegated = false } = {}) {
       const scriptRefusal = inspectStdinScript(invocation, position, context);
 
       if (scriptRefusal !== undefined) return scriptRefusal;
+
+      // An in-place edit of a source file by a shell tool (sed -i, perl -pi, sd, Set-Content...): the promoted rule
+      // says source files are written only with the Write and Edit tools, and it recurred 7 times without this check.
+      // @es Una edición en el sitio de un fuente con una herramienta de shell: la regla promovida dice que los fuentes
+      // se escriben solo con Write y Edit, y se repitió 7 veces sin este chequeo.
+      const inPlace = inPlaceSourceEdit(programWords(invocation, position) ?? []);
+
+      if (inPlace !== undefined) {
+        return { kind: 'in-place-edit', program: inPlace.program, flag: inPlace.program, payload: inPlace.target, findings: [{ offset: 0, code: inPlace.target.charCodeAt(0), kind: `in-place edit of the source file \`${inPlace.target}\`` }] };
+      }
     }
 
     // Text-editing programs: the SAME failure family as a mangled node payload. A pattern or script that
