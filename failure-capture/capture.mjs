@@ -51,6 +51,7 @@ import { describeOutcome, newRunId, runCondense } from './condense.mjs';
 import { isValidKey, MARK_CLOSE, MARK_OPEN, readMarker } from './ledger-line.mjs';
 import { loadedSet } from './loaded-set.mjs';
 import { promotedStub } from './promotion.mjs';
+import { describeEvidenceNote, runEvidenceNote } from './evidence-note.mjs';
 import { describeRecount, runRecount } from './recount.mjs';
 import { describeSupersede, runSupersede } from './supersede.mjs';
 import { isPromotedStub, promotedRecurrenceLines } from './promoted-recurrence.mjs';
@@ -1224,6 +1225,20 @@ function commandRecount(args) {
 }
 
 /**
+ * Adds a later measurement of one incident to its evidence file without counting a recurrence (`evidence-note.mjs`).
+ * @es Agrega a la evidencia una medición posterior de un incidente sin contar una recurrencia.
+ */
+function commandNote(args) {
+  ensureDirs();
+
+  const outcome = runEvidenceNote({ load: loadLedgers, key: args.key, text: args.text, date: today(), lockFile: lockFile() });
+
+  for (const line of describeEvidenceNote(outcome)) (outcome.status === 0 ? speaker.data : speaker.dataError)(line);
+
+  return outcome.status;
+}
+
+/**
  * The loaded instruction set of a project (or of `directory` when no project holds it) and its verdict,
  * shared by the `budget` command and the advisory after a capture. `ceiling` is the highest directory walked.
  * @es El conjunto de instrucciones cargado de un proyecto (o de `directory` si ningún proyecto lo contiene) y
@@ -1349,6 +1364,8 @@ function dispatch(command, args) {
       return commandSupersede(args);
     case 'recount':
       return commandRecount(args);
+    case 'note':
+      return commandNote(args);
     case 'route':
       return commandRoute(args);
     case 'budget':
