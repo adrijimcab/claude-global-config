@@ -28,7 +28,7 @@ Use Claude Code's native Agent/Task mechanism for delegated-direct work. Summari
 
 Pass the authorized edit surfaces, acceptance criteria, the applicable test-first policy and runner from `## Implementation Routing`, applicable verification commands, and relevant prior context explicitly to bounded implementation workers. Workers preserve unrelated working-tree changes and return observed outcomes and checks.
 
-Keep each delegated writer bounded, with a short synthesized handoff. Delegation is mandatory only when a mechanism's own trigger fires.
+Keep each delegated writer bounded, with a short synthesized handoff.
 
 #### Delegation Triggers
 
@@ -51,7 +51,7 @@ Verification of a delegated writer's work follows the same rule whether receipt-
 - **RDD on**: the native review is an additional outside view of the change, from the lenses pertinent to what was touched; it never replaces or skips the tier's verification, and the tier's verifier runs before review. A runtime that renders an RDD status line reads it from there; otherwise read `gentle-ai review mode status` (read-only) and treat a failure as `unknown`. A declined consent, a disabled clone, or a refused START or STATUS changes nothing about verification.
 - The parent spot check — re-running one reported command before delivery — stays in every tier.
 - **Verification timing**: when several deliveries of one feature were written inline, run one independent verifier at the feature's end instead of one per delivery; verify per unit only when that unit names a high-risk item (its Risk line or the escalation over its actual diff), never because of the model or effort that wrote the code.
-- **Correction bounds**: verifier blockers get one correction batch that fixes every reported blocker, then one recheck limited to those blockers, never a new full sweep. A second correction runs only when the recheck shows the same blocker still failing; a new finding never earns one. Blockers still open after that become one **Needs your decision** result. A writer's self-review follows the same bound, then reports `partial`.
+- **Correction bounds**: verifier blockers get one correction batch that fixes every reported blocker, then one recheck limited to those blockers, never a new full sweep. A second correction runs only when the recheck shows the same blocker still failing; a new finding never earns one. Blockers still open after that leave the unit `status: partial`, naming any genuine human decision; independent authorized work continues. A writer's exhausted limit ends its cycle, not the unit: you, not the user, name and act on the loop's cause: fix inline only when small and understood, else launch a new bounded writer with the diagnosis and a new hypothesis, never a repeat; a recurring cause or no hypothesis blocks the unit. Worker, setup, recheck, native, and user budgets stay separate; changed state earns a fresh check, not a reset.
 - **Verify handoff**: give the verifier the whole feature document (every `S#`, never one task), the baseline commit, and the probe command forms. The parent names the change kind and pastes or references `_shared/verify-method.md` from the runtime's installed skills directory, then hands returned probes to the writer. The writer adds the probes as regression tests; the parent commits them when authorized.
 - The writer receives `## Verification` naming the exact commands to run, and may receive `## Known environmental failures` naming exact test names or command lines already failing on the base as evidence; any other failing required command still forces `partial`.
 - Exploration stays a separate delegation only when the parent needs the map to decide or route; reading that prepares a write belongs to whoever makes that write, and the parent never explores files it will read anyway before writing inline.
@@ -64,7 +64,7 @@ Verification of a delegated writer's work follows the same rule whether receipt-
 - A passive ordinary document or image needs structural readback, not an artificial semantic-verification subagent. Active, mixed, operational, executable, mode-changing, or unknown content fails closed into the applicable native plan.
 - For a trivial passive documentation-only edit, structural readback is the complete proportional check; do not open a separate semantic-verification or heavy review ceremony.
 - If an applicable verifier is unavailable, preserve the typed unavailable result; never invent PASS, retry indefinitely, or escalate into extra ceremony.
-- An applicable quick check runs once. Long or very-long work gets one cost/side-effect forecast before launch. Unavailable, partial, declined, or exhausted proof becomes one actionable **Needs your decision** result.
+- An applicable quick check runs once. Long or very-long work gets one cost/side-effect forecast before launch. Continuity and missing proof follow the ODD Close (step 7).
 - Functional proof and adversarial review both project as **Checking**. One immutable candidate permits at most one scoped correction; there is no loop-until-clean behavior.
 - Commit, push, PR, direct-main, emergency, and release gates are informational and unmanaged; ordinary repository policy decides delivery and they never reopen review for unchanged content.
 
