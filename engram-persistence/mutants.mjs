@@ -36,7 +36,7 @@ const MUTANTS = [
   ['mem_session_summary no longer counts as a save', SAVES, 'mem_(?:save|session_summary|update)', 'mem_(?:save|update)'],
   ['mem_update no longer counts as a save', SAVES, 'mem_(?:save|session_summary|update)', 'mem_(?:save|session_summary)'],
   ['the plugin server name no longer counts', SAVES, '^mcp__(?:plugin_engram_)?engram__', '^mcp__engram__'],
-  ['an engram save through the CLI no longer counts', SAVES, 'SHELLS.has(item.name) && typeof', 'false && typeof'],
+  ['an engram save through the CLI no longer counts', SAVES, 'SHELLS.has(item?.name) && typeof', 'false && typeof'],
   ['a PowerShell CLI save no longer counts', SAVES, "new Set(['Bash', 'PowerShell'])", "new Set(['Bash'])"],
   ['engram.exe no longer counts', SAVES, 'engram(?:\\.exe)?["\']?\\s+save', 'engram\\s+save'],
   ['any engram command counts as a save', SAVES, '\\s+save(?:\\s|$)', '\\s+\\w+(?:\\s|$)'],
