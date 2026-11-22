@@ -21,7 +21,9 @@
  *
  * NOT COUNTED, stated: a write made by a child process (`node script.mjs`, `npm run x`), which no lexer can see; a
  * target the lexer reports as unresolvable (a variable, an unknowable `cd`), allowed as both other callers of the
- * lexer allow it; `git --work-tree=<dir>`, whose acting tree is not followed. And `TEMP/claude`, which the captured
+ * lexer allow it. A git command's acting tree is its `-C` directory, or its `--work-tree` when it names one (the last
+ * one wins, a relative one folds onto the `-C` directory), because that is the tree whose status it changes. And
+ * `TEMP/claude`, which the captured
  * rule also names: MEASURED, no detector of the selftest runner reads it — each selftest gets a PRIVATE temp
  * (`selftest-runner/sandbox.mjs`, `<tmpdir>/selftest-sandbox-XXXX/temp`), and the verdict reads only the sandbox
  * home, that private temp and the tree. Refusing writes there would block every session's scratch for no measured
@@ -35,7 +37,8 @@
  * el lexer compartido, y un comando git que cambia lo que lista `git status` (`add`, `commit`, `reset`...), en el
  * directorio donde actúa. NO ESTÁ DENTRO una ruta de un árbol git ANIDADO (un worktree bajo `.claude/worktrees/`):
  * el `git status` de la cadena no la lista, y rechazarla congelaría a todo worker cuyo worktree vive bajo el checkout
- * principal. NO SE CUENTA, dicho: lo que escribe un proceso hijo, un destino no resoluble, `--work-tree`, y
+ * principal. El árbol donde actúa un comando git es su directorio `-C`, o su `--work-tree` si nombra uno (gana el
+ * último; uno relativo se pliega sobre el de `-C`). NO SE CUENTA, dicho: lo que escribe un proceso hijo, un destino no resoluble, y
  * `TEMP/claude`: MEDIDO, ningún detector del runner lo lee (cada selftest tiene su temporal PRIVADO); por el
  * propio código del veredicto, solo las escrituras en el árbol del 2026-10-26 (la edición y el commit) pudieron poner
  * rojo un selftest; qué escritura puso rojo a cuál de los tres no quedó registrado.
@@ -76,7 +79,28 @@ function gitStatusWrites(payload) {
 
   return gitInvocations(script, dialect, callDirectory(payload))
     .filter(changesStatus)
-    .map((invocation) => ({ path: invocationDirectory(invocation), via: `git ${invocation.subcommand}` }));
+    .map((invocation) => ({ path: actingTree(invocation), via: `git ${invocation.subcommand}` }));
+}
+
+/**
+ * The tree a git invocation changes the status of: its last `--work-tree` (fused or as the next word), folded onto the
+ * `-C` directory when relative, else the `-C` directory itself.
+ * @es El árbol cuyo estado cambia una invocación de git: su último `--work-tree`, plegado sobre el directorio de `-C`
+ * si es relativo, o si no el propio directorio de `-C`.
+ */
+function actingTree(invocation) {
+  const base = invocationDirectory(invocation);
+  let named;
+
+  invocation.gitOptions.forEach((option, index) => {
+    if (option === '--work-tree') named = invocation.gitOptions[index + 1];
+    else if (option.startsWith('--work-tree=')) named = option.slice('--work-tree='.length);
+  });
+
+  if (named === undefined || named === '') return base;
+  if (path.isAbsolute(named)) return named;
+
+  return base === undefined ? undefined : path.resolve(base, named);
 }
 
 /**

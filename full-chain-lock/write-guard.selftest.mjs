@@ -225,6 +225,12 @@ for (const verb of ['add -A', 'commit -m x', 'reset --hard', 'checkout -- a', 's
 }
 
 expect('deny', shellCall('Bash', `git -C '${TREE}' commit -m x`, SCRATCH), 'git -C <tree> commit from outside', live);
+expect('deny', shellCall('Bash', `git --git-dir='${TREE}/.git' --work-tree='${TREE}' add a.mjs`, SCRATCH), 'git --work-tree=<tree> add from outside', live);
+expect('deny', shellCall('Bash', `git --work-tree '${TREE}' add a.mjs`, SCRATCH), 'git --work-tree <tree> (separate word) add from outside', live);
+expect('deny', shellCall('Bash', `git -C '${SCRATCH}' --work-tree='${TREE}' add a.mjs`, SCRATCH), 'a --work-tree into the tree overrides a -C elsewhere', live);
+expect('deny', shellCall('Bash', `git -C '${path.dirname(TREE)}' --work-tree='${path.basename(TREE)}' add a.mjs`, SCRATCH), 'a relative --work-tree folds onto the -C directory', live);
+expect('allow', shellCall('Bash', `git -C '${TREE}' --work-tree='${SCRATCH}' add a.mjs`, SCRATCH), 'a --work-tree elsewhere wins over a -C into the tree', live);
+expect('allow', shellCall('Bash', `git --work-tree='${SCRATCH}' --work-tree='${SCRATCH}' add a.mjs`, TREE), 'the last --work-tree wins, even from a cwd inside the tree', live);
 expect('deny', shellCall('Bash', `cd '${path.join(TREE, 'src')}' && git add a.mjs`, SCRATCH), 'git add after cd into a subdirectory of the tree', live);
 expect('deny', shellCall('PowerShell', 'git commit -m x', TREE), 'PowerShell git commit inside the tree', live);
 expect('deny', shellCall('Bash', 'bash -c "git commit -m x"', TREE), 'git commit inside bash -c', live);
