@@ -39,12 +39,25 @@ const check = (label, actual, expected) => {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${label}${ok ? '' : ` — got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`}`);
 };
 
+// node_modules is not versioned, so a fresh worktree or a landing checkout lacks the pinned TypeScript (the first T70
+// landing went red on exactly that, 2026-11-22). The proof installs its own dependency from the lockfile when it is
+// missing, and refuses as a named precondition only when that install fails.
+// @es node_modules no se versiona, así que un worktree nuevo o el checkout de un aterrizaje no tiene el TypeScript
+// fijado (el primer aterrizaje de T70 se puso en rojo por eso). La prueba instala su propia dependencia desde el
+// lockfile cuando falta, y solo la rechaza como precondición con nombre si esa instalación falla.
+const loadPinned = () => createRequire(path.join(HERE, 'package.json'))('typescript');
 let typescript;
 
 try {
-  typescript = createRequire(path.join(HERE, 'package.json'))('typescript');
-} catch (error) {
-  throw new Error(`precondition: the pinned typescript is not installed; run npm ci --prefix ${HERE} (${error instanceof Error ? error.message : String(error)}) @es precondición: el typescript fijado no está instalado; corré npm ci --prefix ${HERE}`);
+  typescript = loadPinned();
+} catch {
+  const install = spawnSync('npm', ['ci', '--no-audit', '--no-fund'], { cwd: HERE, encoding: 'utf8', shell: process.platform === 'win32', windowsHide: true });
+
+  try {
+    typescript = loadPinned();
+  } catch (error) {
+    throw new Error(`precondition: the pinned typescript could not be installed (npm ci exit ${String(install.status)}: ${(install.stderr ?? '').trim().split('\n').at(-1) ?? ''}; ${error instanceof Error ? error.message : String(error)}) @es precondición: no se pudo instalar el typescript fijado (npm ci en ${HERE})`);
+  }
 }
 
 const root = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'related-specs-')));
