@@ -48,6 +48,7 @@
 
 import { statSync } from 'node:fs';
 
+import { endedByHarness } from './harness-end.mjs';
 import { ACTIVE_WINDOW_MS, activeOwner as quietOwner, agentRecords, worktreeName } from './liveness.mjs';
 import { STOP, agentKey, readLifecycle } from './lifecycle-log.mjs';
 
@@ -93,13 +94,16 @@ function startedOwner(path, record, startedAt, now) {
  * @param lifecycle What is recorded about each agent (`lifecycle-log.mjs`); injectable.
  * @es El agente que trabaja en `path`, o `undefined`. `undefined` es «nadie trabaja aquí», no «ningún agente lo posee».
  */
-export function activeOwner(path, records = agentRecords(), now = Date.now(), lifecycle = readLifecycle()) {
+export function activeOwner(path, records = agentRecords(), now = Date.now(), lifecycle = readLifecycle(), ended = endedByHarness) {
   const unrecorded = [];
 
   for (const record of records) {
     const recorded = lifecycle.get(agentKey(record.id));
 
     if (recorded?.event === STOP) continue;
+    // A START the harness itself marked ended (an agent cut by an API error gets no SubagentStop): stopped.
+    // @es Un START que el propio harness marcó terminado (un agente cortado por error de API no recibe SubagentStop): parado.
+    if (recorded !== undefined && ended(record.transcript, recorded.at)) continue;
     if (recorded === undefined || now - recorded.at >= STARTED_CEILING_MS) {
       unrecorded.push(record);
       continue;

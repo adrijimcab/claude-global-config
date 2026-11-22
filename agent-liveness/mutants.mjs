@@ -16,8 +16,18 @@ import { runMutants } from '../mutation-proof/run-mutants.mjs';
 const A = 'agent-liveness/active-owner.mjs';
 const L = 'agent-liveness/lifecycle-log.mjs';
 const R = 'agent-liveness/recorder.mjs';
+const H = 'agent-liveness/harness-end.mjs';
 
 const MUTANTS = [
+  // --- a START the harness marked ended ---
+  ['a harness-ended start keeps its worktree', A, '    if (recorded !== undefined && ended(record.transcript, recorded.at)) continue;\n', ''],
+  ['the ended check runs for unrecorded agents too', A, 'if (recorded !== undefined && ended(', 'if (ended('],
+  ['a finished meta no longer ends a start', H, "if (meta?.finished === true && meta.mtimeMs >= startedAt) return true;", 'if (false) return true;'],
+  ['a finished meta from before the start still ends it', H, 'meta?.finished === true && meta.mtimeMs >= startedAt', 'meta?.finished === true'],
+  ['an API error last record no longer ends a start', H, 'return last?.isApiErrorMessage === true && Date.parse(last.timestamp) >= startedAt;', 'return false;'],
+  ['an API error from before the start still ends it', H, 'last?.isApiErrorMessage === true && Date.parse(last.timestamp) >= startedAt', 'last?.isApiErrorMessage === true'],
+  ['the meta is looked for under another name', H, ".replace(/\\.jsonl$/, '.meta.json')", ".replace(/\\.jsonl$/, '.json')"],
+  ['the first record is read instead of the last', H, 'JSON.parse(lines[lines.length - 1])', 'JSON.parse(lines[0])'],
   // --- the decision order ---
   ['a recorded stop does not stop', A, "if (recorded?.event === STOP) continue;", ''],
   ['a stop sends the agent to the window rule', A, "if (recorded?.event === STOP) continue;", "if (recorded?.event === STOP) { unrecorded.push(record); continue; }"],

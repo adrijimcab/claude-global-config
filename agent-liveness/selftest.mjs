@@ -100,7 +100,7 @@ const brief = (tenancy) => `${JSON.stringify({ message: { content: `MEASURED: x\
 const recorded = (...events) => lifecycleFrom(events.map(([event, id, ageMs]) => JSON.stringify({ event, agent_id: id, time: iso(NOW - ageMs) })).join('\n'));
 
 const idOf = (owner) => owner?.id;
-const ownerOf = (worktree, records, lifecycle) => activeOwner(`C:/repo/.claude/worktrees/${worktree}`, records, NOW, lifecycle);
+const ownerOf = (worktree, records, lifecycle, ended) => activeOwner(`C:/repo/.claude/worktrees/${worktree}`, records, NOW, lifecycle, ...(ended === undefined ? [] : [ended]));
 
 // --- 1. a recorded STOP means stopped, immediately -------------------------------------------------------------
 await section("1. a recorded STOP means stopped, immediately", async () => {
@@ -171,6 +171,46 @@ await section("5. a START with no STOP older than the ceiling is a crashed sessi
   check('a start just inside the ceiling is working', idOf(ownerOf('wt6', [isolated('agent-a6', 'wt6', transcript('a6i', 90 * MINUTE))], recorded(['start', 'a6', STARTED_CEILING_MS - MINUTE]))), 'agent-a6');
   check('a start exactly at the ceiling is read as unrecorded: a quiet transcript means stopped', idOf(ownerOf('wt6', [isolated('agent-a6', 'wt6', transcript('a6x', 90 * MINUTE))], recorded(['start', 'a6', STARTED_CEILING_MS]))), undefined);
   check('a stop past the ceiling is still a stop', idOf(ownerOf('wt6', [isolated('agent-a6', 'wt6', transcript('a6s', MINUTE))], recorded(['stop', 'a6', old]))), undefined);
+});
+
+// --- 5b. a START the harness itself marked ended (an API error, no SubagentStop) --------------------------------
+// The shapes measured on agents aaad56c5e2955c98c (2026-11-18) and a9ea8c6a06b3e6f39 (2026-11-22): a meta.json beside
+// the transcript with "finished": true, and a last record that is the harness's synthetic API error.
+// @es Las formas medidas en dos agentes muertos por el límite de uso: meta.json con "finished": true y un último
+// registro que es el error sintético de API del harness.
+await section('5b. a START the harness itself marked ended', async () => {
+  const meta = (file, body, ageMs) => {
+    const metaFile = file.replace(/\.jsonl$/, '.meta.json');
+
+    writeFileSync(metaFile, JSON.stringify(body));
+    utimesSync(metaFile, new Date(NOW - ageMs), new Date(NOW - ageMs));
+  };
+  const apiError = (ageMs) => `${JSON.stringify({ type: 'assistant', timestamp: iso(NOW - ageMs), isApiErrorMessage: true, error: 'rate_limit', message: { model: '<synthetic>', content: [{ type: 'text', text: "You've hit your 5-hour limit" }] } })}\n`;
+  const work = (ageMs) => `${JSON.stringify({ type: 'assistant', timestamp: iso(NOW - ageMs), message: { content: [{ type: 'tool_use', id: 't', name: 'Bash', input: { command: 'x' } }] } })}\n`;
+
+  const finished = transcript('h1', 10 * MINUTE, work(10 * MINUTE));
+  meta(finished, { agentType: 'general-purpose', finished: true }, 10 * MINUTE);
+  check('a start whose meta says finished after it began is stopped', idOf(ownerOf('wh', [isolated('agent-h1', 'wh', finished)], recorded(['start', 'h1', 30 * MINUTE]))), undefined);
+
+  const cut = transcript('h2', 10 * MINUTE, `${work(12 * MINUTE)}${apiError(10 * MINUTE)}`);
+  check('a start whose last record is an API error after it began is stopped', idOf(ownerOf('wh', [isolated('agent-h2', 'wh', cut)], recorded(['start', 'h2', 30 * MINUTE]))), undefined);
+
+  const resumedMeta = transcript('h3', MINUTE, work(MINUTE));
+  meta(resumedMeta, { finished: true }, 40 * MINUTE);
+  check('a meta marked finished BEFORE the latest start (a resumed agent) keeps it working', idOf(ownerOf('wh', [isolated('agent-h3', 'wh', resumedMeta)], recorded(['start', 'h3', 30 * MINUTE]))), 'agent-h3');
+
+  const oldError = transcript('h4', 40 * MINUTE, apiError(40 * MINUTE));
+  check('an API error older than the latest start keeps it working', idOf(ownerOf('wh', [isolated('agent-h4', 'wh', oldError)], recorded(['start', 'h4', 30 * MINUTE]))), 'agent-h4');
+
+  const recovered = transcript('h5', MINUTE, `${apiError(10 * MINUTE)}${work(MINUTE)}`);
+  check('an API error followed by more work is not an end', idOf(ownerOf('wh', [isolated('agent-h5', 'wh', recovered)], recorded(['start', 'h5', 30 * MINUTE]))), 'agent-h5');
+
+  const notFinished = transcript('h6', MINUTE, work(MINUTE));
+  meta(notFinished, { agentType: 'general-purpose' }, MINUTE);
+  check('a meta with no finished key keeps a started agent working', idOf(ownerOf('wh', [isolated('agent-h6', 'wh', notFinished)], recorded(['start', 'h6', 30 * MINUTE]))), 'agent-h6');
+
+  check('an unrecorded finished agent falls to the window rule (written inside the window: working)', idOf(ownerOf('wh', [isolated('agent-h1', 'wh', finished)], recorded())), 'agent-h1');
+  check('the ended check is not consulted without a recorded start', idOf(ownerOf('wh', [isolated('agent-h7', 'wh', transcript('h7', MINUTE))], recorded(), () => { throw new Error('consulted'); })), 'agent-h7');
 });
 
 // --- 6. an agent joined only by the TENANCY line of its brief ---------------------------------------------------
