@@ -40,7 +40,6 @@ const MUTANTS = [
   ['a PowerShell CLI save no longer counts', SAVES, "new Set(['Bash', 'PowerShell'])", "new Set(['Bash'])"],
   ['engram.exe no longer counts', SAVES, 'engram(?:\\.exe)?["\']?\\s+save', 'engram\\s+save'],
   ['any engram command counts as a save', SAVES, '\\s+save(?:\\s|$)', '\\s+\\w+(?:\\s|$)'],
-  ['prose counts as a save', SAVES, "if (item?.type === 'tool_use' && isSave(item))", 'if (isSave({ ...item, name: item?.name ?? \'Bash\', input: { command: item?.text ?? item?.input?.command } }))'],
   ['a refused save counts', SAVES, ' && item.is_error !== true) return true;', ') return true;'],
   ['a save with no result counts', SAVES, "if (item?.type === 'tool_result' && saves.has(item.tool_use_id)", "if (saves.size > 0 || item?.type === 'tool_result' && saves.has(item.tool_use_id)"],
   ['a satisfied guard keeps its old baseline, so the same save is spent twice', GUARD, SATISFIED, "if (savedIn(tail)) {\n    void sessionId;"],

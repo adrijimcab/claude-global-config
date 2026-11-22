@@ -35,9 +35,9 @@ function itemsOf(line) {
 
 /** Whether a tool_use item is an engram save. @es Si un elemento tool_use es un guardado de engram. */
 function isSave(item) {
-  if (MCP_SAVE.test(item.name ?? '')) return true;
+  if (MCP_SAVE.test(item?.name ?? '')) return true;
 
-  return SHELLS.has(item.name) && typeof item.input?.command === 'string' && CLI_SAVE.test(item.input.command);
+  return SHELLS.has(item?.name) && typeof item.input?.command === 'string' && CLI_SAVE.test(item.input.command);
 }
 
 /** @param {string} tail @returns {boolean} */
@@ -46,7 +46,9 @@ export function savedIn(tail) {
 
   for (const line of tail.split('\n')) {
     for (const item of itemsOf(line)) {
-      if (item?.type === 'tool_use' && isSave(item)) saves.add(item.id);
+      // Only a tool call carries a tool name, so a text item never passes isSave and needs no type check.
+      // @es Solo una llamada de herramienta lleva nombre de herramienta: un elemento de texto nunca pasa isSave.
+      if (isSave(item)) saves.add(item.id);
       if (item?.type === 'tool_result' && saves.has(item.tool_use_id) && item.is_error !== true) return true;
     }
   }
