@@ -11,8 +11,11 @@ import { fileURLToPath } from 'node:url';
 import { runMutants } from '../mutation-proof/run-mutants.mjs';
 
 const N = 'failure-capture/evidence-note.mjs';
+const CAPTURE = 'failure-capture/capture.mjs';
 
 const MUTANTS = [
+  ['note is no project command', CAPTURE, "'recount', 'note', 'status'", "'recount', 'status'"],
+  ['note is no command at all', CAPTURE, "    case 'note':\n      return commandNote(args);\n", ''],
   ['an invalid key is accepted', N, '...(isValidKey(key) ? [] : [refuse(', '...(true ? [] : [refuse('],
   ['a short text is accepted', N, 'text.trim().length >= MINIMUM_TEXT_LENGTH', 'text.trim().length >= 1'],
   ['a multi-line text is accepted', N, "? oneLineProblems('--text', text) :", '? [] :'],

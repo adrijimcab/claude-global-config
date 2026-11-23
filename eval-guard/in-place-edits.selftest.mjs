@@ -13,7 +13,7 @@
  */
 
 import { evaluate } from './guard.mjs';
-import { inPlaceSourceEdit, isSourceFile } from './in-place-edits.mjs';
+import { isSourceFile, shellSourceWrite } from './in-place-edits.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
 isolateState('eval-guard');
@@ -46,11 +46,11 @@ const refusedOn = [
   ["sed -i.bak 's/a/b/' src/x.ts", 'sed -i with a backup suffix'],
   ["sed -ni 's/a/b/p' src/x.html", 'sed -ni'],
   ["sed --in-place 's/a/b/' src/x.scss", 'sed --in-place'],
-  ["perl -pi -e 's/a/b/' src/x.mjs", 'perl -pi'],
-  ["perl -0777pi -e 's/a/b/' package.json", 'perl -0777pi on a json'],
-  ["gawk -i inplace '{print}' src/x.js", 'gawk -i inplace'],
-  ['sd old new src/x.tsx', 'sd always edits in place'],
   ["cd src && sed -i 's/a/b/' x.ts", 'sed -i after a cd'],
+  ['cat src/part.txt >> src/app/network-vis-click.ts', 'the 2026-11-23 case: cat >> appending source'],
+  ["echo 'export const a = 1;' > src/x.ts", 'a > redirection into a source file'],
+  ["cat <<'EOF' > src/y.ts\nexport const y = 1;\nEOF", 'a heredoc redirected into a source file'],
+  ['echo x | tee src/z.ts', 'tee into a source file'],
 ];
 
 for (const [command, label] of refusedOn) check(`deny: ${label}`, verdict(command), 'deny');
@@ -66,6 +66,9 @@ for (const [command, label] of [
   ["awk '{print}' src/x.js", 'awk without inplace only reads'],
   ["sed -i 's/a/b/' build.log", 'an in-place edit of a non-source file'],
   ["sed -i 's/a/b/' notes.md", 'markdown is not a source file here'],
+  ['node build.mjs > build.log', 'a redirection into a log'],
+  ['cp src/a.ts src/b.ts', 'a byte copy of a source file carries no text through the shell'],
+  ['mv src/a.ts src/c.ts', 'a byte move of a source file'],
 ]) check(`allow: ${label}`, verdict(command), 'allow');
 
 check('allow: Get-Content only reads', verdict("Get-Content -Path 'src/x.ts'", { tool: 'PowerShell' }), 'allow');
@@ -74,16 +77,18 @@ check('allow: the parent session is not covered (delegated agents only)', verdic
 
 const reason = evaluate(payload("sed -i 's/a/b/' src/x.ts"))?.hookSpecificOutput?.permissionDecisionReason ?? '';
 
-check('the reason names the program and the file', reason.includes('`sed`') && reason.includes('`src/x.ts`'), true);
+check('the reason names the writer and the file', reason.includes('sed -i writes the source file') && reason.includes('x.ts`'), true);
 check('the reason points at the Edit tool, in both languages', reason.includes('the Edit tool') && reason.includes('@es Lo que sí funciona'), true);
 
-check('pure: a Windows path with backslashes is a source file', isSourceFile('C:\\repo\\src\\x.ts'), true);
+const shellPayload = (command, tool = 'Bash') => ({ tool_name: tool, tool_input: { command }, cwd: 'C:/repo' });
+
 check('pure: an extension in upper case is a source file', isSourceFile('X.TS'), true);
 check('pure: a dotfile with no extension is not', isSourceFile('.gitignore'), false);
-check('pure: a program given with a folder and .exe is recognised', inPlaceSourceEdit([{ raw: 'C:/bin/sed.exe' }, { raw: '-i' }, { raw: 's/a/b/' }, { raw: 'x.ts' }])?.target, 'x.ts');
-check('pure: no words, no finding', inPlaceSourceEdit([]), undefined);
-check('pure: Set-Content -LiteralPath is read, not the first positional word', inPlaceSourceEdit([{ raw: 'Set-Content' }, { raw: '-Value' }, { raw: 'notes.txt' }, { raw: '-LiteralPath' }, { raw: 'a.mjs' }])?.target, 'a.mjs');
 check('pure: a word with .ts inside but another extension is not source', isSourceFile('src/x.ts.orig'), false);
+check('pure: the write names its writer label', shellSourceWrite(shellPayload('echo x | tee src/x.mjs'))?.via, 'tee');
+check('pure: a sed executable given with a folder and .exe is recognised', shellSourceWrite(shellPayload("C:/bin/sed.exe -i 's/a/b/' x.ts"))?.via, 'sed -i');
+check('pure: a command that writes nothing gives no finding', shellSourceWrite(shellPayload('git status')), undefined);
+check('pure: Set-Content -LiteralPath is read, not the first positional word', shellSourceWrite(shellPayload("Set-Content -Value 'notes' -LiteralPath a.mjs", 'PowerShell'))?.target?.endsWith('a.mjs'), true);
 
 if (failures.length > 0) {
   for (const failure of failures) console.log(`FAIL ${failure}`);

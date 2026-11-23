@@ -43,6 +43,18 @@ import { isSubagentCaller } from '../hook-caller/identify-caller.mjs';
 import { digestInput } from '../hook-state/input-digest.mjs';
 import { stateDir } from '../hook-state/locations.mjs';
 import { inspectCommand } from './detect.mjs';
+import { shellSourceWrite } from './in-place-edits.mjs';
+
+/**
+ * The refusal for a delegated shell call that writes the text of a source file, read from the shared write-targets
+ * lexer (`in-place-edits.mjs`), or undefined.
+ * @es El rechazo para una llamada de shell delegada que escribe el texto de un fuente, o undefined.
+ */
+function sourceWriteRefusal(payload) {
+  const write = shellSourceWrite(payload);
+
+  return write === undefined ? undefined : { kind: 'in-place-edit', program: write.via, flag: write.via, payload: write.target, findings: [{ offset: 0, code: write.target.charCodeAt(0), kind: `${write.via} writes the source file \`${write.target}\`` }] };
+}
 
 /** Where this mechanism keeps its state, resolved at each call through the one state-location module. @es Dónde guarda su estado este mecanismo, resuelto en cada llamada por el único módulo de ubicaciones. */
 const stateDirectory = () => stateDir('eval-guard');
@@ -192,13 +204,13 @@ function scriptWriteReason(refusal) {
  */
 function inPlaceEditReason(refusal) {
   return [
-    `EVAL-GUARD REFUSED this command: \`${refusal.program}\` edits the source file \`${refusal.payload}\` in place through a shell.`,
-    `@es EVAL-GUARD RECHAZÓ este comando: \`${refusal.program}\` edita el fuente \`${refusal.payload}\` en el sitio a través de un shell.`,
+    `EVAL-GUARD REFUSED this command: ${refusal.program} writes the source file \`${refusal.payload}\` through a shell.`,
+    `@es EVAL-GUARD RECHAZÓ este comando: ${refusal.program} escribe el fuente \`${refusal.payload}\` a través de un shell.`,
     '',
     'Why. The promoted rule shell-one-liner-corrupted-data: source files are written only with the Write and Edit',
     'tools, never through a shell tool, because the shell can change the pattern or the text on the way and the',
-    'file is written wrong with exit code 0. It recurred 7 times while only briefs stated it (the 7th, 2026-11-22,',
-    'an escape-free sed -i on a spec file).',
+    'file is written wrong with exit code 0. It recurred 7 times while only briefs stated it (2026-11-22, an',
+    'escape-free sed -i on a spec; 2026-11-23, cat >> appending source to a component).',
     '@es Por qué. La regla promovida shell-one-liner-corrupted-data: los fuentes se escriben solo con Write y Edit,',
     '@es nunca con una herramienta de shell, porque el shell puede cambiar el patrón o el texto en el camino y el',
     '@es fichero queda mal con código 0. Se repitió 7 veces mientras solo los briefs la decían.',
@@ -206,10 +218,11 @@ function inPlaceEditReason(refusal) {
     'What works instead: change the file with the Edit tool (or write a new one with the Write tool).',
     '@es Lo que sí funciona: cambiar el fichero con la herramienta Edit (o escribir uno nuevo con Write).',
     '',
-    'This rule applies to delegated agents only, and only to a source file: reading (sed -n, perl -ne, Get-Content)',
-    'and editing a file that is not source (a log, a scratch text) are untouched.',
-    '@es Esta regla es solo para agentes delegados y solo para un fuente: leer y editar un fichero que no es fuente',
-    '@es (un log, un texto de scratch) no se toca.'
+    'This rule applies to delegated agents only, and only to the text of a source file: reading (sed -n, perl -ne,',
+    'Get-Content), a byte copy or move (cp, mv, Copy-Item), and writing a file that is not source (a log, a scratch',
+    'text) are untouched.',
+    '@es Esta regla es solo para agentes delegados y solo para el texto de un fuente: leer, copiar o mover bytes (cp,',
+    '@es mv, Copy-Item) y escribir un fichero que no es fuente (un log, un texto de scratch) no se toca.'
   ].join('\n');
 }
 
@@ -298,7 +311,8 @@ function decideFor(payload) {
 
   if (command === undefined) return undefined;
 
-  const refusal = inspectCommand(command, { toolName: payload?.tool_name, delegated: isSubagentCaller(payload) });
+  const delegated = isSubagentCaller(payload);
+  const refusal = inspectCommand(command, { toolName: payload?.tool_name, delegated }) ?? (delegated ? sourceWriteRefusal(payload) : undefined);
 
   if (refusal === undefined) return undefined;
 
