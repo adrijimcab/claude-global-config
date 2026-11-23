@@ -29,10 +29,13 @@ const POWERSHELL_PATHS = new Set(['-path', '-literalpath', '-filepath', '-lp']);
 
 /** Whether a word names a source file. @es Si una palabra nombra un fichero fuente. */
 export function isSourceFile(word) {
-  const name = word.split(/[\\/]/).pop() ?? '';
-  const dot = name.lastIndexOf('.');
+  // The extension is the trailing run of letters and digits after the last dot; a dotfile such as `.gitignore` has
+  // none of the code extensions, so it needs no special case.
+  // @es La extensión es la racha final de letras y dígitos tras el último punto; un dotfile como `.gitignore` no tiene
+  // ninguna extensión de código, así que no necesita un caso aparte.
+  const extension = /\.([A-Za-z0-9]+)$/.exec(word)?.[1];
 
-  return dot > 0 && CODE_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
+  return extension !== undefined && CODE_EXTENSIONS.has(extension.toLowerCase());
 }
 
 /** The program name without its folder or `.exe`. @es El nombre del programa sin carpeta ni `.exe`. */

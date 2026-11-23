@@ -17,9 +17,8 @@ const G = 'eval-guard/guard.mjs';
 const MUTANTS = [
   ['ts is not a source extension', I, "new Set(['ts', 'tsx',", "new Set(['tsx',"],
   ['json is not a source extension', I, "'html', 'scss', 'css', 'json',", "'html', 'scss', 'css',"],
-  ['the extension is compared in its case', I, 'name.slice(dot + 1).toLowerCase()', 'name.slice(dot + 1)'],
-  ['a dotfile counts as having an extension', I, 'return dot > 0 && CODE_EXTENSIONS', 'return dot >= 0 && CODE_EXTENSIONS'],
-  ['a backslash path is not split', I, "const name = word.split(/[\\\\/]/).pop() ?? '';", "const name = word.split('/').pop() ?? '';"],
+  ['the extension is compared in its case', I, 'CODE_EXTENSIONS.has(extension.toLowerCase())', 'CODE_EXTENSIONS.has(extension)'],
+  ['the extension may be anywhere in the word', I, '/\\.([A-Za-z0-9]+)$/', '/\\.([A-Za-z0-9]+)/'],
   ['sed -i is not in place', I, "|| /^-[nErsuz]*i/.test(arg)", ''],
   ['sed --in-place is not in place', I, "arg === '--in-place' || arg.startsWith('--in-place=') || ", ''],
   ['any sed option is in place', I, '/^-[nErsuz]*i/.test(arg)', "arg.startsWith('-')"],

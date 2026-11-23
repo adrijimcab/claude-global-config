@@ -42,7 +42,7 @@ const MUTANTS = [
   ['every git subcommand is a status change', W, 'const changesStatus = ({ subcommand, args }) => STATUS_CHANGING.has(subcommand) &&', 'const changesStatus = ({ subcommand, args }) => true &&'],
   ['git -C is not followed', W, '  const base = invocationDirectory(invocation);', '  const base = invocation.directory;'],
   ['--work-tree is not followed', W, '  if (named === undefined || named === \'\') return base;', '  return base;'],
-  ['the separate-word --work-tree is not read', W, "    if (option === '--work-tree') named = invocation.gitOptions[index + 1];\n", ''],
+  ['the separate-word --work-tree is not read', W, "    if (option === '--work-tree') named = invocation.gitOptions[index + 1];\n", "    if (false) named = invocation.gitOptions[index + 1];\n"],
   ['the fused --work-tree= is not read', W, "    else if (option.startsWith('--work-tree=')) named = option.slice('--work-tree='.length);\n", ''],
   ['the first --work-tree wins', W, "    if (option === '--work-tree') named = invocation.gitOptions[index + 1];", "    if (option === '--work-tree' && named === undefined) named = invocation.gitOptions[index + 1];"],
   ['a relative --work-tree is read from the call directory', W, '  return path.resolve(base, named);', '  return path.resolve(named);'],

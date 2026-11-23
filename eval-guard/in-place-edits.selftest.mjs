@@ -82,7 +82,8 @@ check('pure: an extension in upper case is a source file', isSourceFile('X.TS'),
 check('pure: a dotfile with no extension is not', isSourceFile('.gitignore'), false);
 check('pure: a program given with a folder and .exe is recognised', inPlaceSourceEdit([{ raw: 'C:/bin/sed.exe' }, { raw: '-i' }, { raw: 's/a/b/' }, { raw: 'x.ts' }])?.target, 'x.ts');
 check('pure: no words, no finding', inPlaceSourceEdit([]), undefined);
-check('pure: Set-Content -LiteralPath is read', inPlaceSourceEdit([{ raw: 'Set-Content' }, { raw: '-LiteralPath' }, { raw: 'a.mjs' }])?.target, 'a.mjs');
+check('pure: Set-Content -LiteralPath is read, not the first positional word', inPlaceSourceEdit([{ raw: 'Set-Content' }, { raw: '-Value' }, { raw: 'notes.txt' }, { raw: '-LiteralPath' }, { raw: 'a.mjs' }])?.target, 'a.mjs');
+check('pure: a word with .ts inside but another extension is not source', isSourceFile('src/x.ts.orig'), false);
 
 if (failures.length > 0) {
   for (const failure of failures) console.log(`FAIL ${failure}`);
