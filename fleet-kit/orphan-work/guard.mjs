@@ -50,7 +50,7 @@ export const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
  *
  * REMAINING BOUNDS: a carrying branch that has been deleted, with no worktree left on it, no longer carries;
  * and a worktree whose agent STOPPED carries nothing, so its work is judged in full.
- * @param others the LIVE linked worktrees of the repository, `[{ path, branch }]`; this one is skipped.
+ * @param others the LIVE linked worktrees of the repository, `[{ path, branch }]`; the judged one is never among them.
  * @returns `{ dirty, unintegrated }` counts, or `{ unmeasurable: why }`.
  * @es Lo que guarda un worktree que ninguna rama de integración, ni la rama de otro worktree vivo, tiene. Un
  * commit cuenta como no integrado si `git cherry` lo echa en falta en la rama de integración Y ninguna rama
@@ -71,7 +71,9 @@ export function workIn(worktree, integrationBranch, others = []) {
 
     if (cherry.status !== 0) return { unmeasurable: `git cherry ${integrationBranch} failed: ${cherry.stderr.trim()}` };
 
-    const carriers = others.filter((other) => other.branch !== undefined && other.path !== worktree.path);
+    // `others` are the live worktrees and a judged worktree is never live (parkedWork), so it is never its own carrier.
+    // @es `others` son los worktrees vivos y uno juzgado nunca está vivo, así que nunca se porta a sí mismo.
+    const carriers = others.filter((other) => other.branch !== undefined);
     const candidates = cherry.stdout.split('\n').filter((line) => line.startsWith('+')).map((line) => line.slice(1).trim());
 
     return { dirty, unintegrated: candidates.filter((sha) => !carriers.some((other) => isAncestor(ask, sha, other.branch))).length };
