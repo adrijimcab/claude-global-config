@@ -43,7 +43,9 @@ export function isSourceFile(word) {
  * @returns {{ via: string, target: string } | undefined}
  */
 export function shellSourceWrite(payload) {
-  const write = toolCallWrites(payload).find((one) => one.channel === 'shell' && !BYTE_COPIES.has(one.via) && isSourceFile(one.path));
+  // eval-guard judges only calls that carry a command (Bash, PowerShell), whose writes are all on the shell channel.
+  // @es eval-guard solo juzga llamadas con comando (Bash, PowerShell), cuyas escrituras van todas por el canal de shell.
+  const write = toolCallWrites(payload).find((one) => !BYTE_COPIES.has(one.via) && isSourceFile(one.path));
 
   return write === undefined ? undefined : { via: write.via, target: write.path };
 }

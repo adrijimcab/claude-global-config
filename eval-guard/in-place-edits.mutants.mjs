@@ -21,7 +21,6 @@ const MUTANTS = [
   ['the extension may be anywhere in the word', I, '/\\.([A-Za-z0-9]+)$/', '/\\.([A-Za-z0-9]+)/'],
   ['a copy writes text', I, "new Set(['cp', 'mv',", "new Set(['mv',"],
   ['a move writes text', I, "new Set(['cp', 'mv', 'PowerShell Copy-Item'", "new Set(['cp', 'PowerShell Copy-Item'"],
-  ['a Write or Edit tool call counts as a shell write', I, "one.channel === 'shell' && ", ''],
   ['a non-source write is refused', I, ' && isSourceFile(one.path));', ');'],
   ['the delegated check is not consulted', G, "?? (delegated ? sourceWriteRefusal(payload) : undefined)", ''],
   ['the parent session is covered too', G, '(delegated ? sourceWriteRefusal(payload) : undefined)', 'sourceWriteRefusal(payload)'],
