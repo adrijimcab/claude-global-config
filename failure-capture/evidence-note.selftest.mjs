@@ -11,11 +11,14 @@
  * líneas, un disco que miente o un lock ocupado no cambian nada y dicen por qué en los dos idiomas.
  */
 
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 import { describeEvidenceNote, runEvidenceNote } from './evidence-note.mjs';
+import { provisionLoop, worldEnv } from './fixture-loop.mjs';
+import { HEADER } from './ledgers.mjs';
 import { isolateState } from '../hook-state/locations.mjs';
 
 isolateState('failure-capture');
@@ -117,6 +120,52 @@ check('a multi-line text is refused BY the text check', note(world('why-text', [
   const outcome = note(target);
 
   check('a held lock changes nothing and says so', outcome.status === 2 && outcome.held === true && !existsSync(target.evidence(KEY)) && describeEvidenceNote(outcome)[0].includes('locked'), JSON.stringify(outcome));
+}
+
+// --- the command, end to end, in a home of its own (a unit-only proof missed that `note` was not a project command,
+// so the real CLI crashed before loading any ledger, 2026-11-23) -------------------------------------------------
+// @es El comando de punta a punta en un home propio: una prueba solo unitaria no vio que `note` no era un comando de
+// proyecto, y el CLI real se cayó antes de cargar ningún ledger.
+{
+  const root = path.join(scratch, 'cli');
+  const repo = path.join(root, 'repo');
+  const home = path.join(root, 'home');
+  const loop = path.join(repo, '.claude', 'failure-capture');
+  const promoted = path.join(home, '.claude', 'lessons-promoted.md');
+  const ledger = path.join(home, '.claude', 'lessons-ledger.md');
+
+  mkdirSync(loop, { recursive: true });
+  mkdirSync(path.join(home, '.claude', 'rules'), { recursive: true });
+  provisionLoop(loop);
+  writeFileSync(path.join(repo, '.claude', 'CLAUDE.md'), '# Project\n', 'utf8');
+  writeFileSync(path.join(repo, '.claude', 'failure-capture.json'), JSON.stringify({ scope: 'demo' }), 'utf8');
+  writeFileSync(path.join(repo, '.claude', 'lessons-ledger.md'), `${HEADER('demo', '`x`')}`, 'utf8');
+  writeFileSync(ledger, `${HEADER('global', '`x`')}${LIVE}\n`, 'utf8');
+  writeFileSync(promoted, `# promoted\n\n${STUB}\n`, 'utf8');
+
+  const run = (...args) => {
+    try {
+      return { status: 0, out: execFileSync(process.execPath, [path.join(loop, 'capture.mjs'), ...args], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...worldEnv(home, { loop }), CLAUDE_CODE_SESSION_ID: 'note-selftest' }, timeout: 60_000 }) };
+    } catch (error) {
+      return { status: typeof error?.status === 'number' ? error.status : 'did-not-run', out: `${error?.stdout ?? ''}${error?.stderr ?? ''}` };
+    }
+  };
+
+  const usage = run('--help');
+
+  check('the usage names note and --text, in both languages', usage.out.includes('note') && usage.out.includes('--text') && usage.out.includes('nunca toca el contador'), usage.out);
+
+  const ledgersBefore = [readFileSync(ledger, 'utf8'), readFileSync(promoted, 'utf8')];
+  const done = run('note', '--key', 'live-lesson', '--text', TEXT);
+  const evidence = readOr(path.join(home, '.claude', 'lessons', 'evidence', 'live-lesson.md'));
+
+  check('the command exits 0 and says the counter is unchanged', done.status === 0 && done.out.includes('the counter is unchanged'), `exit ${done.status}: ${done.out}`);
+  check('the command wrote the dated note into the evidence of the home ledger', evidence.split('\n').some((line) => line.startsWith('Measured ') && line.endsWith(TEXT)), evidence);
+  check('the command left both ledgers byte-identical', readFileSync(ledger, 'utf8') === ledgersBefore[0] && readFileSync(promoted, 'utf8') === ledgersBefore[1]);
+
+  const refusedRun = run('note', '--key', 'live-lesson', '--text', 'short');
+
+  check('the command refuses a short text with exit 1', refusedRun.status === 1 && refusedRun.out.includes('--text'), `exit ${refusedRun.status}: ${refusedRun.out}`);
 }
 
 if (failures.length > 0) {
