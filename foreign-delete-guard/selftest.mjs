@@ -177,6 +177,25 @@ function announce(payload, ...effects) {
   tick();
 }
 
+/**
+ * The call RAN and FAILED: the harness sends PostToolUseFailure, not PostToolUse. The payload shape is the one
+ * measured with a live probe from a subagent on 2026-11-23 (agent_id, tool_use_id, tool_input, error, is_interrupt).
+ * @es La llamada CORRIÓ y FALLÓ: el harness envía PostToolUseFailure, no PostToolUse, con la forma medida en vivo.
+ */
+function announceFailing(payload, ...effects) {
+  const id = `toolu_${(callCounter += 1)}`;
+
+  tick();
+  evaluate(JSON.stringify({ ...payload, hook_event_name: 'PreToolUse', tool_use_id: id }));
+  tick();
+
+  for (const effect of effects) put(effect);
+
+  tick();
+  evaluate(JSON.stringify({ ...payload, hook_event_name: 'PostToolUseFailure', tool_use_id: id, error: 'Exit code 1', is_interrupt: false }));
+  tick();
+}
+
 /** The call reached the guard but never completed (another guard denied it, or it crashed): no PostToolUse. @es La llamada llegó al guard pero no se completó. */
 function announceWithoutCompleting(payload, ...effects) {
   tick();
@@ -319,6 +338,18 @@ try {
   announce(bash(`false && touch ${p('failed.txt')}`));
   put(at('failed.txt'));
   expect('deny', bash(`rm ${p('failed.txt')}`), 'a command whose creation never happened confirms nothing, so a file that appears there is foreign');
+
+  // The 2026-11-23 Discovery case: a redirection target created by a command that then failed (a commit a hook
+  // rejected, a red Playwright run). @es El caso de Discovery: el destino de una redirección de un comando que falló.
+  announceFailing(bash(`git commit -m x > ${p('.tmp-commit.log')}`), at('.tmp-commit.log'));
+  expect('allow', bash(`rm ${p('.tmp-commit.log')}`), 'a file created by the agent\'s own call that then FAILED is its own (PostToolUseFailure confirms it)');
+
+  announceFailing(bash(`npx playwright test > ${p('.tmp-a.log')} 2> ${p('.tmp-b.log')}`), at('.tmp-a.log'), at('.tmp-b.log'));
+  expect('allow', bash(`rm ${p('.tmp-a.log')} ${p('.tmp-b.log')}`), 'a batch of files created by a failed call is the agent\'s own, all of them');
+
+  announceFailing(bash(`false > ${p('.tmp-late.log')}`));
+  put(at('.tmp-late.log'));
+  expect('deny', bash(`rm ${p('.tmp-late.log')}`), 'a file that appears only AFTER the failed call ended is still foreign');
 
   agentWrites(at('recreate.txt'));
   expect('allow', bash(`rm ${p('recreate.txt')}`), 'a file the agent wrote is its own while it is the same file');

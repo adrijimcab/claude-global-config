@@ -15,7 +15,15 @@
     {
       "event": "PostToolUse",
       "matcher": "Write|MultiEdit"
+    },
+    {
+      "event": "PostToolUseFailure",
+      "matcher": "Bash|PowerShell"
+    },
+    {
+      "event": "PostToolUseFailure",
+      "matcher": "Write|MultiEdit"
     }
   ],
-  "why": "Third measured occurrence (2026-10-19, Discovery report) of worker-temp-file-collided-across-sessions: writers told to delete the scratch scripts after removed the orchestrator's provision.mjs, engram-save.mjs, mirror-odd.mjs, split-backlog.mjs and contrast.mjs from the shared session scratchpad root. shared-temp-guard stops a delegated agent writing into the shared TEMP root; this guard stops it deleting a file it did not create. Authorship is recorded by effect in a per-agent journal and confirmed by the agent's own completed call: PreToolUse (Bash, PowerShell, Write, MultiEdit) judges a deletion and records the call's start and its absent creation targets; PostToolUse on the same tools confirms the targets that now exist with their file identity and records the call's end, which a call another guard denied or a command that failed never reaches. The main session is never judged."
+  "why": "Third measured occurrence (2026-10-19, Discovery report) of worker-temp-file-collided-across-sessions: writers told to delete the scratch scripts after removed the orchestrator's provision.mjs, engram-save.mjs, mirror-odd.mjs, split-backlog.mjs and contrast.mjs from the shared session scratchpad root. shared-temp-guard stops a delegated agent writing into the shared TEMP root; this guard stops it deleting a file it did not create. Authorship is recorded by effect in a per-agent journal and confirmed by the agent's own completed call: PreToolUse (Bash, PowerShell, Write, MultiEdit) judges a deletion and records the call's start and its absent creation targets; PostToolUse and PostToolUseFailure on the same tools confirm the targets that now exist with their file identity and record the call's end. A command that ran and failed still creates its redirection targets, so its PostToolUseFailure confirms them (2026-11-23, Discovery: files a writer made with `> .tmp-x.log` before a failing commit or a red Playwright run were refused as foreign); a call another guard denied fires neither event and creates nothing (measured with live probes, 2026-11-23). The main session is never judged."
 }

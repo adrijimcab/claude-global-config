@@ -298,6 +298,26 @@
         ],
         "matcher": ""
       }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/posttoolusefailure.json\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|PowerShell"
+      },
+      {
+        "hooks": [
+          {
+            "command": "node \"$HOME/.claude/hook-dispatch/dispatch.mjs\" \"$HOME/.claude/hook-dispatch/manifests/posttoolusefailure.json\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|MultiEdit"
+      }
     ]
   },
   "outputStyle": "Gentleman",

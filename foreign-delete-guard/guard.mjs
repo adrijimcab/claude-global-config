@@ -14,9 +14,14 @@
  * WHAT IS A DELETION. `deletion-targets.mjs`, on the vendored shell parser. WHAT THE AGENT CREATED. Recorded BY
  * EFFECT: on every allowed call of a delegated agent (shell, Write, MultiEdit) this guard records each creation
  * target that does not exist yet in the agent's own journal (`authored-journal.mjs`, `authorship.mjs`); a path is
- * the agent's only if its own COMPLETED call confirmed it (PostToolUse) and its file identity is unchanged.
+ * the agent's only if its own FINISHED call confirmed it (PostToolUse, or PostToolUseFailure for a call that ran and
+ * failed) and its file identity is unchanged. A failed command still creates its redirection targets (`git commit
+ * > log` rejected by a hook, a red Playwright run), and confirming only on success left those files "foreign" to
+ * the agent that made them (2026-11-23, Discovery). Measured with live probes (2026-11-23): a failing Bash fires
+ * PostToolUseFailure, not PostToolUse, carrying agent_id and tool_use_id from a subagent; a call DENIED in PreToolUse
+ * fires neither and creates nothing, so a denied call still confirms nothing.
  * THE DECISION AND ITS ORDER. `judge.mjs`. Registered for PreToolUse on Bash|PowerShell (judge and record) and
- * Write|MultiEdit (record), and for PostToolUse on the same tools (confirm).
+ * Write|MultiEdit (record), and for PostToolUse and PostToolUseFailure on the same tools (confirm).
  *
  * FAILS OPEN on every malfunction of its own: a guard that cannot decide must not silence a safe command.
  *
@@ -30,10 +35,13 @@
  * expresa con un comodín sobre una carpeta que comparte. Quién es worker lo decide `hook-caller`; qué es un
  * borrado, `deletion-targets.mjs`; qué creó el agente se ANOTA POR EFECTO: en cada llamada permitida de un agente
  * delegado (shell, Write, MultiEdit) se anota en su journal propio cada objetivo de creación que aún no existe
- * (`authored-journal.mjs`, `authorship.mjs`); una ruta es del agente solo si su propia llamada COMPLETADA la
- * confirmó (PostToolUse) y la identidad de su fichero no cambió; la decisión y su orden, `judge.mjs`. Registrada
- * para PreToolUse en Bash|PowerShell (juzga y anota) y Write|MultiEdit (anota), y para PostToolUse en las mismas
- * herramientas (confirma). Falla ABIERTO.
+ * (`authored-journal.mjs`, `authorship.mjs`); una ruta es del agente solo si su propia llamada TERMINADA la
+ * confirmó (PostToolUse, o PostToolUseFailure si corrió y falló) y la identidad de su fichero no cambió: un comando
+ * que falla igual crea los destinos de su redirección, y confirmar solo en el éxito dejaba esos ficheros «ajenos» a
+ * quien los creó; una llamada DENEGADA en PreToolUse no dispara ninguno de los dos (medido con sondas reales) y sigue
+ * sin confirmar nada. La decisión y su orden, `judge.mjs`. Registrada para PreToolUse en Bash|PowerShell (juzga y
+ * anota) y Write|MultiEdit (anota), y para PostToolUse y PostToolUseFailure en las mismas herramientas (confirma).
+ * Falla ABIERTO.
  */
 
 import { readFileSync } from 'node:fs';
@@ -67,9 +75,10 @@ export function evaluate(raw, deps = {}) {
   if (!isSubagentCaller(payload)) return undefined;
 
   try {
-    if (payload?.hook_event_name === 'PostToolUse') {
-      // The call completed: confirm what it really created, its end stamped on the clock that stamps births.
-      // @es La llamada se completó: confirmar lo que creó de verdad, con el fin sellado en el reloj de los nacimientos.
+    if (payload?.hook_event_name === 'PostToolUse' || payload?.hook_event_name === 'PostToolUseFailure') {
+      // The call ran to its end, succeeding or failing: confirm what it really created, its end stamped on the clock
+      // that stamps births. @es La llamada corrió hasta el final, con éxito o con fallo: confirmar lo que creó de verdad,
+      // con el fin sellado en el reloj de los nacimientos.
       confirmCall(agentKeyOf(payload), payload.tool_use_id, fileSystemNow(agentKeyOf(payload)));
 
       return undefined;

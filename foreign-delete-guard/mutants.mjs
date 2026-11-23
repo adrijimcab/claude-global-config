@@ -27,6 +27,8 @@ const JOURNAL = 'foreign-delete-guard/authored-journal.mjs';
 const MUTANTS = [
   // who is judged, and the failure mode
   ['the main session is judged too', GUARD, 'if (!isSubagentCaller(payload)) return undefined;', ''],
+  ['a failed call confirms nothing', GUARD, " || payload?.hook_event_name === 'PostToolUseFailure') {", ') {'],
+  ['only a failed call confirms', GUARD, "if (payload?.hook_event_name === 'PostToolUse' || ", 'if ('],
   ['every caller is allowed', GUARD, 'if (!isSubagentCaller(payload)) return undefined;', 'return undefined;'],
   ['a refusal is never produced', GUARD, 'if (verdict !== undefined) return { hookSpecificOutput', 'if (false) return { hookSpecificOutput'],
   ['a BOM-prefixed payload is not parsed', GUARD, 'raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw', 'raw'],
