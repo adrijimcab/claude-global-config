@@ -106,8 +106,29 @@ function confirmedDeadPid() {
 }
 
 const AT = Date.now();
-const options = (extra) => ({ attempts: 3, staleAfterMs: STALE, now: () => AT, wait: () => undefined, ...extra });
 const deadPid = confirmedDeadPid();
+
+/**
+ * Liveness as the cases mean it: `deadPid` is dead BY CONSTRUCTION, every other pid is asked of the OS. Windows reuses
+ * pids, and under the full selftest runner the confirmed-dead pid was taken by a live process before the K-E cases ran
+ * (landing run 20261123-060207002: every K-E case failed with the signature a live owner gives, reproduced by setting
+ * deadPid to process.pid). The OS probe itself is the lock's `processExists`, proved by the R cases with real pids.
+ * @es La vida como la entienden los casos: `deadPid` está muerto POR CONSTRUCCIÓN y todo otro pid se le pregunta al SO.
+ * Windows reutiliza pids, y bajo el runner completo el pid confirmado muerto lo tomó un proceso vivo antes de los casos
+ * K-E (todos fallaron con la firma de un dueño vivo, reproducida poniendo deadPid = process.pid).
+ */
+const isAlive = (pid) => {
+  if (pid === deadPid) return false;
+
+  try {
+    process.kill(pid, 0);
+
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+};
+const options = (extra) => ({ attempts: 3, staleAfterMs: STALE, now: () => AT, wait: () => undefined, isAlive, ...extra });
 
 /** A create that fails with each of `codes` in turn, then creates for real. @es Un create que falla con cada código y luego crea de verdad. */
 const failing = (codes) => {
@@ -128,7 +149,9 @@ const failing = (codes) => {
 
   check('R1: a lock held by this live process names its pid', ownerOf(held('r-live', `${String(process.pid)}:x`, 0, AT), reader()), process.pid);
   check('R2: no lock file is no owner', ownerOf(file('r-none'), reader()), undefined);
-  check('R3: a YOUNG lock whose pid is dead has no live owner (a reader must not wait on it)', ownerOf(held('r-dead', `${String(deadPid)}:x`, 0, AT), reader()), undefined);
+  // R3 proves the REAL liveness probe, so its dead pid is confirmed right here, not at the top of a long run.
+  // @es R3 prueba el chequeo REAL de vida, así que su pid muerto se confirma aquí mismo, no al principio de la corrida.
+  check('R3: a YOUNG lock whose pid is dead has no live owner (a reader must not wait on it)', ownerOf(held('r-dead', `${String(confirmedDeadPid())}:x`, 0, AT), reader()), undefined);
   check('R4: an empty lock names no owner', ownerOf(held('r-empty', '', 0, AT), reader()), undefined);
   check('R5: a live pid past the ceiling is no owner (the pid may be reused)', ownerOf(held('r-ceiling', `${String(process.pid)}:x`, STALE * 10 + 1, AT), reader()), undefined);
   check('R6: a live pid just under the ceiling still owns it', ownerOf(held('r-at-ceiling', `${String(process.pid)}:x`, STALE * 10 - 1000, AT), reader()), process.pid);
@@ -185,8 +208,11 @@ const failing = (codes) => {
 }
 
 {
-  const old = held('default-old', `${String(deadPid)}:x`, 2 * STALE);
-  const recent = held('default-recent', `${String(deadPid)}:x`, STALE / 2);
+  // These cases use the lock's DEFAULT liveness probe, so their dead pid is confirmed right before them.
+  // @es Estos casos usan el chequeo de vida POR DEFECTO del lock, así que su pid muerto se confirma justo antes.
+  const freshDead = confirmedDeadPid();
+  const old = held('default-old', `${String(freshDead)}:x`, 2 * STALE);
+  const recent = held('default-recent', `${String(freshDead)}:x`, STALE / 2);
   let waits = 0;
 
   check('by default a dead owner\'s lock two minutes old is taken', outcomeOf(() => lock.takeLock(old, { wait: () => undefined })), true);
