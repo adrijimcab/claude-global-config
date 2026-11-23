@@ -40,24 +40,26 @@ export const DELEGATION_TOOLS = new Set(['Agent', 'Task']);
 /**
  * What a worktree holds that no integration branch, and no other worktree's branch, does.
  *
- * A commit counts as unintegrated when `git cherry` finds it missing from the integration branch AND it is
- * not part of the branch of another LIVE worktree that sits BELOW this one (that branch's tip is an ancestor
- * of this worktree's tip, or equal to it). Commits stacked on somebody else's unlanded branch are that branch's
- * work, and that branch is judged on its own. Only a branch below counts: the base of a stack keeps owning
- * its commits, so a stack is never hidden from both ends.
+ * A commit counts as unintegrated when `git cherry` finds it missing from the integration branch AND no
+ * other LIVE worktree's branch contains it (it is an ancestor of that branch's tip). A live branch is a
+ * carrier wherever its tip sits: below this worktree (work stacked on it), or ahead of the commit this worktree
+ * was cut from (2026-11-23, Discovery: a fresh worktree cut from an earlier commit of a live unit's branch, whose
+ * writer kept committing, was refused as orphaned although every one of its commits was in that live branch).
+ * Work a live branch carries is not lost, so it is not parked. A stack is still never hidden from both ends:
+ * only a LIVE branch carries, so when every holder of a commit has stopped, each of them counts it.
  *
- * REMAINING BOUNDS: a stacked base that has been deleted, with no worktree left on it, counts as orphaned
- * again; and a base whose worktree has STOPPED holds nothing, so stopped work is still judged in full (its
- * stacked child then counts the base's commits too, and both are named).
+ * REMAINING BOUNDS: a carrying branch that has been deleted, with no worktree left on it, no longer carries;
+ * and a worktree whose agent STOPPED carries nothing, so its work is judged in full.
  * @param others the LIVE linked worktrees of the repository, `[{ path, branch }]`; this one is skipped.
  * @returns `{ dirty, unintegrated }` counts, or `{ unmeasurable: why }`.
  * @es Lo que guarda un worktree que ninguna rama de integración, ni la rama de otro worktree vivo, tiene. Un
- * commit cuenta como no integrado si `git cherry` lo echa en falta en la rama de integración Y no forma
- * parte de la rama de otro worktree enlazado VIVO que está POR DEBAJO de este (su punta es ancestro de la punta
- * de este, o igual). Lo apilado sobre la rama sin aterrizar de otro es trabajo de esa rama, que se juzga
- * aparte. Solo cuenta una rama inferior: la base de una pila conserva sus commits. LÍMITES: una base
- * apilada que se borró, sin worktree encima, vuelve a contar como huérfana; y la base cuyo worktree PARÓ no
- * retiene nada: el trabajo parado se juzga entero (su hijo apilado cuenta entonces también los commits de la base y se nombran ambos).
+ * commit cuenta como no integrado si `git cherry` lo echa en falta en la rama de integración Y ninguna rama
+ * de otro worktree VIVO lo contiene. Una rama viva lo porta esté donde esté su punta: debajo de este worktree, o
+ * adelante del commit del que se cortó (Discovery, 2026-11-23: un worktree nuevo cortado de un commit anterior de
+ * la rama de una unidad viva se rechazaba como huérfano aunque todos sus commits estaban en esa rama viva). Lo que
+ * porta una rama viva no se pierde, así que no está aparcado. Una pila nunca queda escondida por los dos extremos:
+ * solo porta una rama VIVA, y si todos los que tienen un commit pararon, cada uno lo cuenta. LÍMITES: una rama
+ * portadora borrada, sin worktree, ya no porta; y un worktree cuyo agente PARÓ no porta nada: se juzga entero.
  */
 export function workIn(worktree, integrationBranch, others = []) {
   const ask = gitAsker(worktree.path);
@@ -69,10 +71,10 @@ export function workIn(worktree, integrationBranch, others = []) {
 
     if (cherry.status !== 0) return { unmeasurable: `git cherry ${integrationBranch} failed: ${cherry.stderr.trim()}` };
 
-    const below = others.filter((other) => other.branch !== undefined && other.path !== worktree.path && isAncestor(ask, other.branch, tip));
+    const carriers = others.filter((other) => other.branch !== undefined && other.path !== worktree.path);
     const candidates = cherry.stdout.split('\n').filter((line) => line.startsWith('+')).map((line) => line.slice(1).trim());
 
-    return { dirty, unintegrated: candidates.filter((sha) => !below.some((other) => isAncestor(ask, sha, other.branch))).length };
+    return { dirty, unintegrated: candidates.filter((sha) => !carriers.some((other) => isAncestor(ask, sha, other.branch))).length };
   } catch (error) {
     return { unmeasurable: error instanceof Error ? error.message : String(error) };
   }

@@ -271,6 +271,23 @@ try {
   check('a stacked worktree with one commit of its own is parked, and that one commit is the count', [stackNames().includes('stack-own'), parkedWork({ tool_name: 'Agent', cwd: repository }, { records: liveBase, lastWorked: () => 0 }).find(({ worktree }) => worktree.branch === 'stack-own')?.work.unintegrated], [true, 1]);
   check('the base keeps its own commits counted once it stops', parkedWorkOf('stack-base')?.unintegrated, 2);
 
+  // The 2026-11-23 Discovery case: a fresh worktree cut from an EARLIER commit of a live branch that has kept
+  // moving. Every commit it holds is in that live branch, which is no longer below it.
+  // @es El caso de Discovery: un worktree nuevo cortado de un commit ANTERIOR de una rama viva que siguió avanzando.
+  const earlier = git(repository, '-C', worktreeOf('stack-base'), 'rev-parse', 'HEAD~1').trim();
+
+  stackedOn(earlier, 'stack-behind');
+  commitFiles(worktreeOf('stack-base'), { 'base-3.txt': 'x\n' }, 'feat: base three');
+  check('a worktree cut from an earlier commit of a live branch that moved on is not parked', stackNames().includes('stack-behind'), false);
+  check('the same worktree is parked once that branch has stopped (nothing carries its commits)', parkedWorkOf('stack-behind')?.unintegrated, 1);
+
+  // A stopped base whose commits a LIVE stacked child carries: the work is not lost, so it is not parked.
+  // @es Una base parada cuyos commits lleva un hijo apilado VIVO: el trabajo no se pierde, así que no está aparcado.
+  const liveChild = [{ id: 'child-agent', worktree: 'stack-own', worktreePath: worktreeOf('stack-own'), transcript }];
+  const childCarried = parkedWork({ tool_name: 'Agent', cwd: repository }, { records: liveChild, lastWorked: () => 0 }).find(({ worktree }) => worktree.branch === 'stack-base')?.work;
+
+  check('a stopped base counts only the commits no live branch carries', childCarried?.unintegrated, 1);
+
   // --- A DECLARED TAKEOVER OF AN UNRESUMABLE HOLDER (2026-10-26, P1-5). The incident: a worktree with
   // unlanded commits whose agent held a 21.87 MB transcript; resume-before-fresh advised the replacement and
   // this guard refused it. The records are read back from a constructed harness store with `agentRecords`,
