@@ -116,8 +116,13 @@ const newToken = () => `${String(process.pid)}:${randomBytes(6).toString('hex')}
 /** A fault of `file`, bilingual, carrying the failure as its cause. @es Un fallo de `file`, bilingüe, con la causa. */
 const fault = (id, file, error) => new LockFault(bilingual(id, { file, code: String(error?.code ?? 'unknown'), detail: error instanceof Error ? error.message : String(error) }), { cause: error, file });
 
-/** Whether a process with this pid exists; one we may not signal exists all the same. @es Si existe un proceso con este pid; uno al que no podemos enviar señal existe igual. */
-function processExists(pid) {
+/**
+ * Whether a process with this pid exists; one we may not signal exists all the same. Exported so a proof can keep the
+ * real probe for every pid but one it makes dead by construction.
+ * @es Si existe un proceso con este pid; uno al que no podemos enviar señal existe igual. Exportada para que una prueba
+ * conserve el chequeo real para todo pid salvo uno que hace muerto por construcción.
+ */
+export function processExists(pid) {
   try {
     process.kill(pid, 0);
 

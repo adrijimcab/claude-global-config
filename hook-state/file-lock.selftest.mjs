@@ -117,17 +117,7 @@ const deadPid = confirmedDeadPid();
  * Windows reutiliza pids, y bajo el runner completo el pid confirmado muerto lo tomó un proceso vivo antes de los casos
  * K-E (todos fallaron con la firma de un dueño vivo, reproducida poniendo deadPid = process.pid).
  */
-const isAlive = (pid) => {
-  if (pid === deadPid) return false;
-
-  try {
-    process.kill(pid, 0);
-
-    return true;
-  } catch (error) {
-    return error?.code === 'EPERM';
-  }
-};
+const isAlive = (pid) => pid !== deadPid && lock.processExists(pid);
 const options = (extra) => ({ attempts: 3, staleAfterMs: STALE, now: () => AT, wait: () => undefined, isAlive, ...extra });
 
 /** A create that fails with each of `codes` in turn, then creates for real. @es Un create que falla con cada código y luego crea de verdad. */
