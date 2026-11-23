@@ -21,7 +21,6 @@ const MUTANTS = [
   ['the note is not dated', N, 'const note = `Measured ${date}: ${text.trim()}`;', 'const note = text.trim();'],
   ['the note is filed as another kind', N, "kind: 'measured', note", "kind: 'captured', note"],
   ['the note is not proved after writing', N, ' || !holdsWholeLine(evidence, note)', ''],
-  ['a failed append is reported as done', N, 'if (!written.ok || evidence === undefined', 'if (evidence === undefined'],
   ['a held lock reads as done', N, 'return locked.held ? locked.value : { status: 2, held: true', 'return locked.held ? locked.value : { status: 0, held: true'],
   ['the report forgets the counter is unchanged', N, 'the counter is unchanged', 'the counter is fine'],
 ];

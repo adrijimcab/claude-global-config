@@ -58,7 +58,8 @@ function noteLocked({ ledgers, key, text, date, io }) {
   const written = io.appendEvidence({ ledgerFile: where.ledger.file, key, line: where.line, date, kind: 'measured', note });
   const evidence = written.ok ? io.readEvidence(where.ledger.file, key) : undefined;
 
-  if (!written.ok || evidence === undefined || !holdsWholeLine(evidence, note)) {
+  // A failed append leaves `evidence` undefined, so this one test covers it too. @es Un append fallido deja `evidence` sin definir: este test lo cubre.
+  if (evidence === undefined || !holdsWholeLine(evidence, note)) {
     return refused([`the note could not be proved in the evidence store${written.ok ? '' : ` (${written.problem})`}. @es no se pudo probar la nota en la evidencia.`]);
   }
 

@@ -89,6 +89,13 @@ for (const [label, overrides] of [
   check(`${label}: the report is bilingual`, describeEvidenceNote(outcome).join(' ').includes('@es'));
 }
 
+// The reason must name the input at fault, not only refuse: an invalid key or a multi-line text would also be refused
+// later (no line carries it, the evidence store rejects it), so only the stated reason proves the input check.
+// @es El motivo debe nombrar la entrada culpable: una clave inválida o un texto de varias líneas también se rechazarían
+// después, así que solo el motivo prueba el chequeo de entrada.
+check('an invalid key is refused BY the key check', note(world('why-key', [STUB]), { key: 'Not A Key' }).problems.join(' ').includes('--key must be lowercase kebab-case'));
+check('a multi-line text is refused BY the text check', note(world('why-text', [STUB]), { text: `${TEXT}\nsecond line` }).problems.join(' ').includes('--text'));
+
 {
   const target = world('twin', [STUB, STUB.replace('2026-11-10', '2026-11-11')]);
 
