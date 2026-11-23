@@ -98,9 +98,14 @@ function actingTree(invocation) {
   });
 
   if (named === undefined || named === '') return base;
-  if (path.isAbsolute(named)) return named;
 
-  return base === undefined ? undefined : path.resolve(base, named);
+  // path.resolve keeps an absolute path as it is, so only a relative one depends on the -C directory; with no
+  // resolvable -C directory, only an absolute --work-tree is known.
+  // @es path.resolve deja intacta una ruta absoluta: solo una relativa depende del directorio de -C; sin un -C
+  // resoluble, solo se conoce un --work-tree absoluto.
+  if (base === undefined) return path.isAbsolute(named) ? named : undefined;
+
+  return path.resolve(base, named);
 }
 
 /**

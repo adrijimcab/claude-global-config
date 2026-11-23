@@ -72,7 +72,7 @@ check('allow: Get-Content only reads', verdict("Get-Content -Path 'src/x.ts'", {
 check('allow: Set-Content on a non-source file', verdict("Set-Content -Path 'out.txt' -Value 'y'", { tool: 'PowerShell' }), 'allow');
 check('allow: the parent session is not covered (delegated agents only)', verdict("sed -i 's/a/b/' src/x.ts", { delegated: false }), 'allow');
 
-const reason = evaluate(payload("sed -i 's/a/b/' src/x.ts")).hookSpecificOutput.permissionDecisionReason;
+const reason = evaluate(payload("sed -i 's/a/b/' src/x.ts"))?.hookSpecificOutput?.permissionDecisionReason ?? '';
 
 check('the reason names the program and the file', reason.includes('`sed`') && reason.includes('`src/x.ts`'), true);
 check('the reason points at the Edit tool, in both languages', reason.includes('the Edit tool') && reason.includes('@es Lo que sí funciona'), true);
