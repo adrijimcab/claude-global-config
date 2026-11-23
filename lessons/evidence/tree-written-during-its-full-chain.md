@@ -11,3 +11,9 @@ Ledger lines archived verbatim, append-only: each block is one original line, by
 - [guards] 2026-10-26 — RULE: while a full chain runs in the background, write nothing in the tree under test or in TEMP/claude; queue those edits until its verdict is read. Evidence: lessons/evidence/tree-written-during-its-full-chain.md <!--fc:tree-written-during-its-full-chain#1-->
 
 Promoted 2026-11-10 to ~/.claude/rules/promoted-guards.md; closed by mechanism C:/Users/adrian.jimenez/.claude/full-chain-lock/write-guard.mjs (selftest run, exit 0)
+
+## Ledger line archived 2026-11-23 (measured)
+
+- [promoted] 2026-11-10 — tree-written-during-its-full-chain: mechanism C:/Users/adrian.jimenez/.claude/full-chain-lock/write-guard.mjs <!--fc:tree-written-during-its-full-chain#2-->
+
+Measured 2026-11-23: The 2026-11-18 count #2 (a Discovery helper wrote bk646-* under its session TEMP during build:ci) was no recurrence: no chain reads TEMP/claude. full-chain-lock/tree-writes.mjs documents that no detector of the selftest runner reads it (each selftest has a private temp), the write guard has no TEMP clause, and selftest-runner/pollution.mjs is invoked by no chain (git grep). The counter stays as recorded because recount refuses promoted stubs (recount.mjs:69).
