@@ -39,7 +39,7 @@ const MUTANTS = [
   ['the call id of the harness is ignored', GUARD, 'payload.tool_use_id ?? `pre-${Date.now()}-${process.pid}`', '`pre-${Date.now()}-${process.pid}`'],
   ['a completed call confirms nothing', GUARD, 'confirmCall(agentKeyOf(payload), payload.tool_use_id, fileSystemNow(agentKeyOf(payload)));', ''],
   ['a completed call is confirmed without its id', GUARD, 'confirmCall(agentKeyOf(payload), payload.tool_use_id, fileSystemNow', 'confirmCall(agentKeyOf(payload), undefined, fileSystemNow'],
-  ['a PostToolUse payload is judged as a PreToolUse one', GUARD, "if (payload?.hook_event_name === 'PostToolUse') {", 'if (false) {'],
+  ['a PostToolUse payload is judged as a PreToolUse one', GUARD, "if (payload?.hook_event_name === 'PostToolUse' || payload?.hook_event_name === 'PostToolUseFailure') {", 'if (false) {'],
   ['an internal failure refuses the call instead of failing open', GUARD, 'return undefined; // fail open: a malfunction of the decision must never block a call.', "throw new Error('boom'); // x."],
   ['a tool that runs no shell is parsed as a shell line', GUARD, "dialect === undefined || typeof command !== 'string' ? undefined : judge(payload, dialect, command, { ...deps, platform })", 'judge(payload, dialect, command, { ...deps, platform })'],
   // the order of the decision
